@@ -1,0 +1,16 @@
+abis := '../packages/contracts-bedrock/snapshots/abi'
+
+bindings-celo-migrate:
+  #!/usr/bin/env bash
+  set -euxo pipefail
+
+  build_abi() {
+    local lowercase=$(echo "$2" | awk '{print tolower($0)}')
+    abigen \
+      --abi "{{abis}}/$1.json" \
+      --pkg bindings \
+      --out "cmd/celo-migrate/bindings/$lowercase.go" \
+      --type $2
+  }
+
+  build_abi GoldToken CeloToken
