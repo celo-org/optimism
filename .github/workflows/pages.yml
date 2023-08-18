@@ -4,7 +4,6 @@ permissions:
 on:
   push:
     branches:
-      - eelanagaraj/add-forkdiff # TODO remove
       - develop
 jobs:
   deploy:
