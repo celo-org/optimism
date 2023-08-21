@@ -6,7 +6,7 @@ footer: |
 base:
   name: OP
   url: https://github.com/ethereum-optimism/optimism
-  hash: a4aaafcd8491e8cc87146c8314f659135627ac92 # tracks the last rebased commit
+  hash: c0f0f2d5fc6f1aaa6bf05e102ec0b8bdf74356db # tracks the last rebased commit
 fork:
   name: CELO
   url: https://github.com/celo-org/optimism
