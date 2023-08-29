@@ -36,6 +36,17 @@ const (
 	Permit2                       = "0x000000000022D473030F116dDEE9F6B43aC78BA3"
 	SenderCreator                 = "0x7fc98430eaedbb6070b35b39d798725049088348"
 	EntryPoint                    = "0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"
+
+	// Celo
+	CeloRegistry                      = "0x000000000000000000000000000000000000ce10"
+	GoldToken                         = "0x471ece3750da237f93b8e339c536989b8978a438"
+	FeeHandler                        = "0xcd437749e43a154c07f3553504c68fbfd56b8778"
+	FeeCurrencyWhitelist              = "0xbb024e9cdcb2f9e34d893630d19611b8a5381b3c"
+	MentoFeeHandlerSeller             = "0x4efa274b7e33476c961065000d58ee09f7921a74"
+	UniswapFeeHandlerSeller           = "0xd3aee28548dbb65df03981f0dc0713bfcbd10a97"
+	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
+	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
+	FeeCurrency                       = "0x4200000000000000000000000000000000001022"
 )
 
 var (
@@ -72,6 +83,19 @@ var (
 
 	Predeploys          = make(map[string]*Predeploy)
 	PredeploysByAddress = make(map[common.Address]*Predeploy)
+
+	// Celo
+	CeloRegistryAddr                      = common.HexToAddress(CeloRegistry)
+	GoldTokenAddr                         = common.HexToAddress(GoldToken)
+	FeeHandlerAddr                        = common.HexToAddress(FeeHandler)
+	FeeCurrencyWhitelistAddr              = common.HexToAddress(FeeCurrencyWhitelist)
+	MentoFeeHandlerSellerAddr             = common.HexToAddress(MentoFeeHandlerSeller)
+	UniswapFeeHandlerSellerAddr           = common.HexToAddress(UniswapFeeHandlerSeller)
+	SortedOraclesAddr                     = common.HexToAddress(SortedOracles)
+	AddressSortedLinkedListWithMedianAddr = common.HexToAddress(AddressSortedLinkedListWithMedian)
+	FeeCurrencyAddr                       = common.HexToAddress(FeeCurrency)
+
+	CeloPredeploys = make(map[string]*Predeploy)
 )
 
 func init() {
@@ -143,6 +167,20 @@ func init() {
 	Predeploys["EntryPoint"] = &Predeploy{
 		Address:       EntryPointAddr,
 		ProxyDisabled: true,
+	}
+
+	// Celo
+	CeloPredeploys["CeloRegistry"] = &Predeploy{Address: CeloRegistryAddr}
+	CeloPredeploys["GoldToken"] = &Predeploy{Address: GoldTokenAddr}
+	CeloPredeploys["FeeHandler"] = &Predeploy{Address: FeeHandlerAddr}
+	CeloPredeploys["FeeCurrencyWhitelist"] = &Predeploy{Address: FeeCurrencyWhitelistAddr}
+	CeloPredeploys["MentoFeeHandlerSeller"] = &Predeploy{Address: MentoFeeHandlerSellerAddr}
+	CeloPredeploys["UniswapFeeHandlerSeller"] = &Predeploy{Address: UniswapFeeHandlerSellerAddr}
+	CeloPredeploys["SortedOracles"] = &Predeploy{Address: SortedOraclesAddr}
+	CeloPredeploys["AddressSortedLinkedListWithMedian"] = &Predeploy{Address: AddressSortedLinkedListWithMedianAddr}
+	CeloPredeploys["FeeCurrency"] = &Predeploy{Address: FeeCurrencyAddr}
+	for key, predeploy := range CeloPredeploys {
+		Predeploys[key] = predeploy
 	}
 
 	for _, predeploy := range Predeploys {
