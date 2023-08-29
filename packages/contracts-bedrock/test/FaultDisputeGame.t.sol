@@ -7,16 +7,18 @@ import { DisputeGameFactory_Init } from "./DisputeGameFactory.t.sol";
 import { DisputeGameFactory } from "src/dispute/DisputeGameFactory.sol";
 import { FaultDisputeGame } from "src/dispute/FaultDisputeGame.sol";
 import { L2OutputOracle } from "src/L1/L2OutputOracle.sol";
+import { BlockOracle } from "src/dispute/BlockOracle.sol";
+import { PreimageOracle } from "src/cannon/PreimageOracle.sol";
+import { PreimageKeyLib } from "src/cannon/PreimageKeyLib.sol";
 
 import "src/libraries/DisputeTypes.sol";
 import "src/libraries/DisputeErrors.sol";
+import { Types } from "src/libraries/Types.sol";
 import { LibClock } from "src/dispute/lib/LibClock.sol";
 import { LibPosition } from "src/dispute/lib/LibPosition.sol";
 import { IBigStepper, IPreimageOracle } from "src/dispute/interfaces/IBigStepper.sol";
 
 contract FaultDisputeGame_Init is DisputeGameFactory_Init {
-    /// @dev The extra data passed to the game for initialization.
-    bytes internal constant EXTRA_DATA = abi.encode(1);
     /// @dev The type of the game being tested.
     GameType internal constant GAME_TYPE = GameType.wrap(0);
 
@@ -24,24 +26,49 @@ contract FaultDisputeGame_Init is DisputeGameFactory_Init {
     FaultDisputeGame internal gameImpl;
     /// @dev The `Clone` proxy of the game.
     FaultDisputeGame internal gameProxy;
+    /// @dev The extra data passed to the game for initialization.
+    bytes internal extraData;
 
     event Move(uint256 indexed parentIndex, Claim indexed pivot, address indexed claimant);
 
     function init(Claim rootClaim, Claim absolutePrestate) public {
         super.setUp();
 
+        // Set the time to a realistic date.
+        vm.warp(1690906994);
+
+        // Propose 2 mock outputs
+        vm.startPrank(oracle.PROPOSER());
+        for (uint256 i; i < 2; i++) {
+            oracle.proposeL2Output(bytes32(i + 1), oracle.nextBlockNumber(), blockhash(i), i);
+
+            // Advance 1 block
+            vm.roll(block.number + 1);
+            vm.warp(block.timestamp + 13);
+        }
+        vm.stopPrank();
+
+        // Deploy a new block hash oracle and store the block hash for the genesis block.
+        BlockOracle blockOracle = new BlockOracle();
+        blockOracle.checkpoint();
+
+        // Set the extra data for the game creation
+        extraData = abi.encode(oracle.SUBMISSION_INTERVAL() * 2, block.number - 1);
+
         // Deploy an implementation of the fault game
         gameImpl = new FaultDisputeGame(
+            GAME_TYPE,
             absolutePrestate,
             4,
             Duration.wrap(7 days),
             new AlphabetVM(absolutePrestate),
-            L2OutputOracle(deployNoop())
+            oracle,
+            blockOracle
         );
         // Register the game implementation with the factory.
         factory.setImplementation(GAME_TYPE, gameImpl);
         // Create a new game.
-        gameProxy = FaultDisputeGame(address(factory.create(GAME_TYPE, rootClaim, EXTRA_DATA)));
+        gameProxy = FaultDisputeGame(address(factory.create(GAME_TYPE, rootClaim, extraData)));
 
         // Label the proxy
         vm.label(address(gameProxy), "FaultDisputeGame_Clone");
@@ -69,12 +96,12 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
 
     /// @dev Tests that the game's extra data is set correctly.
     function test_extraData_succeeds() public {
-        assertEq(gameProxy.extraData(), EXTRA_DATA);
+        assertEq(gameProxy.extraData(), extraData);
     }
 
-    /// @dev Tests that the game's status is set correctly.
-    function test_gameStart_succeeds() public {
-        assertEq(Timestamp.unwrap(gameProxy.gameStart()), block.timestamp);
+    /// @dev Tests that the game's starting timestamp is set correctly.
+    function test_createdAt_succeeds() public {
+        assertEq(Timestamp.unwrap(gameProxy.createdAt()), block.timestamp);
     }
 
     /// @dev Tests that the game's type is set correctly.
@@ -84,34 +111,65 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
 
     /// @dev Tests that the game's data is set correctly.
     function test_gameData_succeeds() public {
-        (GameType gameType, Claim rootClaim, bytes memory extraData) = gameProxy.gameData();
+        (GameType gameType, Claim rootClaim, bytes memory _extraData) = gameProxy.gameData();
 
         assertEq(GameType.unwrap(gameType), GameType.unwrap(GAME_TYPE));
         assertEq(Claim.unwrap(rootClaim), Claim.unwrap(ROOT_CLAIM));
-        assertEq(extraData, EXTRA_DATA);
+        assertEq(_extraData, extraData);
     }
 
     ////////////////////////////////////////////////////////////////
     //          `IFaultDisputeGame` Implementation Tests          //
     ////////////////////////////////////////////////////////////////
 
-    /// @dev Tests that the root claim's data is set correctly when the game is initialized.
-    function test_initialRootClaimData_succeeds() public {
-        (
-            uint32 parentIndex,
-            bool countered,
-            Claim claim,
-            Position position,
-            Clock clock
-        ) = gameProxy.claimData(0);
+    /// @dev Tests that a game cannot be created by the factory if the L1 head hash does not
+    ///      contain the disputed L2 output root.
+    function test_initialize_l1HeadTooOld_reverts() public {
+        // Store a mock block hash for the genesis block. The timestamp will default to 0.
+        vm.store(address(gameImpl.BLOCK_ORACLE()), keccak256(abi.encode(0, 0)), bytes32(uint256(1)));
+        bytes memory _extraData = abi.encode(oracle.SUBMISSION_INTERVAL() * 2, 0);
+
+        vm.expectRevert(L1HeadTooOld.selector);
+        factory.create(GAME_TYPE, ROOT_CLAIM, _extraData);
+    }
+
+    /// @dev Tests that a game cannot be created that disputes the first output root proposed.
+    /// TODO(clabby): This will be solved by the block hash bisection game, where we'll be able
+    ///               to dispute the first output root by using genesis as the starting point.
+    ///               For now, it is critical that the first proposed output root of an OP stack
+    ///               chain is done so by an honest party.
+    function test_initialize_firstOutput_reverts() public {
+        vm.expectRevert(abi.encodeWithSignature("Panic(uint256)", 0x11));
+        factory.create(GAME_TYPE, ROOT_CLAIM, abi.encode(1800, block.number - 1));
+    }
+
+    /// @dev Tests that the game is initialized with the correct data.
+    function test_initialize_correctData_succeeds() public {
+        // Starting
+        (FaultDisputeGame.OutputProposal memory startingProp, FaultDisputeGame.OutputProposal memory disputedProp) =
+            gameProxy.proposals();
+        Types.OutputProposal memory starting = oracle.getL2Output(startingProp.index);
+        assertEq(startingProp.index, 0);
+        assertEq(startingProp.l2BlockNumber, starting.l2BlockNumber);
+        assertEq(Hash.unwrap(startingProp.outputRoot), starting.outputRoot);
+        // Disputed
+        Types.OutputProposal memory disputed = oracle.getL2Output(disputedProp.index);
+        assertEq(disputedProp.index, 1);
+        assertEq(disputedProp.l2BlockNumber, disputed.l2BlockNumber);
+        assertEq(Hash.unwrap(disputedProp.outputRoot), disputed.outputRoot);
+
+        // L1 head
+        (, uint256 l1HeadNumber) = abi.decode(gameProxy.extraData(), (uint256, uint256));
+        assertEq(blockhash(l1HeadNumber), Hash.unwrap(gameProxy.l1Head()));
+
+        (uint32 parentIndex, bool countered, Claim claim, Position position, Clock clock) = gameProxy.claimData(0);
 
         assertEq(parentIndex, type(uint32).max);
         assertEq(countered, false);
         assertEq(Claim.unwrap(claim), Claim.unwrap(ROOT_CLAIM));
         assertEq(Position.unwrap(position), 1);
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp))))
         );
     }
 
@@ -185,44 +243,39 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
 
     /// @notice Static unit test for the correctness of the chess clock incrementation.
     function test_move_clockCorrectness_succeeds() public {
-        (, , , , Clock clock) = gameProxy.claimData(0);
+        (,,,, Clock clock) = gameProxy.claimData(0);
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp))))
         );
 
         Claim claim = Claim.wrap(bytes32(uint256(5)));
 
         vm.warp(block.timestamp + 15);
         gameProxy.attack(0, claim);
-        (, , , , clock) = gameProxy.claimData(1);
+        (,,,, clock) = gameProxy.claimData(1);
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(15), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(15), Timestamp.wrap(uint64(block.timestamp))))
         );
 
         vm.warp(block.timestamp + 10);
         gameProxy.attack(1, claim);
-        (, , , , clock) = gameProxy.claimData(2);
+        (,,,, clock) = gameProxy.claimData(2);
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(10), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(10), Timestamp.wrap(uint64(block.timestamp))))
         );
 
         vm.warp(block.timestamp + 10);
         gameProxy.attack(2, claim);
-        (, , , , clock) = gameProxy.claimData(3);
+        (,,,, clock) = gameProxy.claimData(3);
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(25), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(25), Timestamp.wrap(uint64(block.timestamp))))
         );
 
         vm.warp(block.timestamp + 10);
         gameProxy.attack(3, claim);
-        (, , , , clock) = gameProxy.claimData(4);
+        (,,,, clock) = gameProxy.claimData(4);
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(20), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(20), Timestamp.wrap(uint64(block.timestamp))))
         );
     }
 
@@ -252,13 +305,7 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
         gameProxy.attack(0, counter);
 
         // Grab the claim data of the attack.
-        (
-            uint32 parentIndex,
-            bool countered,
-            Claim claim,
-            Position position,
-            Clock clock
-        ) = gameProxy.claimData(1);
+        (uint32 parentIndex, bool countered, Claim claim, Position position, Clock clock) = gameProxy.claimData(1);
 
         // Assert correctness of the attack claim's data.
         assertEq(parentIndex, 0);
@@ -266,8 +313,7 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
         assertEq(Claim.unwrap(claim), Claim.unwrap(counter));
         assertEq(Position.unwrap(position), Position.unwrap(Position.wrap(1).move(true)));
         assertEq(
-            Clock.unwrap(clock),
-            Clock.unwrap(LibClock.wrap(Duration.wrap(5), Timestamp.wrap(uint64(block.timestamp))))
+            Clock.unwrap(clock), Clock.unwrap(LibClock.wrap(Duration.wrap(5), Timestamp.wrap(uint64(block.timestamp))))
         );
 
         // Grab the claim data of the parent.
@@ -280,9 +326,7 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
         assertEq(Position.unwrap(position), 1);
         assertEq(
             Clock.unwrap(clock),
-            Clock.unwrap(
-                LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp - 5)))
-            )
+            Clock.unwrap(LibClock.wrap(Duration.wrap(0), Timestamp.wrap(uint64(block.timestamp - 5))))
         );
     }
 
@@ -354,6 +398,57 @@ contract FaultDisputeGame_Test is FaultDisputeGame_Init {
         assertEq(uint8(status), uint8(GameStatus.CHALLENGER_WINS));
         assertEq(uint8(gameProxy.status()), uint8(GameStatus.CHALLENGER_WINS));
     }
+
+    /// @dev Tests that adding local data with an out of bounds identifier reverts.
+    function testFuzz_addLocalData_oob_reverts(uint256 _ident) public {
+        // [1, 5] are valid local data identifiers.
+        if (_ident <= 5) _ident = 0;
+
+        vm.expectRevert(InvalidLocalIdent.selector);
+        gameProxy.addLocalData(_ident, 0);
+    }
+
+    /// @dev Tests that local data is loaded into the preimage oracle correctly.
+    function test_addLocalData_static_succeeds() public {
+        IPreimageOracle oracle = IPreimageOracle(address(gameProxy.VM().oracle()));
+        (FaultDisputeGame.OutputProposal memory starting, FaultDisputeGame.OutputProposal memory disputed) =
+            gameProxy.proposals();
+
+        bytes32[5] memory data = [
+            Hash.unwrap(gameProxy.l1Head()),
+            Hash.unwrap(starting.outputRoot),
+            Hash.unwrap(disputed.outputRoot),
+            bytes32(uint256(starting.l2BlockNumber) << 0xC0),
+            bytes32(block.chainid << 0xC0)
+        ];
+
+        for (uint256 i = 1; i <= 5; i++) {
+            uint256 expectedLen = i > 3 ? 8 : 32;
+
+            gameProxy.addLocalData(i, 0);
+            bytes32 key = _getKey(i);
+            (bytes32 dat, uint256 datLen) = oracle.readPreimage(key, 0);
+            assertEq(dat >> 0xC0, bytes32(expectedLen));
+            // Account for the length prefix if i > 3 (the data stored
+            // at identifiers i <= 3 are 32 bytes long, so the expected
+            // length is already correct. If i > 3, the data is only 8
+            // bytes long, so the length prefix + the data is 16 bytes
+            // total.)
+            assertEq(datLen, expectedLen + (i > 3 ? 8 : 0));
+
+            gameProxy.addLocalData(i, 8);
+            key = _getKey(i);
+            (dat, datLen) = oracle.readPreimage(key, 8);
+            assertEq(dat, data[i - 1]);
+            assertEq(datLen, expectedLen);
+        }
+    }
+
+    /// @dev Helper to get the localized key for an identifier in the context of the game proxy.
+    function _getKey(uint256 _ident) internal view returns (bytes32) {
+        bytes32 h = keccak256(abi.encode(_ident | (1 << 248), address(gameProxy)));
+        return bytes32((uint256(h) & ~uint256(0xFF << 248)) | (1 << 248));
+    }
 }
 
 /// @notice A generic game player actor with a configurable trace.
@@ -369,11 +464,7 @@ contract GamePlayer {
     uint256 internal maxDepth;
 
     /// @notice Initializes the player
-    function init(
-        FaultDisputeGame _gameProxy,
-        GamePlayer _counterParty,
-        Vm _vm
-    ) public {
+    function init(FaultDisputeGame _gameProxy, GamePlayer _counterParty, Vm _vm) public {
         gameProxy = _gameProxy;
         counterParty = _counterParty;
         vm = _vm;
@@ -383,9 +474,7 @@ contract GamePlayer {
     /// @notice Perform the next move in the game.
     function play(uint256 _parentIndex) public virtual {
         // Grab the claim data at the parent index.
-        (uint32 grandparentIndex, , Claim parentClaim, Position parentPos, ) = gameProxy.claimData(
-            _parentIndex
-        );
+        (uint32 grandparentIndex,, Claim parentClaim, Position parentPos,) = gameProxy.claimData(_parentIndex);
 
         // The position to move to.
         Position movePos;
@@ -407,9 +496,7 @@ contract GamePlayer {
             Claim ourParentClaim = claimAt(parentPos);
 
             // Fetch our claim at the grandparent's position.
-            (, , Claim grandparentClaim, Position grandparentPos, ) = gameProxy.claimData(
-                grandparentIndex
-            );
+            (,, Claim grandparentClaim, Position grandparentPos,) = gameProxy.claimData(grandparentIndex);
             Claim ourGrandparentClaim = claimAt(grandparentPos);
 
             if (Claim.unwrap(ourParentClaim) != Claim.unwrap(parentClaim)) {
@@ -423,8 +510,8 @@ contract GamePlayer {
                 // Flag the move as an attack.
                 isAttack = true;
             } else if (
-                Claim.unwrap(ourParentClaim) == Claim.unwrap(parentClaim) &&
-                Claim.unwrap(ourGrandparentClaim) == Claim.unwrap(grandparentClaim)
+                Claim.unwrap(ourParentClaim) == Claim.unwrap(parentClaim)
+                    && Claim.unwrap(ourGrandparentClaim) == Claim.unwrap(grandparentClaim)
             ) {
                 movePos = parentPos.move(false);
             }
@@ -474,7 +561,7 @@ contract GamePlayer {
 
                 // If we have a second move position, attack the grandparent.
                 if (Position.unwrap(movePos2) != 0) {
-                    (, , , Position grandparentPos, ) = gameProxy.claimData(grandparentIndex);
+                    (,,, Position grandparentPos,) = gameProxy.claimData(grandparentIndex);
                     Claim ourGrandparentClaim = claimAt(grandparentPos.move(true));
 
                     gameProxy.attack(grandparentIndex, ourGrandparentClaim);
@@ -482,10 +569,7 @@ contract GamePlayer {
                 }
             } else {
                 // Don't defend a claim we would've made ourselves.
-                if (
-                    parentPos.depth() % 2 == 0 &&
-                    Claim.unwrap(claimAt(15)) == Claim.unwrap(gameProxy.rootClaim())
-                ) {
+                if (parentPos.depth() % 2 == 0 && Claim.unwrap(claimAt(15)) == Claim.unwrap(gameProxy.rootClaim())) {
                     return;
                 }
 
@@ -504,23 +588,14 @@ contract GamePlayer {
 
     /// @notice Returns the state at the trace index within the player's trace.
     function traceAt(uint256 _traceIndex) public view returns (uint256 state_) {
-        return
-            uint256(
-                uint8(_traceIndex >= trace.length ? trace[trace.length - 1] : trace[_traceIndex])
-            );
+        return uint256(uint8(_traceIndex >= trace.length ? trace[trace.length - 1] : trace[_traceIndex]));
     }
 
     /// @notice Returns the player's claim that commits to a given trace index.
     function claimAt(uint256 _traceIndex) public view returns (Claim claim_) {
-        return
-            Claim.wrap(
-                keccak256(
-                    abi.encode(
-                        _traceIndex >= trace.length ? trace.length - 1 : _traceIndex,
-                        traceAt(_traceIndex)
-                    )
-                )
-            );
+        return Claim.wrap(
+            keccak256(abi.encode(_traceIndex >= trace.length ? trace.length - 1 : _traceIndex, traceAt(_traceIndex)))
+        );
     }
 
     /// @notice Returns the player's claim that commits to a given trace index.
@@ -539,14 +614,8 @@ contract OneVsOne_Arena is FaultDisputeGame_Init {
     /// @dev The challenger.
     GamePlayer internal challenger;
 
-    function init(
-        GamePlayer _defender,
-        GamePlayer _challenger,
-        uint256 _finalTraceIndex
-    ) public {
-        Claim rootClaim = Claim.wrap(
-            keccak256(abi.encode(_finalTraceIndex, _defender.traceAt(_finalTraceIndex)))
-        );
+    function init(GamePlayer _defender, GamePlayer _challenger, uint256 _finalTraceIndex) public {
+        Claim rootClaim = Claim.wrap(keccak256(abi.encode(_finalTraceIndex, _defender.traceAt(_finalTraceIndex))));
         super.init(rootClaim, ABSOLUTE_PRESTATE_CLAIM);
         defender = _defender;
         challenger = _challenger;
@@ -871,11 +940,7 @@ contract HonestPlayer_QuarterTrace is GamePlayer {
 }
 
 contract VariableDivergentPlayer is GamePlayer {
-    constructor(
-        bytes memory _absolutePrestate,
-        uint256 _traceLength,
-        uint256 _divergeAt
-    ) {
+    constructor(bytes memory _absolutePrestate, uint256 _traceLength, uint256 _divergeAt) {
         uint8 absolutePrestate = uint8(_absolutePrestate[31]);
         bytes memory _trace = new bytes(_traceLength);
         for (uint8 i = 0; i < _trace.length; i++) {
@@ -896,15 +961,11 @@ contract AlphabetVM is IBigStepper {
 
     constructor(Claim _absolutePrestate) {
         ABSOLUTE_PRESTATE = _absolutePrestate;
-        oracle = IPreimageOracle(deployNoop());
+        oracle = new PreimageOracle();
     }
 
     /// @inheritdoc IBigStepper
-    function step(bytes calldata _stateData, bytes calldata)
-        external
-        view
-        returns (bytes32 postState_)
-    {
+    function step(bytes calldata _stateData, bytes calldata) external view returns (bytes32 postState_) {
         uint256 traceIndex;
         uint256 claim;
         if (keccak256(_stateData) == Claim.unwrap(ABSOLUTE_PRESTATE)) {
@@ -918,18 +979,5 @@ contract AlphabetVM is IBigStepper {
         }
         // STF: n -> n + 1
         postState_ = keccak256(abi.encode(traceIndex, claim + 1));
-    }
-}
-
-////////////////////////////////////////////////////////////////
-//                          HELPERS                           //
-////////////////////////////////////////////////////////////////
-
-/// @notice Deploys a noop contract.
-function deployNoop() returns (address noop_) {
-    assembly {
-        mstore(0x00, 0x60016000F3)
-        let size := 5
-        noop_ := create(0, sub(0x20, size), size)
     }
 }

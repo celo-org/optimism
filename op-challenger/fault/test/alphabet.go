@@ -10,7 +10,7 @@ import (
 
 func NewAlphabetWithProofProvider(t *testing.T, maxDepth int, oracleError error) *alphabetWithProofProvider {
 	return &alphabetWithProofProvider{
-		alphabet.NewAlphabetProvider("abcdefghijklmnopqrstuvwxyz", uint64(maxDepth)),
+		alphabet.NewTraceProvider("abcdefghijklmnopqrstuvwxyz", uint64(maxDepth)),
 		oracleError,
 	}
 }
@@ -21,22 +21,15 @@ func NewAlphabetClaimBuilder(t *testing.T, maxDepth int) *ClaimBuilder {
 }
 
 type alphabetWithProofProvider struct {
-	*alphabet.AlphabetProvider
+	*alphabet.AlphabetTraceProvider
 	OracleError error
 }
 
-func (a *alphabetWithProofProvider) GetPreimage(ctx context.Context, i uint64) ([]byte, []byte, error) {
-	preimage, _, err := a.AlphabetProvider.GetPreimage(ctx, i)
+func (a *alphabetWithProofProvider) GetStepData(ctx context.Context, i uint64) ([]byte, []byte, *types.PreimageOracleData, error) {
+	preimage, _, _, err := a.AlphabetTraceProvider.GetStepData(ctx, i)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return preimage, []byte{byte(i)}, nil
-}
-
-func (a *alphabetWithProofProvider) GetOracleData(ctx context.Context, i uint64) (*types.PreimageOracleData, error) {
-	if a.OracleError != nil {
-		return &types.PreimageOracleData{}, a.OracleError
-	}
-	data := types.NewPreimageOracleData([]byte{byte(i)}, []byte{byte(i)})
-	return &data, nil
+	data := types.NewPreimageOracleData([]byte{byte(i)}, []byte{byte(i - 1)}, uint32(i-1))
+	return preimage, []byte{byte(i - 1)}, data, nil
 }

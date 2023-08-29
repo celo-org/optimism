@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"strconv"
 
+	"github.com/ethereum-optimism/optimism/cannon/mipsevm"
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/crossdomain"
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -59,6 +61,15 @@ var (
 	})
 	proveWithdrawalInputsArgs = abi.Arguments{
 		{Name: "inputs", Type: proveWithdrawalInputs},
+	}
+
+	// cannonMemoryProof inputs tuple (bytes32, bytes)
+	cannonMemoryProof, _ = abi.NewType("tuple", "CannonMemoryProof", []abi.ArgumentMarshaling{
+		{Name: "memRoot", Type: "bytes32"},
+		{Name: "proof", Type: "bytes"},
+	})
+	cannonMemoryProofArgs = abi.Arguments{
+		{Name: "encodedCannonMemoryProof", Type: cannonMemoryProof},
 	}
 )
 
@@ -266,7 +277,8 @@ func main() {
 		checkErr(err, "Error creating secure trie")
 
 		// Put a "true" bool in the storage slot
-		state.UpdateStorage(common.Address{}, hash.Bytes(), []byte{0x01})
+		err = state.UpdateStorage(common.Address{}, hash.Bytes(), []byte{0x01})
+		checkErr(err, "Error updating storage")
 
 		// Create a secure trie for the world state
 		world, err := trie.NewStateTrie(
@@ -283,7 +295,8 @@ func main() {
 		}
 		writer := new(bytes.Buffer)
 		checkErr(account.EncodeRLP(writer), "Error encoding account")
-		world.UpdateStorage(common.Address{}, predeploys.L2ToL1MessagePasserAddr.Bytes(), writer.Bytes())
+		err = world.UpdateStorage(common.Address{}, predeploys.L2ToL1MessagePasserAddr.Bytes(), writer.Bytes())
+		checkErr(err, "Error updating storage")
 
 		// Get the proof
 		var proof proofList
@@ -311,6 +324,39 @@ func main() {
 		checkErr(err, "Error encoding output")
 
 		// Print the output
+		fmt.Print(hexutil.Encode(packed[32:]))
+	case "cannonMemoryProof":
+		// <pc, insn, [memAddr, memValue]>
+		mem := mipsevm.NewMemory()
+		if len(args) != 3 && len(args) != 5 {
+			panic("Error: cannonMemoryProofWithProof requires 2 or 4 arguments")
+		}
+		pc, err := strconv.ParseUint(args[1], 10, 32)
+		checkErr(err, "Error decocding addr")
+		insn, err := strconv.ParseUint(args[2], 10, 32)
+		checkErr(err, "Error decocding insn")
+		mem.SetMemory(uint32(pc), uint32(insn))
+
+		var insnProof, memProof [896]byte
+		if len(args) == 5 {
+			memAddr, err := strconv.ParseUint(args[3], 10, 32)
+			checkErr(err, "Error decocding memAddr")
+			memValue, err := strconv.ParseUint(args[4], 10, 32)
+			checkErr(err, "Error decocding memValue")
+			mem.SetMemory(uint32(memAddr), uint32(memValue))
+			memProof = mem.MerkleProof(uint32(memAddr))
+		}
+		insnProof = mem.MerkleProof(uint32(pc))
+
+		output := struct {
+			MemRoot common.Hash
+			Proof   []byte
+		}{
+			MemRoot: mem.MerkleRoot(),
+			Proof:   append(insnProof[:], memProof[:]...),
+		}
+		packed, err := cannonMemoryProofArgs.Pack(&output)
+		checkErr(err, "Error encoding output")
 		fmt.Print(hexutil.Encode(packed[32:]))
 	default:
 		panic(fmt.Errorf("Unknown command: %s", args[0]))

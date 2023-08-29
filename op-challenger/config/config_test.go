@@ -3,26 +3,27 @@ package config
 import (
 	"testing"
 
-	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
 var (
 	validL1EthRpc              = "http://localhost:8545"
-	validGameAddress           = common.HexToAddress("0x7bdd3b028C4796eF0EAf07d11394d0d9d8c24139")
+	validGameFactoryAddress    = common.Address{0x23}
 	validAlphabetTrace         = "abcdefgh"
 	validCannonBin             = "./bin/cannon"
 	validCannonOpProgramBin    = "./bin/op-program"
+	validCannonNetwork         = "mainnet"
 	validCannonAbsolutPreState = "pre.json"
 	validCannonDatadir         = "/tmp/cannon"
 	validCannonL2              = "http://localhost:9545"
 	agreeWithProposedOutput    = true
-	gameDepth                  = 4
 )
 
 func validConfig(traceType TraceType) Config {
-	cfg := NewConfig(validL1EthRpc, validGameAddress, traceType, agreeWithProposedOutput, gameDepth)
+	cfg := NewConfig(validGameFactoryAddress, validL1EthRpc, traceType, agreeWithProposedOutput)
 	switch traceType {
 	case TraceTypeAlphabet:
 		cfg.AlphabetTrace = validAlphabetTrace
@@ -32,6 +33,7 @@ func validConfig(traceType TraceType) Config {
 		cfg.CannonAbsolutePreState = validCannonAbsolutPreState
 		cfg.CannonDatadir = validCannonDatadir
 		cfg.CannonL2 = validCannonL2
+		cfg.CannonNetwork = validCannonNetwork
 	}
 	return cfg
 }
@@ -61,10 +63,16 @@ func TestL1EthRpcRequired(t *testing.T) {
 	require.ErrorIs(t, config.Check(), ErrMissingL1EthRPC)
 }
 
-func TestGameAddressRequired(t *testing.T) {
+func TestGameFactoryAddressRequired(t *testing.T) {
 	config := validConfig(TraceTypeCannon)
-	config.GameAddress = common.Address{}
-	require.ErrorIs(t, config.Check(), ErrMissingGameAddress)
+	config.GameFactoryAddress = common.Address{}
+	require.ErrorIs(t, config.Check(), ErrMissingGameFactoryAddress)
+}
+
+func TestGameAllowlistNotRequired(t *testing.T) {
+	config := validConfig(TraceTypeCannon)
+	config.GameAllowlist = []common.Address{}
+	require.NoError(t, config.Check())
 }
 
 func TestAlphabetTraceRequired(t *testing.T) {
@@ -109,4 +117,42 @@ func TestCannonSnapshotFreq(t *testing.T) {
 		cfg.CannonSnapshotFreq = 0
 		require.ErrorIs(t, cfg.Check(), ErrMissingCannonSnapshotFreq)
 	})
+}
+
+func TestCannonNetworkOrRollupConfigRequired(t *testing.T) {
+	cfg := validConfig(TraceTypeCannon)
+	cfg.CannonNetwork = ""
+	cfg.CannonRollupConfigPath = ""
+	cfg.CannonL2GenesisPath = "genesis.json"
+	require.ErrorIs(t, cfg.Check(), ErrMissingCannonRollupConfig)
+}
+
+func TestCannonNetworkOrL2GenesisRequired(t *testing.T) {
+	cfg := validConfig(TraceTypeCannon)
+	cfg.CannonNetwork = ""
+	cfg.CannonRollupConfigPath = "foo.json"
+	cfg.CannonL2GenesisPath = ""
+	require.ErrorIs(t, cfg.Check(), ErrMissingCannonL2Genesis)
+}
+
+func TestMustNotSpecifyNetworkAndRollup(t *testing.T) {
+	cfg := validConfig(TraceTypeCannon)
+	cfg.CannonNetwork = validCannonNetwork
+	cfg.CannonRollupConfigPath = "foo.json"
+	cfg.CannonL2GenesisPath = ""
+	require.ErrorIs(t, cfg.Check(), ErrCannonNetworkAndRollupConfig)
+}
+
+func TestMustNotSpecifyNetworkAndL2Genesis(t *testing.T) {
+	cfg := validConfig(TraceTypeCannon)
+	cfg.CannonNetwork = validCannonNetwork
+	cfg.CannonRollupConfigPath = ""
+	cfg.CannonL2GenesisPath = "foo.json"
+	require.ErrorIs(t, cfg.Check(), ErrCannonNetworkAndL2Genesis)
+}
+
+func TestNetworkMustBeValid(t *testing.T) {
+	cfg := validConfig(TraceTypeCannon)
+	cfg.CannonNetwork = "unknown"
+	require.ErrorIs(t, cfg.Check(), ErrCannonNetworkUnknown)
 }

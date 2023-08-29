@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 	mocknet "github.com/libp2p/go-libp2p/p2p/net/mock"
 	"github.com/stretchr/testify/require"
@@ -42,9 +43,9 @@ import (
 	batchermetrics "github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
+	"github.com/ethereum-optimism/optimism/op-e2e/config"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils"
 	"github.com/ethereum-optimism/optimism/op-node/chaincfg"
-	"github.com/ethereum-optimism/optimism/op-node/eth"
 	"github.com/ethereum-optimism/optimism/op-node/metrics"
 	rollupNode "github.com/ethereum-optimism/optimism/op-node/node"
 	"github.com/ethereum-optimism/optimism/op-node/p2p"
@@ -54,6 +55,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/testlog"
 	proposermetrics "github.com/ethereum-optimism/optimism/op-proposer/metrics"
 	l2os "github.com/ethereum-optimism/optimism/op-proposer/proposer"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -78,81 +80,27 @@ func newTxMgrConfig(l1Addr string, privKey *ecdsa.PrivateKey) txmgr.CLIConfig {
 func DefaultSystemConfig(t *testing.T) SystemConfig {
 	secrets, err := e2eutils.DefaultMnemonicConfig.Secrets()
 	require.NoError(t, err)
-	addresses := secrets.Addresses()
+	deployConfig := config.DeployConfig.Copy()
+	deployConfig.L1GenesisBlockTimestamp = hexutil.Uint64(time.Now().Unix())
+	require.NoError(t, deployConfig.Check())
+	l1Deployments := config.L1Deployments.Copy()
+	require.NoError(t, l1Deployments.Check())
 
-	deployConfig := &genesis.DeployConfig{
-		L1ChainID:   900,
-		L2ChainID:   901,
-		L2BlockTime: 1,
+	require.Equal(t, secrets.Addresses().Batcher, deployConfig.BatchSenderAddress)
+	require.Equal(t, secrets.Addresses().SequencerP2P, deployConfig.P2PSequencerAddress)
+	require.Equal(t, secrets.Addresses().Proposer, deployConfig.L2OutputOracleProposer)
 
-		FinalizationPeriodSeconds: 60 * 60 * 24,
-		MaxSequencerDrift:         10,
-		SequencerWindowSize:       30,
-		ChannelTimeout:            10,
-		P2PSequencerAddress:       addresses.SequencerP2P,
-		BatchInboxAddress:         common.Address{0: 0x52, 19: 0xff}, // tbd
-		BatchSenderAddress:        addresses.Batcher,
-
-		L2OutputOracleSubmissionInterval: 4,
-		L2OutputOracleStartingTimestamp:  -1,
-		L2OutputOracleProposer:           addresses.Proposer,
-		L2OutputOracleChallenger:         common.Address{}, // tbd
-
-		FinalSystemOwner: addresses.SysCfgOwner,
-
-		L1BlockTime:                 2,
-		L1GenesisBlockNonce:         4660,
-		CliqueSignerAddress:         common.Address{}, // op-e2e used to run Clique, but now uses fake Proof of Stake.
-		L1GenesisBlockTimestamp:     hexutil.Uint64(time.Now().Unix()),
-		L1GenesisBlockGasLimit:      30_000_000,
-		L1GenesisBlockDifficulty:    uint642big(1),
-		L1GenesisBlockMixHash:       common.Hash{},
-		L1GenesisBlockCoinbase:      common.Address{},
-		L1GenesisBlockNumber:        0,
-		L1GenesisBlockGasUsed:       0,
-		L1GenesisBlockParentHash:    common.Hash{},
-		L1GenesisBlockBaseFeePerGas: uint642big(7),
-
-		L2GenesisBlockNonce:         0,
-		L2GenesisBlockGasLimit:      30_000_000,
-		L2GenesisBlockDifficulty:    uint642big(1),
-		L2GenesisBlockMixHash:       common.Hash{},
-		L2GenesisBlockNumber:        0,
-		L2GenesisBlockGasUsed:       0,
-		L2GenesisBlockParentHash:    common.Hash{},
-		L2GenesisBlockBaseFeePerGas: uint642big(7),
-
-		GasPriceOracleOverhead: 2100,
-		GasPriceOracleScalar:   1_000_000,
-
-		SequencerFeeVaultRecipient:               common.Address{19: 1},
-		BaseFeeVaultRecipient:                    common.Address{19: 2},
-		L1FeeVaultRecipient:                      common.Address{19: 3},
-		BaseFeeVaultMinimumWithdrawalAmount:      uint642big(1000_000_000),           // 1 gwei
-		L1FeeVaultMinimumWithdrawalAmount:        uint642big(1000_000_000),           // 1 gwei
-		SequencerFeeVaultMinimumWithdrawalAmount: uint642big(1000_000_000),           // 1 gwei
-		BaseFeeVaultWithdrawalNetwork:            genesis.WithdrawalNetwork("local"), // L2 withdrawal network
-		L1FeeVaultWithdrawalNetwork:              genesis.WithdrawalNetwork("local"), // L2 withdrawal network
-		SequencerFeeVaultWithdrawalNetwork:       genesis.WithdrawalNetwork("local"), // L2 withdrawal network
-
-		DeploymentWaitConfirmations: 1,
-
-		EIP1559Elasticity:  2,
-		EIP1559Denominator: 8,
-
-		FundDevAccounts: true,
-	}
-
-	if err := deployConfig.InitDeveloperDeployedAddresses(); err != nil {
-		panic(err)
+	// Tests depend on premine being filled with secrets addresses
+	premine := make(map[common.Address]*big.Int)
+	for _, addr := range secrets.Addresses().All() {
+		premine[addr] = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
 	}
 
 	return SystemConfig{
-		Secrets: secrets,
-
-		Premine: make(map[common.Address]*big.Int),
-
+		Secrets:                secrets,
+		Premine:                premine,
 		DeployConfig:           deployConfig,
+		L1Deployments:          config.L1Deployments,
 		L1InfoPredeployAddress: predeploys.L1BlockAddr,
 		JWTFilePath:            writeDefaultJWT(t),
 		JWTSecret:              testingJWTSecret,
@@ -169,7 +117,7 @@ func DefaultSystemConfig(t *testing.T) SystemConfig {
 					ListenPort:  0,
 					EnableAdmin: true,
 				},
-				L1EpochPollInterval: time.Second * 4,
+				L1EpochPollInterval: time.Second * 2,
 				ConfigPersistence:   &rollupNode.DisabledConfigPersistence{},
 			},
 			"verifier": {
@@ -191,6 +139,7 @@ func DefaultSystemConfig(t *testing.T) SystemConfig {
 		GethOptions:                map[string][]GethOption{},
 		P2PTopology:                nil, // no P2P connectivity by default
 		NonFinalizedProposals:      false,
+		ExternalL2Nodes:            config.ExternalL2Nodes,
 		BatcherTargetL1TxSizeBytes: 100_000,
 	}
 }
@@ -198,7 +147,7 @@ func DefaultSystemConfig(t *testing.T) SystemConfig {
 func writeDefaultJWT(t *testing.T) string {
 	// Sadly the geth node config cannot load JWT secret from memory, it has to be a file
 	jwtPath := path.Join(t.TempDir(), "jwt_secret")
-	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(testingJWTSecret[:])), 0600); err != nil {
+	if err := os.WriteFile(jwtPath, []byte(hexutil.Encode(testingJWTSecret[:])), 0o600); err != nil {
 		t.Fatalf("failed to prepare jwt file for geth: %v", err)
 	}
 	return jwtPath
@@ -213,7 +162,8 @@ type SystemConfig struct {
 	Secrets                *e2eutils.Secrets
 	L1InfoPredeployAddress common.Address
 
-	DeployConfig *genesis.DeployConfig
+	DeployConfig  *genesis.DeployConfig
+	L1Deployments *genesis.L1Deployments
 
 	JWTFilePath string
 	JWTSecret   [32]byte
@@ -224,6 +174,8 @@ type SystemConfig struct {
 	GethOptions    map[string][]GethOption
 	ProposerLogger log.Logger
 	BatcherLogger  log.Logger
+
+	ExternalL2Nodes string
 
 	// map of outbound connections to other nodes. Node names prefixed with "~" are unconnected but linked.
 	// A nil map disables P2P completely.
@@ -246,6 +198,41 @@ type SystemConfig struct {
 	SupportL1TimeTravel bool
 }
 
+type GethInstance struct {
+	Backend *geth_eth.Ethereum
+	Node    *node.Node
+}
+
+func (gi *GethInstance) HTTPEndpoint() string {
+	return gi.Node.HTTPEndpoint()
+}
+
+func (gi *GethInstance) WSEndpoint() string {
+	return gi.Node.WSEndpoint()
+}
+
+func (gi *GethInstance) WSAuthEndpoint() string {
+	return gi.Node.WSAuthEndpoint()
+}
+
+func (gi *GethInstance) HTTPAuthEndpoint() string {
+	return gi.Node.HTTPAuthEndpoint()
+}
+
+func (gi *GethInstance) Close() {
+	gi.Node.Close()
+}
+
+// EthInstance is either an in process Geth or external process exposing its
+// endpoints over the network
+type EthInstance interface {
+	HTTPEndpoint() string
+	WSEndpoint() string
+	HTTPAuthEndpoint() string
+	WSAuthEndpoint() string
+	Close()
+}
+
 type System struct {
 	cfg SystemConfig
 
@@ -254,9 +241,9 @@ type System struct {
 	L2GenesisCfg *core.Genesis
 
 	// Connections to running nodes
-	Nodes             map[string]*node.Node
-	Backends          map[string]*geth_eth.Ethereum
+	EthInstances      map[string]EthInstance
 	Clients           map[string]*ethclient.Client
+	RawClients        map[string]*rpc.Client
 	RollupNodes       map[string]*rollupNode.OpNode
 	L2OutputSubmitter *l2os.L2OutputSubmitter
 	BatchSubmitter    *bss.BatchSubmitter
@@ -271,7 +258,7 @@ type System struct {
 }
 
 func (sys *System) NodeEndpoint(name string) string {
-	return selectEndpoint(sys.Nodes[name])
+	return selectEndpoint(sys.EthInstances[name])
 }
 
 func (sys *System) Close() {
@@ -287,8 +274,8 @@ func (sys *System) Close() {
 	for _, node := range sys.RollupNodes {
 		node.Close()
 	}
-	for _, node := range sys.Nodes {
-		node.Close()
+	for _, ei := range sys.EthInstances {
+		ei.Close()
 	}
 	sys.Mocknet.Close()
 }
@@ -324,18 +311,18 @@ func (s *SystemConfigOptions) Get(key, role string) (systemConfigHook, bool) {
 	return v, ok
 }
 
-func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
+func (cfg SystemConfig) Start(t *testing.T, _opts ...SystemConfigOption) (*System, error) {
 	opts, err := NewSystemConfigOptions(_opts)
 	if err != nil {
 		return nil, err
 	}
 
 	sys := &System{
-		cfg:         cfg,
-		Nodes:       make(map[string]*node.Node),
-		Backends:    make(map[string]*geth_eth.Ethereum),
-		Clients:     make(map[string]*ethclient.Client),
-		RollupNodes: make(map[string]*rollupNode.OpNode),
+		cfg:          cfg,
+		EthInstances: make(map[string]EthInstance),
+		Clients:      make(map[string]*ethclient.Client),
+		RawClients:   make(map[string]*rpc.Client),
+		RollupNodes:  make(map[string]*rollupNode.OpNode),
 	}
 	didErrAfterStart := false
 	defer func() {
@@ -343,8 +330,8 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 			for _, node := range sys.RollupNodes {
 				node.Close()
 			}
-			for _, node := range sys.Nodes {
-				node.Close()
+			for _, ei := range sys.EthInstances {
+				ei.Close()
 			}
 		}
 	}()
@@ -355,7 +342,11 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 		c = sys.TimeTravelClock
 	}
 
-	l1Genesis, err := genesis.BuildL1DeveloperGenesis(cfg.DeployConfig)
+	if err := cfg.DeployConfig.Check(); err != nil {
+		return nil, err
+	}
+
+	l1Genesis, err := genesis.BuildL1DeveloperGenesis(cfg.DeployConfig, config.L1Allocs, config.L1Deployments, true)
 	if err != nil {
 		return nil, err
 	}
@@ -419,12 +410,15 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 			L1ChainID:              cfg.L1ChainIDBig(),
 			L2ChainID:              cfg.L2ChainIDBig(),
 			BatchInboxAddress:      cfg.DeployConfig.BatchInboxAddress,
-			DepositContractAddress: predeploys.DevOptimismPortalAddr,
-			L1SystemConfigAddress:  predeploys.DevSystemConfigAddr,
+			DepositContractAddress: cfg.DeployConfig.OptimismPortalProxy,
+			L1SystemConfigAddress:  cfg.DeployConfig.SystemConfigProxy,
 			RegolithTime:           cfg.DeployConfig.RegolithTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 		}
 	}
 	defaultConfig := makeRollupConfig()
+	if err := defaultConfig.Check(); err != nil {
+		return nil, err
+	}
 	sys.RollupConfig = &defaultConfig
 
 	// Initialize nodes
@@ -432,41 +426,53 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 	if err != nil {
 		return nil, err
 	}
-	sys.Nodes["l1"] = l1Node
-	sys.Backends["l1"] = l1Backend
-
-	for name := range cfg.Nodes {
-		node, backend, err := initL2Geth(name, big.NewInt(int64(cfg.DeployConfig.L2ChainID)), l2Genesis, cfg.JWTFilePath, cfg.GethOptions[name]...)
-		if err != nil {
-			return nil, err
-		}
-		sys.Nodes[name] = node
-		sys.Backends[name] = backend
+	sys.EthInstances["l1"] = &GethInstance{
+		Backend: l1Backend,
+		Node:    l1Node,
 	}
-
-	// Start
 	err = l1Node.Start()
 	if err != nil {
 		didErrAfterStart = true
 		return nil, err
 	}
-	for name, node := range sys.Nodes {
-		if name == "l1" {
-			continue
+
+	for name := range cfg.Nodes {
+		var ethClient EthInstance
+		if cfg.ExternalL2Nodes == "" {
+			node, backend, err := initL2Geth(name, big.NewInt(int64(cfg.DeployConfig.L2ChainID)), l2Genesis, cfg.JWTFilePath, cfg.GethOptions[name]...)
+			if err != nil {
+				return nil, err
+			}
+			gethInst := &GethInstance{
+				Backend: backend,
+				Node:    node,
+			}
+			err = gethInst.Node.Start()
+			if err != nil {
+				didErrAfterStart = true
+				return nil, err
+			}
+			ethClient = gethInst
+		} else {
+			if len(cfg.GethOptions[name]) > 0 {
+				t.Errorf("External L2 nodes do not support configuration through GethOptions")
+			}
+			ethClient = (&ExternalRunner{
+				Name:    name,
+				BinPath: cfg.ExternalL2Nodes,
+				Genesis: l2Genesis,
+				JWTPath: cfg.JWTFilePath,
+			}).Run(t)
 		}
-		err = node.Start()
-		if err != nil {
-			didErrAfterStart = true
-			return nil, err
-		}
+		sys.EthInstances[name] = ethClient
 	}
 
 	// Configure connections to L1 and L2 for rollup nodes.
-	// TODO: refactor testing to use in-process rpc connections instead of websockets.
-
+	// TODO: refactor testing to allow use of in-process rpc connections instead
+	// of only websockets (which are required for external eth client tests).
 	for name, rollupCfg := range cfg.Nodes {
-		configureL1(rollupCfg, l1Node)
-		configureL2(rollupCfg, sys.Nodes[name], cfg.JWTSecret)
+		configureL1(rollupCfg, sys.EthInstances["l1"])
+		configureL2(rollupCfg, sys.EthInstances[name], cfg.JWTSecret)
 
 		rollupCfg.L2Sync = &rollupNode.PreparedL2SyncEndpoint{
 			Client:   nil,
@@ -482,14 +488,18 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 		didErrAfterStart = true
 		return nil, err
 	}
-	l1Client := ethclient.NewClient(rpc.DialInProc(l1Srv))
+	rawL1Client := rpc.DialInProc(l1Srv)
+	l1Client := ethclient.NewClient(rawL1Client)
 	sys.Clients["l1"] = l1Client
-	for name, node := range sys.Nodes {
-		client, err := ethclient.DialContext(ctx, node.WSEndpoint())
+	sys.RawClients["l1"] = rawL1Client
+	for name, ethInst := range sys.EthInstances {
+		rawClient, err := rpc.DialContext(ctx, ethInst.WSEndpoint())
 		if err != nil {
 			didErrAfterStart = true
 			return nil, err
 		}
+		client := ethclient.NewClient(rawClient)
+		sys.RawClients[name] = rawClient
 		sys.Clients[name] = client
 	}
 
@@ -576,7 +586,7 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 			}
 		}
 
-		c.Rollup.LogDescription(cfg.Loggers[name], chaincfg.L2ChainIDToNetworkName)
+		c.Rollup.LogDescription(cfg.Loggers[name], chaincfg.L2ChainIDToNetworkDisplayName)
 
 		node, err := rollupNode.New(context.Background(), &c, cfg.Loggers[name], snapLog, "", metrics.NewMetrics(""))
 		if err != nil {
@@ -620,13 +630,14 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 	if sys.RollupNodes["sequencer"] == nil {
 		return sys, nil
 	}
+
 	// L2Output Submitter
 	sys.L2OutputSubmitter, err = l2os.NewL2OutputSubmitterFromCLIConfig(l2os.CLIConfig{
-		L1EthRpc:          sys.Nodes["l1"].WSEndpoint(),
+		L1EthRpc:          sys.EthInstances["l1"].WSEndpoint(),
 		RollupRpc:         sys.RollupNodes["sequencer"].HTTPEndpoint(),
-		L2OOAddress:       predeploys.DevL2OutputOracleAddr.String(),
+		L2OOAddress:       config.L1Deployments.L2OutputOracleProxy.Hex(),
 		PollInterval:      50 * time.Millisecond,
-		TxMgrConfig:       newTxMgrConfig(sys.Nodes["l1"].WSEndpoint(), cfg.Secrets.Proposer),
+		TxMgrConfig:       newTxMgrConfig(sys.EthInstances["l1"].WSEndpoint(), cfg.Secrets.Proposer),
 		AllowNonFinalized: cfg.NonFinalizedProposals,
 		LogConfig: oplog.CLIConfig{
 			Level:  "info",
@@ -643,12 +654,12 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 
 	// Batch Submitter
 	sys.BatchSubmitter, err = bss.NewBatchSubmitterFromCLIConfig(bss.CLIConfig{
-		L1EthRpc:               sys.Nodes["l1"].WSEndpoint(),
-		L2EthRpc:               sys.Nodes["sequencer"].WSEndpoint(),
+		L1EthRpc:               sys.EthInstances["l1"].WSEndpoint(),
+		L2EthRpc:               sys.EthInstances["sequencer"].WSEndpoint(),
 		RollupRpc:              sys.RollupNodes["sequencer"].HTTPEndpoint(),
 		MaxPendingTransactions: 0,
 		MaxChannelDuration:     1,
-		MaxL1TxSize:            120_000,
+		MaxL1TxSize:            240_000,
 		CompressorConfig: compressor.CLIConfig{
 			TargetL1TxSizeBytes: cfg.BatcherTargetL1TxSizeBytes,
 			TargetNumFrames:     1,
@@ -656,7 +667,7 @@ func (cfg SystemConfig) Start(_opts ...SystemConfigOption) (*System, error) {
 		},
 		SubSafetyMargin: 4,
 		PollInterval:    50 * time.Millisecond,
-		TxMgrConfig:     newTxMgrConfig(sys.Nodes["l1"].WSEndpoint(), cfg.Secrets.Batcher),
+		TxMgrConfig:     newTxMgrConfig(sys.EthInstances["l1"].WSEndpoint(), cfg.Secrets.Batcher),
 		LogConfig: oplog.CLIConfig{
 			Level:  "info",
 			Format: "text",
@@ -721,7 +732,7 @@ func (sys *System) newMockNetPeer() (host.Host, error) {
 	return sys.Mocknet.AddPeerWithPeerstore(p, eps)
 }
 
-func selectEndpoint(node *node.Node) string {
+func selectEndpoint(node EthInstance) string {
 	useHTTP := os.Getenv("OP_E2E_USE_HTTP") == "true"
 	if useHTTP {
 		log.Info("using HTTP client")
@@ -730,7 +741,7 @@ func selectEndpoint(node *node.Node) string {
 	return node.WSEndpoint()
 }
 
-func configureL1(rollupNodeCfg *rollupNode.Config, l1Node *node.Node) {
+func configureL1(rollupNodeCfg *rollupNode.Config, l1Node EthInstance) {
 	l1EndpointConfig := selectEndpoint(l1Node)
 	rollupNodeCfg.L1 = &rollupNode.L1EndpointConfig{
 		L1NodeAddr:       l1EndpointConfig,
@@ -741,7 +752,13 @@ func configureL1(rollupNodeCfg *rollupNode.Config, l1Node *node.Node) {
 		HttpPollInterval: time.Millisecond * 100,
 	}
 }
-func configureL2(rollupNodeCfg *rollupNode.Config, l2Node *node.Node, jwtSecret [32]byte) {
+
+type WSOrHTTPEndpoint interface {
+	WSAuthEndpoint() string
+	HTTPAuthEndpoint() string
+}
+
+func configureL2(rollupNodeCfg *rollupNode.Config, l2Node WSOrHTTPEndpoint, jwtSecret [32]byte) {
 	useHTTP := os.Getenv("OP_E2E_USE_HTTP") == "true"
 	l2EndpointConfig := l2Node.WSAuthEndpoint()
 	if useHTTP {
@@ -760,12 +777,6 @@ func (cfg SystemConfig) L1ChainIDBig() *big.Int {
 
 func (cfg SystemConfig) L2ChainIDBig() *big.Int {
 	return new(big.Int).SetUint64(cfg.DeployConfig.L2ChainID)
-}
-
-func uint642big(in uint64) *hexutil.Big {
-	b := new(big.Int).SetUint64(in)
-	hu := hexutil.Big(*b)
-	return &hu
 }
 
 func hexPriv(in *ecdsa.PrivateKey) string {

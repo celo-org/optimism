@@ -8,20 +8,19 @@ import { Test } from "forge-std/Test.sol";
 import { DisputeGameFactory } from "../src/dispute/DisputeGameFactory.sol";
 import { IDisputeGame } from "../src/dispute/interfaces/IDisputeGame.sol";
 import { Proxy } from "../src/universal/Proxy.sol";
+import { L2OutputOracle_Initializer } from "./CommonTest.t.sol";
 
-contract DisputeGameFactory_Init is Test {
+contract DisputeGameFactory_Init is L2OutputOracle_Initializer {
     DisputeGameFactory factory;
     FakeClone fakeClone;
 
-    event DisputeGameCreated(
-        address indexed disputeProxy,
-        GameType indexed gameType,
-        Claim indexed rootClaim
-    );
+    event DisputeGameCreated(address indexed disputeProxy, GameType indexed gameType, Claim indexed rootClaim);
 
     event ImplementationSet(address indexed impl, GameType indexed gameType);
 
-    function setUp() public virtual {
+    function setUp() public virtual override {
+        super.setUp();
+
         Proxy proxy = new Proxy(address(this));
         DisputeGameFactory impl = new DisputeGameFactory();
 
@@ -39,11 +38,7 @@ contract DisputeGameFactory_Init is Test {
 contract DisputeGameFactory_Create_Test is DisputeGameFactory_Init {
     /// @dev Tests that the `create` function succeeds when creating a new dispute game
     ///      with a `GameType` that has an implementation set.
-    function testFuzz_create_succeeds(
-        uint8 gameType,
-        Claim rootClaim,
-        bytes calldata extraData
-    ) public {
+    function testFuzz_create_succeeds(uint8 gameType, Claim rootClaim, bytes calldata extraData) public {
         // Ensure that the `gameType` is within the bounds of the `GameType` enum's possible values.
         GameType gt = GameType.wrap(uint8(bound(gameType, 0, 2)));
 
@@ -56,25 +51,21 @@ contract DisputeGameFactory_Create_Test is DisputeGameFactory_Init {
         emit DisputeGameCreated(address(0), gt, rootClaim);
         IDisputeGame proxy = factory.create(gt, rootClaim, extraData);
 
-        (IDisputeGame game, uint256 timestamp) = factory.games(gt, rootClaim, extraData);
+        (IDisputeGame game, Timestamp timestamp) = factory.games(gt, rootClaim, extraData);
 
         // Ensure that the dispute game was assigned to the `disputeGames` mapping.
         assertEq(address(game), address(proxy));
-        assertEq(timestamp, block.timestamp);
+        assertEq(Timestamp.unwrap(timestamp), block.timestamp);
         assertEq(factory.gameCount(), 1);
 
-        (IDisputeGame game2, uint256 timestamp2) = factory.gameAtIndex(0);
+        (, Timestamp timestamp2, IDisputeGame game2) = factory.gameAtIndex(0);
         assertEq(address(game2), address(proxy));
-        assertEq(timestamp2, block.timestamp);
+        assertEq(Timestamp.unwrap(timestamp2), block.timestamp);
     }
 
     /// @dev Tests that the `create` function reverts when there is no implementation
     ///      set for the given `GameType`.
-    function testFuzz_create_noImpl_reverts(
-        uint8 gameType,
-        Claim rootClaim,
-        bytes calldata extraData
-    ) public {
+    function testFuzz_create_noImpl_reverts(uint8 gameType, Claim rootClaim, bytes calldata extraData) public {
         // Ensure that the `gameType` is within the bounds of the `GameType` enum's possible values.
         GameType gt = GameType.wrap(uint8(bound(gameType, 0, 2)));
 
@@ -83,11 +74,7 @@ contract DisputeGameFactory_Create_Test is DisputeGameFactory_Init {
     }
 
     /// @dev Tests that the `create` function reverts when there exists a dispute game with the same UUID.
-    function testFuzz_create_sameUUID_reverts(
-        uint8 gameType,
-        Claim rootClaim,
-        bytes calldata extraData
-    ) public {
+    function testFuzz_create_sameUUID_reverts(uint8 gameType, Claim rootClaim, bytes calldata extraData) public {
         // Ensure that the `gameType` is within the bounds of the `GameType` enum's possible values.
         GameType gt = GameType.wrap(uint8(bound(gameType, 0, 2)));
 
@@ -101,17 +88,14 @@ contract DisputeGameFactory_Create_Test is DisputeGameFactory_Init {
         emit DisputeGameCreated(address(0), gt, rootClaim);
         IDisputeGame proxy = factory.create(gt, rootClaim, extraData);
 
-        (IDisputeGame game, uint256 timestamp) = factory.games(gt, rootClaim, extraData);
+        (IDisputeGame game, Timestamp timestamp) = factory.games(gt, rootClaim, extraData);
         // Ensure that the dispute game was assigned to the `disputeGames` mapping.
         assertEq(address(game), address(proxy));
-        assertEq(timestamp, block.timestamp);
+        assertEq(Timestamp.unwrap(timestamp), block.timestamp);
 
         // Ensure that the `create` function reverts when called with parameters that would result in the same UUID.
         vm.expectRevert(
-            abi.encodeWithSelector(
-                GameAlreadyExists.selector,
-                factory.getGameUUID(gt, rootClaim, extraData)
-            )
+            abi.encodeWithSelector(GameAlreadyExists.selector, factory.getGameUUID(gt, rootClaim, extraData))
         );
         factory.create(gt, rootClaim, extraData);
     }
@@ -145,17 +129,12 @@ contract DisputeGameFactory_SetImplementation_Test is DisputeGameFactory_Init {
 contract DisputeGameFactory_GetGameUUID_Test is DisputeGameFactory_Init {
     /// @dev Tests that the `getGameUUID` function returns the correct hash when comparing
     ///      against the keccak256 hash of the abi-encoded parameters.
-    function testDiff_getGameUUID_succeeds(
-        uint8 gameType,
-        Claim rootClaim,
-        bytes calldata extraData
-    ) public {
+    function testDiff_getGameUUID_succeeds(uint8 gameType, Claim rootClaim, bytes calldata extraData) public {
         // Ensure that the `gameType` is within the bounds of the `GameType` enum's possible values.
         GameType gt = GameType.wrap(uint8(bound(gameType, 0, 2)));
 
         assertEq(
-            Hash.unwrap(factory.getGameUUID(gt, rootClaim, extraData)),
-            keccak256(abi.encode(gt, rootClaim, extraData))
+            Hash.unwrap(factory.getGameUUID(gt, rootClaim, extraData)), keccak256(abi.encode(gt, rootClaim, extraData))
         );
     }
 }
@@ -179,37 +158,6 @@ contract DisputeGameFactory_TransferOwnership_Test is DisputeGameFactory_Init {
         vm.prank(address(0));
         vm.expectRevert("Ownable: caller is not the owner");
         factory.transferOwnership(address(1));
-    }
-}
-
-/// @title PackingTester
-/// @notice Exposes the internal packing functions so that they can be fuzzed
-///         in a roundtrip manner.
-contract PackingTester is DisputeGameFactory {
-    function packSlot(address _addr, uint256 _num) external pure returns (GameId) {
-        return _packSlot(_addr, _num);
-    }
-
-    function unpackSlot(GameId _slot) external pure returns (address, uint256) {
-        return _unpackSlot(_slot);
-    }
-}
-
-/// @title DisputeGameFactory_PackSlot_Test
-/// @notice Fuzzes the PackingTester contract
-contract DisputeGameFactory_PackSlot_Test is Test {
-    PackingTester tester;
-
-    function setUp() public {
-        tester = new PackingTester();
-    }
-
-    /// @dev Tests that the `packSlot` and `unpackSlot` functions roundtrip correctly.
-    function testFuzz_packSlot_succeeds(address _addr, uint96 _num) public {
-        GameId slot = tester.packSlot(_addr, uint256(_num));
-        (address addr, uint256 num) = tester.unpackSlot(slot);
-        assertEq(addr, _addr);
-        assertEq(num, _num);
     }
 }
 

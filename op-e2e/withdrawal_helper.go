@@ -9,13 +9,14 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
+	"github.com/ethereum-optimism/optimism/op-e2e/config"
+	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-node/withdrawals"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethclient/gethclient"
-	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 )
@@ -77,18 +78,18 @@ func defaultWithdrawalTxOpts() *WithdrawalTxOpts {
 	}
 }
 
-func ProveAndFinalizeWithdrawal(t *testing.T, cfg SystemConfig, l1Client *ethclient.Client, l2Node *node.Node, ethPrivKey *ecdsa.PrivateKey, l2WithdrawalReceipt *types.Receipt) (*types.Receipt, *types.Receipt) {
+func ProveAndFinalizeWithdrawal(t *testing.T, cfg SystemConfig, l1Client *ethclient.Client, l2Node EthInstance, ethPrivKey *ecdsa.PrivateKey, l2WithdrawalReceipt *types.Receipt) (*types.Receipt, *types.Receipt) {
 	params, proveReceipt := ProveWithdrawal(t, cfg, l1Client, l2Node, ethPrivKey, l2WithdrawalReceipt)
 	finalizeReceipt := FinalizeWithdrawal(t, cfg, l1Client, ethPrivKey, proveReceipt, params)
 	return proveReceipt, finalizeReceipt
 }
 
-func ProveWithdrawal(t *testing.T, cfg SystemConfig, l1Client *ethclient.Client, l2Node *node.Node, ethPrivKey *ecdsa.PrivateKey, l2WithdrawalReceipt *types.Receipt) (withdrawals.ProvenWithdrawalParameters, *types.Receipt) {
+func ProveWithdrawal(t *testing.T, cfg SystemConfig, l1Client *ethclient.Client, l2Node EthInstance, ethPrivKey *ecdsa.PrivateKey, l2WithdrawalReceipt *types.Receipt) (withdrawals.ProvenWithdrawalParameters, *types.Receipt) {
 	// Get l2BlockNumber for proof generation
 	ctx, cancel := context.WithTimeout(context.Background(), 40*time.Duration(cfg.DeployConfig.L1BlockTime)*time.Second)
 	defer cancel()
 
-	blockNumber, err := withdrawals.WaitForOutputRootPublished(ctx, l1Client, predeploys.DevOptimismPortalAddr, l2WithdrawalReceipt.BlockNumber)
+	blockNumber, err := wait.ForOutputRootPublished(ctx, l1Client, config.L1Deployments.L2OutputOracleProxy, l2WithdrawalReceipt.BlockNumber)
 	require.Nil(t, err)
 
 	rpcClient, err := rpc.Dial(l2Node.WSEndpoint())
@@ -103,13 +104,13 @@ func ProveWithdrawal(t *testing.T, cfg SystemConfig, l1Client *ethclient.Client,
 	require.Nil(t, err)
 
 	// Now create withdrawal
-	oracle, err := bindings.NewL2OutputOracleCaller(predeploys.DevL2OutputOracleAddr, l1Client)
+	oracle, err := bindings.NewL2OutputOracleCaller(config.L1Deployments.L2OutputOracleProxy, l1Client)
 	require.Nil(t, err)
 
 	params, err := withdrawals.ProveWithdrawalParameters(context.Background(), proofCl, receiptCl, l2WithdrawalReceipt.TxHash, header, oracle)
 	require.Nil(t, err)
 
-	portal, err := bindings.NewOptimismPortal(predeploys.DevOptimismPortalAddr, l1Client)
+	portal, err := bindings.NewOptimismPortal(config.L1Deployments.OptimismPortalProxy, l1Client)
 	require.Nil(t, err)
 
 	opts, err := bind.NewKeyedTransactorWithChainID(ethPrivKey, cfg.L1ChainIDBig())
@@ -143,12 +144,13 @@ func FinalizeWithdrawal(t *testing.T, cfg SystemConfig, l1Client *ethclient.Clie
 	// Wait for finalization and then create the Finalized Withdrawal Transaction
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Duration(cfg.DeployConfig.L1BlockTime)*time.Second)
 	defer cancel()
-	err := withdrawals.WaitForFinalizationPeriod(ctx, l1Client, predeploys.DevOptimismPortalAddr, withdrawalProofReceipt.BlockNumber)
+
+	err := wait.ForFinalizationPeriod(ctx, l1Client, withdrawalProofReceipt.BlockNumber, config.L1Deployments.L2OutputOracleProxy)
 	require.Nil(t, err)
 
 	opts, err := bind.NewKeyedTransactorWithChainID(privKey, cfg.L1ChainIDBig())
 	require.Nil(t, err)
-	portal, err := bindings.NewOptimismPortal(predeploys.DevOptimismPortalAddr, l1Client)
+	portal, err := bindings.NewOptimismPortal(config.L1Deployments.OptimismPortalProxy, l1Client)
 	require.Nil(t, err)
 	// Finalize withdrawal
 	tx, err := portal.FinalizeWithdrawalTransaction(

@@ -14,10 +14,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils"
-	"github.com/ethereum-optimism/optimism/op-node/eth"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
 	"github.com/ethereum-optimism/optimism/op-node/testlog"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
 func TestBatcher(gt *testing.T) {
@@ -26,6 +26,7 @@ func TestBatcher(gt *testing.T) {
 		MaxSequencerDrift:   20, // larger than L1 block time we simulate in this test (12)
 		SequencerWindowSize: 24,
 		ChannelTimeout:      20,
+		L1BlockTime:         12,
 	}
 	dp := e2eutils.MakeDeployParams(t, p)
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
@@ -345,6 +346,7 @@ func TestExtendedTimeWithoutL1Batches(gt *testing.T) {
 		MaxSequencerDrift:   20, // larger than L1 block time we simulate in this test (12)
 		SequencerWindowSize: 24,
 		ChannelTimeout:      20,
+		L1BlockTime:         12,
 	}
 	dp := e2eutils.MakeDeployParams(t, p)
 	sd := e2eutils.Setup(t, dp, defaultAlloc)
@@ -402,6 +404,7 @@ func TestBigL2Txs(gt *testing.T) {
 		MaxSequencerDrift:   100,
 		SequencerWindowSize: 1000,
 		ChannelTimeout:      200, // give enough space to buffer large amounts of data before submitting it
+		L1BlockTime:         12,
 	}
 	dp := e2eutils.MakeDeployParams(t, p)
 	sd := e2eutils.Setup(t, dp, defaultAlloc)

@@ -52,7 +52,7 @@ type StepData struct {
 	IsAttack   bool
 	PreState   []byte
 	ProofData  []byte
-	OracleData types.PreimageOracleData
+	OracleData *types.PreimageOracleData
 }
 
 // AttemptStep determines what step should occur for a given leaf claim.
@@ -71,23 +71,22 @@ func (s *Solver) AttemptStep(ctx context.Context, claim types.Claim, agreeWithCl
 	index := claim.TraceIndex(s.gameDepth)
 	var preState []byte
 	var proofData []byte
-	// If we are attacking index 0, we provide the absolute pre-state, not an intermediate state
-	if index == 0 && !claimCorrect {
-		preState = s.trace.AbsolutePreState(ctx)
-	} else {
-		// If attacking, get the state just before, other get the state after
-		if !claimCorrect {
-			index = index - 1
-		}
-		preState, proofData, err = s.trace.GetPreimage(ctx, index)
+	var oracleData *types.PreimageOracleData
+
+	if !claimCorrect {
+		// Attack the claim by executing step index, so we need to get the pre-state of that index
+		preState, proofData, oracleData, err = s.trace.GetStepData(ctx, index)
 		if err != nil {
 			return StepData{}, err
 		}
-	}
-
-	oracleData, err := s.trace.GetOracleData(ctx, index)
-	if err != nil {
-		return StepData{}, err
+	} else {
+		// We agree with the claim so Defend and use this claim as the starting point to execute the step after
+		// Thus we need the pre-state of the next step
+		// Note: This makes our maximum depth 63 because we need to add 1 without overflowing.
+		preState, proofData, oracleData, err = s.trace.GetStepData(ctx, index+1)
+		if err != nil {
+			return StepData{}, err
+		}
 	}
 
 	return StepData{
@@ -95,7 +94,7 @@ func (s *Solver) AttemptStep(ctx context.Context, claim types.Claim, agreeWithCl
 		IsAttack:   !claimCorrect,
 		PreState:   preState,
 		ProofData:  proofData,
-		OracleData: *oracleData,
+		OracleData: oracleData,
 	}, nil
 }
 

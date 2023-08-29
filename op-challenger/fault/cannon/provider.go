@@ -8,10 +8,14 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
 	"github.com/ethereum-optimism/optimism/op-challenger/config"
 	"github.com/ethereum-optimism/optimism/op-challenger/fault/types"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -20,11 +24,12 @@ const (
 )
 
 type proofData struct {
-	ClaimValue  hexutil.Bytes `json:"post"`
-	StateData   hexutil.Bytes `json:"state-data"`
-	ProofData   hexutil.Bytes `json:"proof-data"`
-	OracleKey   hexutil.Bytes `json:"oracle-key,omitempty"`
-	OracleValue hexutil.Bytes `json:"oracle-value,omitempty"`
+	ClaimValue   hexutil.Bytes `json:"post"`
+	StateData    hexutil.Bytes `json:"state-data"`
+	ProofData    hexutil.Bytes `json:"proof-data"`
+	OracleKey    hexutil.Bytes `json:"oracle-key,omitempty"`
+	OracleValue  hexutil.Bytes `json:"oracle-value,omitempty"`
+	OracleOffset uint32        `json:"oracle-offset,omitempty"`
 }
 
 type ProofGenerator interface {
@@ -33,24 +38,43 @@ type ProofGenerator interface {
 }
 
 type CannonTraceProvider struct {
+	logger    log.Logger
 	dir       string
+	prestate  string
 	generator ProofGenerator
+
+	// lastStep stores the last step in the actual trace if known. 0 indicates unknown.
+	// Cached as an optimisation to avoid repeatedly attempting to execute beyond the end of the trace.
+	lastStep uint64
+	// lastProof stores the proof data to use for all steps extended beyond lastStep
+	lastProof *proofData
 }
 
-func NewCannonTraceProvider(logger log.Logger, cfg *config.Config) *CannonTraceProvider {
-	return &CannonTraceProvider{
-		dir:       cfg.CannonDatadir,
-		generator: NewExecutor(logger, cfg),
-	}
-}
-
-func (p *CannonTraceProvider) GetOracleData(ctx context.Context, i uint64) (*types.PreimageOracleData, error) {
-	proof, err := p.loadProof(ctx, i)
+func NewTraceProvider(ctx context.Context, logger log.Logger, cfg *config.Config, l1Client bind.ContractCaller, gameAddr common.Address) (*CannonTraceProvider, error) {
+	l2Client, err := ethclient.DialContext(ctx, cfg.CannonL2)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("dial l2 client %v: %w", cfg.CannonL2, err)
 	}
-	data := types.NewPreimageOracleData(proof.OracleKey, proof.OracleValue)
-	return &data, nil
+	defer l2Client.Close() // Not needed after fetching the inputs
+	gameCaller, err := bindings.NewFaultDisputeGameCaller(gameAddr, l1Client)
+	if err != nil {
+		return nil, fmt.Errorf("create caller for game %v: %w", gameAddr, err)
+	}
+	localInputs, err := fetchLocalInputs(ctx, gameAddr, gameCaller, l2Client)
+	if err != nil {
+		return nil, fmt.Errorf("fetch local game inputs: %w", err)
+	}
+	return NewTraceProviderFromInputs(logger, cfg, gameAddr.Hex(), localInputs), nil
+}
+
+func NewTraceProviderFromInputs(logger log.Logger, cfg *config.Config, gameDirName string, localInputs LocalGameInputs) *CannonTraceProvider {
+	dir := filepath.Join(cfg.CannonDatadir, gameDirName)
+	return &CannonTraceProvider{
+		logger:    logger,
+		dir:       dir,
+		prestate:  cfg.CannonAbsolutePreState,
+		generator: NewExecutor(logger, cfg, localInputs),
+	}
 }
 
 func (p *CannonTraceProvider) Get(ctx context.Context, i uint64) (common.Hash, error) {
@@ -66,27 +90,41 @@ func (p *CannonTraceProvider) Get(ctx context.Context, i uint64) (common.Hash, e
 	return value, nil
 }
 
-func (p *CannonTraceProvider) GetPreimage(ctx context.Context, i uint64) ([]byte, []byte, error) {
+func (p *CannonTraceProvider) GetStepData(ctx context.Context, i uint64) ([]byte, []byte, *types.PreimageOracleData, error) {
 	proof, err := p.loadProof(ctx, i)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	value := ([]byte)(proof.StateData)
 	if len(value) == 0 {
-		return nil, nil, errors.New("proof missing state data")
+		return nil, nil, nil, errors.New("proof missing state data")
 	}
 	data := ([]byte)(proof.ProofData)
-	if len(data) == 0 {
-		return nil, nil, errors.New("proof missing proof data")
+	if data == nil {
+		return nil, nil, nil, errors.New("proof missing proof data")
 	}
-	return value, data, nil
+	var oracleData *types.PreimageOracleData
+	if len(proof.OracleKey) > 0 {
+		oracleData = types.NewPreimageOracleData(proof.OracleKey, proof.OracleValue, proof.OracleOffset)
+	}
+	return value, data, oracleData, nil
 }
 
-func (p *CannonTraceProvider) AbsolutePreState(ctx context.Context) []byte {
-	panic("absolute prestate not yet supported")
+func (p *CannonTraceProvider) AbsolutePreState(ctx context.Context) ([]byte, error) {
+	state, err := parseState(p.prestate)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load absolute pre-state: %w", err)
+	}
+	return state.EncodeWitness(), nil
 }
 
+// loadProof will attempt to load or generate the proof data at the specified index
+// If the requested index is beyond the end of the actual trace it is extended with no-op instructions.
 func (p *CannonTraceProvider) loadProof(ctx context.Context, i uint64) (*proofData, error) {
+	if p.lastProof != nil && i > p.lastStep {
+		// If the requested index is after the last step in the actual trace, extend the final no-op step
+		return p.lastProof, nil
+	}
 	path := filepath.Join(p.dir, proofsDir, fmt.Sprintf("%d.json", i))
 	file, err := os.Open(path)
 	if errors.Is(err, os.ErrNotExist) {
@@ -95,6 +133,34 @@ func (p *CannonTraceProvider) loadProof(ctx context.Context, i uint64) (*proofDa
 		}
 		// Try opening the file again now and it should exist.
 		file, err = os.Open(path)
+		if errors.Is(err, os.ErrNotExist) {
+			// Expected proof wasn't generated, check if we reached the end of execution
+			state, err := parseState(filepath.Join(p.dir, finalState))
+			if err != nil {
+				return nil, fmt.Errorf("cannot read final state: %w", err)
+			}
+			if state.Exited && state.Step <= i {
+				p.logger.Warn("Requested proof was after the program exited", "proof", i, "last", state.Step)
+				// The final instruction has already been applied to this state, so the last step we can execute
+				// is one before its Step value.
+				p.lastStep = state.Step - 1
+				// Extend the trace out to the full length using a no-op instruction that doesn't change any state
+				// No execution is done, so no proof-data or oracle values are required.
+				witness := state.EncodeWitness()
+				proof := &proofData{
+					ClaimValue:   crypto.Keccak256(witness),
+					StateData:    witness,
+					ProofData:    []byte{},
+					OracleKey:    nil,
+					OracleValue:  nil,
+					OracleOffset: 0,
+				}
+				p.lastProof = proof
+				return proof, nil
+			} else {
+				return nil, fmt.Errorf("expected proof not generated but final state was not exited, requested step %v, final state at step %v", i, state.Step)
+			}
+		}
 	}
 	if err != nil {
 		return nil, fmt.Errorf("cannot open proof file (%v): %w", path, err)
