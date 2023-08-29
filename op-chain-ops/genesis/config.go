@@ -877,6 +877,11 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (*immutables
 			Name: "EAS",
 		},
 		Create2Deployer: struct{}{},
+		BridgedETH: struct {
+			Bridge common.Address
+		}{
+			Bridge: predeploys.L2StandardBridgeAddr,
+		},
 	}
 
 	if err := cfg.Check(); err != nil {
@@ -952,6 +957,52 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 	}
 	storage["ProxyAdmin"] = state.StorageValues{
 		"_owner": config.ProxyAdminOwner,
+	}
+
+	// Celo
+	storage["GoldToken"] = state.StorageValues{
+		"initialized":  true,
+		"totalSupply_": 0,
+		"registry":     predeploys.CeloRegistry,
+		"_owner":       config.ProxyAdminOwner,
+	}
+	storage["CeloRegistry"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+		"registry": map[any]any{
+			"0xd7e89ade8430819f08bf97a087285824af3351ee12d72a2d132b0c6c0687bfaf": predeploys.GoldTokenAddr, // keccak256(abi.encodePacked("GoldToken"));
+		},
+	}
+	storage["FeeHandler"] = state.StorageValues{
+		"initialized":    true,
+		"registry":       predeploys.CeloRegistry,
+		"_owner":         config.ProxyAdminOwner,
+		"feeBeneficiary": config.ProxyAdminOwner,
+	}
+	storage["FeeCurrencyWhitelist"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
+	storage["MentoFeeHandlerSeller"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
+	storage["UniswapFeeHandlerSeller"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
+	storage["SortedOracles"] = state.StorageValues{
+		"initialized":         true,
+		"_owner":              config.ProxyAdminOwner,
+		"reportExpirySeconds": 600,
+	}
+	storage["FeeCurrency"] = state.StorageValues{
+		"_name":        "FeeCurrency",
+		"_symbol":      "FC",
+		"_totalSupply": 1000_000_000,
+		"_balances": map[any]any{
+			config.ProxyAdminOwner.String(): 1000_000_000,
+		},
 	}
 	return storage, nil
 }

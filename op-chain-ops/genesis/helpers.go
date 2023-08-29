@@ -1,11 +1,11 @@
 package genesis
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -74,7 +74,14 @@ func AddressToCodeNamespace(addr common.Address) (common.Address, error) {
 }
 
 func IsL2DevPredeploy(addr common.Address) bool {
-	return bytes.Equal(addr[0:2], []byte{0x42, 0x00})
+	// Celo: We allow all predeploys here so that we can deploy contracts with
+	// proxies at arbitrary addresses. Since only the last two bytes are kept
+	// when mapping the address into `codeNamespace`, there is a 2^16 risk of
+	// collision. This is why Optimism only allowed that for addresses starting
+	// with 0x4200, because those are all chosen to differ in the last two
+	// bytes.
+	var _, isPredeploy = predeploys.PredeploysByAddress[addr]
+	return isPredeploy
 }
 
 // GetBlockFromTag will resolve a Block given an rpc block tag

@@ -77,6 +77,22 @@ func TestBuildOptimism(t *testing.T) {
 		Permit2:                      struct{}{},
 		SenderCreator:                struct{}{},
 		EntryPoint:                   struct{}{},
+
+		// Celo
+		CeloRegistry:                      struct{}{},
+		GoldToken:                         struct{}{},
+		FeeHandler:                        struct{}{},
+		FeeCurrencyWhitelist:              struct{}{},
+		MentoFeeHandlerSeller:             struct{}{},
+		UniswapFeeHandlerSeller:           struct{}{},
+		SortedOracles:                     struct{}{},
+		AddressSortedLinkedListWithMedian: struct{}{},
+		FeeCurrency:                       struct{}{},
+		BridgedETH: struct {
+			Bridge common.Address
+		}{
+			Bridge: predeploys.L2StandardBridgeAddr,
+		},
 	}
 
 	require.NoError(t, cfg.Check())

@@ -42,7 +42,18 @@
     "DelayedVetoable",
     "ISemver",
     "StorageSetter",
-    "SuperchainConfig"
+    "SuperchainConfig",
+    "CeloRegistry",
+    "GoldToken",
+    "FeeHandler",
+    "FeeCurrencyWhitelist",
+    "MentoFeeHandlerSeller",
+    "UniswapFeeHandlerSeller",
+    "SortedOracles",
+    "AddressSortedLinkedListWithMedian",
+    "FeeCurrency",
+    "BridgedETH",
+    "MockSortedOracles"
   ],
   "remote": [
     {

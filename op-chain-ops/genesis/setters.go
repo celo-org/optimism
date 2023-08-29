@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
+	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/immutables"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/state"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -49,6 +50,11 @@ func setProxies(db vm.StateDB, proxyAdminAddr common.Address, namespace *big.Int
 		db.SetCode(addr, depBytecode)
 		db.SetState(addr, AdminSlot, eth.AddressAsLeftPaddedHash(proxyAdminAddr))
 		log.Trace("Set proxy", "address", addr, "admin", proxyAdminAddr)
+	}
+
+	for _, predeploy := range predeploys.CeloPredeploys {
+		db.SetCode(predeploy.Address, depBytecode)
+		db.SetState(predeploy.Address, AdminSlot, eth.AddressAsLeftPaddedHash(proxyAdminAddr))
 	}
 
 	return nil

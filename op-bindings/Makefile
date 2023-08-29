@@ -19,7 +19,7 @@ version:
 compile:
 	cd $(contracts-dir) && \
 		forge clean && \
-		pnpm build
+		pnpm build:linkedLibraries
 
 bindings: bindgen-local
 

@@ -67,6 +67,20 @@ type PredeploysImmutableConfig struct {
 	Permit2                      struct{}
 	SenderCreator                struct{}
 	EntryPoint                   struct{}
+
+	// Celo
+	CeloRegistry                      struct{}
+	GoldToken                         struct{}
+	FeeHandler                        struct{}
+	FeeCurrencyWhitelist              struct{}
+	MentoFeeHandlerSeller             struct{}
+	UniswapFeeHandlerSeller           struct{}
+	SortedOracles                     struct{}
+	AddressSortedLinkedListWithMedian struct{}
+	FeeCurrency                       struct{}
+	BridgedETH                        struct {
+		Bridge common.Address
+	}
 }
 
 // Check will ensure that the required fields are set on the config.
@@ -230,6 +244,40 @@ func l2ImmutableDeployer(backend *backends.SimulatedBackend, opts *bind.Transact
 		_, tx, _, err = bindings.DeployOptimismMintableERC721Factory(opts, backend, bridge, remoteChainId)
 	case "EAS":
 		_, tx, _, err = bindings.DeployEAS(opts, backend)
+
+	// Celo
+	case "CeloRegistry":
+		_, tx, _, err = bindings.DeployCeloRegistry(opts, backend, false)
+	case "GoldToken":
+		_, tx, _, err = bindings.DeployGoldToken(opts, backend, false)
+	case "FeeHandler":
+		_, tx, _, err = bindings.DeployFeeHandler(opts, backend, false)
+	case "FeeCurrencyWhitelist":
+		_, tx, _, err = bindings.DeployFeeCurrencyWhitelist(opts, backend, false)
+	case "MentoFeeHandlerSeller":
+		_, tx, _, err = bindings.DeployMentoFeeHandlerSeller(opts, backend, false)
+	case "UniswapFeeHandlerSeller":
+		_, tx, _, err = bindings.DeployUniswapFeeHandlerSeller(opts, backend, false)
+	case "SortedOracles":
+		_, tx, _, err = bindings.DeploySortedOracles(opts, backend, false)
+	case "AddressSortedLinkedListWithMedian":
+		_, tx, _, err = bindings.DeployAddressSortedLinkedListWithMedian(opts, backend)
+	case "FeeCurrency":
+		name, ok := deployment.Args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid fee currency name")
+		}
+		symbol, ok := deployment.Args[1].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid fee currency symbol")
+		}
+		_, tx, _, err = bindings.DeployFeeCurrency(opts, backend, name, symbol)
+	case "BridgedETH":
+		bridge, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for bridge: %v %+v", bridge, deployment.Args)
+		}
+		_, tx, _, err = bindings.DeployBridgedETH(opts, backend, bridge)
 	default:
 		return tx, fmt.Errorf("unknown contract: %s", deployment.Name)
 	}
