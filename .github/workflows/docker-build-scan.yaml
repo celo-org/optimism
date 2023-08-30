@@ -21,12 +21,14 @@ jobs:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
     with:
       dockerfile: ops-bedrock/Dockerfile.l1
+      context: ops-bedrock
 
   Build-Scan-Container-ops-bedrock-l2:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
     with:
       dockerfile: ops-bedrock/Dockerfile.l2
- 
+      context: ops-bedrock
+
   Build-Scan-Container-indexer:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
     with:
