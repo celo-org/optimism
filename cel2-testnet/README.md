@@ -15,11 +15,16 @@ These steps should only be done once when creating a new testnet. The scripts in
 
 This assumes that you run the full testnet setup including the sequencer on our GCP instance. If you want to run a second node, you will have to turn off the sequencer and might have to do further adjustments.
 
-* Copy the `cel2-testnet` directory to the GCP instance `gcloud compute scp --zone "us-west1-b" --project "blockchaintestsglobaltestnet" --recurse ../cel2-testnet/ l2-celo-dev:~`
+* Copy the `cel2-testnet` directory to the GCP instance `gcloud compute scp --zone "us-west1-b" --project "blockchaintestsglobaltestnet" --recurse ../cel2-testnet/ l2-celo-dev:/home/cel2`
 * Build the docker images with `build_images.sh`.
 * Upload the images to the remote docker instance with `upload-images.sh`.
-* SSH into the remote host and start the docker-compose setup. `gcloud compute ssh --zone "us-west1-b" "l2-celo-dev" --project "blockchaintestsglobaltestnet" -- 'cd cel2-testnet && ./run_docker.sh'`
+* SSH into the remote host and start the docker-compose setup. `gcloud compute ssh --zone "us-west1-b" "l2-celo-dev" --project "blockchaintestsglobaltestnet" -- 'cd /home/cel2/cel2-testnet && ./run_docker.sh'`
 
-## Helper Scripts
+## Monitoring
 
-The testnet will stop functioning if the accounts run out of balance. Use `balances.sh` to display the current balances.
+The `monitoring.sh` script will check the testnet health and submit messages via Slack if problems are detected. I recommend running it once per day. To do that via cron, execute
+```
+sudo bash -c 'echo -e "#!/bin/bash\n/home/cel2/cel2-testnet/monitoring.sh >>/var/log/cel2_monitoring 2>&1" \
+	> /etc/cron.daily/cel2_monitoring'
+sudo chmod u+x /etc/cron.daily/cel2_monitoring
+```
