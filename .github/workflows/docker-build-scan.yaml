@@ -11,6 +11,7 @@ jobs:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
     with:
       dockerfile: ops/docker/Dockerfile.packages
+      context: ops/docker
 
   Build-Scan-Container-op-ufm:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
