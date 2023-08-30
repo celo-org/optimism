@@ -22,7 +22,7 @@ jobs:
     with:
       dockerfile: ops-bedrock/Dockerfile.l1
 
-   Build-Scan-Container-ops-bedrock-l2:
+  Build-Scan-Container-ops-bedrock-l2:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
     with:
       dockerfile: ops-bedrock/Dockerfile.l2
