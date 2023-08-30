@@ -1,18 +1,8 @@
 name: Docker Build Scan
 on:
-  push:
-    branches:
-    - celo1
-  pull_request:
   workflow_dispatch:
 
 jobs:
-  Build-Scan-Container-ops:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
-    with:
-      dockerfile: ops/docker/Dockerfile.packages
-      context: ops
-
   Build-Scan-Container-op-ufm:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
     with:
