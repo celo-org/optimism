@@ -31,6 +31,9 @@ import { L1ERC721Bridge } from "src/L1/L1ERC721Bridge.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Chains } from "./Chains.sol";
 
+import { GoldToken } from "src/celo/GoldToken.sol";
+import { Registry } from "src/celo/Registry.sol";
+
 import { IBigStepper } from "src/dispute/interfaces/IBigStepper.sol";
 import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { AlphabetVM } from "../test/FaultDisputeGame.t.sol";
@@ -76,6 +79,9 @@ contract Deploy is Deployer {
         initializeL2OutputOracle();
         initializeOptimismPortal();
 
+        initializeRegistry();
+        initializeGoldToken();
+
         setAlphabetFaultGameImplementation();
         setCannonFaultGameImplementation();
 
@@ -112,6 +118,9 @@ contract Deploy is Deployer {
         deployL1ERC721BridgeProxy();
         deployDisputeGameFactoryProxy();
 
+        deployRegistryProxy();
+        deployGoldTokenProxy();
+
         transferAddressManagerOwnership();
     }
 
@@ -128,6 +137,9 @@ contract Deploy is Deployer {
         deployBlockOracle();
         deployPreimageOracle();
         deployMips();
+
+        deployRegistry();
+        deployGoldToken();
     }
 
     /// @notice Deploy the AddressManager
@@ -266,6 +278,38 @@ contract Deploy is Deployer {
 
         save("SystemConfigProxy", address(proxy));
         console.log("SystemConfigProxy deployed at %s", address(proxy));
+
+        addr_ = address(proxy);
+    }
+
+     /// @notice Deploy the RegistryProxy
+    function deployRegistryProxy() public broadcast returns (address addr_) {
+        address proxyAdmin = mustGetAddress("ProxyAdmin");
+        Proxy proxy = new Proxy({
+            _admin: proxyAdmin
+        });
+
+        address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
+        require(admin == proxyAdmin);
+
+        save("RegistryProxy", address(proxy));
+        console.log("RegistryProxy deployed at %s", address(proxy));
+
+        addr_ = address(proxy);
+    }
+
+     /// @notice Deploy the GoldTokenProxy
+    function deployGoldTokenProxy() public broadcast returns (address addr_) {
+        address proxyAdmin = mustGetAddress("ProxyAdmin");
+        Proxy proxy = new Proxy({
+            _admin: proxyAdmin
+        });
+
+        address admin = address(uint160(uint256(vm.load(address(proxy), OWNER_KEY))));
+        require(admin == proxyAdmin);
+
+        save("GoldTokenProxy", address(proxy));
+        console.log("GoldTokenProxy deployed at %s", address(proxy));
 
         addr_ = address(proxy);
     }
@@ -454,6 +498,26 @@ contract Deploy is Deployer {
         addr_ = address(bridge);
     }
 
+    /// @notice Deploy the Registry
+    function deployRegistry() public broadcast returns (address addr_) {
+        Registry registry = new Registry(false);
+
+        save("Registry", address(registry));
+        console.log("Registry deployed at %s", address(registry));
+
+        addr_ = address(registry);
+    }
+
+     /// @notice Deploy the GoldToken
+    function deployGoldToken() public broadcast returns (address addr_) {
+        GoldToken goldToken = new GoldToken(false);
+
+        save("GoldToken", address(goldToken));
+        console.log("GoldToken deployed at %s", address(goldToken));
+
+        addr_ = address(goldToken);
+    }
+
     /// @notice Transfer ownership of the address manager to the ProxyAdmin
     function transferAddressManagerOwnership() public broadcast {
         AddressManager addressManager = AddressManager(mustGetAddress("AddressManager"));
@@ -550,6 +614,40 @@ contract Deploy is Deployer {
         } else {
             require(config.startBlock() == block.number);
         }
+    }
+
+    /// @notice Initialize the Registry
+    function initializeRegistry() public broadcast {
+        ProxyAdmin proxyAdmin = ProxyAdmin(mustGetAddress("ProxyAdmin"));
+        address registryProxy = mustGetAddress("RegistryProxy");
+        address registry = mustGetAddress("Registry");
+
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(registryProxy),
+            _implementation: registry,
+            _data: abi.encodeCall(
+                Registry.initialize,
+                ()
+                )
+        });
+    }
+
+    /// @notice Initialize the GoldToken
+    function initializeGoldToken() public broadcast {
+        ProxyAdmin proxyAdmin = ProxyAdmin(mustGetAddress("ProxyAdmin"));
+        address goldTokenProxy = mustGetAddress("GoldTokenProxy");
+        address goldToken = mustGetAddress("GoldToken");
+
+        address registryProxy = mustGetAddress("RegistryProxy");
+
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(goldTokenProxy),
+            _implementation: goldToken,
+            _data: abi.encodeCall(
+                GoldToken.initialize,
+                (registryProxy)
+                )
+        });
     }
 
     /// @notice Initialize the L1StandardBridge
