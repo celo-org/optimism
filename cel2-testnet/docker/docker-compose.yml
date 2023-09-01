@@ -14,8 +14,8 @@ services:
   l2:
     image: celo-testnet-ops-l2
     build:
-      context: .
-      dockerfile: ${HOME}/optimism/ops-bedrock/Dockerfile.l2
+      context: ${PWD}/../../ops-bedrock/
+      dockerfile: ${PWD}/../../ops-bedrock/Dockerfile.l2
     ports:
       - "9545:8545"
       - "8060:6060"
@@ -33,8 +33,8 @@ services:
       - l2
     image: celo-testnet-ops-op-node
     build:
-      context: ${HOME}/optimism
-      dockerfile: ${HOME}/optimism/op-node/Dockerfile
+      context: ${PWD}/../..
+      dockerfile: ${PWD}/../../op-node/Dockerfile
     command: >
       op-node
       --l1=${L1_RPC}
@@ -77,8 +77,8 @@ services:
       - op-node
     image: celo-testnet-ops-op-proposer
     build:
-      context: ${HOME}/optimism
-      dockerfile: ${HOME}/optimism/op-proposer/Dockerfile
+      context: ${PWD}/../..
+      dockerfile: ${PWD}/../../op-proposer/Dockerfile
     ports:
       - "6062:6060"
       - "7302:7300"
@@ -99,8 +99,8 @@ services:
       - op-node
     image: celo-testnet-ops-op-batcher
     build:
-      context: ${HOME}/optimism
-      dockerfile: ${HOME}/optimism/op-batcher/Dockerfile
+      context: ${PWD}/../..
+      dockerfile: ${PWD}/../../op-batcher/Dockerfile
     ports:
       - "6061:6060"
       - "7301:7300"
@@ -131,8 +131,8 @@ services:
 
   # stateviz:
   #   build:
-  #     context: ${HOME}/optimism
-  #     dockerfile: ${HOME}/optimism/ops-bedrock/Dockerfile.stateviz
+  #     context: ${PWD}/../..
+  #     dockerfile: ${PWD}/../../ops-bedrock/Dockerfile.stateviz
   #   command:
   #     - stateviz
   #     - -addr=0.0.0.0:8080
