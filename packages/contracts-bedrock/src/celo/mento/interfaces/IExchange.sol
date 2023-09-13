@@ -2,23 +2,11 @@
 pragma solidity >=0.5.13 <0.9.0;
 
 interface IExchange {
-    function buy(
-        uint256,
-        uint256,
-        bool
-    ) external returns (uint256);
+    function buy(uint256, uint256, bool) external returns (uint256);
 
-    function sell(
-        uint256,
-        uint256,
-        bool
-    ) external returns (uint256);
+    function sell(uint256, uint256, bool) external returns (uint256);
 
-    function exchange(
-        uint256,
-        uint256,
-        bool
-    ) external returns (uint256);
+    function exchange(uint256, uint256, bool) external returns (uint256);
 
     function setUpdateFrequency(uint256) external;
 
