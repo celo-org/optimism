@@ -2,21 +2,23 @@
 pragma solidity >=0.5.13 <0.9.0;
 
 interface IGovernance {
-  function votePartially(
-    uint256 proposalId,
-    uint256 index,
-    uint256 yesVotes,
-    uint256 noVotes,
-    uint256 abstainVotes
-  ) external returns (bool);
+    function votePartially(
+        uint256 proposalId,
+        uint256 index,
+        uint256 yesVotes,
+        uint256 noVotes,
+        uint256 abstainVotes
+    )
+        external
+        returns (bool);
 
-  function isVoting(address) external view returns (bool);
-  function getAmountOfGoldUsedForVoting(address account) external view returns (uint256);
+    function isVoting(address) external view returns (bool);
+    function getAmountOfGoldUsedForVoting(address account) external view returns (uint256);
 
-  function getProposal(uint256 proposalId)
-    external
-    view
-    returns (address, uint256, uint256, uint256, string memory, uint256, bool);
+    function getProposal(uint256 proposalId)
+        external
+        view
+        returns (address, uint256, uint256, uint256, string memory, uint256, bool);
 
-  function getReferendumStageDuration() external view returns (uint256);
+    function getReferendumStageDuration() external view returns (uint256);
 }
