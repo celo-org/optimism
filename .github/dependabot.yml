@@ -7,7 +7,7 @@ updates:
       day: "tuesday"
       time: "14:30"
       timezone: "America/New_York"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 0
     commit-message:
       prefix: "dependabot(gomod): "
     labels:
