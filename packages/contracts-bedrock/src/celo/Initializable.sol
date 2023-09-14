@@ -2,17 +2,17 @@
 pragma solidity >=0.5.13 <0.9.0;
 
 contract Initializable {
-  bool public initialized;
+    bool public initialized;
 
-  modifier initializer() {
-    require(!initialized, "contract already initialized");
-    initialized = true;
-    _;
-  }
-
-  constructor(bool testingDeployment) {
-    if (!testingDeployment) {
-      initialized = true;
+    modifier initializer() {
+        require(!initialized, "contract already initialized");
+        initialized = true;
+        _;
     }
-  }
+
+    constructor(bool testingDeployment) {
+        if (!testingDeployment) {
+            initialized = true;
+        }
+    }
 }

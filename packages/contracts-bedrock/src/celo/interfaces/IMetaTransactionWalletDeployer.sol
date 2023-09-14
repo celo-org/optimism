@@ -2,5 +2,5 @@
 pragma solidity >=0.5.13 <0.9.0;
 
 interface IMetaTransactionWalletDeployer {
-  function deploy(address, address, bytes calldata) external;
+    function deploy(address, address, bytes calldata) external;
 }
