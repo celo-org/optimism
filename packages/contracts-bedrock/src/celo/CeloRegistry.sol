@@ -10,13 +10,9 @@ import "./Initializable.sol";
  * @title Routes identifiers to addresses.
  */
 contract CeloRegistry is ICeloRegistry, Ownable, Initializable {
-    event RegistryUpdated(string identifier, bytes32 indexed identifierHash, address indexed addr);
+    mapping(bytes32 => address) public registry;
 
-    /**
-     * @notice Sets initialized == true on implementation contracts
-     * @param test Set to true to skip implementation initialization
-     */
-    constructor(bool test) Initializable(test) { }
+    event RegistryUpdated(string identifier, bytes32 indexed identifierHash, address indexed addr);
 
     /**
      * @notice Sets initialized == true on implementation contracts
@@ -94,5 +90,6 @@ contract CeloRegistry is ICeloRegistry, Ownable, Initializable {
                 return true;
             }
         }
+        return false;
     }
 }
