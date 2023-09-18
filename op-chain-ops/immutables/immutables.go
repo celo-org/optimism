@@ -150,6 +150,18 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 		{
 			Name: "SchemaRegistry",
 		},
+		{
+			Name: "CeloRegistry",
+			Args: []interface{}{
+				false,
+			},
+		},
+		{
+			Name: "GoldToken",
+			Args: []interface{}{
+				false,
+			},
+		},
 	}
 	return BuildL2(deployments)
 }
@@ -245,6 +257,10 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		_, tx, _, err = bindings.DeployEAS(opts, backend)
 	case "SchemaRegistry":
 		_, tx, _, err = bindings.DeploySchemaRegistry(opts, backend)
+	case "CeloRegistry":
+		_, tx, _, err = bindings.DeployCeloRegistry(opts, backend, false)
+	case "GoldToken":
+		_, tx, _, err = bindings.DeployGoldToken(opts, backend, false)
 	default:
 		return tx, fmt.Errorf("unknown contract: %s", deployment.Name)
 	}

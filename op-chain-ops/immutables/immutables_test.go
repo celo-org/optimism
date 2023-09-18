@@ -43,6 +43,16 @@ func TestBuildOptimism(t *testing.T) {
 			"minimumWithdrawalAmount": minimumWithdrawalAmount,
 			"withdrawalNetwork":       uint8(0),
 		},
+		"CeloRegistry": {
+			"recipient":               common.HexToAddress("0x1234567890123456789012345678901234567890"),
+			"minimumWithdrawalAmount": minimumWithdrawalAmount,
+			"withdrawalNetwork":       uint8(0),
+		},
+		"GoldToken": {
+			"recipient":               common.HexToAddress("0x1234567890123456789012345678901234567890"),
+			"minimumWithdrawalAmount": minimumWithdrawalAmount,
+			"withdrawalNetwork":       uint8(0),
+		},
 	})
 	require.Nil(t, err)
 	require.NotNil(t, results)
@@ -65,6 +75,8 @@ func TestBuildOptimism(t *testing.T) {
 		"LegacyERC20ETH":                true,
 		"EAS":                           true,
 		"SchemaRegistry":                true,
+		"CeloRegistry":                  true,
+		"GoldToken":                     true,
 	}
 
 	// Only the exact contracts that we care about are being

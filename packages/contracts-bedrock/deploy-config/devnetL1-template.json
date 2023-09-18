@@ -42,7 +42,7 @@
   "eip1559Denominator": 50,
   "eip1559DenominatorCanyon": 250,
   "eip1559Elasticity": 6,
-  "l1GenesisBlockTimestamp": "0x64c811bf",
+  "l1GenesisBlockTimestamp": "0x6502e1ca",
   "l2GenesisRegolithTimeOffset": "0x0",
   "l2GenesisSpanBatchTimeOffset": "0x0",
   "l2GenesisCanyonTimeOffset": "0x40",
