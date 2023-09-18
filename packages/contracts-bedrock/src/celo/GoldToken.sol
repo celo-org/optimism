@@ -31,7 +31,7 @@ contract GoldToken is Initializable, CalledByVm, UsingRegistry, IERC20, ICeloTok
      * @notice Sets initialized == true on implementation contracts
      * @param test Set to true to skip implementation initialization
      */
-    constructor(bool test) public Initializable(test) { }
+    constructor(bool test) Initializable(test) { }
 
     /**
      * @notice Returns the storage, major, minor, and patch version of the contract.
@@ -176,21 +176,21 @@ contract GoldToken is Initializable, CalledByVm, UsingRegistry, IERC20, ICeloTok
     /**
      * @return The name of the CELO token.
      */
-    function name() external view returns (string memory) {
+    function name() external pure returns (string memory) {
         return NAME;
     }
 
     /**
      * @return The symbol of the CELO token.
      */
-    function symbol() external view returns (string memory) {
+    function symbol() external pure returns (string memory) {
         return SYMBOL;
     }
 
     /**
      * @return The number of decimal places to which CELO is divisible.
      */
-    function decimals() external view returns (uint8) {
+    function decimals() external pure returns (uint8) {
         return DECIMALS;
     }
 

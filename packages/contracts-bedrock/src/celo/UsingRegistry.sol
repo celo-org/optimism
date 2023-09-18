@@ -7,7 +7,7 @@ import "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "./interfaces/IAccounts.sol";
 import "./interfaces/IFeeCurrencyWhitelist.sol";
 import "./interfaces/IFreezer.sol";
-import "./interfaces/IRegistry.sol";
+import "./interfaces/ICeloRegistry.sol";
 
 import "./governance/interfaces/IElection.sol";
 import "./governance/interfaces/IGovernance.sol";
@@ -46,7 +46,7 @@ contract UsingRegistry is Ownable {
     bytes32 constant VALIDATORS_REGISTRY_ID = keccak256(abi.encodePacked("Validators"));
     // solhint-enable state-visibility
 
-    IRegistry public registry;
+    ICeloRegistry public registry;
 
     modifier onlyRegisteredContract(bytes32 identifierHash) {
         require(registry.getAddressForOrDie(identifierHash) == msg.sender, "only registered contract");
@@ -64,7 +64,7 @@ contract UsingRegistry is Ownable {
      */
     function setRegistry(address registryAddress) public onlyOwner {
         require(registryAddress != address(0), "Cannot register the null address");
-        registry = IRegistry(registryAddress);
+        registry = ICeloRegistry(registryAddress);
         emit RegistrySet(registryAddress);
     }
 
