@@ -40,5 +40,7 @@
   "Safe",
   "SafeProxyFactory",
   "DelayedVetoable",
-  "ISemver"
+  "ISemver",
+  "CeloRegistry",
+  "GoldToken"
 ]
