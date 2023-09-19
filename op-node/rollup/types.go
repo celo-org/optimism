@@ -74,6 +74,7 @@ type Config struct {
 	// "Regolith" is the loose deposited rock that sits on top of Bedrock.
 	// Active if RegolithTime != nil && L2 block timestamp >= *RegolithTime, inactive otherwise.
 	RegolithTime *uint64 `json:"regolith_time,omitempty"`
+	Cel2Time     *uint64 `json:"cel2_time,omitempty"`
 
 	// CanyonTime sets the activation time of the Canyon network upgrade.
 	// Active if CanyonTime != nil && L2 block timestamp >= *CanyonTime, inactive otherwise.
@@ -455,6 +456,7 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 		"ecotone_time", fmtForkTimeOrUnset(c.EcotoneTime),
 		"fjord_time", fmtForkTimeOrUnset(c.FjordTime),
 		"interop_time", fmtForkTimeOrUnset(c.InteropTime),
+		"cel2_time", fmtForkTimeOrUnset(c.Cel2Time),
 	)
 }
 
