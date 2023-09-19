@@ -1,4 +1,4 @@
-FROM us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:optimism
+FROM --platform=linux/amd64 us-west1-docker.pkg.dev/blockchaintestsglobaltestnet/dev-images/op-geth@sha256:472b94785e528f8e7e47f72819429261f65ba984382fac4a9ab0c5e82e8c7477
 
 RUN apk add --no-cache jq
 
