@@ -71,6 +71,7 @@ func NewL2Genesis(config *DeployConfig, l1StartHeader *types.Header) (*core.Gene
 		FjordTime:                     config.FjordTime(l1StartTime),
 		GraniteTime:                   config.GraniteTime(l1StartTime),
 		InteropTime:                   config.InteropTime(l1StartTime),
+		Cel2Time:                      config.RegolithTime(l1StartTime),
 		Optimism: &params.OptimismConfig{
 			EIP1559Denominator:       eip1559Denom,
 			EIP1559Elasticity:        eip1559Elasticity,
