@@ -75,6 +75,7 @@ func NewL2Genesis(config *DeployConfig, l1StartHeader *eth.BlockRef) (*core.Gene
 		JovianTime:              config.JovianTime(l1StartTime),
 		PragueTime:              config.IsthmusTime(l1StartTime),
 		InteropTime:             config.InteropTime(l1StartTime),
+		Cel2Time:                config.RegolithTime(l1StartTime),
 		Optimism: &params.OptimismConfig{
 			EIP1559Denominator:       eip1559Denom,
 			EIP1559Elasticity:        eip1559Elasticity,
