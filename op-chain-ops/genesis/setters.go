@@ -4,14 +4,14 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/log"
-
 	"github.com/ethereum-optimism/optimism/op-bindings/bindings"
+	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/immutables"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/state"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // PrecompileCount represents the number of precompile addresses
@@ -51,6 +51,11 @@ func setProxies(db vm.StateDB, proxyAdminAddr common.Address, namespace *big.Int
 		log.Trace("Set proxy", "address", addr, "admin", proxyAdminAddr)
 	}
 
+	for _, address := range predeploys.CeloPredeploys {
+		db.SetCode(*address, depBytecode)
+		db.SetState(*address, AdminSlot, eth.AddressAsLeftPaddedHash(proxyAdminAddr))
+	}
+
 	return nil
 }
 
@@ -62,6 +67,11 @@ func SetPrecompileBalances(db vm.StateDB) {
 		addr := common.BytesToAddress([]byte{byte(i)})
 		db.CreateAccount(addr)
 		db.AddBalance(addr, common.Big1)
+	}
+
+	for _, address := range predeploys.CeloPredeploys {
+		db.CreateAccount(*address)
+		db.AddBalance(*address, common.Big1)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -74,7 +75,8 @@ func AddressToCodeNamespace(addr common.Address) (common.Address, error) {
 }
 
 func IsL2DevPredeploy(addr common.Address) bool {
-	return bytes.Equal(addr[0:2], []byte{0x42, 0x00})
+	var _, celoPredeploy = predeploys.CeloPredeploys[addr.String()]
+	return celoPredeploy || bytes.Equal(addr[0:2], []byte{0x42, 0x00})
 }
 
 // GetBlockFromTag will resolve a Block given an rpc block tag

@@ -25,8 +25,8 @@ const (
 	L1FeeVault                    = "0x420000000000000000000000000000000000001a"
 	SchemaRegistry                = "0x4200000000000000000000000000000000000020"
 	EAS                           = "0x4200000000000000000000000000000000000021"
-	CeloRegistry                  = "0x4200000000000000000000000000000000000022"
-	GoldToken                     = "0x4200000000000000000000000000000000000023"
+	CeloRegistry                  = "0x000000000000000000000000000000000000ce10"
+	GoldToken                     = "0x471ece3750da237f93b8e339c536989b8978a438"
 )
 
 var (
@@ -53,7 +53,8 @@ var (
 	CeloRegistryAddr = common.HexToAddress(CeloRegistry)
 	GoldTokenAddr    = common.HexToAddress(GoldToken)
 
-	Predeploys = make(map[string]*common.Address)
+	Predeploys     = make(map[string]*common.Address)
+	CeloPredeploys = make(map[string]*common.Address)
 )
 
 // IsProxied returns true for predeploys that will sit behind a proxy contract
@@ -89,4 +90,7 @@ func init() {
 	Predeploys["EAS"] = &EASAddr
 	Predeploys["CeloRegistry"] = &CeloRegistryAddr
 	Predeploys["GoldToken"] = &GoldTokenAddr
+
+	CeloPredeploys[Predeploys["CeloRegistry"].String()] = Predeploys["CeloRegistry"]
+	CeloPredeploys[Predeploys["GoldToken"].String()] = Predeploys["GoldToken"]
 }
