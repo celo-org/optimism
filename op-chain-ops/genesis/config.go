@@ -478,6 +478,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		DepositContractAddress: d.OptimismPortalProxy,
 		L1SystemConfigAddress:  d.SystemConfigProxy,
 		RegolithTime:           d.RegolithTime(l1StartBlock.Time()),
+		Cel2Time:               d.RegolithTime(l1StartBlock.Time()),
 	}, nil
 }
 
