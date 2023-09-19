@@ -1165,6 +1165,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *eth.BlockRef, l2GenesisBlockHa
 		InteropTime:            d.InteropTime(l1StartTime),
 		AltDAConfig:            altDA,
 		ChainOpConfig:          chainOpConfig,
+		Cel2Time:               d.RegolithTime(l1StartTime),
 	}, nil
 }
 
