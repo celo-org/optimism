@@ -740,6 +740,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 			JovianTime:             cfg.DeployConfig.JovianTime(l2GenesisTime),
 			KarstTime:              cfg.DeployConfig.KarstTime(l2GenesisTime),
 			LagoonTime:             cfg.DeployConfig.LagoonTime(l2GenesisTime),
+			Cel2Time:               cfg.DeployConfig.RegolithTime(l2GenesisTime),
 			AltDAConfig:            rollupAltDAConfig,
 			ChainOpConfig: &opparams.OptimismConfig{
 				EIP1559Elasticity:        cfg.DeployConfig.EIP1559Elasticity,
