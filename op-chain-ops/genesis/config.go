@@ -929,6 +929,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 		GraniteTime:            d.GraniteTime(l1StartBlock.Time()),
 		InteropTime:            d.InteropTime(l1StartBlock.Time()),
 		AltDAConfig:            altDA,
+		Cel2Time:               d.RegolithTime(l1StartBlock.Time()),
 	}, nil
 }
 
