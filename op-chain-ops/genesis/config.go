@@ -756,6 +756,10 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 			"0xd7e89ade8430819f08bf97a087285824af3351ee12d72a2d132b0c6c0687bfaf": predeploys.GoldTokenAddr, // keccak256(abi.encodePacked("GoldToken"));
 		},
 	}
+	storage["FeeCurrencyWhitelist"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
 	return storage, nil
 }
 

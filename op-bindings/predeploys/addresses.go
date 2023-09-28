@@ -27,6 +27,7 @@ const (
 	EAS                           = "0x4200000000000000000000000000000000000021"
 	CeloRegistry                  = "0x000000000000000000000000000000000000ce10"
 	GoldToken                     = "0x471ece3750da237f93b8e339c536989b8978a438"
+	FeeCurrencyWhitelist          = "0xBB024E9cdCB2f9E34d893630D19611B8A5381b3c"
 )
 
 var (
@@ -50,8 +51,9 @@ var (
 	SchemaRegistryAddr                = common.HexToAddress(SchemaRegistry)
 	EASAddr                           = common.HexToAddress(EAS)
 
-	CeloRegistryAddr = common.HexToAddress(CeloRegistry)
-	GoldTokenAddr    = common.HexToAddress(GoldToken)
+	CeloRegistryAddr         = common.HexToAddress(CeloRegistry)
+	GoldTokenAddr            = common.HexToAddress(GoldToken)
+	FeeCurrencyWhitelistAddr = common.HexToAddress(FeeCurrencyWhitelist)
 
 	Predeploys     = make(map[string]*common.Address)
 	CeloPredeploys = make(map[string]*common.Address)
@@ -90,6 +92,7 @@ func init() {
 	Predeploys["EAS"] = &EASAddr
 	Predeploys["CeloRegistry"] = &CeloRegistryAddr
 	Predeploys["GoldToken"] = &GoldTokenAddr
+	Predeploys["FeeCurrencyWhitelist"] = &FeeCurrencyWhitelistAddr
 
 	CeloPredeploys[Predeploys["CeloRegistry"].String()] = Predeploys["CeloRegistry"]
 	CeloPredeploys[Predeploys["GoldToken"].String()] = Predeploys["GoldToken"]

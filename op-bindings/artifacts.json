@@ -42,5 +42,6 @@
   "DelayedVetoable",
   "ISemver",
   "CeloRegistry",
-  "GoldToken"
+  "GoldToken",
+  "FeeCurrencyWhitelist"
 ]
