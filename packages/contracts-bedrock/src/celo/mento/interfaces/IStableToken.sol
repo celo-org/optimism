@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity >=0.5.13 <0.9.0;
+pragma solidity ^0.8.15;
 
 /**
  * @title This interface describes the functions specific to Celo Stable Tokens, and in the
