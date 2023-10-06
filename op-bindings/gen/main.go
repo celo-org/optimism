@@ -15,6 +15,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-bindings/ast"
 	"github.com/ethereum-optimism/optimism/op-bindings/foundry"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 type flags struct {
@@ -108,6 +109,11 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// all library addresses need to be deployed before the contracts that use them
+	var libraries = map[string]string{
+		"src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol:AddressSortedLinkedListWithMedian": "ED477A99035d0c1e11369F1D7A4e587893cc002B",
+	}
+
 	for _, name := range contracts {
 		log.Printf("generating code for %s\n", name)
 
@@ -136,10 +142,25 @@ func main() {
 		if err := os.WriteFile(abiFile, rawAbi, 0o600); err != nil {
 			log.Fatalf("error writing file: %v\n", err)
 		}
-		rawBytecode := artifact.Bytecode.Object.String()
+		rawBytecode := artifact.Bytecode.Object
 		if err != nil {
 			log.Fatalf("error marshaling bytecode: %v\n", err)
 		}
+
+		// replace library placeholders with their addresses
+		for linkReferenceKey, linkReferenceValue := range artifact.Bytecode.LinkReferences {
+			for libraryKey := range linkReferenceValue {
+				var aggregateKey = linkReferenceKey + ":" + libraryKey
+				var libAddress, keyExists = libraries[aggregateKey]
+				if !keyExists {
+					log.Fatalf("library %s not found", aggregateKey)
+					continue
+				}
+				var pattern = crypto.Keccak256Hash([]byte(aggregateKey)).String()[2:36]
+				rawBytecode = strings.ReplaceAll(rawBytecode, "__$"+pattern+"$__", libAddress)
+			}
+		}
+
 		bytecodeFile := path.Join(dir, name+".bin")
 		if err := os.WriteFile(bytecodeFile, []byte(rawBytecode), 0o600); err != nil {
 			log.Fatalf("error writing file: %v\n", err)
@@ -176,7 +197,7 @@ func main() {
 		d := data{
 			Name:              name,
 			StorageLayout:     serStr,
-			DeployedBin:       artifact.DeployedBytecode.Object.String(),
+			DeployedBin:       artifact.DeployedBytecode.Object,
 			Package:           f.Package,
 			DeployedSourceMap: deployedSourceMap,
 		}

@@ -42,5 +42,11 @@
   "DelayedVetoable",
   "ISemver",
   "CeloRegistry",
-  "GoldToken"
+  "GoldToken",
+  "FeeHandler",
+  "FeeCurrencyWhitelist",
+  "MentoFeeHandlerSeller",
+  "UniswapFeeHandlerSeller",
+  "SortedOracles",
+  "AddressSortedLinkedListWithMedian"
 ]
