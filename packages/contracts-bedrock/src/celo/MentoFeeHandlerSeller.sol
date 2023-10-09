@@ -17,67 +17,69 @@ import "./FeeHandlerSeller.sol";
 // Mento
 // See https://github.com/celo-org/celo-proposals/blob/master/CIPs/cip-0052.md
 contract MentoFeeHandlerSeller is FeeHandlerSeller {
-  using FixidityLib for FixidityLib.Fraction;
+    using FixidityLib for FixidityLib.Fraction;
 
-  /**
-   * @notice Sets initialized == true on implementation contracts.
-   * @param test Set to true to skip implementation initialisation.
-   */
-  constructor(bool test) FeeHandlerSeller(test) {}
+    /**
+     * @notice Sets initialized == true on implementation contracts.
+     * @param test Set to true to skip implementation initialisation.
+     */
+    constructor(bool test) FeeHandlerSeller(test) { }
 
-  // without this line the contract can't receive native Celo transfers
-   receive() external payable {}
+    // without this line the contract can't receive native Celo transfers
+    receive() external payable { }
 
-  /**
-   * @notice Returns the storage, major, minor, and patch version of the contract.
-   * @return Storage version of the contract.
-   * @return Major version of the contract.
-   * @return Minor version of the contract.
-   * @return Patch version of the contract.
-   */
-  function getVersionNumber() external pure returns (uint256, uint256, uint256, uint256) {
-    return (1, 1, 0, 0);
-  }
+    /**
+     * @notice Returns the storage, major, minor, and patch version of the contract.
+     * @return Storage version of the contract.
+     * @return Major version of the contract.
+     * @return Minor version of the contract.
+     * @return Patch version of the contract.
+     */
+    function getVersionNumber() external pure returns (uint256, uint256, uint256, uint256) {
+        return (1, 1, 0, 0);
+    }
 
-  function sell(
-    address sellTokenAddress,
-    address buyTokenAddress,
-    uint256 amount,
-    uint256 maxSlippage // as fraction,
-  ) external returns (uint256) {
-    require(
-      buyTokenAddress == registry.getAddressForOrDie(GOLD_TOKEN_REGISTRY_ID),
-      "Buy token can only be gold token"
-    );
+    function sell(
+        address sellTokenAddress,
+        address buyTokenAddress,
+        uint256 amount,
+        uint256 maxSlippage // as fraction,
+    )
+        external
+        returns (uint256)
+    {
+        require(
+            buyTokenAddress == registry.getAddressForOrDie(GOLD_TOKEN_REGISTRY_ID), "Buy token can only be gold token"
+        );
 
-    IStableTokenMento stableToken = IStableTokenMento(sellTokenAddress);
-    require(amount <= stableToken.balanceOf(address(this)), "Balance of token to burn not enough");
+        IStableTokenMento stableToken = IStableTokenMento(sellTokenAddress);
+        require(amount <= stableToken.balanceOf(address(this)), "Balance of token to burn not enough");
 
-    address exchangeAddress = registry.getAddressForOrDie(stableToken.getExchangeRegistryId());
+        address exchangeAddress = registry.getAddressForOrDie(stableToken.getExchangeRegistryId());
 
-    IExchange exchange = IExchange(exchangeAddress);
+        IExchange exchange = IExchange(exchangeAddress);
 
-    uint256 minAmount = 0;
+        uint256 minAmount = 0;
 
-    ISortedOracles sortedOracles = getSortedOracles();
+        ISortedOracles sortedOracles = getSortedOracles();
 
-    require(
-      sortedOracles.numRates(sellTokenAddress) >= minimumReports[sellTokenAddress],
-      "Number of reports for token not enough"
-    );
+        require(
+            sortedOracles.numRates(sellTokenAddress) >= minimumReports[sellTokenAddress],
+            "Number of reports for token not enough"
+        );
 
-    (uint256 rateNumerator, uint256 rateDenominator) = sortedOracles.medianRate(sellTokenAddress);
-    minAmount = calculateMinAmount(rateNumerator, rateDenominator, amount, maxSlippage);
+        (uint256 rateNumerator, uint256 rateDenominator) = sortedOracles.medianRate(sellTokenAddress);
+        minAmount = calculateMinAmount(rateNumerator, rateDenominator, amount, maxSlippage);
 
-    // TODO an upgrade would be to compare using routers as well
-    stableToken.approve(exchangeAddress, amount);
-    exchange.sell(amount, minAmount, false);
+        // TODO an upgrade would be to compare using routers as well
+        stableToken.approve(exchangeAddress, amount);
+        exchange.sell(amount, minAmount, false);
 
-    IERC20 goldToken = getGoldToken();
-    uint256 celoAmount = goldToken.balanceOf(address(this));
-    goldToken.transfer(msg.sender, celoAmount);
+        IERC20 goldToken = getGoldToken();
+        uint256 celoAmount = goldToken.balanceOf(address(this));
+        goldToken.transfer(msg.sender, celoAmount);
 
-    emit TokenSold(sellTokenAddress, buyTokenAddress, amount);
-    return celoAmount;
-  }
+        emit TokenSold(sellTokenAddress, buyTokenAddress, amount);
+        return celoAmount;
+    }
 }
