@@ -13,6 +13,7 @@
     "bindings:ts": "nx generate @eth-optimism/contracts-ts",
     "bindings:go": "cd ../../op-bindings && make",
     "build": "forge build",
+    "build:linkedLibraries": "forge build --libraries src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol:AddressSortedLinkedListWithMedian:0xED477A99035d0c1e11369F1D7A4e587893cc002B",
     "prebuild": "./scripts/verify-foundry-install.sh",
     "build:differential": "go build -o ./scripts/differential-testing/differential-testing ./scripts/differential-testing",
     "build:fuzz": "(cd test-case-generator && go build ./cmd/fuzz.go)",

@@ -33,7 +33,7 @@ const (
 	MentoFeeHandlerSeller             = "0x4efa274b7e33476c961065000d58ee09f7921a74"
 	UniswapFeeHandlerSeller           = "0xd3aee28548dbb65df03981f0dc0713bfcbd10a97"
 	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
-	AddressSortedLinkedListWithMedian = "ED477A99035d0c1e11369F1D7A4e587893cc002B"
+	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
 )
 
 var (
@@ -73,6 +73,8 @@ var (
 // IsProxied returns true for predeploys that will sit behind a proxy contract
 func IsProxied(predeployAddr common.Address) bool {
 	switch predeployAddr {
+	case AddressSortedLinkedListWithMedianAddr:
+		return false
 	case WETH9Addr:
 	case GovernanceTokenAddr:
 	default:
