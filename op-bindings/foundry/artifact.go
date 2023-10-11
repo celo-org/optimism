@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/ethereum-optimism/optimism/op-bindings/solc"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 // Artifact represents a foundry compilation artifact.
@@ -19,18 +20,13 @@ type Artifact struct {
 
 type DeployedBytecode struct {
 	SourceMap           string          `json:"sourceMap"`
-	Object              string          `json:"object"`
+	Object              hexutil.Bytes   `json:"object"`
 	LinkReferences      json.RawMessage `json:"linkReferences"`
 	ImmutableReferences json.RawMessage `json:"immutableReferences"`
 }
 
 type Bytecode struct {
-	SourceMap      string                                `json:"sourceMap"`
-	Object         string                                `json:"object"`
-	LinkReferences map[string]map[string][]LinkReference `json:"linkReferences"`
-}
-
-type LinkReference struct {
-	Start  int `json:"start"`
-	Length int `json:"length"`
+	SourceMap      string          `json:"sourceMap"`
+	Object         hexutil.Bytes   `json:"object"`
+	LinkReferences json.RawMessage `json:"linkReferences"`
 }
