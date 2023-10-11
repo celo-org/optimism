@@ -136,11 +136,10 @@ func main() {
 		if err := os.WriteFile(abiFile, rawAbi, 0o600); err != nil {
 			log.Fatalf("error writing file: %v\n", err)
 		}
-		rawBytecode := artifact.Bytecode.Object
+		rawBytecode := artifact.Bytecode.Object.String()
 		if err != nil {
 			log.Fatalf("error marshaling bytecode: %v\n", err)
 		}
-
 		bytecodeFile := path.Join(dir, name+".bin")
 		if err := os.WriteFile(bytecodeFile, []byte(rawBytecode), 0o600); err != nil {
 			log.Fatalf("error writing file: %v\n", err)
@@ -177,7 +176,7 @@ func main() {
 		d := data{
 			Name:              name,
 			StorageLayout:     serStr,
-			DeployedBin:       artifact.DeployedBytecode.Object,
+			DeployedBin:       artifact.DeployedBytecode.Object.String(),
 			Package:           f.Package,
 			DeployedSourceMap: deployedSourceMap,
 		}
