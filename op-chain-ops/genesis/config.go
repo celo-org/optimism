@@ -792,6 +792,29 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 			"0xd7e89ade8430819f08bf97a087285824af3351ee12d72a2d132b0c6c0687bfaf": predeploys.GoldTokenAddr, // keccak256(abi.encodePacked("GoldToken"));
 		},
 	}
+	storage["FeeHandler"] = state.StorageValues{
+		"initialized":    true,
+		"registry":       predeploys.CeloRegistry,
+		"_owner":         config.ProxyAdminOwner,
+		"feeBeneficiary": config.ProxyAdminOwner,
+	}
+	storage["FeeCurrencyWhitelist"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
+	storage["MentoFeeHandlerSeller"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
+	storage["UniswapFeeHandlerSeller"] = state.StorageValues{
+		"initialized": true,
+		"_owner":      config.ProxyAdminOwner,
+	}
+	storage["SortedOracles"] = state.StorageValues{
+		"initialized":         true,
+		"_owner":              config.ProxyAdminOwner,
+		"reportExpirySeconds": 600,
+	}
 	return storage, nil
 }
 

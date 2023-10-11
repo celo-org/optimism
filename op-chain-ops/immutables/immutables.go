@@ -162,6 +162,40 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 				false,
 			},
 		},
+		{
+			Name: "FeeHandler",
+			Args: []interface{}{
+				false,
+			},
+		},
+		{
+			Name: "FeeCurrencyWhitelist",
+			Args: []interface{}{
+				false,
+			},
+		},
+		{
+			Name: "MentoFeeHandlerSeller",
+			Args: []interface{}{
+				false,
+			},
+		},
+		{
+			Name: "UniswapFeeHandlerSeller",
+			Args: []interface{}{
+				false,
+			},
+		},
+		{
+			Name: "SortedOracles",
+			Args: []interface{}{
+				false,
+			},
+		},
+		{
+			Name: "AddressSortedLinkedListWithMedian",
+			Args: []interface{}{},
+		},
 	}
 	return BuildL2(deployments)
 }
@@ -261,6 +295,18 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		_, tx, _, err = bindings.DeployCeloRegistry(opts, backend, false)
 	case "GoldToken":
 		_, tx, _, err = bindings.DeployGoldToken(opts, backend, false)
+	case "FeeHandler":
+		_, tx, _, err = bindings.DeployFeeHandler(opts, backend, false)
+	case "FeeCurrencyWhitelist":
+		_, tx, _, err = bindings.DeployFeeCurrencyWhitelist(opts, backend, false)
+	case "MentoFeeHandlerSeller":
+		_, tx, _, err = bindings.DeployMentoFeeHandlerSeller(opts, backend, false)
+	case "UniswapFeeHandlerSeller":
+		_, tx, _, err = bindings.DeployUniswapFeeHandlerSeller(opts, backend, false)
+	case "SortedOracles":
+		_, tx, _, err = bindings.DeploySortedOracles(opts, backend, false)
+	case "AddressSortedLinkedListWithMedian":
+		_, tx, _, err = bindings.DeployAddressSortedLinkedListWithMedian(opts, backend)
 	default:
 		return tx, fmt.Errorf("unknown contract: %s", deployment.Name)
 	}

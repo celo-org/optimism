@@ -15,6 +15,7 @@
     "bindings:go": "pnpm clean && pnpm build && pnpm bindings:go:no-build",
     "prebuild": "./scripts/verify-foundry-install.sh",
     "build": "forge build",
+    "build:linkedLibraries": "forge build --libraries src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol:AddressSortedLinkedListWithMedian:0xED477A99035d0c1e11369F1D7A4e587893cc002B",
     "build:go-ffi": "(cd scripts/go-ffi && go build)",
     "autogen:invariant-docs": "npx tsx scripts/invariant-doc-gen.ts",
     "test": "pnpm build:go-ffi && forge test",

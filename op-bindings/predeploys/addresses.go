@@ -25,8 +25,15 @@ const (
 	L1FeeVault                    = "0x420000000000000000000000000000000000001a"
 	SchemaRegistry                = "0x4200000000000000000000000000000000000020"
 	EAS                           = "0x4200000000000000000000000000000000000021"
-	CeloRegistry                  = "0x000000000000000000000000000000000000ce10"
-	GoldToken                     = "0x471ece3750da237f93b8e339c536989b8978a438"
+
+	CeloRegistry                      = "0x000000000000000000000000000000000000ce10"
+	GoldToken                         = "0x471ece3750da237f93b8e339c536989b8978a438"
+	FeeHandler                        = "0xcd437749e43a154c07f3553504c68fbfd56b8778"
+	FeeCurrencyWhitelist              = "0xbb024e9cdcb2f9e34d893630d19611b8a5381b3c"
+	MentoFeeHandlerSeller             = "0x4efa274b7e33476c961065000d58ee09f7921a74"
+	UniswapFeeHandlerSeller           = "0xd3aee28548dbb65df03981f0dc0713bfcbd10a97"
+	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
+	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
 )
 
 var (
@@ -50,8 +57,14 @@ var (
 	SchemaRegistryAddr                = common.HexToAddress(SchemaRegistry)
 	EASAddr                           = common.HexToAddress(EAS)
 
-	CeloRegistryAddr = common.HexToAddress(CeloRegistry)
-	GoldTokenAddr    = common.HexToAddress(GoldToken)
+	CeloRegistryAddr                      = common.HexToAddress(CeloRegistry)
+	GoldTokenAddr                         = common.HexToAddress(GoldToken)
+	FeeHandlerAddr                        = common.HexToAddress(FeeHandler)
+	FeeCurrencyWhitelistAddr              = common.HexToAddress(FeeCurrencyWhitelist)
+	MentoFeeHandlerSellerAddr             = common.HexToAddress(MentoFeeHandlerSeller)
+	UniswapFeeHandlerSellerAddr           = common.HexToAddress(UniswapFeeHandlerSeller)
+	SortedOraclesAddr                     = common.HexToAddress(SortedOracles)
+	AddressSortedLinkedListWithMedianAddr = common.HexToAddress(AddressSortedLinkedListWithMedian)
 
 	Predeploys     = make(map[string]*common.Address)
 	CeloPredeploys = make(map[string]*common.Address)
@@ -60,6 +73,8 @@ var (
 // IsProxied returns true for predeploys that will sit behind a proxy contract
 func IsProxied(predeployAddr common.Address) bool {
 	switch predeployAddr {
+	case AddressSortedLinkedListWithMedianAddr:
+		return false
 	case WETH9Addr:
 	case GovernanceTokenAddr:
 	default:
@@ -88,9 +103,22 @@ func init() {
 	Predeploys["L1FeeVault"] = &L1FeeVaultAddr
 	Predeploys["SchemaRegistry"] = &SchemaRegistryAddr
 	Predeploys["EAS"] = &EASAddr
+
 	Predeploys["CeloRegistry"] = &CeloRegistryAddr
 	Predeploys["GoldToken"] = &GoldTokenAddr
+	Predeploys["FeeHandler"] = &FeeHandlerAddr
+	Predeploys["FeeCurrencyWhitelist"] = &FeeCurrencyWhitelistAddr
+	Predeploys["MentoFeeHandlerSeller"] = &MentoFeeHandlerSellerAddr
+	Predeploys["UniswapFeeHandlerSeller"] = &UniswapFeeHandlerSellerAddr
+	Predeploys["SortedOracles"] = &SortedOraclesAddr
+	Predeploys["AddressSortedLinkedListWithMedian"] = &AddressSortedLinkedListWithMedianAddr
 
 	CeloPredeploys[Predeploys["CeloRegistry"].String()] = Predeploys["CeloRegistry"]
 	CeloPredeploys[Predeploys["GoldToken"].String()] = Predeploys["GoldToken"]
+	CeloPredeploys[Predeploys["FeeHandler"].String()] = Predeploys["FeeHandler"]
+	CeloPredeploys[Predeploys["FeeCurrencyWhitelist"].String()] = Predeploys["FeeCurrencyWhitelist"]
+	CeloPredeploys[Predeploys["MentoFeeHandlerSeller"].String()] = Predeploys["MentoFeeHandlerSeller"]
+	CeloPredeploys[Predeploys["UniswapFeeHandlerSeller"].String()] = Predeploys["UniswapFeeHandlerSeller"]
+	CeloPredeploys[Predeploys["SortedOracles"].String()] = Predeploys["SortedOracles"]
+	CeloPredeploys[Predeploys["AddressSortedLinkedListWithMedian"].String()] = Predeploys["AddressSortedLinkedListWithMedian"]
 }

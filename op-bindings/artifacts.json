@@ -43,5 +43,11 @@
   "ISemver",
   "StorageSetter",
   "CeloRegistry",
-  "GoldToken"
+  "GoldToken",
+  "FeeHandler",
+  "FeeCurrencyWhitelist",
+  "MentoFeeHandlerSeller",
+  "UniswapFeeHandlerSeller",
+  "SortedOracles",
+  "AddressSortedLinkedListWithMedian"
 ]
