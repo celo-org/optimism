@@ -157,11 +157,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
      * - the caller must have allowance for ``from``'s tokens of at least
      * `amount`.
      */
-    function transferFrom(
-        address from,
-        address to,
-        uint256 amount
-    ) public virtual override returns (bool) {
+    function transferFrom(address from, address to, uint256 amount) public virtual override returns (bool) {
         address spender = _msgSender();
         _spendAllowance(from, spender, amount);
         _transfer(from, to, amount);
@@ -225,11 +221,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
      * - `to` cannot be the zero address.
      * - `from` must have a balance of at least `amount`.
      */
-    function _transfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {
+    function _transfer(address from, address to, uint256 amount) internal virtual {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
 
@@ -247,7 +239,8 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
         _afterTokenTransfer(from, to, amount);
     }
 
-    /** @dev Creates `amount` tokens and assigns them to `account`, increasing
+    /**
+     * @dev Creates `amount` tokens and assigns them to `account`, increasing
      * the total supply.
      *
      * Emits a {Transfer} event with `from` set to the zero address.
@@ -309,11 +302,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
      * - `owner` cannot be the zero address.
      * - `spender` cannot be the zero address.
      */
-    function _approve(
-        address owner,
-        address spender,
-        uint256 amount
-    ) internal virtual {
+    function _approve(address owner, address spender, uint256 amount) internal virtual {
         require(owner != address(0), "ERC20: approve from the zero address");
         require(spender != address(0), "ERC20: approve to the zero address");
 
@@ -329,11 +318,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
      *
      * Might emit an {Approval} event.
      */
-    function _spendAllowance(
-        address owner,
-        address spender,
-        uint256 amount
-    ) internal virtual {
+    function _spendAllowance(address owner, address spender, uint256 amount) internal virtual {
         uint256 currentAllowance = allowance(owner, spender);
         if (currentAllowance != type(uint256).max) {
             require(currentAllowance >= amount, "ERC20: insufficient allowance");
@@ -357,11 +342,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
      *
      * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
      */
-    function _beforeTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {}
+    function _beforeTokenTransfer(address from, address to, uint256 amount) internal virtual { }
 
     /**
      * @dev Hook that is called after any transfer of tokens. This includes
@@ -377,11 +358,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
      *
      * To learn more about hooks, head to xref:ROOT:extending-contracts.adoc#using-hooks[Using Hooks].
      */
-    function _afterTokenTransfer(
-        address from,
-        address to,
-        uint256 amount
-    ) internal virtual {}
+    function _afterTokenTransfer(address from, address to, uint256 amount) internal virtual { }
 
     /**
      * @notice Reserve balance for making payments for gas in this StableToken currency.
@@ -415,11 +392,11 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
     function creditGasFees(
         address from,
         address feeRecipient,
-        address,  // gatewayFeeRecipient
+        address, // gatewayFeeRecipient
         address communityFund,
         uint256 refund,
         uint256 tipTxFee,
-        uint256,  // gatewayFee
+        uint256, // gatewayFee
         uint256 baseTxFee
     )
         external
@@ -432,11 +409,7 @@ contract FeeCurrency is Context, IERC20, IERC20Metadata, CalledByVm {
         _totalSupply += refund;
     }
 
-    function _creditGas(
-        address from,
-        address to,
-        uint256 value
-    ) internal returns (uint256) {
+    function _creditGas(address from, address to, uint256 value) internal returns (uint256) {
         if (to == address(0)) {
             return 0;
         }
