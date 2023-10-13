@@ -49,6 +49,5 @@
   "UniswapFeeHandlerSeller",
   "SortedOracles",
   "AddressSortedLinkedListWithMedian",
-  "SortedOracles",
   "FeeCurrency"
 ]
