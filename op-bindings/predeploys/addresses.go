@@ -34,7 +34,7 @@ const (
 	UniswapFeeHandlerSeller           = "0xd3aee28548dbb65df03981f0dc0713bfcbd10a97"
 	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
 	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
-	FeeCurrency                       = "0x4200000000000000000000000000000000000022"
+	FeeCurrency                       = "0x4200000000000000000000000000000000001022"
 )
 
 var (
