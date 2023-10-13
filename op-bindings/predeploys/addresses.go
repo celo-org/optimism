@@ -124,4 +124,5 @@ func init() {
 	CeloPredeploys[Predeploys["UniswapFeeHandlerSeller"].String()] = Predeploys["UniswapFeeHandlerSeller"]
 	CeloPredeploys[Predeploys["SortedOracles"].String()] = Predeploys["SortedOracles"]
 	CeloPredeploys[Predeploys["AddressSortedLinkedListWithMedian"].String()] = Predeploys["AddressSortedLinkedListWithMedian"]
+	CeloPredeploys[Predeploys["FeeCurrency"].String()] = Predeploys["FeeCurrency"]
 }
