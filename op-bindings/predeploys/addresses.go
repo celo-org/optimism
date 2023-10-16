@@ -35,6 +35,7 @@ const (
 	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
 	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
 	FeeCurrency                       = "0x4200000000000000000000000000000000001022"
+	BridgedETH                        = "0x4200000000000000000000000000000000001023"
 )
 
 var (
@@ -67,6 +68,7 @@ var (
 	SortedOraclesAddr                     = common.HexToAddress(SortedOracles)
 	AddressSortedLinkedListWithMedianAddr = common.HexToAddress(AddressSortedLinkedListWithMedian)
 	FeeCurrencyAddr                       = common.HexToAddress(FeeCurrency)
+	BridgedETHAddr                        = common.HexToAddress(BridgedETH)
 
 	Predeploys     = make(map[string]*common.Address)
 	CeloPredeploys = make(map[string]*common.Address)
@@ -115,6 +117,7 @@ func init() {
 	Predeploys["SortedOracles"] = &SortedOraclesAddr
 	Predeploys["AddressSortedLinkedListWithMedian"] = &AddressSortedLinkedListWithMedianAddr
 	Predeploys["FeeCurrency"] = &FeeCurrencyAddr
+	Predeploys["BridgedETH"] = &BridgedETHAddr
 
 	CeloPredeploys[Predeploys["CeloRegistry"].String()] = Predeploys["CeloRegistry"]
 	CeloPredeploys[Predeploys["GoldToken"].String()] = Predeploys["GoldToken"]
@@ -125,4 +128,5 @@ func init() {
 	CeloPredeploys[Predeploys["SortedOracles"].String()] = Predeploys["SortedOracles"]
 	CeloPredeploys[Predeploys["AddressSortedLinkedListWithMedian"].String()] = Predeploys["AddressSortedLinkedListWithMedian"]
 	CeloPredeploys[Predeploys["FeeCurrency"].String()] = Predeploys["FeeCurrency"]
+	CeloPredeploys[Predeploys["BridgedETH"].String()] = Predeploys["BridgedETH"]
 }

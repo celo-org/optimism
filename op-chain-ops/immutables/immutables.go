@@ -202,6 +202,12 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 				immutable["FeeCurrency"]["name"], immutable["FeeCurrency"]["symbol"], immutable["FeeCurrency"]["mintTo"],
 			},
 		},
+		{
+			Name: "BridgedETH",
+			Args: []interface{}{
+				immutable["BridgedETH"]["bridge"],
+			},
+		},
 	}
 	return BuildL2(deployments)
 }
@@ -323,6 +329,12 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 			return nil, fmt.Errorf("invalid fee currency symbol")
 		}
 		_, tx, _, err = bindings.DeployFeeCurrency(opts, backend, name, symbol)
+	case "BridgedETH":
+		bridge, ok := deployment.Args[0].(common.Address)
+		if !ok {
+			return nil, fmt.Errorf("invalid type for bridge: %v %+v", bridge, deployment.Args)
+		}
+		_, tx, _, err = bindings.DeployBridgedETH(opts, backend, bridge)
 	default:
 		return tx, fmt.Errorf("unknown contract: %s", deployment.Name)
 	}
