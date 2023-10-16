@@ -10,6 +10,7 @@ import { IOptimismMintableERC20, ILegacyMintableERC20 } from "src/universal/IOpt
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 import { Initializable } from "@openzeppelin/contracts/proxy/utils/Initializable.sol";
+import { Predeploys } from "src/libraries/Predeploys.sol";
 
 /// @custom:upgradeable
 /// @title StandardBridge
@@ -382,6 +383,50 @@ abstract contract StandardBridge is Initializable {
                 ),
             _minGasLimit: _minGasLimit
         });
+    }
+
+    /// @notice Escrows ETH and sends ERC20 tokens to a receiver's address on the other chain.
+    ///         Used when the other chain has a different native token and ETH
+    ///         is represented by an ERC20 token, there.
+    /// @param _remoteToken Address of the corresponding token on the remote chain.
+    /// @param _to          Address of the receiver.
+    /// @param _amount      Amount of local tokens to deposit.
+    /// @param _minGasLimit Minimum amount of gas that the bridge can be relayed with.
+    /// @param _extraData   Extra data to be sent with the transaction. Note that the recipient will
+    ///                     not be triggered with this data, but it will be emitted and can be used
+    ///                     to identify the transaction.
+    function _initiateBridgeETHToERC20(
+        address _remoteToken,
+        address _from,
+        address _to,
+        uint256 _amount,
+        uint32 _minGasLimit,
+        bytes memory _extraData
+    )
+        internal
+    {
+        require(msg.value == _amount, "StandardBridge: bridging ETH must include sufficient ETH value");
+
+        // Emit the correct events. By default this will be _amount, but child
+        // contracts may override this function in order to emit legacy events as well.
+        _emitETHBridgeInitiated(_from, _to, _amount, _extraData);
+
+        messenger.sendMessage(
+            address(otherBridge),
+            abi.encodeWithSelector(
+                this.finalizeBridgeERC20.selector,
+                // Because this call will be executed on the remote chain, we reverse the order of
+                // the remote and local token addresses relative to their order in the
+                // finalizeBridgeERC20 function.
+                _remoteToken,
+                0,
+                _from,
+                _to,
+                _amount,
+                _extraData
+            ),
+            _minGasLimit
+        );
     }
 
     /// @notice Checks if a given address is an OptimismMintableERC20. Not perfect, but good enough.

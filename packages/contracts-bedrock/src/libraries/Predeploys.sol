@@ -110,4 +110,8 @@ library Predeploys {
 
     /// @notice Address of the EntryPoint predeploy.
     address internal constant EntryPoint = 0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789;
+
+    // Celo
+    /// @notice Address of the BridgedETH predeploy.
+    address internal constant BRIDGED_ETH = 0x4200000000000000000000000000000000001023;
 }
