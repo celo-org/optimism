@@ -211,7 +211,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @param _minGasLimit Minimum gas limit for the deposit message on L2.
     /// @param _extraData   Optional data to forward to L2.
     function _initiateETHDeposit(address _from, address _to, uint32 _minGasLimit, bytes memory _extraData) internal {
-        _initiateBridgeETH(_from, _to, msg.value, _minGasLimit, _extraData);
+        _initiateBridgeETHToERC20(Predeploys.BRIDGED_ETH, _from, _to, msg.value, _minGasLimit, _extraData);
     }
 
     /// @notice Internal function for initiating an ERC20 deposit.
