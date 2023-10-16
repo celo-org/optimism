@@ -710,6 +710,10 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 		"minimumWithdrawalAmount": config.BaseFeeVaultMinimumWithdrawalAmount,
 		"withdrawalNetwork":       config.BaseFeeVaultWithdrawalNetwork.ToUint8(),
 	}
+	immutable["FeeCurrency"] = immutables.ImmutableValues{
+		"name":   "FeeCurrency",
+		"symbol": "FC",
+	}
 
 	return immutable, nil
 }
@@ -814,6 +818,14 @@ func NewL2StorageConfig(config *DeployConfig, block *types.Block) (state.Storage
 		"initialized":         true,
 		"_owner":              config.ProxyAdminOwner,
 		"reportExpirySeconds": 600,
+	}
+	storage["FeeCurrency"] = state.StorageValues{
+		"_name":        "FeeCurrency",
+		"_symbol":      "FC",
+		"_totalSupply": 1000_000_000,
+		"_balances": map[any]any{
+			config.ProxyAdminOwner.String(): 1000_000_000,
+		},
 	}
 	return storage, nil
 }

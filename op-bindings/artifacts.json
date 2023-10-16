@@ -49,5 +49,6 @@
   "MentoFeeHandlerSeller",
   "UniswapFeeHandlerSeller",
   "SortedOracles",
-  "AddressSortedLinkedListWithMedian"
+  "AddressSortedLinkedListWithMedian",
+  "FeeCurrency"
 ]

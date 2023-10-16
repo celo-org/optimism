@@ -196,6 +196,12 @@ func BuildOptimism(immutable ImmutableConfig) (DeploymentResults, error) {
 			Name: "AddressSortedLinkedListWithMedian",
 			Args: []interface{}{},
 		},
+		{
+			Name: "FeeCurrency",
+			Args: []interface{}{
+				immutable["FeeCurrency"]["name"], immutable["FeeCurrency"]["symbol"], immutable["FeeCurrency"]["mintTo"],
+			},
+		},
 	}
 	return BuildL2(deployments)
 }
@@ -307,6 +313,16 @@ func l2Deployer(backend *backends.SimulatedBackend, opts *bind.TransactOpts, dep
 		_, tx, _, err = bindings.DeploySortedOracles(opts, backend, false)
 	case "AddressSortedLinkedListWithMedian":
 		_, tx, _, err = bindings.DeployAddressSortedLinkedListWithMedian(opts, backend)
+	case "FeeCurrency":
+		name, ok := deployment.Args[0].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid fee currency name")
+		}
+		symbol, ok := deployment.Args[1].(string)
+		if !ok {
+			return nil, fmt.Errorf("invalid fee currency symbol")
+		}
+		_, tx, _, err = bindings.DeployFeeCurrency(opts, backend, name, symbol)
 	default:
 		return tx, fmt.Errorf("unknown contract: %s", deployment.Name)
 	}

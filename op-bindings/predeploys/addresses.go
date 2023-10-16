@@ -34,6 +34,7 @@ const (
 	UniswapFeeHandlerSeller           = "0xd3aee28548dbb65df03981f0dc0713bfcbd10a97"
 	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
 	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
+	FeeCurrency                       = "0x4200000000000000000000000000000000001022"
 )
 
 var (
@@ -65,6 +66,7 @@ var (
 	UniswapFeeHandlerSellerAddr           = common.HexToAddress(UniswapFeeHandlerSeller)
 	SortedOraclesAddr                     = common.HexToAddress(SortedOracles)
 	AddressSortedLinkedListWithMedianAddr = common.HexToAddress(AddressSortedLinkedListWithMedian)
+	FeeCurrencyAddr                       = common.HexToAddress(FeeCurrency)
 
 	Predeploys     = make(map[string]*common.Address)
 	CeloPredeploys = make(map[string]*common.Address)
@@ -112,6 +114,7 @@ func init() {
 	Predeploys["UniswapFeeHandlerSeller"] = &UniswapFeeHandlerSellerAddr
 	Predeploys["SortedOracles"] = &SortedOraclesAddr
 	Predeploys["AddressSortedLinkedListWithMedian"] = &AddressSortedLinkedListWithMedianAddr
+	Predeploys["FeeCurrency"] = &FeeCurrencyAddr
 
 	CeloPredeploys[Predeploys["CeloRegistry"].String()] = Predeploys["CeloRegistry"]
 	CeloPredeploys[Predeploys["GoldToken"].String()] = Predeploys["GoldToken"]
@@ -121,4 +124,5 @@ func init() {
 	CeloPredeploys[Predeploys["UniswapFeeHandlerSeller"].String()] = Predeploys["UniswapFeeHandlerSeller"]
 	CeloPredeploys[Predeploys["SortedOracles"].String()] = Predeploys["SortedOracles"]
 	CeloPredeploys[Predeploys["AddressSortedLinkedListWithMedian"].String()] = Predeploys["AddressSortedLinkedListWithMedian"]
+	CeloPredeploys[Predeploys["FeeCurrency"].String()] = Predeploys["FeeCurrency"]
 }

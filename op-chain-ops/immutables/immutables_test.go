@@ -83,6 +83,10 @@ func TestBuildOptimism(t *testing.T) {
 			"minimumWithdrawalAmount": minimumWithdrawalAmount,
 			"withdrawalNetwork":       uint8(0),
 		},
+		"FeeCurrency": {
+			"name":   "FeeCurrency",
+			"symbol": "FC",
+		},
 	})
 	require.Nil(t, err)
 	require.NotNil(t, results)
@@ -113,6 +117,7 @@ func TestBuildOptimism(t *testing.T) {
 		"UniswapFeeHandlerSeller":           true,
 		"SortedOracles":                     true,
 		"AddressSortedLinkedListWithMedian": true,
+		"FeeCurrency":                       true,
 	}
 
 	// Only the exact contracts that we care about are being
