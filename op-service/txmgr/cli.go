@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 
+	"github.com/Layr-Labs/eigenda/api/grpc/disperser"
 	opservice "github.com/ethereum-optimism/optimism/op-service"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-signer/client"
@@ -24,13 +26,19 @@ const (
 	HDPathFlagName     = "hd-path"
 	PrivateKeyFlagName = "private-key"
 	// TxMgr Flags (new + legacy + some shared flags)
-	NumConfirmationsFlagName          = "num-confirmations"
-	SafeAbortNonceTooLowCountFlagName = "safe-abort-nonce-too-low-count"
-	ResubmissionTimeoutFlagName       = "resubmission-timeout"
-	NetworkTimeoutFlagName            = "network-timeout"
-	TxSendTimeoutFlagName             = "txmgr.send-timeout"
-	TxNotInMempoolTimeoutFlagName     = "txmgr.not-in-mempool-timeout"
-	ReceiptQueryIntervalFlagName      = "txmgr.receipt-query-interval"
+	NumConfirmationsFlagName            = "num-confirmations"
+	SafeAbortNonceTooLowCountFlagName   = "safe-abort-nonce-too-low-count"
+	ResubmissionTimeoutFlagName         = "resubmission-timeout"
+	NetworkTimeoutFlagName              = "network-timeout"
+	TxSendTimeoutFlagName               = "txmgr.send-timeout"
+	TxNotInMempoolTimeoutFlagName       = "txmgr.not-in-mempool-timeout"
+	ReceiptQueryIntervalFlagName        = "txmgr.receipt-query-interval"
+	DARpcFlagName                       = "da-rpc"
+	DAPrimaryQuorumIDFlagName           = "da-primary-quorum-id"
+	DAPrimaryAdversaryThresholdFlagName = "da-primary-adversary-threshold"
+	DAPrimaryQuorumThresholdFlagName    = "da-primary-quorum-threshold"
+	DAStatusQueryRetryIntervalFlagName  = "da-status-query-retry-interval"
+	DAStatusQueryTimeoutFlagName        = "da-status-query-timeout"
 )
 
 var (
@@ -120,24 +128,62 @@ func CLIFlags(envPrefix string) []cli.Flag {
 			Value:   defaultReceiptQueryInterval,
 			EnvVars: prefixEnvVars("TXMGR_RECEIPT_QUERY_INTERVAL"),
 		},
+		&cli.StringFlag{
+			Name:    DARpcFlagName,
+			Usage:   "RPC endpoint of the EigenDA disperser",
+			EnvVars: prefixEnvVars("DA_RPC"),
+		},
+		&cli.Uint64Flag{
+			Name:    DAPrimaryAdversaryThresholdFlagName,
+			Usage:   "Adversary threshold for the primary quorum of the DA layer",
+			EnvVars: prefixEnvVars("DA_PRIMARY_ADVERSARY_THRESHOLD"),
+		},
+		&cli.Uint64Flag{
+			Name:    DAPrimaryQuorumThresholdFlagName,
+			Usage:   "Quorum threshold for the primary quorum of the DA layer",
+			EnvVars: prefixEnvVars("DA_PRIMARY_QUORUM_THRESHOLD"),
+		},
+		&cli.Uint64Flag{
+			Name:    DAPrimaryQuorumIDFlagName,
+			Usage:   "Secondary Quorum ID of the DA layer",
+			EnvVars: prefixEnvVars("DA_PRIMARY_QUORUM_ID"),
+		},
+		&cli.DurationFlag{
+			Name:    DAStatusQueryTimeoutFlagName,
+			Usage:   "Timeout for aborting an EigenDA blob dispersal if the disperser does not report that the blob has been confirmed dispersed.",
+			Value:   1 * time.Minute,
+			EnvVars: prefixEnvVars("DA_STATUS_QUERY_TIMEOUT"),
+		},
+		&cli.DurationFlag{
+			Name:    DAStatusQueryRetryIntervalFlagName,
+			Usage:   "Wait time between retries of EigenDA blob status queries (made while waiting for a blob to be confirmed by)",
+			Value:   5 * time.Second,
+			EnvVars: prefixEnvVars("DA_STATUS_QUERY_INTERVAL"),
+		},
 	}, client.CLIFlags(envPrefix)...)
 }
 
 type CLIConfig struct {
-	L1RPCURL                  string
-	Mnemonic                  string
-	HDPath                    string
-	SequencerHDPath           string
-	L2OutputHDPath            string
-	PrivateKey                string
-	SignerCLIConfig           client.CLIConfig
-	NumConfirmations          uint64
-	SafeAbortNonceTooLowCount uint64
-	ResubmissionTimeout       time.Duration
-	ReceiptQueryInterval      time.Duration
-	NetworkTimeout            time.Duration
-	TxSendTimeout             time.Duration
-	TxNotInMempoolTimeout     time.Duration
+	L1RPCURL                    string
+	Mnemonic                    string
+	HDPath                      string
+	SequencerHDPath             string
+	L2OutputHDPath              string
+	PrivateKey                  string
+	SignerCLIConfig             client.CLIConfig
+	NumConfirmations            uint64
+	SafeAbortNonceTooLowCount   uint64
+	ResubmissionTimeout         time.Duration
+	ReceiptQueryInterval        time.Duration
+	NetworkTimeout              time.Duration
+	TxSendTimeout               time.Duration
+	TxNotInMempoolTimeout       time.Duration
+	DARpc                       string
+	DAPrimaryQuorumID           uint32
+	DAPrimaryAdversaryThreshold uint32
+	DAPrimaryQuorumThreshold    uint32
+	DAStatusQueryRetryInterval  time.Duration
+	DAStatusQueryTimeout        time.Duration
 }
 
 func NewCLIConfig(l1RPCURL string) CLIConfig {
@@ -176,6 +222,21 @@ func (m CLIConfig) Check() error {
 	if m.SafeAbortNonceTooLowCount == 0 {
 		return errors.New("SafeAbortNonceTooLowCount must not be 0")
 	}
+	if m.DARpc == "" {
+		return errors.New("must provide a DA RPC url")
+	}
+	if m.DAPrimaryAdversaryThreshold == 0 || m.DAPrimaryAdversaryThreshold >= 100 {
+		return errors.New("must provide a valid primary DA adversary threshold between (0 and 100)")
+	}
+	if m.DAPrimaryQuorumThreshold == 0 || m.DAPrimaryQuorumThreshold >= 100 {
+		return errors.New("must provide a valid primary DA quorum threshold between (0 and 100)")
+	}
+	if m.DAStatusQueryTimeout == 0 {
+		return errors.New("DA status query timeout must be greater than 0")
+	}
+	if m.DAStatusQueryRetryInterval == 0 {
+		return errors.New("DA status query retry interval must be greater than 0")
+	}
 	if err := m.SignerCLIConfig.Check(); err != nil {
 		return err
 	}
@@ -184,20 +245,26 @@ func (m CLIConfig) Check() error {
 
 func ReadCLIConfig(ctx *cli.Context) CLIConfig {
 	return CLIConfig{
-		L1RPCURL:                  ctx.String(L1RPCFlagName),
-		Mnemonic:                  ctx.String(MnemonicFlagName),
-		HDPath:                    ctx.String(HDPathFlagName),
-		SequencerHDPath:           ctx.String(SequencerHDPathFlag.Name),
-		L2OutputHDPath:            ctx.String(L2OutputHDPathFlag.Name),
-		PrivateKey:                ctx.String(PrivateKeyFlagName),
-		SignerCLIConfig:           client.ReadCLIConfig(ctx),
-		NumConfirmations:          ctx.Uint64(NumConfirmationsFlagName),
-		SafeAbortNonceTooLowCount: ctx.Uint64(SafeAbortNonceTooLowCountFlagName),
-		ResubmissionTimeout:       ctx.Duration(ResubmissionTimeoutFlagName),
-		ReceiptQueryInterval:      ctx.Duration(ReceiptQueryIntervalFlagName),
-		NetworkTimeout:            ctx.Duration(NetworkTimeoutFlagName),
-		TxSendTimeout:             ctx.Duration(TxSendTimeoutFlagName),
-		TxNotInMempoolTimeout:     ctx.Duration(TxNotInMempoolTimeoutFlagName),
+		L1RPCURL:                    ctx.String(L1RPCFlagName),
+		Mnemonic:                    ctx.String(MnemonicFlagName),
+		HDPath:                      ctx.String(HDPathFlagName),
+		SequencerHDPath:             ctx.String(SequencerHDPathFlag.Name),
+		L2OutputHDPath:              ctx.String(L2OutputHDPathFlag.Name),
+		PrivateKey:                  ctx.String(PrivateKeyFlagName),
+		SignerCLIConfig:             client.ReadCLIConfig(ctx),
+		NumConfirmations:            ctx.Uint64(NumConfirmationsFlagName),
+		SafeAbortNonceTooLowCount:   ctx.Uint64(SafeAbortNonceTooLowCountFlagName),
+		ResubmissionTimeout:         ctx.Duration(ResubmissionTimeoutFlagName),
+		ReceiptQueryInterval:        ctx.Duration(ReceiptQueryIntervalFlagName),
+		NetworkTimeout:              ctx.Duration(NetworkTimeoutFlagName),
+		TxSendTimeout:               ctx.Duration(TxSendTimeoutFlagName),
+		TxNotInMempoolTimeout:       ctx.Duration(TxNotInMempoolTimeoutFlagName),
+		DARpc:                       ctx.String(DARpcFlagName),
+		DAPrimaryQuorumID:           Uint32(ctx, DAPrimaryQuorumIDFlagName),
+		DAPrimaryAdversaryThreshold: Uint32(ctx, DAPrimaryAdversaryThresholdFlagName),
+		DAPrimaryQuorumThreshold:    Uint32(ctx, DAPrimaryQuorumThresholdFlagName),
+		DAStatusQueryRetryInterval:  ctx.Duration(DAStatusQueryRetryIntervalFlagName),
+		DAStatusQueryTimeout:        ctx.Duration(DAStatusQueryTimeoutFlagName),
 	}
 }
 
@@ -233,18 +300,29 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		return Config{}, fmt.Errorf("could not init signer: %w", err)
 	}
 
+	disperserSecurityParams := []*disperser.SecurityParams{}
+	disperserSecurityParams = append(disperserSecurityParams, &disperser.SecurityParams{
+		QuorumId:           cfg.DAPrimaryQuorumID,
+		AdversaryThreshold: cfg.DAPrimaryAdversaryThreshold,
+		QuorumThreshold:    cfg.DAPrimaryQuorumThreshold,
+	})
+
 	return Config{
-		Backend:                   l1,
-		ResubmissionTimeout:       cfg.ResubmissionTimeout,
-		ChainID:                   chainID,
-		TxSendTimeout:             cfg.TxSendTimeout,
-		TxNotInMempoolTimeout:     cfg.TxNotInMempoolTimeout,
-		NetworkTimeout:            cfg.NetworkTimeout,
-		ReceiptQueryInterval:      cfg.ReceiptQueryInterval,
-		NumConfirmations:          cfg.NumConfirmations,
-		SafeAbortNonceTooLowCount: cfg.SafeAbortNonceTooLowCount,
-		Signer:                    signerFactory(chainID),
-		From:                      from,
+		Backend:                    l1,
+		ResubmissionTimeout:        cfg.ResubmissionTimeout,
+		ChainID:                    chainID,
+		TxSendTimeout:              cfg.TxSendTimeout,
+		TxNotInMempoolTimeout:      cfg.TxNotInMempoolTimeout,
+		NetworkTimeout:             cfg.NetworkTimeout,
+		ReceiptQueryInterval:       cfg.ReceiptQueryInterval,
+		NumConfirmations:           cfg.NumConfirmations,
+		SafeAbortNonceTooLowCount:  cfg.SafeAbortNonceTooLowCount,
+		Signer:                     signerFactory(chainID),
+		From:                       from,
+		DARpc:                      cfg.DARpc,
+		DADisperserSecurityParams:  disperserSecurityParams,
+		DAStatusQueryTimeout:       cfg.DAStatusQueryTimeout,
+		DAStatusQueryRetryInterval: cfg.DAStatusQueryRetryInterval,
 	}, nil
 }
 
@@ -289,6 +367,40 @@ type Config struct {
 	// Signer is used to sign transactions when the gas price is increased.
 	Signer opcrypto.SignerFn
 	From   common.Address
+
+	// Eigenlayer Config
+
+	// TODO(eigenlayer): Update quorum ID command-line parameters to support passing
+	// and arbitrary number of quorum IDs.
+
+	// DaRpc is the HTTP provider URL for the Data Availability node.
+	DARpc string
+
+	// Quorum IDs and SecurityParams to use when dispersing and retrieving blobs
+	DADisperserSecurityParams []*disperser.SecurityParams
+
+	// The total amount of time that the batcher will spend waiting for EigenDA to confirm a blob
+	DAStatusQueryTimeout time.Duration
+
+	// The amount of time to wait between status queries of a newly dispersed blob
+	DAStatusQueryRetryInterval time.Duration
+}
+
+func SafeConvertUInt64ToUInt32(val uint64) (uint32, bool) {
+	if val <= math.MaxUint32 {
+		return uint32(val), true
+	}
+	return 0, false
+}
+
+// We add this because the urfave/cli library doesn't support uint32 specifically
+func Uint32(ctx *cli.Context, flagName string) uint32 {
+	daQuorumIDLong := ctx.Uint64(flagName)
+	daQuorumID, success := SafeConvertUInt64ToUInt32(daQuorumIDLong)
+	if !success {
+		panic(fmt.Errorf("%s must be in the uint32 range", flagName))
+	}
+	return daQuorumID
 }
 
 func (m Config) Check() error {

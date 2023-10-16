@@ -62,7 +62,7 @@ services:
       --p2p.listen.ip=0.0.0.0
       --p2p.listen.tcp=9003
       --p2p.listen.udp=9003
-      --p2p.scoring.peers=light
+      --p2p.scoring=light
       --p2p.ban.peers=true
       --snapshotlog.file=/op_log/snapshot.log
       --p2p.priv.path=/config/p2p-node-key.txt
@@ -71,6 +71,7 @@ services:
       --metrics.port=7300
       --pprof.enabled
       --rpc.enable-admin
+      --da-rpc=host.docker.internal:32018
     ports:
       - "7545:8545"
       - "9003:9003"
@@ -105,6 +106,12 @@ services:
       OP_PROPOSER_PPROF_ENABLED: "true"
       OP_PROPOSER_METRICS_ENABLED: "true"
       OP_PROPOSER_ALLOW_NON_FINALIZED: "true"
+      OP_PROPOSER_DA_RPC: host.docker.internal:32003
+      OP_PROPOSER_DA_PRIMARY_QUORUM_ID: 0
+      OP_PROPOSER_DA_PRIMARY_ADVERSARY_THRESHOLD: 40
+      OP_PROPOSER_DA_PRIMARY_QUORUM_THRESHOLD: 60
+      OP_PROPOSER_DA_STATUS_QUERY_INTERVAL: "5s"
+      OP_PROPOSER_DA_STATUS_QUERY_TIMEOUT: "30s"
 
   op-batcher:
     depends_on:
@@ -131,6 +138,12 @@ services:
       OP_BATCHER_PPROF_ENABLED: "true"
       OP_BATCHER_METRICS_ENABLED: "true"
       OP_BATCHER_RPC_ENABLE_ADMIN: "true"
+      OP_BATCHER_DA_RPC: host.docker.internal:32003
+      OP_BATCHER_DA_PRIMARY_QUORUM_ID: 0
+      OP_BATCHER_DA_PRIMARY_ADVERSARY_THRESHOLD: 40
+      OP_BATCHER_DA_PRIMARY_QUORUM_THRESHOLD: 60
+      OP_BATCHER_DA_STATUS_QUERY_INTERVAL: "5s"
+      OP_BATCHER_DA_STATUS_QUERY_TIMEOUT: "30s"
 
   artifact-server:
     depends_on:

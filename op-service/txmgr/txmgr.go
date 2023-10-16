@@ -2,6 +2,8 @@ package txmgr
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -16,8 +18,14 @@ import (
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/ethereum-optimism/optimism/op-service/retry"
+	"github.com/Layr-Labs/eigenda/api/grpc/disperser"
+	"github.com/ethereum-optimism/optimism/op-service/backoff"
+	"github.com/ethereum-optimism/optimism/op-service/proto/gen/op_service/v1"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr/metrics"
 )
 
@@ -185,7 +193,53 @@ func (m *SimpleTxManager) send(ctx context.Context, candidate TxCandidate) (*typ
 		ctx, cancel = context.WithTimeout(ctx, m.cfg.TxSendTimeout)
 		defer cancel()
 	}
-	tx, err := retry.Do(ctx, 30, retry.Fixed(2*time.Second), func() (*types.Transaction, error) {
+
+	// TODO: this is a hack to route only batcher transactions through celestia
+	// SimpleTxManager is used by both batcher and proposer but since proposer
+	// writes to a smart contract, we overwrite _only_ batcher candidate as the
+	// frame pointer to celestia, while retaining the proposer pathway that
+	// writes the state commitment data to ethereum.
+	// if candidate.To.Hex() == "0xfF00000000000000000000000000000000000000" {
+	if candidate.To.Hex() == "0xFf00000000000000000000000000000000000901" {
+		blobInfo, err := m.disperseBlob(ctx, candidate.TxData)
+		if err != nil { // fallback to posting raw frame to calldata, although still within this proto wrapper
+			m.l.Error("Unable to publish batch frameset to EigenDA, falling back to calldata", "err", err)
+			calldataFrame := &op_service.CalldataFrame{
+				Value: &op_service.CalldataFrame_Frame{
+					Frame: candidate.TxData,
+				},
+			}
+			calldataFrameBz, err := proto.Marshal(calldataFrame)
+			if err != nil {
+				return nil, err
+			}
+			candidate.TxData = calldataFrameBz
+		} else { // happy path, post raw frame to eigenda then post frameRef to calldata
+			quorumIDs := make([]uint32, len(blobInfo.BlobHeader.BlobQuorumParams))
+			for i := range quorumIDs {
+				quorumIDs[i] = blobInfo.BlobHeader.BlobQuorumParams[i].QuorumNumber
+			}
+			calldataFrame := &op_service.CalldataFrame{
+				Value: &op_service.CalldataFrame_FrameRef{
+					FrameRef: &op_service.FrameRef{
+						BatchHeaderHash:      blobInfo.BlobVerificationProof.BatchMetadata.BatchHeaderHash,
+						BlobIndex:            blobInfo.BlobVerificationProof.BlobIndex,
+						ReferenceBlockNumber: blobInfo.BlobVerificationProof.BatchMetadata.ConfirmationBlockNumber,
+						QuorumIds:            quorumIDs,
+						BlobLength:           uint32(len(candidate.TxData)),
+					},
+				},
+			}
+			calldataFrameBz, err := proto.Marshal(calldataFrame)
+			if err != nil {
+				return nil, err
+			}
+
+			candidate.TxData = calldataFrameBz
+		}
+	}
+
+	tx, err := backoff.Do(ctx, 30, backoff.Fixed(2*time.Second), func() (*types.Transaction, error) {
 		tx, err := m.craftTx(ctx, candidate)
 		if err != nil {
 			m.l.Warn("Failed to create a transaction, will retry", "err", err)
@@ -196,6 +250,68 @@ func (m *SimpleTxManager) send(ctx context.Context, candidate TxCandidate) (*typ
 		return nil, fmt.Errorf("failed to create the tx: %w", err)
 	}
 	return m.sendTx(ctx, tx)
+}
+
+func (m *SimpleTxManager) disperseBlob(ctx context.Context, txData []byte) (*disperser.BlobInfo, error) {
+	m.l.Info("Attempting to disperse blob to EigenDA")
+	conn, err := grpc.Dial(m.cfg.DARpc, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return nil, err
+	}
+	daClient := disperser.NewDisperserClient(conn)
+
+	disperseReq := &disperser.DisperseBlobRequest{
+		Data:           txData,
+		SecurityParams: m.cfg.DADisperserSecurityParams,
+	}
+	disperseRes, err := daClient.DisperseBlob(ctx, disperseReq)
+
+	if err != nil || disperseRes == nil {
+		m.l.Error("Unable to disperse blob to EigenDA, aborting", "err", err)
+		return nil, err
+	}
+
+	if disperseRes.Result == disperser.BlobStatus_UNKNOWN ||
+		disperseRes.Result == disperser.BlobStatus_FAILED {
+		m.l.Error("Unable to disperse blob to EigenDA, aborting", "err", err)
+		return nil, fmt.Errorf("reply status is %d", disperseRes.Result)
+	}
+
+	base64RequestID := base64.StdEncoding.EncodeToString(disperseRes.RequestId)
+
+	m.l.Info("Blob disepersed to EigenDA, now waiting for confirmation", "requestID", base64RequestID)
+
+	var statusRes *disperser.BlobStatusReply
+	timeoutTime := time.Now().Add(m.cfg.DAStatusQueryTimeout)
+	// Wait before first status check
+	time.Sleep(m.cfg.DAStatusQueryRetryInterval)
+	for time.Now().Before(timeoutTime) {
+		statusRes, err = daClient.GetBlobStatus(ctx, &disperser.BlobStatusRequest{
+			RequestId: disperseRes.RequestId,
+		})
+		if err != nil {
+			m.l.Warn("Unable to retrieve blob dispersal status, will retry", "requestID", base64RequestID, "err", err)
+		} else if statusRes.Status == disperser.BlobStatus_CONFIRMED {
+			// TODO(eigenlayer): As long as fault proofs are disabled, we can move on once a blob is confirmed
+			// but not yet finalized, without further logic. Once fault proofs are enabled, we will need to update
+			// the proposer to wait until the blob associated with an L2 block has been finalized, i.e. the EigenDA
+			// contracts on Ethereum have confirmed the full availability of the blob on EigenDA.
+			batchHeaderHashHex := fmt.Sprintf("0x%s", hex.EncodeToString(statusRes.Info.BlobVerificationProof.BatchMetadata.BatchHeaderHash))
+			m.l.Info("Successfully dispersed blob to EigenDA", "requestID", base64RequestID, "batchHeaderHash", batchHeaderHashHex)
+			return statusRes.Info, nil
+		} else if statusRes.Status == disperser.BlobStatus_UNKNOWN ||
+			statusRes.Status == disperser.BlobStatus_FAILED {
+			m.l.Error("EigenDA blob dispersal failed in processing", "requestID", base64RequestID, "err", err)
+			return nil, fmt.Errorf("eigenDA blob dispersal failed in processing with reply status %d", statusRes.Status)
+		} else {
+			m.l.Warn("Still waiting for confirmation from EigenDA", "requestID", base64RequestID)
+		}
+
+		// Wait before first status check
+		time.Sleep(m.cfg.DAStatusQueryRetryInterval)
+	}
+
+	return nil, fmt.Errorf("timed out getting EigenDA status for dispersed blob key: %s", base64RequestID)
 }
 
 // craftTx creates the signed transaction

@@ -1,12 +1,16 @@
 package derive
 
 import (
+	"context"
 	"crypto/ecdsa"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"testing"
 
+	"github.com/Layr-Labs/eigenda/api/grpc/retriever"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -14,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 
+	"github.com/ethereum-optimism/optimism/op-node/da"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/testlog"
 	"github.com/ethereum-optimism/optimism/op-node/testutils"
@@ -49,6 +54,30 @@ type calldataTest struct {
 	txs  []testTx
 }
 
+var _ retriever.RetrieverClient = RetrieverClientMock{}
+
+type RetrieverClientMock struct {
+	Responses     []*retriever.BlobReply
+	ResponseIndex int
+}
+
+func (c RetrieverClientMock) RetrieveBlob(ctx context.Context, in *retriever.BlobRequest, opts ...grpc.CallOption) (*retriever.BlobReply, error) {
+	if c.ResponseIndex < len(c.Responses) {
+		res := c.Responses[c.ResponseIndex]
+		c.ResponseIndex += 1
+		return res, nil
+	} else {
+		return nil, fmt.Errorf("Ran out of stub responses")
+	}
+}
+
+func NewRetrieverClientMock(responses []*retriever.BlobReply) retriever.RetrieverClient {
+	return &RetrieverClientMock{
+		Responses:     responses,
+		ResponseIndex: 0,
+	}
+}
+
 // TestDataFromEVMTransactions creates some transactions from a specified template and asserts
 // that DataFromEVMTransactions properly filters and returns the data from the authorized transactions
 // inside the transaction set.
@@ -59,6 +88,16 @@ func TestDataFromEVMTransactions(t *testing.T) {
 		L1ChainID:         big.NewInt(100),
 		BatchInboxAddress: crypto.PubkeyToAddress(inboxPriv.PublicKey),
 	}
+
+	daCfg := &da.DAConfig{
+		Rpc: "",
+		Client: NewRetrieverClientMock([]*retriever.BlobReply{
+			{
+				Data: []byte{0x00, 0x01, 0x02},
+			},
+		}),
+	}
+
 	batcherAddr := crypto.PubkeyToAddress(batcherPriv.PublicKey)
 
 	altInbox := testutils.RandomAddress(rand.New(rand.NewSource(1234)))
@@ -121,7 +160,7 @@ func TestDataFromEVMTransactions(t *testing.T) {
 			}
 		}
 
-		out := DataFromEVMTransactions(cfg, batcherAddr, txs, testlog.Logger(t, log.LvlCrit))
+		out := DataFromEVMTransactions(cfg, daCfg, batcherAddr, txs, testlog.Logger(t, log.LvlCrit))
 		require.ElementsMatch(t, expectedData, out)
 	}
 

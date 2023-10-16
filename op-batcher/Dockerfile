@@ -12,6 +12,7 @@ WORKDIR /app
 RUN go mod download
 
 # build op-batcher with the shared go.mod & go.sum files
+COPY ./vendor /app/vendor
 COPY ./op-batcher /app/op-batcher
 COPY ./op-bindings /app/op-bindings
 COPY ./op-node /app/op-node
@@ -24,7 +25,7 @@ WORKDIR /app/op-batcher
 
 ARG TARGETOS TARGETARCH
 
-RUN make op-batcher VERSION="$VERSION" GOOS=$TARGETOS GOARCH=$TARGETARCH
+RUN --mount=type=cache,target="/root/.cache/go-build" make op-batcher VERSION="$VERSION" GOOS=$TARGETOS GOARCH=$TARGETARCH
 
 FROM alpine:3.18
 

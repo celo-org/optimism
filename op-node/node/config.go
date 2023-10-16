@@ -6,6 +6,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/op-node/da"
 	"github.com/ethereum-optimism/optimism/op-node/flags"
 	"github.com/ethereum-optimism/optimism/op-node/p2p"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
@@ -46,6 +47,7 @@ type Config struct {
 	// Runtime config changes should be picked up from log-events,
 	// but if log-events are not coming in (e.g. not syncing blocks) then the reload ensures the config stays accurate.
 	RuntimeConfigReloadInterval time.Duration
+	DAConfig da.DAConfig
 
 	// Optional
 	Tracer    Tracer

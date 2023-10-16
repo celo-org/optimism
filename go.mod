@@ -4,6 +4,7 @@ go 1.21
 
 require (
 	github.com/BurntSushi/toml v1.3.2
+	github.com/Layr-Labs/eigenda/api v0.0.0
 	github.com/btcsuite/btcd v0.23.3
 	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.2.0
@@ -44,6 +45,8 @@ require (
 	golang.org/x/sync v0.3.0
 	golang.org/x/term v0.12.0
 	golang.org/x/time v0.3.0
+	google.golang.org/grpc v1.58.3
+	google.golang.org/protobuf v1.31.0
 	gorm.io/driver/postgres v1.5.2
 	gorm.io/gorm v1.25.4
 )
@@ -212,3 +215,6 @@ replace github.com/ethereum/go-ethereum v1.13.1 => github.com/celo-org/op-geth v
 
 //replace github.com/ethereum-optimism/superchain-registry/superchain => ../superchain-registry/superchain
 //replace github.com/ethereum/go-ethereum v1.13.1 => ../go-ethereum
+
+// TODO: Update to OSS repo before merge
+replace github.com/Layr-Labs/eigenda/api => ../eigenda/api

@@ -300,11 +300,11 @@ func (l *BatchSubmitter) loop() {
 				if err != nil {
 					l.log.Error("error closing the channel manager to handle a L2 reorg", "err", err)
 				}
-				l.publishStateToL1(queue, receiptsCh, true)
+				l.publishStateToDA(queue, receiptsCh, true)
 				l.state.Clear()
 				continue
 			}
-			l.publishStateToL1(queue, receiptsCh, false)
+			l.publishStateToDA(queue, receiptsCh, false)
 		case r := <-receiptsCh:
 			l.handleReceipt(r)
 		case <-l.shutdownCtx.Done():
@@ -312,15 +312,15 @@ func (l *BatchSubmitter) loop() {
 			if err != nil {
 				l.log.Error("error closing the channel manager", "err", err)
 			}
-			l.publishStateToL1(queue, receiptsCh, true)
+			l.publishStateToDA(queue, receiptsCh, true)
 			return
 		}
 	}
 }
 
-// publishStateToL1 loops through the block data loaded into `state` and
-// submits the associated data to the L1 in the form of channel frames.
-func (l *BatchSubmitter) publishStateToL1(queue *txmgr.Queue[txData], receiptsCh chan txmgr.TxReceipt[txData], drain bool) {
+// publishStateToDA loops through the block data loaded into `state` and
+// submits the associated data to DA in the form of channel frames and submits the associated DA refs to the L1.
+func (l *BatchSubmitter) publishStateToDA(queue *txmgr.Queue[txData], receiptsCh chan txmgr.TxReceipt[txData], drain bool) {
 	txDone := make(chan struct{})
 	// send/wait and receipt reading must be on a separate goroutines to avoid deadlocks
 	go func() {
@@ -332,7 +332,7 @@ func (l *BatchSubmitter) publishStateToL1(queue *txmgr.Queue[txData], receiptsCh
 			close(txDone)
 		}()
 		for {
-			err := l.publishTxToL1(l.killCtx, queue, receiptsCh)
+			err := l.publishFrameToDA(l.killCtx, queue, receiptsCh)
 			if err != nil {
 				if drain && err != io.EOF {
 					l.log.Error("error sending tx while draining state", "err", err)
@@ -352,8 +352,8 @@ func (l *BatchSubmitter) publishStateToL1(queue *txmgr.Queue[txData], receiptsCh
 	}
 }
 
-// publishTxToL1 submits a single state tx to the L1
-func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[txData], receiptsCh chan txmgr.TxReceipt[txData]) error {
+// publishFrameToDA submits a single state frame to the DA layer
+func (l *BatchSubmitter) publishFrameToDA(ctx context.Context, queue *txmgr.Queue[txData], receiptsCh chan txmgr.TxReceipt[txData]) error {
 	// send all available transactions
 	l1tip, err := l.l1Tip(ctx)
 	if err != nil {
@@ -372,6 +372,10 @@ func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[t
 		return err
 	}
 
+	// if da config prescribes separate da
+	// do separate da upload, returning da data reference
+	// then send the transaction with the da data reference
+	// otherwise just send the transaction
 	l.sendTransaction(txdata, queue, receiptsCh)
 	return nil
 }

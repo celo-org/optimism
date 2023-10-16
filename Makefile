@@ -22,8 +22,7 @@ ci-builder:
 submodules:
 	# CI will checkout submodules on its own (and fails on these commands)
 	if [ -z "$$GITHUB_ENV" ]; then \
-		git submodule init; \
-		git submodule update; \
+		git submodule update --init --recursive; \
 	fi
 .PHONY: submodules
 

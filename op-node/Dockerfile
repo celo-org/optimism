@@ -12,6 +12,7 @@ WORKDIR /app
 RUN go mod download
 
 # build op-node with the shared go.mod & go.sum files
+COPY ./vendor /app/vendor
 COPY ./op-node /app/op-node
 COPY ./op-chain-ops /app/op-chain-ops
 COPY ./op-service /app/op-service
@@ -22,7 +23,7 @@ WORKDIR /app/op-node
 
 ARG TARGETOS TARGETARCH
 
-RUN make op-node VERSION="$VERSION" GOOS=$TARGETOS GOARCH=$TARGETARCH
+RUN --mount=type=cache,target="/root/.cache/go-build" make op-node VERSION="$VERSION" GOOS=$TARGETOS GOARCH=$TARGETARCH
 
 FROM alpine:3.18
 
