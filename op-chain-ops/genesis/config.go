@@ -714,6 +714,9 @@ func NewL2ImmutableConfig(config *DeployConfig, block *types.Block) (immutables.
 		"name":   "FeeCurrency",
 		"symbol": "FC",
 	}
+	immutable["BridgedETH"] = immutables.ImmutableValues{
+		"bridge": predeploys.L2StandardBridgeAddr,
+	}
 
 	return immutable, nil
 }
