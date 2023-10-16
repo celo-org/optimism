@@ -148,4 +148,8 @@ library Predeploys {
             uint160(uint256(uint160(_addr)) & 0xffff | uint256(uint160(0xc0D3C0d3C0d3C0D3c0d3C0d3c0D3C0d3c0d30000)))
         );
     }
+
+    // Celo
+    /// @notice Address of the BridgedETH predeploy.
+    address internal constant BRIDGED_ETH = 0x4200000000000000000000000000000000001023;
 }
