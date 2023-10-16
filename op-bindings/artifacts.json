@@ -50,5 +50,6 @@
   "UniswapFeeHandlerSeller",
   "SortedOracles",
   "AddressSortedLinkedListWithMedian",
-  "FeeCurrency"
+  "FeeCurrency",
+  "BridgedETH"
 ]
