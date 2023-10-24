@@ -71,9 +71,7 @@ contract L2StandardBridge is StandardBridge, ISemver {
 
     /// @notice Allows EOAs to bridge ETH by sending directly to the bridge.
     receive() external payable override onlyEOA {
-        _initiateWithdrawal(
-            Predeploys.LEGACY_ERC20_ETH, msg.sender, msg.sender, msg.value, RECEIVE_DEFAULT_GAS_LIMIT, bytes("")
-        );
+        revert("CELO tokens can't be bridged to L1!");
     }
 
     /// @inheritdoc StandardBridge
@@ -159,7 +157,9 @@ contract L2StandardBridge is StandardBridge, ISemver {
     )
         internal
     {
-        if (_l2Token == Predeploys.LEGACY_ERC20_ETH) {
+        if (_l2Token == address(Predeploys.BRIDGED_ETH)) {
+            _initiateBridgeERC20ToETH(_l2Token, _from, _to, _amount, _minGasLimit, _extraData);
+        } else if (_l2Token == Predeploys.LEGACY_ERC20_ETH) {
             _initiateBridgeETH(_from, _to, _amount, _minGasLimit, _extraData);
         } else {
             address l1Token = OptimismMintableERC20(_l2Token).l1Token();
