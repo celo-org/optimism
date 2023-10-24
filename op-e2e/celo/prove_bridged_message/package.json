@@ -1,0 +1,10 @@
+{
+  "name": "prove-bridged-message",
+  "bin": {
+    "prove-bridged-message": "./index.js"
+  },
+  "dependencies": {
+    "@eth-optimism/sdk": "^0.0.0-develop-20230928190155",
+    "ethers": "^5.7.2"
+  }
+}
