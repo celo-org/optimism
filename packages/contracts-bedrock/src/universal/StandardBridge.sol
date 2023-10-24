@@ -241,7 +241,6 @@ abstract contract StandardBridge is Initializable {
         payable
         onlyOtherBridge
     {
-        require(msg.value == _amount, "StandardBridge: amount sent does not match amount required");
         require(_to != address(this), "StandardBridge: cannot send to self");
         require(_to != address(messenger), "StandardBridge: cannot send to messenger");
 
@@ -415,6 +414,37 @@ abstract contract StandardBridge is Initializable {
                 _amount,
                 _extraData
             ),
+            _minGasLimit
+        );
+    }
+
+    /// @notice Burn ERC20 tokens and add native tokens to a receiver's address on the other chain.
+    /// @param _localToken  Address of the ERC20 on this chain.
+    /// @param _to          Address of the receiver.
+    /// @param _amount      Amount of local tokens to deposit.
+    /// @param _minGasLimit Minimum amount of gas that the bridge can be relayed with.
+    /// @param _extraData   Extra data to be sent with the transaction. Note that the recipient will
+    ///                     not be triggered with this data, but it will be emitted and can be used
+    ///                     to identify the transaction.
+    function _initiateBridgeERC20ToETH(
+        address _localToken,
+        address _from,
+        address _to,
+        uint256 _amount,
+        uint32 _minGasLimit,
+        bytes memory _extraData
+    )
+        internal
+    {
+        OptimismMintableERC20(_localToken).burn(_from, _amount);
+
+        // Emit the correct events. By default this will be _amount, but child
+        // contracts may override this function in order to emit legacy events as well.
+        _emitETHBridgeInitiated(_from, _to, _amount, _extraData);
+
+        messenger.sendMessage(
+            address(OTHER_BRIDGE),
+            abi.encodeWithSelector(this.finalizeBridgeETH.selector, _from, _to, _amount, _extraData),
             _minGasLimit
         );
     }
