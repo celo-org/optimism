@@ -118,6 +118,7 @@ func TestBuildOptimism(t *testing.T) {
 		"SortedOracles":                     true,
 		"AddressSortedLinkedListWithMedian": true,
 		"FeeCurrency":                       true,
+		"BridgeETH":                         true,
 	}
 
 	// Only the exact contracts that we care about are being
