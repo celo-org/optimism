@@ -2,6 +2,8 @@
 set -eo pipefail
 
 SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
+TEST_GLOB=$1
+cd "$SCRIPT_DIR" || exit 1
 source "$SCRIPT_DIR/shared.sh"
 
 ## Start geth
@@ -24,7 +26,7 @@ echo Geth ready, start tests
 failures=0
 tests=0
 cd "$SCRIPT_DIR" || exit 1
-for f in test_*
+for f in test_*"$TEST_GLOB"*
 do
 	echo -e "\nRun $f"
 	if "./$f"
@@ -36,7 +38,7 @@ do
 		echo "FAIL $f ❌"
 		((failures++)) || true
 	fi
-	tput init || true
+	tput sgr0 || true
 	((tests++)) || true
 done
 
@@ -50,5 +52,5 @@ else
 	tput setaf 1 || true
 	echo $failures/$tests failed.
 fi
-tput init || true
+tput sgr0 || true
 exit $failures
