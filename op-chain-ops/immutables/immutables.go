@@ -275,7 +275,7 @@ func l2ImmutableDeployer(backend *backends.SimulatedBackend, opts *bind.Transact
 	case "BridgedETH":
 		bridge, ok := deployment.Args[0].(common.Address)
 		if !ok {
-			return nil, fmt.Errorf("invalid type for bridge: %v %+v", bridge, deployment.Args)
+			return nil, fmt.Errorf("invalid type for bridge: %+v", deployment.Args[0])
 		}
 		_, tx, _, err = bindings.DeployBridgedETH(opts, backend, bridge)
 	default:
