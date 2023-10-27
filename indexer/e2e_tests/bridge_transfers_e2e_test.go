@@ -379,6 +379,8 @@ func TestE2EBridgeTransfersL2ToL1MessagePasserETHReceive(t *testing.T) {
 }
 
 func TestE2EBridgeTransfersCursoredWithdrawals(t *testing.T) {
+	t.Skip("Test bridges native tokens from L2 to L1, which is not supported by Celo")
+
 	testSuite := createE2ETestSuite(t)
 
 	l2StandardBridge, err := bindings.NewL2StandardBridge(predeploys.L2StandardBridgeAddr, testSuite.L2Client)
