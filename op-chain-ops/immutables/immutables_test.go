@@ -87,6 +87,9 @@ func TestBuildOptimism(t *testing.T) {
 			"name":   "FeeCurrency",
 			"symbol": "FC",
 		},
+		"BridgedETH": {
+			"bridge": common.HexToAddress("0x1234567890123456789012345678901234567890"),
+		},
 	})
 	require.Nil(t, err)
 	require.NotNil(t, results)
@@ -118,7 +121,7 @@ func TestBuildOptimism(t *testing.T) {
 		"SortedOracles":                     true,
 		"AddressSortedLinkedListWithMedian": true,
 		"FeeCurrency":                       true,
-		"BridgeETH":                         true,
+		"BridgedETH":                        true,
 	}
 
 	// Only the exact contracts that we care about are being
