@@ -161,7 +161,7 @@ abstract contract StandardBridge is Initializable {
     ///                     not be triggered with this data, but it will be emitted and can be used
     ///                     to identify the transaction.
     function bridgeETH(uint32 _minGasLimit, bytes calldata _extraData) public payable onlyEOA {
-        _initiateBridgeETH(msg.sender, msg.sender, msg.value, _minGasLimit, _extraData);
+        _initiateBridgeETHToERC20(Predeploys.BRIDGED_ETH, msg.sender, msg.sender, msg.value, _minGasLimit, _extraData);
     }
 
     /// @notice Sends ETH to a receiver's address on the other chain. Note that if ETH is sent to a
@@ -177,7 +177,7 @@ abstract contract StandardBridge is Initializable {
     ///                     not be triggered with this data, but it will be emitted and can be used
     ///                     to identify the transaction.
     function bridgeETHTo(address _to, uint32 _minGasLimit, bytes calldata _extraData) public payable {
-        _initiateBridgeETH(msg.sender, _to, msg.value, _minGasLimit, _extraData);
+        _initiateBridgeETHToERC20(Predeploys.BRIDGED_ETH, msg.sender, _to, msg.value, _minGasLimit, _extraData);
     }
 
     /// @notice Sends ERC20 tokens to the sender's address on the other chain. Note that if the
