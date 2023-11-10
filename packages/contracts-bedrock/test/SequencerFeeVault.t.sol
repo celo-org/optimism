@@ -64,7 +64,8 @@ contract SequencerFeeVault_Test is CommonTest {
         vm.etch(
             Predeploys.SEQUENCER_FEE_WALLET,
             address(
-                new SequencerFeeVault(cfg.sequencerFeeVaultRecipient(), cfg.sequencerFeeVaultMinimumWithdrawalAmount(), FeeVault.WithdrawalNetwork.L1)
+        new SequencerFeeVault(cfg.sequencerFeeVaultRecipient(), cfg.sequencerFeeVaultMinimumWithdrawalAmount(),
+        FeeVault.WithdrawalNetwork.L1)
             ).code
         );
 
