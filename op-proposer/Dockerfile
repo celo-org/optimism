@@ -9,7 +9,7 @@ COPY ./go.sum /app/go.sum
 
 WORKDIR /app
 
-RUN go mod download
+# RUN go mod download
 
 # build op-proposer with the shared go.mod & go.sum files
 COPY ./vendor /app/vendor

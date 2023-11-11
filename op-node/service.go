@@ -73,6 +73,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 	haltOption := ctx.String(flags.RollupHalt.Name)
 	if haltOption == "none" {
 		haltOption = ""
+	}
 
 	daCfg, err := NewDAConfig(ctx)
 	if err != nil {
@@ -111,11 +112,8 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*node.Config, error) {
 		},
 		ConfigPersistence: configPersistence,
 		Sync:              *syncConfig,
-<<<<<<< HEAD
 		RollupHalt:        haltOption,
-=======
 		DAConfig:          daCfg,
->>>>>>> d50e32406 (Add MVP EigenDA Support)
 	}
 
 	if err := cfg.LoadPersisted(log); err != nil {
