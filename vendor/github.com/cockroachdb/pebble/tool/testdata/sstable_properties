@@ -1,0 +1,231 @@
+sstable properties
+----
+requires at least 1 arg(s), only received 0
+
+sstable properties
+../sstable/testdata/h.sst
+----
+h.sst
+version             0
+size                
+  file              15 K
+  data              14 K
+    blocks          14
+  index             325 B
+    blocks          1
+    top-level       0 B
+  filter            0 B
+  raw-key           23 K
+  raw-value         1.9 K
+records             1727
+  set               1710
+  delete            0
+  range-delete      17
+  range-key-set     0
+  range-key-unset   0
+  range-key-delete  0
+  merge             0
+  global-seq-num    0
+index               
+  key               internal key
+  value             raw encoded
+comparer            leveldb.BytewiseComparator
+merger              -
+filter              -
+  prefix            false
+  whole-key         false
+compression         Snappy
+  options           window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; 
+user properties     
+  collectors        [KeyCountPropertyCollector]
+  test.key-count    1727
+
+sstable properties
+../sstable/testdata/h.ldb
+----
+h.ldb
+version             0
+size                
+  file              15 K
+  data              14 K
+    blocks          14
+  index             325 B
+    blocks          1
+    top-level       0 B
+  filter            0 B
+  raw-key           23 K
+  raw-value         1.9 K
+records             1727
+  set               1710
+  delete            0
+  range-delete      17
+  range-key-set     0
+  range-key-unset   0
+  range-key-delete  0
+  merge             0
+  global-seq-num    0
+index               
+  key               internal key
+  value             raw encoded
+comparer            leveldb.BytewiseComparator
+merger              -
+filter              -
+  prefix            false
+  whole-key         false
+compression         Snappy
+  options           window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; 
+user properties     
+  collectors        []
+
+sstable properties
+../sstable/testdata/h.no-compression.two_level_index.sst
+----
+h.no-compression.two_level_index.sst
+version             0
+size                
+  file              28 K
+  data              26 K
+    blocks          14
+  index             408 B
+    blocks          4
+    top-level       70 B
+  filter            0 B
+  raw-key           23 K
+  raw-value         1.9 K
+records             1727
+  set               1710
+  delete            0
+  range-delete      17
+  range-key-set     0
+  range-key-unset   0
+  range-key-delete  0
+  merge             0
+  global-seq-num    0
+index               
+  key               internal key
+  value             raw encoded
+comparer            leveldb.BytewiseComparator
+merger              -
+filter              -
+  prefix            false
+  whole-key         false
+compression         NoCompression
+  options           window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; 
+user properties     
+  collectors        [KeyCountPropertyCollector]
+  test.key-count    1727
+
+sstable properties
+-v
+../sstable/testdata/h.no-compression.two_level_index.sst
+----
+h.no-compression.two_level_index.sst
+rocksdb.column.family.id: -
+rocksdb.comparator: leveldb.BytewiseComparator
+rocksdb.compression: NoCompression
+rocksdb.compression_options: window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; 
+rocksdb.creation.time: 0
+rocksdb.data.size: 26799
+rocksdb.external_sst_file.version: 2
+rocksdb.filter.size: 0
+rocksdb.fixed.key.length: 0
+rocksdb.format.version: 0
+rocksdb.external_sst_file.global_seqno: 0
+rocksdb.index.key.is.user.key: 0
+rocksdb.index.partitions: 3
+rocksdb.index.size: 408
+rocksdb.block.based.table.index.type: 2
+rocksdb.index.value.is.delta.encoded: 0
+rocksdb.merge.operator: nullptr
+rocksdb.num.data.blocks: 14
+rocksdb.deleted.keys: 17
+rocksdb.num.entries: 1727
+rocksdb.merge.operands: 0
+rocksdb.num.range-deletions: 17
+rocksdb.oldest.key.time: 0
+rocksdb.prefix.extractor.name: nullptr
+rocksdb.block.based.table.prefix.filtering: false
+rocksdb.property.collectors: [KeyCountPropertyCollector]
+rocksdb.raw.key.size: 23938
+rocksdb.raw.value.size: 1912
+rocksdb.top-level.index.size: 70
+rocksdb.block.based.table.whole.key.filtering: false
+test.key-count: 1727
+
+# Test for properties in SSTs made by the db itself. Should not contain
+# rocksdb.external_sst_file.* . See
+# https://github.com/cockroachdb/pebble/issues/532
+sstable properties
+-v
+testdata/find-db/archive/000011.sst
+----
+000011.sst
+rocksdb.column.family.id: -
+rocksdb.comparator: alt-comparer
+rocksdb.compression: Snappy
+rocksdb.compression_options: window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; 
+rocksdb.creation.time: 0
+rocksdb.data.size: 90
+rocksdb.filter.size: 0
+rocksdb.fixed.key.length: 0
+rocksdb.format.version: 0
+rocksdb.index.key.is.user.key: 0
+rocksdb.index.size: 27
+rocksdb.block.based.table.index.type: 0
+rocksdb.index.value.is.delta.encoded: 0
+rocksdb.merge.operator: test-merger
+rocksdb.num.data.blocks: 1
+rocksdb.deleted.keys: 2
+rocksdb.num.entries: 8
+rocksdb.merge.operands: 1
+rocksdb.num.range-deletions: 1
+rocksdb.oldest.key.time: 0
+rocksdb.prefix.extractor.name: nullptr
+rocksdb.block.based.table.prefix.filtering: false
+rocksdb.property.collectors: []
+rocksdb.raw.key.size: 88
+rocksdb.raw.value.size: 13
+rocksdb.block.based.table.whole.key.filtering: false
+
+sstable properties
+testdata/bad-magic.sst
+----
+bad-magic.sst
+pebble/table: invalid table (bad magic number)
+
+sstable properties
+testdata/mixed/000005.sst
+----
+000005.sst
+version             0
+size                
+  file              1.1 K
+  data              236 B
+    blocks          1
+  index             29 B
+    blocks          1
+    top-level       0 B
+  filter            0 B
+  raw-key           286 B
+  raw-value         0 B
+records             26
+  set               26
+  delete            0
+  range-delete      0
+  range-key-set     1
+  range-key-unset   1
+  range-key-delete  1
+  merge             0
+  global-seq-num    0
+index               
+  key               internal key
+  value             raw encoded
+comparer            pebble.internal.testkeys
+merger              pebble.concatenate
+filter              -
+  prefix            false
+  whole-key         false
+compression         Snappy
+  options           window_bits=-14; level=32767; strategy=0; max_dict_bytes=0; zstd_max_train_bytes=0; enabled=0; 
+user properties     
+  collectors        []

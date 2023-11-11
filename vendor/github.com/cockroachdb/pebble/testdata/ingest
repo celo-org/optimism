@@ -1,0 +1,904 @@
+ingest
+----
+
+ingest non-existent
+----
+open non-existent: file does not exist
+
+# Elide ingestion of empty sstables.
+
+build ext0
+----
+
+ingest ext0
+----
+
+lsm
+----
+
+build ext0 format=pebblev2
+set a 1
+set b 2
+----
+
+ingest ext0
+----
+
+lsm
+----
+6:
+  000006:[a#1,SET-b#1,SET]
+
+metrics
+----
+__level_____count____size___score______in__ingest(sz_cnt)____move(sz_cnt)___write(sz_cnt)____read___r-amp___w-amp
+    WAL         1     0 B       -     0 B       -       -       -       -     0 B       -       -       -     0.0
+      0         0     0 B    0.00     0 B     0 B       0     0 B       0     0 B       0     0 B       0     0.0
+      1         0     0 B    0.00     0 B     0 B       0     0 B       0     0 B       0     0 B       0     0.0
+      2         0     0 B    0.00     0 B     0 B       0     0 B       0     0 B       0     0 B       0     0.0
+      3         0     0 B    0.00     0 B     0 B       0     0 B       0     0 B       0     0 B       0     0.0
+      4         0     0 B    0.00     0 B     0 B       0     0 B       0     0 B       0     0 B       0     0.0
+      5         0     0 B    0.00     0 B     0 B       0     0 B       0     0 B       0     0 B       0     0.0
+      6         1   833 B       -     0 B   833 B       1     0 B       0     0 B       0     0 B       1     0.0
+  total         1   833 B       -   833 B   833 B       1     0 B       0   833 B       0     0 B       1     1.0
+  flush         0
+compact         0     0 B     0 B       0          (size == estimated-debt, score = in-progress-bytes, in = num-in-progress)
+  ctype         0       0       0       0       0       0       0  (default, delete, elision, move, read, rewrite, multi-level)
+ memtbl         1   256 K
+zmemtbl         0     0 B
+   ztbl         0     0 B
+ bcache         8   1.5 K   42.9%  (score == hit-rate)
+ tcache         1   680 B   50.0%  (score == hit-rate)
+  snaps         0       -       0  (score == earliest seq num)
+ titers         0
+ filter         -       -    0.0%  (score == utility)
+
+iter
+seek-ge a
+next
+next
+----
+a: (1, .)
+b: (2, .)
+.
+
+get
+a
+b
+----
+a:1
+b:2
+
+wait-pending-table-stats
+000006
+----
+num-entries: 2
+num-deletions: 0
+num-range-key-sets: 0
+point-deletions-bytes-estimate: 0
+range-deletions-bytes-estimate: 0
+
+build ext1
+set a 3
+del b
+----
+
+ingest ext1
+----
+
+lsm
+----
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+6:
+  000006:[a#1,SET-b#1,SET]
+
+iter
+seek-ge a
+next
+----
+a: (3, .)
+.
+
+get
+a
+b
+----
+a:3
+b: pebble: not found
+
+build ext2 format=pebblev2
+set a 4
+set b 5
+set c 6
+----
+
+ingest ext2
+----
+
+lsm
+----
+0.1:
+  000008:[a#3,SET-c#3,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+6:
+  000006:[a#1,SET-b#1,SET]
+
+iter
+seek-ge a
+next
+next
+----
+a: (4, .)
+b: (5, .)
+c: (6, .)
+
+get
+a
+b
+c
+----
+a:4
+b:5
+c:6
+
+build ext3
+merge b 5
+del c
+----
+
+ingest ext3
+----
+
+lsm
+----
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+6:
+  000006:[a#1,SET-b#1,SET]
+
+iter
+seek-ge a
+next
+next
+----
+a: (4, .)
+b: (55, .)
+.
+
+get
+a
+b
+c
+----
+a:4
+b:55
+c: pebble: not found
+
+build ext4
+set x 7
+set y 8
+----
+
+ingest ext4
+----
+
+lsm
+----
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000010:[x#5,SET-y#5,SET]
+
+iter
+seek-lt y
+prev
+prev
+----
+x: (7, .)
+b: (55, .)
+a: (4, .)
+
+get
+x
+y
+----
+x:7
+y:8
+
+batch
+set j 9
+set k 10
+----
+
+# Overlap with point keys in memtable, hence memtable will be flushed.
+
+build ext5
+set k 11
+----
+
+ingest ext5
+----
+memtable flushed
+
+lsm
+----
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000010:[x#5,SET-y#5,SET]
+
+iter
+seek-ge j
+next
+----
+j: (9, .)
+k: (11, .)
+
+get
+j
+k
+----
+j:9
+k:11
+
+# No data overlap in memtable, hence it will not be flushed.
+
+batch
+set m 12
+----
+
+build ext6
+set n 13
+----
+
+ingest ext6
+----
+
+lsm
+----
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000015:[n#10,SET-n#10,SET]
+  000010:[x#5,SET-y#5,SET]
+
+get
+m
+n
+----
+m:12
+n:13
+
+build ext7 format=pebblev2
+del-range a c
+del-range x z
+----
+
+ingest ext7
+----
+memtable flushed
+
+lsm
+----
+0.3:
+  000016:[a#11,RANGEDEL-z#inf,RANGEDEL]
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+  000019:[m#9,SET-m#9,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000015:[n#10,SET-n#10,SET]
+  000010:[x#5,SET-y#5,SET]
+
+get
+a
+b
+c
+j
+k
+m
+n
+x
+y
+----
+a: pebble: not found
+b: pebble: not found
+c: pebble: not found
+j:9
+k:11
+m:12
+n:13
+x: pebble: not found
+y: pebble: not found
+
+wait-pending-table-stats
+000016
+----
+num-entries: 2
+num-deletions: 2
+num-range-key-sets: 0
+point-deletions-bytes-estimate: 0
+range-deletions-bytes-estimate: 1666
+
+# A set operation takes precedence over a range deletion at the same
+# sequence number as can occur during ingestion.
+
+build ext8
+set j 20
+del-range j k
+set m 30
+----
+
+ingest ext8
+----
+
+get
+j
+k
+m
+----
+j:20
+k:11
+m:30
+
+build ext9
+set a 40
+set f 40
+set g 40
+----
+
+ingest ext9
+----
+
+lsm
+----
+0.4:
+  000021:[a#13,SET-g#13,SET]
+  000020:[j#12,RANGEDEL-m#12,SET]
+0.3:
+  000016:[a#11,RANGEDEL-z#inf,RANGEDEL]
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+  000019:[m#9,SET-m#9,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000015:[n#10,SET-n#10,SET]
+  000010:[x#5,SET-y#5,SET]
+
+# Overlap with sst boundary containing range del sentinel (fileNum 000015) is not considered an overlap since
+# range del's end key is exclusive. Hence ext9 gets ingested into L6.
+
+build ext10
+set z 40
+----
+
+# Although ext11 falls into sst boundaries of fileNum 000019, 000015, they don't actually contain any key within ext11's boundary.
+# Hence ext11 is allowed to go further down and get ingested into L6.
+
+build ext11
+set d 40
+----
+
+# Overlap with fileNum 000018 is not considered an overlap since ext12's end key is range del sentinel which is exclusive.
+
+build ext12
+del-range i j
+----
+
+# Ingesting multiple files into L0 is allowed.
+
+ingest ext10 ext11 ext12
+----
+
+get
+z
+d
+----
+z:40
+d:40
+
+lsm
+----
+0.4:
+  000021:[a#13,SET-g#13,SET]
+  000020:[j#12,RANGEDEL-m#12,SET]
+0.3:
+  000016:[a#11,RANGEDEL-z#inf,RANGEDEL]
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+  000019:[m#9,SET-m#9,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000023:[d#14,SET-d#14,SET]
+  000024:[i#15,RANGEDEL-j#inf,RANGEDEL]
+  000015:[n#10,SET-n#10,SET]
+  000010:[x#5,SET-y#5,SET]
+  000022:[z#16,SET-z#16,SET]
+
+# No overlap between fileNum 000019 that contains point key f, since f is ingested file's range del sentinel.
+
+build ext13
+del-range e f
+----
+
+ingest ext13
+----
+
+lsm
+----
+0.4:
+  000021:[a#13,SET-g#13,SET]
+  000020:[j#12,RANGEDEL-m#12,SET]
+0.3:
+  000016:[a#11,RANGEDEL-z#inf,RANGEDEL]
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+  000019:[m#9,SET-m#9,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000023:[d#14,SET-d#14,SET]
+  000025:[e#17,RANGEDEL-f#inf,RANGEDEL]
+  000024:[i#15,RANGEDEL-j#inf,RANGEDEL]
+  000015:[n#10,SET-n#10,SET]
+  000010:[x#5,SET-y#5,SET]
+  000022:[z#16,SET-z#16,SET]
+
+# Overlap with range delete keys in memtable, hence memtable will be flushed.
+
+batch
+del-range a d
+----
+
+build ext14
+set b 1
+----
+
+ingest ext14
+----
+memtable flushed
+
+lsm
+----
+0.6:
+  000026:[b#19,SET-b#19,SET]
+0.5:
+  000029:[a#18,RANGEDEL-d#inf,RANGEDEL]
+0.4:
+  000021:[a#13,SET-g#13,SET]
+  000020:[j#12,RANGEDEL-m#12,SET]
+0.3:
+  000016:[a#11,RANGEDEL-z#inf,RANGEDEL]
+0.2:
+  000009:[b#4,MERGE-c#4,DEL]
+0.1:
+  000008:[a#3,SET-c#3,SET]
+  000011:[k#8,SET-k#8,SET]
+0.0:
+  000007:[a#2,SET-b#2,DEL]
+  000014:[j#6,SET-k#7,SET]
+  000019:[m#9,SET-m#9,SET]
+6:
+  000006:[a#1,SET-b#1,SET]
+  000023:[d#14,SET-d#14,SET]
+  000025:[e#17,RANGEDEL-f#inf,RANGEDEL]
+  000024:[i#15,RANGEDEL-j#inf,RANGEDEL]
+  000015:[n#10,SET-n#10,SET]
+  000010:[x#5,SET-y#5,SET]
+  000022:[z#16,SET-z#16,SET]
+
+reset
+----
+
+# Tests to show that keys don't overlap with range delete sentinels.
+
+batch
+set b 1
+----
+
+build ext15
+del-range a b
+----
+
+ingest ext15
+----
+
+lsm
+----
+6:
+  000004:[a#2,RANGEDEL-b#inf,RANGEDEL]
+
+reset
+----
+
+batch
+del-range b c
+----
+
+build ext16
+del-range a b
+----
+
+ingest ext16
+----
+
+lsm
+----
+6:
+  000004:[a#2,RANGEDEL-b#inf,RANGEDEL]
+
+reset
+----
+
+# Tests for branch coverage of method overlapWithIterator,
+# when levelIter is used and it produces a range del sentinel boundary
+# because it finds no overlapping point key.
+
+# Case 1) levelIter produced boundary is less than ingested file's largest key.
+
+build ext17
+del-range a b
+----
+
+ingest ext17
+----
+
+build ext18
+set a 10
+set c 10
+----
+
+ingest ext18
+----
+
+lsm
+----
+0.0:
+  000005:[a#2,SET-c#2,SET]
+6:
+  000004:[a#1,RANGEDEL-b#inf,RANGEDEL]
+
+reset
+----
+
+# Case 2) levelIter produced boundary is more than ingested file's largest key.
+
+build ext19
+del-range c d
+----
+
+ingest ext19
+----
+
+build ext20
+set a 10
+set b 10
+----
+
+ingest ext20
+----
+
+build ext21
+set c 10
+----
+
+ingest ext21
+----
+
+lsm
+----
+0.0:
+  000006:[c#3,SET-c#3,SET]
+6:
+  000005:[a#2,SET-b#2,SET]
+  000004:[c#1,RANGEDEL-d#inf,RANGEDEL]
+
+reset
+----
+
+# Case 3) levelIter produced boundary is equal to ingested file's largest key,
+# where the latter is not a range del sentinel.
+
+build ext22
+del-range a b
+----
+
+ingest ext22
+----
+
+build ext23
+set a 10
+set b 10
+----
+
+ingest ext23
+----
+
+lsm
+----
+0.0:
+  000005:[a#2,SET-b#2,SET]
+6:
+  000004:[a#1,RANGEDEL-b#inf,RANGEDEL]
+
+reset
+----
+
+# Case 4) levelIter produced boundary is equal to ingested file's largest key,
+# where the latter is a range del sentinel.
+
+build ext24
+del-range a b
+----
+
+ingest ext24
+----
+
+build ext25
+del-range a b
+----
+
+ingest ext25
+----
+
+lsm
+----
+0.0:
+  000005:[a#2,RANGEDEL-b#inf,RANGEDEL]
+6:
+  000004:[a#1,RANGEDEL-b#inf,RANGEDEL]
+
+# Check for range key ingestion bug fix in
+# https://github.com/cockroachdb/pebble/pull/2082. Without the fix, we expect
+# the range key associated with the table ext3 to get elided. This test checks
+# that the elision does not happen.
+reset
+----
+
+build ext1
+range-key-set d g 1 val1
+----
+
+ingest ext1
+----
+
+lsm
+----
+6:
+  000004:[d#1,RANGEKEYSET-g#inf,RANGEKEYSET]
+
+build ext2
+range-key-set b e 1 val2
+----
+
+ingest ext2
+----
+
+lsm
+----
+0.0:
+  000005:[b#2,RANGEKEYSET-e#inf,RANGEKEYSET]
+6:
+  000004:[d#1,RANGEKEYSET-g#inf,RANGEKEYSET]
+
+build ext3
+range-key-del a c
+----
+
+ingest ext3
+----
+
+# Without the fix in #2082 we would expect ext3 file to be ingested into L6.
+lsm
+----
+0.1:
+  000006:[a#3,RANGEKEYDEL-c#inf,RANGEKEYDEL]
+0.0:
+  000005:[b#2,RANGEKEYSET-e#inf,RANGEKEYSET]
+6:
+  000004:[d#1,RANGEKEYSET-g#inf,RANGEKEYSET]
+
+build ext4
+set a a
+----
+
+ingest ext4
+----
+
+lsm
+----
+0.2:
+  000007:[a#4,SET-a#4,SET]
+0.1:
+  000006:[a#3,RANGEKEYDEL-c#inf,RANGEKEYDEL]
+0.0:
+  000005:[b#2,RANGEKEYSET-e#inf,RANGEKEYSET]
+6:
+  000004:[d#1,RANGEKEYSET-g#inf,RANGEKEYSET]
+
+compact a aa
+----
+
+# Without the fix in #2082, we would expect the range key delete a-c to
+# get elided as it would be in L6 beneath the b-e range key in L0.
+lsm
+----
+6:
+  000008:[a#0,SET-g#inf,RANGEKEYSET]
+
+# Shouldn't show results for the b-c range as it must be deleted.
+iter
+first
+next
+next
+next
+----
+a: (a, .)
+c: (., [c-e) 1=val2 UPDATED)
+e: (., [e-g) 1=val1 UPDATED)
+.
+
+# Keys can have exclusive sentinels. Check that files boundaries which contain
+# such keys are ingested ingested into the lowest level possible.
+reset
+----
+
+build ext1
+set c c
+set e e
+----
+
+ingest ext1
+----
+
+lsm
+----
+6:
+  000004:[c#1,SET-e#1,SET]
+
+
+build ext2
+range-key-set a c 1 val1
+----
+
+ingest ext2
+----
+
+lsm
+----
+6:
+  000005:[a#2,RANGEKEYSET-c#inf,RANGEKEYSET]
+  000004:[c#1,SET-e#1,SET]
+
+# The following test cases will test that files where the end bound is an
+# exclusive sentinel due to range keys are ingested into the correct levels.
+build ext3
+set f f
+set h h
+----
+
+ingest ext3
+----
+
+lsm
+----
+6:
+  000005:[a#2,RANGEKEYSET-c#inf,RANGEKEYSET]
+  000004:[c#1,SET-e#1,SET]
+  000006:[f#3,SET-h#3,SET]
+
+
+build ext4
+range-key-unset eee f 1
+----
+
+ingest ext4
+----
+
+lsm
+----
+6:
+  000005:[a#2,RANGEKEYSET-c#inf,RANGEKEYSET]
+  000004:[c#1,SET-e#1,SET]
+  000007:[eee#4,RANGEKEYUNSET-f#inf,RANGEKEYUNSET]
+  000006:[f#3,SET-h#3,SET]
+
+build ext5
+range-key-set ee eee 1 val3
+----
+
+ingest ext5
+----
+
+lsm
+----
+6:
+  000005:[a#2,RANGEKEYSET-c#inf,RANGEKEYSET]
+  000004:[c#1,SET-e#1,SET]
+  000008:[ee#5,RANGEKEYSET-eee#inf,RANGEKEYSET]
+  000007:[eee#4,RANGEKEYUNSET-f#inf,RANGEKEYUNSET]
+  000006:[f#3,SET-h#3,SET]
+
+build ext6
+set x x
+set y y
+----
+
+ingest ext6
+----
+
+lsm
+----
+6:
+  000005:[a#2,RANGEKEYSET-c#inf,RANGEKEYSET]
+  000004:[c#1,SET-e#1,SET]
+  000008:[ee#5,RANGEKEYSET-eee#inf,RANGEKEYSET]
+  000007:[eee#4,RANGEKEYUNSET-f#inf,RANGEKEYUNSET]
+  000006:[f#3,SET-h#3,SET]
+  000009:[x#6,SET-y#6,SET]
+
+build ext7
+range-key-del s x
+----
+
+ingest ext7
+----
+
+lsm
+----
+6:
+  000005:[a#2,RANGEKEYSET-c#inf,RANGEKEYSET]
+  000004:[c#1,SET-e#1,SET]
+  000008:[ee#5,RANGEKEYSET-eee#inf,RANGEKEYSET]
+  000007:[eee#4,RANGEKEYUNSET-f#inf,RANGEKEYUNSET]
+  000006:[f#3,SET-h#3,SET]
+  000010:[s#7,RANGEKEYDEL-x#inf,RANGEKEYDEL]
+  000009:[x#6,SET-y#6,SET]
