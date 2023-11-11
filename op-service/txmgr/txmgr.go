@@ -24,7 +24,6 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/Layr-Labs/eigenda/api/grpc/disperser"
-	"github.com/ethereum-optimism/optimism/op-service/backoff"
 	"github.com/ethereum-optimism/optimism/op-service/proto/gen/op_service/v1"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr/metrics"
 )
@@ -239,7 +238,7 @@ func (m *SimpleTxManager) send(ctx context.Context, candidate TxCandidate) (*typ
 		}
 	}
 
-	tx, err := backoff.Do(ctx, 30, backoff.Fixed(2*time.Second), func() (*types.Transaction, error) {
+	tx, err := retry.Do(ctx, 30, retry.Fixed(2*time.Second), func() (*types.Transaction, error) {
 		tx, err := m.craftTx(ctx, candidate)
 		if err != nil {
 			m.l.Warn("Failed to create a transaction, will retry", "err", err)
