@@ -13,13 +13,14 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 )
 
-// fileReadable implements objstorage.Readable on top of vfs.File.
+// fileReadable implements objstorage.Readable on top of a vfs.File that
+// supports Prefetch and/or on an FS that supports SequentialReadsOption.
 type fileReadable struct {
 	file vfs.File
 	size int64
 
 	// The following fields are used to possibly open the file again using the
-	// sequential reads option (see readaheadHandle).
+	// sequential reads option (see vfsReadHandle).
 	filename string
 	fs       vfs.FS
 }
@@ -62,14 +63,15 @@ func (r *fileReadable) Size() int64 {
 	return r.size
 }
 
-// NewReadaheadHandle is part of the objstorage.Readable interface.
-func (r *fileReadable) NewReadaheadHandle() ReadaheadHandle {
-	rh := readaheadHandlePool.Get().(*readaheadHandle)
+// NewReadHandle is part of the objstorage.Readable interface.
+func (r *fileReadable) NewReadHandle() ReadHandle {
+	rh := readHandlePool.Get().(*vfsReadHandle)
 	rh.r = r
+	rh.rs = makeReadaheadState()
 	return rh
 }
 
-type readaheadHandle struct {
+type vfsReadHandle struct {
 	r  *fileReadable
 	rs readaheadState
 
@@ -80,15 +82,15 @@ type readaheadHandle struct {
 	sequentialFile vfs.File
 }
 
-var _ ReadaheadHandle = (*readaheadHandle)(nil)
+var _ ReadHandle = (*vfsReadHandle)(nil)
 
-var readaheadHandlePool = sync.Pool{
+var readHandlePool = sync.Pool{
 	New: func() interface{} {
-		i := &readaheadHandle{}
+		i := &vfsReadHandle{}
 		// Note: this is a no-op if invariants are disabled or race is enabled.
 		invariants.SetFinalizer(i, func(obj interface{}) {
-			if obj.(*readaheadHandle).r != nil {
-				fmt.Fprintf(os.Stderr, "ReadaheadHandle was not closed")
+			if obj.(*vfsReadHandle).r != nil {
+				fmt.Fprintf(os.Stderr, "ReadHandle was not closed")
 				os.Exit(1)
 			}
 		})
@@ -96,19 +98,19 @@ var readaheadHandlePool = sync.Pool{
 	},
 }
 
-// Close is part of the objstorage.ReadaheadHandle interface.
-func (rh *readaheadHandle) Close() error {
+// Close is part of the objstorage.ReadHandle interface.
+func (rh *vfsReadHandle) Close() error {
 	var err error
 	if rh.sequentialFile != nil {
 		err = rh.sequentialFile.Close()
 	}
-	*rh = readaheadHandle{}
-	readaheadHandlePool.Put(rh)
+	*rh = vfsReadHandle{}
+	readHandlePool.Put(rh)
 	return err
 }
 
-// ReadAt is part of the objstorage.ReadaheadHandle interface.
-func (rh *readaheadHandle) ReadAt(p []byte, offset int64) (n int, err error) {
+// ReadAt is part of the objstorage.ReadHandle interface.
+func (rh *vfsReadHandle) ReadAt(p []byte, offset int64) (n int, err error) {
 	if rh.sequentialFile != nil {
 		// Use OS-level read-ahead.
 		return rh.sequentialFile.ReadAt(p, offset)
@@ -125,8 +127,8 @@ func (rh *readaheadHandle) ReadAt(p []byte, offset int64) (n int, err error) {
 	return rh.r.file.ReadAt(p, offset)
 }
 
-// MaxReadahead is part of the objstorage.ReadaheadHandle interface.
-func (rh *readaheadHandle) MaxReadahead() {
+// MaxReadahead is part of the objstorage.ReadHandle interface.
+func (rh *vfsReadHandle) MaxReadahead() {
 	if rh.sequentialFile != nil {
 		return
 	}
@@ -139,8 +141,8 @@ func (rh *readaheadHandle) MaxReadahead() {
 	}
 }
 
-// RecordCacheHit is part of the objstorage.ReadaheadHandle interface.
-func (rh *readaheadHandle) RecordCacheHit(offset, size int64) {
+// RecordCacheHit is part of the objstorage.ReadHandle interface.
+func (rh *vfsReadHandle) RecordCacheHit(offset, size int64) {
 	if rh.sequentialFile != nil {
 		// Using OS-level readahead, so do nothing.
 		return
@@ -154,7 +156,7 @@ type genericFileReadable struct {
 	file vfs.File
 	size int64
 
-	rh NoopReadaheadHandle
+	rh NoopReadHandle
 }
 
 var _ Readable = (*genericFileReadable)(nil)
@@ -167,7 +169,7 @@ func newGenericFileReadable(file vfs.File) (*genericFileReadable, error) {
 	r := &genericFileReadable{
 		file: file,
 		size: info.Size(),
-		rh:   MakeNoopReadaheadHandle(file),
+		rh:   MakeNoopReadHandle(file),
 	}
 	invariants.SetFinalizer(r, func(obj interface{}) {
 		if obj.(*genericFileReadable).file != nil {
@@ -194,13 +196,49 @@ func (r *genericFileReadable) Size() int64 {
 	return r.size
 }
 
-// NewReadaheadHandle is part of the objstorage.Readable interface.
-func (r *genericFileReadable) NewReadaheadHandle() ReadaheadHandle {
+// NewReadHandle is part of the objstorage.Readable interface.
+func (r *genericFileReadable) NewReadHandle() ReadHandle {
 	return &r.rh
 }
 
-// TestingCheckMaxReadahead returns true if the ReadaheadHandle has switched to
+// TestingCheckMaxReadahead returns true if the ReadHandle has switched to
 // OS-level read-ahead.
-func TestingCheckMaxReadahead(rh ReadaheadHandle) bool {
-	return rh.(*readaheadHandle).sequentialFile != nil
+func TestingCheckMaxReadahead(rh ReadHandle) bool {
+	switch rh := rh.(type) {
+	case *vfsReadHandle:
+		return rh.sequentialFile != nil
+	case *PreallocatedReadHandle:
+		return rh.sequentialFile != nil
+	default:
+		panic("unknown ReadHandle type")
+	}
+}
+
+// PreallocatedReadHandle is used to avoid an allocation in NewReadHandle; see
+// UsePreallocatedReadHandle.
+type PreallocatedReadHandle struct {
+	vfsReadHandle
+}
+
+// Close is part of the objstorage.ReadHandle interface.
+func (rh *PreallocatedReadHandle) Close() error {
+	var err error
+	if rh.sequentialFile != nil {
+		err = rh.sequentialFile.Close()
+	}
+	rh.vfsReadHandle = vfsReadHandle{}
+	return err
+}
+
+// UsePreallocatedReadHandle is equivalent to calling readable.NewReadHandle()
+// but uses the existing storage of a PreallocatedReadHandle when possible
+// (currently this happens if we are reading from a local file).
+// The returned handle still needs to be closed.
+func UsePreallocatedReadHandle(readable Readable, rh *PreallocatedReadHandle) ReadHandle {
+	if r, ok := readable.(*fileReadable); ok {
+		// See fileReadable.NewReadHandle.
+		rh.vfsReadHandle = vfsReadHandle{r: r}
+		return rh
+	}
+	return readable.NewReadHandle()
 }

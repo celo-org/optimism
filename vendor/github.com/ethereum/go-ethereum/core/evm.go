@@ -19,10 +19,15 @@ package core
 import (
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/contracts/celo/abigen"
+	contracts_config "github.com/ethereum/go-ethereum/contracts/config"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -37,7 +42,7 @@ type ChainContext interface {
 }
 
 // NewEVMBlockContext creates a new context for use in the EVM.
-func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address, config *params.ChainConfig, statedb types.StateGetter) vm.BlockContext {
+func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common.Address, config *params.ChainConfig, statedb *state.StateDB) vm.BlockContext {
 	var (
 		beneficiary common.Address
 		baseFee     *big.Int
@@ -56,26 +61,42 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 	if header.Difficulty.Cmp(common.Big0) == 0 {
 		random = &header.MixDigest
 	}
+
+	// Set goldTokenAddress
+	caller := &CeloBackend{config, statedb.Copy()}
+	registry, err := abigen.NewRegistryCaller(contracts_config.RegistrySmartContractAddress, caller)
+	if err != nil {
+		log.Error("Failed to access registry!", "err", err)
+	}
+	goldTokenAddress, err := registry.GetAddressForOrDie(&bind.CallOpts{}, contracts_config.GoldTokenRegistryId)
+	if err != nil {
+		log.Error("Failed to get address for GoldToken!", "err", err)
+	}
+
 	return vm.BlockContext{
-		CanTransfer: CanTransfer,
-		Transfer:    Transfer,
-		GetHash:     GetHashFn(header, chain),
-		Coinbase:    beneficiary,
-		BlockNumber: new(big.Int).Set(header.Number),
-		Time:        header.Time,
-		Difficulty:  new(big.Int).Set(header.Difficulty),
-		BaseFee:     baseFee,
-		GasLimit:    header.GasLimit,
-		Random:      random,
-		L1CostFunc:  types.NewL1CostFunc(config, statedb),
+		CanTransfer:   CanTransfer,
+		Transfer:      Transfer,
+		GetHash:       GetHashFn(header, chain),
+		Coinbase:      beneficiary,
+		BlockNumber:   new(big.Int).Set(header.Number),
+		Time:          header.Time,
+		Difficulty:    new(big.Int).Set(header.Difficulty),
+		BaseFee:       baseFee,
+		GasLimit:      header.GasLimit,
+		Random:        random,
+		ExcessBlobGas: header.ExcessBlobGas,
+		L1CostFunc:    types.NewL1CostFunc(config, statedb),
+		// Celo specific parameters
+		GoldTokenAddress: goldTokenAddress,
 	}
 }
 
 // NewEVMTxContext creates a new transaction context for a single transaction.
 func NewEVMTxContext(msg *Message) vm.TxContext {
 	return vm.TxContext{
-		Origin:   msg.From,
-		GasPrice: new(big.Int).Set(msg.GasPrice),
+		Origin:     msg.From,
+		GasPrice:   new(big.Int).Set(msg.GasPrice),
+		BlobHashes: msg.BlobHashes,
 	}
 }
 

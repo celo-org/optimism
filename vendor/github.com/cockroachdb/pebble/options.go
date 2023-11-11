@@ -454,17 +454,27 @@ type Options struct {
 	// TODO(peter): untested
 	DisableWAL bool
 
-	// ErrorIfExists is whether it is an error if the database already exists.
+	// ErrorIfExists causes an error on Open if the database already exists.
+	// The error can be checked with errors.Is(err, ErrDBAlreadyExists).
 	//
 	// The default value is false.
 	ErrorIfExists bool
 
-	// ErrorIfNotExists is whether it is an error if the database does not
-	// already exist.
+	// ErrorIfNotExists causes an error on Open if the database does not already
+	// exist. The error can be checked with errors.Is(err, ErrDBDoesNotExist).
 	//
 	// The default value is false which will cause a database to be created if it
 	// does not already exist.
 	ErrorIfNotExists bool
+
+	// ErrorIfNotPristine causes an error on Open if the database already exists
+	// and any operations have been performed on the database. The error can be
+	// checked with errors.Is(err, ErrDBNotPristine).
+	//
+	// Note that a database that contained keys that were all subsequently deleted
+	// may or may not trigger the error. Currently, we check if there are any live
+	// SSTs or log records to replay.
+	ErrorIfNotPristine bool
 
 	// EventListener provides hooks to listening to significant DB events such as
 	// flushes, compactions, and table deletion.
@@ -586,12 +596,6 @@ type Options struct {
 		// for CPUWorkPermissionGranter for more details.
 		CPUWorkPermissionGranter CPUWorkPermissionGranter
 
-		// PointTombstoneWeight is a float in the range [0, +inf) used to weight the
-		// point tombstone heuristics during compaction picking.
-		//
-		// The default value is 1, which results in no scaling of point tombstones.
-		PointTombstoneWeight float64
-
 		// EnableValueBlocks is used to decide whether to enable writing
 		// TableFormatPebblev3 sstables. WARNING: do not return true yet, since
 		// support for TableFormatPebblev3 is incomplete and not production ready.
@@ -617,14 +621,10 @@ type Options struct {
 		// sstables, and does not start rewriting existing sstables.
 		RequiredInPlaceValueBound UserKeyPrefixBound
 
-		// IngestSSTablesAsFlushable is used to determine if ingested sstables
-		// should be ingested as a flushable. By default this is false, but it
-		// is true for all metamorphic tests.
-		//
-		// TODO(bananabrick): Remove this field and enable by default once
-		// https://github.com/cockroachdb/pebble/issues/2292 and
-		// https://github.com/cockroachdb/pebble/issues/2266 are closed.
-		IngestSSTablesAsFlushable bool
+		// DisableIngestAsFlushable disables lazy ingestion of sstables through
+		// a WAL write and memtable rotation. Only effectual if the the format
+		// major version is at least `FormatFlushableIngest`.
+		DisableIngestAsFlushable func() bool
 
 		// SharedStorage is a second FS-like storage medium that can be shared
 		// between multiple Pebble instances. It is used to store sstables only, and
@@ -688,6 +688,17 @@ type Options struct {
 	// The default value uses the underlying operating system's file system.
 	FS vfs.FS
 
+	// Lock, if set, must be a database lock acquired through LockDirectory for
+	// the same directory passed to Open. If provided, Open will skip locking
+	// the directory. Closing the database will not release the lock, and it's
+	// the responsibility of the caller to release the lock after closing the
+	// database.
+	//
+	// Open will enforce that the Lock passed locks the same directory passed to
+	// Open. Concurrent calls to Open using the same Lock are detected and
+	// prohibited.
+	Lock *Lock
+
 	// The count of L0 files necessary to trigger an L0 compaction.
 	L0CompactionFileThreshold int
 
@@ -709,10 +720,15 @@ type Options struct {
 	// options for the last level are used for all subsequent levels.
 	Levels []LevelOptions
 
+	// LoggerAndTracer will be used, if non-nil, else Logger will be used and
+	// tracing will be a noop.
+
 	// Logger used to write log messages.
 	//
 	// The default logger uses the Go standard library log package.
 	Logger Logger
+	// LoggerAndTracer is used for writing log messages and traces.
+	LoggerAndTracer LoggerAndTracer
 
 	// MaxManifestFileSize is the maximum size the MANIFEST file is allowed to
 	// become. When the MANIFEST exceeds this size it is rolled over and a new
@@ -890,6 +906,9 @@ func (o *Options) EnsureDefaults() *Options {
 	if o.Comparer == nil {
 		o.Comparer = DefaultComparer
 	}
+	if o.Experimental.DisableIngestAsFlushable == nil {
+		o.Experimental.DisableIngestAsFlushable = func() bool { return false }
+	}
 	if o.Experimental.L0CompactionConcurrency <= 0 {
 		o.Experimental.L0CompactionConcurrency = 10
 	}
@@ -1005,10 +1024,6 @@ func (o *Options) EnsureDefaults() *Options {
 	if o.Experimental.CPUWorkPermissionGranter == nil {
 		o.Experimental.CPUWorkPermissionGranter = defaultCPUWorkGranter{}
 	}
-	if o.Experimental.PointTombstoneWeight == 0 {
-		o.Experimental.PointTombstoneWeight = 1
-	}
-
 	if o.Experimental.MultiLevelCompactionHueristic == nil {
 		o.Experimental.MultiLevelCompactionHueristic = NoMultiLevel{}
 	}
@@ -1024,12 +1039,8 @@ func (o *Options) WithFSDefaults() *Options {
 		o.FS = vfs.Default
 	}
 	o.FS, o.private.fsCloser = vfs.WithDiskHealthChecks(o.FS, 5*time.Second,
-		func(name string, op vfs.OpType, duration time.Duration) {
-			o.EventListener.DiskSlow(DiskSlowInfo{
-				Path:     name,
-				OpType:   op,
-				Duration: duration,
-			})
+		func(info vfs.DiskSlowInfo) {
+			o.EventListener.DiskSlow(info)
 		})
 	return o
 }
@@ -1113,6 +1124,9 @@ func (o *Options) String() string {
 	fmt.Fprintf(&buf, "  compaction_debt_concurrency=%d\n", o.Experimental.CompactionDebtConcurrency)
 	fmt.Fprintf(&buf, "  comparer=%s\n", o.Comparer.Name)
 	fmt.Fprintf(&buf, "  disable_wal=%t\n", o.DisableWAL)
+	if o.Experimental.DisableIngestAsFlushable != nil && o.Experimental.DisableIngestAsFlushable() {
+		fmt.Fprintf(&buf, "  disable_ingest_as_flushable=%t\n", true)
+	}
 	fmt.Fprintf(&buf, "  flush_delay_delete_range=%s\n", o.FlushDelayDeleteRange)
 	fmt.Fprintf(&buf, "  flush_delay_range_key=%s\n", o.FlushDelayRangeKey)
 	fmt.Fprintf(&buf, "  flush_split_bytes=%d\n", o.FlushSplitBytes)
@@ -1132,7 +1146,6 @@ func (o *Options) String() string {
 	fmt.Fprintf(&buf, "  mem_table_stop_writes_threshold=%d\n", o.MemTableStopWritesThreshold)
 	fmt.Fprintf(&buf, "  min_deletion_rate=%d\n", o.Experimental.MinDeletionRate)
 	fmt.Fprintf(&buf, "  merger=%s\n", o.Merger.Name)
-	fmt.Fprintf(&buf, "  point_tombstone_weight=%f\n", o.Experimental.PointTombstoneWeight)
 	fmt.Fprintf(&buf, "  read_compaction_rate=%d\n", o.Experimental.ReadCompactionRate)
 	fmt.Fprintf(&buf, "  read_sampling_multiplier=%d\n", o.Experimental.ReadSamplingMultiplier)
 	fmt.Fprintf(&buf, "  strict_wal_tail=%t\n", o.private.strictWALTail)
@@ -1175,6 +1188,7 @@ func (o *Options) String() string {
 		fmt.Fprintf(&buf, "[Level \"%d\"]\n", i)
 		fmt.Fprintf(&buf, "  block_restart_interval=%d\n", l.BlockRestartInterval)
 		fmt.Fprintf(&buf, "  block_size=%d\n", l.BlockSize)
+		fmt.Fprintf(&buf, "  block_size_threshold=%d\n", l.BlockSizeThreshold)
 		fmt.Fprintf(&buf, "  compression=%s\n", l.Compression)
 		fmt.Fprintf(&buf, "  filter_policy=%s\n", filterPolicyName(l.FilterPolicy))
 		fmt.Fprintf(&buf, "  filter_type=%s\n", l.FilterType)
@@ -1206,7 +1220,11 @@ func parseOptions(s string, fn func(section, key, value string) error) error {
 
 		pos := strings.Index(line, "=")
 		if pos < 0 {
-			return errors.Errorf("pebble: invalid key=value syntax: %s", errors.Safe(line))
+			const maxLen = 50
+			if len(line) > maxLen {
+				line = line[:maxLen-3] + "..."
+			}
+			return base.CorruptionErrorf("invalid key=value syntax: %q", errors.Safe(line))
 		}
 
 		key := strings.TrimSpace(line[:pos])
@@ -1313,6 +1331,12 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				o.private.disableDeleteOnlyCompactions, err = strconv.ParseBool(value)
 			case "disable_elision_only_compactions":
 				o.private.disableElisionOnlyCompactions, err = strconv.ParseBool(value)
+			case "disable_ingest_as_flushable":
+				var v bool
+				v, err = strconv.ParseBool(value)
+				if err == nil {
+					o.Experimental.DisableIngestAsFlushable = func() bool { return v }
+				}
 			case "disable_lazy_combined_iteration":
 				o.private.disableLazyCombinedIteration, err = strconv.ParseBool(value)
 			case "disable_wal":
@@ -1375,7 +1399,7 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				// Do nothing; option existed in older versions of pebble, and
 				// may be meaningful again eventually.
 			case "point_tombstone_weight":
-				o.Experimental.PointTombstoneWeight, err = strconv.ParseFloat(value, 64)
+				// Do nothing; deprecated.
 			case "strict_wal_tail":
 				o.private.strictWALTail, err = strconv.ParseBool(value)
 			case "merger":
@@ -1447,6 +1471,8 @@ func (o *Options) Parse(s string, hooks *ParseHooks) error {
 				l.BlockRestartInterval, err = strconv.Atoi(value)
 			case "block_size":
 				l.BlockSize, err = strconv.Atoi(value)
+			case "block_size_threshold":
+				l.BlockSizeThreshold, err = strconv.Atoi(value)
 			case "compression":
 				switch value {
 				case "Default":
@@ -1572,6 +1598,7 @@ func (o *Options) MakeReaderOptions() sstable.ReaderOptions {
 		if o.Merger != nil {
 			readerOpts.MergerName = o.Merger.Name
 		}
+		readerOpts.LoggerAndTracer = o.LoggerAndTracer
 	}
 	return readerOpts
 }

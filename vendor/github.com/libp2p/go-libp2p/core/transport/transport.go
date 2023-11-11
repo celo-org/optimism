@@ -4,6 +4,7 @@ package transport
 
 import (
 	"context"
+	"errors"
 	"net"
 
 	"github.com/libp2p/go-libp2p/core/network"
@@ -51,7 +52,7 @@ type CapableConn interface {
 // For a conceptual overview, see https://docs.libp2p.io/concepts/transport/
 type Transport interface {
 	// Dial dials a remote peer. It should try to reuse local listener
-	// addresses if possible but it may choose not to.
+	// addresses if possible, but it may choose not to.
 	Dial(ctx context.Context, raddr ma.Multiaddr, p peer.ID) (CapableConn, error)
 
 	// CanDial returns true if this transport knows how to dial the given
@@ -93,6 +94,9 @@ type Listener interface {
 	Addr() net.Addr
 	Multiaddr() ma.Multiaddr
 }
+
+// ErrListenerClosed is returned by Listener.Accept when the listener is gracefully closed.
+var ErrListenerClosed = errors.New("listener closed")
 
 // TransportNetwork is an inet.Network with methods for managing transports.
 type TransportNetwork interface {

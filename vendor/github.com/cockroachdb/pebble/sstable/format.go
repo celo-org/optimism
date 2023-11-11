@@ -27,6 +27,7 @@ const (
 	// supporting value blocks adds a 1 byte prefix to each value. After
 	// thorough experimentation and some production experience, this may change.
 	TableFormatPebblev3 // Value blocks.
+	NumTableFormats
 
 	TableFormatMax = TableFormatPebblev3
 )
@@ -59,7 +60,7 @@ func ParseTableFormat(magic []byte, version uint32) (TableFormat, error) {
 		}
 	default:
 		return TableFormatUnspecified, base.CorruptionErrorf(
-			"pebble/table: invalid table (bad magic number)",
+			"pebble/table: invalid table (bad magic number: 0x%x)", magic,
 		)
 	}
 }

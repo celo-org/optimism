@@ -10,16 +10,15 @@ import (
 
 	pb "github.com/libp2p/go-libp2p/core/crypto/pb"
 	"github.com/libp2p/go-libp2p/core/internal/catch"
-
-	"github.com/minio/sha256-simd"
+	"github.com/libp2p/go-libp2p/internal/sha256"
 )
 
-// RsaPrivateKey is an rsa private key
+// RsaPrivateKey is a rsa private key
 type RsaPrivateKey struct {
 	sk rsa.PrivateKey
 }
 
-// RsaPublicKey is an rsa public key
+// RsaPublicKey is a rsa public key
 type RsaPublicKey struct {
 	k rsa.PublicKey
 
@@ -71,7 +70,7 @@ func (pk *RsaPublicKey) Raw() (res []byte, err error) {
 
 // Equals checks whether this key is equal to another
 func (pk *RsaPublicKey) Equals(k Key) bool {
-	// make sure this is an rsa public key
+	// make sure this is a rsa public key
 	other, ok := (k).(*RsaPublicKey)
 	if !ok {
 		return basicEquals(pk, k)
@@ -104,7 +103,7 @@ func (sk *RsaPrivateKey) Raw() (res []byte, err error) {
 
 // Equals checks whether this key is equal to another
 func (sk *RsaPrivateKey) Equals(k Key) bool {
-	// make sure this is an rsa public key
+	// make sure this is a rsa public key
 	other, ok := (k).(*RsaPrivateKey)
 	if !ok {
 		return basicEquals(sk, k)

@@ -1,0 +1,7 @@
+name: Sepolia
+l1:
+  chain_id: 11155111
+  public_rpc: https://ethereum-sepolia-rpc.allthatnode.com
+  explorer: https://sepolia.etherscan.io
+
+protocol_versions_addr: null # todo

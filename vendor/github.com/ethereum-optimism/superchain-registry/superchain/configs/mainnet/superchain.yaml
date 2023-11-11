@@ -1,0 +1,8 @@
+name: Mainnet
+l1:
+  chain_id: 1
+  public_rpc: https://ethereum-mainnet-rpc.allthatnode.com
+  explorer: https://etherscan.io
+
+protocol_versions_addr: null # todo
+

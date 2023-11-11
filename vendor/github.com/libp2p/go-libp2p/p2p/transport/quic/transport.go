@@ -190,11 +190,11 @@ func (t *transport) holePunch(ctx context.Context, raddr ma.Multiaddr, p peer.ID
 	if err != nil {
 		return nil, err
 	}
-	pconn, err := t.connManager.Dial(network, addr)
+	tr, err := t.connManager.TransportForDial(network, addr)
 	if err != nil {
 		return nil, err
 	}
-	defer pconn.DecreaseCount()
+	defer tr.DecreaseCount()
 
 	ctx, cancel := context.WithTimeout(ctx, HolePunchTimeout)
 	defer cancel()
@@ -227,7 +227,7 @@ loop:
 			punchErr = err
 			break
 		}
-		if _, err := pconn.WriteTo(payload, addr); err != nil {
+		if _, err := tr.WriteTo(payload, addr); err != nil {
 			punchErr = err
 			break
 		}
@@ -268,8 +268,8 @@ loop:
 	}
 }
 
-// Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic
-var dialMatcher = mafmt.And(mafmt.IP, mafmt.Base(ma.P_UDP), mafmt.Or(mafmt.Base(ma.P_QUIC), mafmt.Base(ma.P_QUIC_V1)))
+// Don't use mafmt.QUIC as we don't want to dial DNS addresses. Just /ip{4,6}/udp/quic-v1
+var dialMatcher = mafmt.And(mafmt.IP, mafmt.Base(ma.P_UDP), mafmt.Base(ma.P_QUIC_V1))
 
 // CanDial determines if we can dial to an address
 func (t *transport) CanDial(addr ma.Multiaddr) bool {

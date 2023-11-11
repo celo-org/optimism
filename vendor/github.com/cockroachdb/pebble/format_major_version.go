@@ -110,12 +110,12 @@ const (
 
 	// 23.1 versions.
 
-	// FormatPrePebblev1MarkedCompacted is a format major version that
-	// guarantees that all sstables explicitly marked for compaction in the
-	// manifest have been compacted. Ratcheting to this format version will block
-	// (without holding mutexes) until all necessary compactions for files marked
-	// for compaction are complete.
-	FormatPrePebblev1MarkedCompacted
+	// FormatUnusedPrePebblev1MarkedCompacted is an unused format major version.
+	// This format major version was originally intended to ship in the 23.1
+	// release. It was later decided that this should be deferred until a
+	// subsequent release. The original ordering is preserved so as not to
+	// introduce breaking changes in Cockroach.
+	FormatUnusedPrePebblev1MarkedCompacted
 
 	// FormatSSTableValueBlocks is a format major version that adds support for
 	// storing values in value blocks in the sstable. Value block support is not
@@ -131,11 +131,28 @@ const (
 	// TableFormatPebblev2.
 	FormatSSTableValueBlocks
 
+	// FormatFlushableIngest is a format major version that enables lazy
+	// addition of ingested sstables into the LSM structure. When an ingest
+	// overlaps with a memtable, a record of the ingest is written to the WAL
+	// without waiting for a flush. Subsequent reads treat the ingested files as
+	// a level above the overlapping memtable. Once the memtable is flushed, the
+	// ingested files are moved into the lowest possible levels.
+	//
+	// This feature is behind a format major version because it required
+	// breaking changes to the WAL format.
+	FormatFlushableIngest
+
+	// 23.2 versions.
+
+	// FormatPrePebblev1MarkedCompacted is a format major version that guarantees
+	// that all sstables explicitly marked for compaction in the manifest (see
+	// FormatPrePebblev1Marked) have been compacted. Ratcheting to this format
+	// version will block (without holding mutexes) until all necessary
+	// compactions for files marked for compaction are complete.
+	FormatPrePebblev1MarkedCompacted
+
 	// FormatNewest always contains the most recent format major version.
-	// NB: When adding new versions, the MaxTableFormat method should also be
-	// updated to return the maximum allowable version for the new
-	// FormatMajorVersion.
-	FormatNewest FormatMajorVersion = FormatSSTableValueBlocks
+	FormatNewest FormatMajorVersion = iota - 1
 )
 
 // MaxTableFormat returns the maximum sstable.TableFormat that can be used at
@@ -149,9 +166,10 @@ func (v FormatMajorVersion) MaxTableFormat() sstable.TableFormat {
 		FormatSplitUserKeysMarkedCompacted:
 		return sstable.TableFormatPebblev1
 	case FormatRangeKeys, FormatMinTableFormatPebblev1, FormatPrePebblev1Marked,
-		FormatPrePebblev1MarkedCompacted:
+		FormatUnusedPrePebblev1MarkedCompacted:
 		return sstable.TableFormatPebblev2
-	case FormatSSTableValueBlocks:
+	case FormatSSTableValueBlocks, FormatFlushableIngest,
+		FormatPrePebblev1MarkedCompacted:
 		return sstable.TableFormatPebblev3
 	default:
 		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
@@ -168,7 +186,8 @@ func (v FormatMajorVersion) MinTableFormat() sstable.TableFormat {
 		FormatRangeKeys:
 		return sstable.TableFormatLevelDB
 	case FormatMinTableFormatPebblev1, FormatPrePebblev1Marked,
-		FormatPrePebblev1MarkedCompacted, FormatSSTableValueBlocks:
+		FormatUnusedPrePebblev1MarkedCompacted, FormatSSTableValueBlocks,
+		FormatFlushableIngest, FormatPrePebblev1MarkedCompacted:
 		return sstable.TableFormatPebblev1
 	default:
 		panic(fmt.Sprintf("pebble: unsupported format major version: %s", v))
@@ -282,6 +301,16 @@ var formatMajorVersionMigrations = map[FormatMajorVersion]func(*DB) error{
 		}
 		return d.finalizeFormatVersUpgrade(FormatPrePebblev1Marked)
 	},
+	FormatUnusedPrePebblev1MarkedCompacted: func(d *DB) error {
+		// Intentional no-op.
+		return d.finalizeFormatVersUpgrade(FormatUnusedPrePebblev1MarkedCompacted)
+	},
+	FormatSSTableValueBlocks: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatSSTableValueBlocks)
+	},
+	FormatFlushableIngest: func(d *DB) error {
+		return d.finalizeFormatVersUpgrade(FormatFlushableIngest)
+	},
 	FormatPrePebblev1MarkedCompacted: func(d *DB) error {
 		// Before finalizing the format major version, rewrite any sstables
 		// still marked for compaction. Note all format major versions
@@ -290,9 +319,6 @@ var formatMajorVersionMigrations = map[FormatMajorVersion]func(*DB) error{
 			return err
 		}
 		return d.finalizeFormatVersUpgrade(FormatPrePebblev1MarkedCompacted)
-	},
-	FormatSSTableValueBlocks: func(d *DB) error {
-		return d.finalizeFormatVersUpgrade(FormatSSTableValueBlocks)
 	},
 }
 
@@ -327,9 +353,7 @@ func lookupFormatMajorVersion(
 // provided in Options when the database was opened if the existing
 // database was written with a higher format version.
 func (d *DB) FormatMajorVersion() FormatMajorVersion {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.mu.formatVers.vers
+	return FormatMajorVersion(d.mu.formatVers.vers.Load())
 }
 
 // RatchetFormatMajorVersion ratchets the opened database's format major
@@ -356,9 +380,9 @@ func (d *DB) ratchetFormatMajorVersionLocked(formatVers FormatMajorVersion) erro
 		// Guard against accidentally forgetting to update FormatNewest.
 		return errors.Errorf("pebble: unknown format version %d", formatVers)
 	}
-	if d.mu.formatVers.vers > formatVers {
+	if currentVers := d.FormatMajorVersion(); currentVers > formatVers {
 		return errors.Newf("pebble: database already at format major version %d; cannot reduce to %d",
-			d.mu.formatVers.vers, formatVers)
+			currentVers, formatVers)
 	}
 	if d.mu.formatVers.ratcheting {
 		return errors.Newf("pebble: database format major version upgrade is in-progress")
@@ -366,7 +390,7 @@ func (d *DB) ratchetFormatMajorVersionLocked(formatVers FormatMajorVersion) erro
 	d.mu.formatVers.ratcheting = true
 	defer func() { d.mu.formatVers.ratcheting = false }()
 
-	for nextVers := d.mu.formatVers.vers + 1; nextVers <= formatVers; nextVers++ {
+	for nextVers := d.FormatMajorVersion() + 1; nextVers <= formatVers; nextVers++ {
 		if err := formatMajorVersionMigrations[nextVers](d); err != nil {
 			return errors.Wrapf(err, "migrating to version %d", nextVers)
 		}
@@ -377,7 +401,7 @@ func (d *DB) ratchetFormatMajorVersionLocked(formatVers FormatMajorVersion) erro
 		// update in-memory state (without ever dropping locks) after
 		// the upgrade is finalized. Here we assert that the upgrade
 		// did occur.
-		if d.mu.formatVers.vers != nextVers {
+		if d.FormatMajorVersion() != nextVers {
 			d.opts.Logger.Fatalf("pebble: successful migration to format version %d never finalized the upgrade", nextVers)
 		}
 	}
@@ -396,7 +420,7 @@ func (d *DB) finalizeFormatVersUpgrade(formatVers FormatMajorVersion) error {
 	if err := d.mu.formatVers.marker.Move(formatVers.String()); err != nil {
 		return err
 	}
-	d.mu.formatVers.vers = formatVers
+	d.mu.formatVers.vers.Store(uint64(formatVers))
 	d.opts.EventListener.FormatUpgrade(formatVers)
 	return nil
 }

@@ -7,10 +7,11 @@ import (
 	"math/rand"
 	"sync"
 
+	"github.com/libp2p/go-libp2p/core/connmgr"
+	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/peerstore"
-
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -18,14 +19,18 @@ import (
 type peernet struct {
 	mocknet *mocknet // parent
 
-	peer peer.ID
-	ps   peerstore.Peerstore
+	peer    peer.ID
+	ps      peerstore.Peerstore
+	emitter event.Emitter
 
 	// conns are actual live connections between peers.
 	// many conns could run over each link.
 	// **conns are NOT shared between peers**
 	connsByPeer map[peer.ID]map[*conn]struct{}
 	connsByLink map[*link]map[*conn]struct{}
+
+	// connection gater to check before dialing or accepting connections. May be nil to allow all.
+	gater connmgr.ConnectionGater
 
 	// implement network.Network
 	streamHandler network.StreamHandler
@@ -37,11 +42,18 @@ type peernet struct {
 }
 
 // newPeernet constructs a new peernet
-func newPeernet(m *mocknet, p peer.ID, ps peerstore.Peerstore) (*peernet, error) {
+func newPeernet(m *mocknet, p peer.ID, opts PeerOptions, bus event.Bus) (*peernet, error) {
+	emitter, err := bus.Emitter(&event.EvtPeerConnectednessChanged{})
+	if err != nil {
+		return nil, err
+	}
+
 	n := &peernet{
 		mocknet: m,
 		peer:    p,
-		ps:      ps,
+		ps:      opts.ps,
+		gater:   opts.gater,
+		emitter: emitter,
 
 		connsByPeer: map[peer.ID]map[*conn]struct{}{},
 		connsByLink: map[*link]map[*conn]struct{}{},
@@ -57,6 +69,7 @@ func (pn *peernet) Close() error {
 	for _, c := range pn.allConns() {
 		c.Close()
 	}
+	pn.emitter.Close()
 	return pn.ps.Close()
 }
 
@@ -116,6 +129,10 @@ func (pn *peernet) connect(p peer.ID) (*conn, error) {
 	}
 	pn.RUnlock()
 
+	if pn.gater != nil && !pn.gater.InterceptPeerDial(p) {
+		log.Debugf("gater disallowed outbound connection to peer %s", p)
+		return nil, fmt.Errorf("%v connection gater disallowed connection to %v", pn.peer, p)
+	}
 	log.Debugf("%s (newly) dialing %s", pn.peer, p)
 
 	// ok, must create a new connection. we need a link
@@ -131,18 +148,51 @@ func (pn *peernet) connect(p peer.ID) (*conn, error) {
 
 	log.Debugf("%s dialing %s openingConn", pn.peer, p)
 	// create a new connection with link
-	c := pn.openConn(p, l.(*link))
-	return c, nil
+	return pn.openConn(p, l.(*link))
 }
 
-func (pn *peernet) openConn(r peer.ID, l *link) *conn {
+func (pn *peernet) openConn(r peer.ID, l *link) (*conn, error) {
 	lc, rc := l.newConnPair(pn)
-	log.Debugf("%s opening connection to %s", pn.LocalPeer(), lc.RemotePeer())
 	addConnPair(pn, rc.net, lc, rc)
+	log.Debugf("%s opening connection to %s", pn.LocalPeer(), lc.RemotePeer())
+	abort := func() {
+		_ = lc.Close()
+		_ = rc.Close()
+	}
+	if pn.gater != nil && !pn.gater.InterceptAddrDial(lc.remote, lc.remoteAddr) {
+		abort()
+		return nil, fmt.Errorf("%v rejected dial to %v on addr %v", lc.local, lc.remote, lc.remoteAddr)
+	}
+	if rc.net.gater != nil && !rc.net.gater.InterceptAccept(rc) {
+		abort()
+		return nil, fmt.Errorf("%v rejected connection from %v", rc.local, rc.remote)
+	}
+	if err := checkSecureAndUpgrade(network.DirOutbound, pn.gater, lc); err != nil {
+		abort()
+		return nil, err
+	}
+	if err := checkSecureAndUpgrade(network.DirInbound, rc.net.gater, rc); err != nil {
+		abort()
+		return nil, err
+	}
 
 	go rc.net.remoteOpenedConn(rc)
 	pn.addConn(lc)
-	return lc
+	return lc, nil
+}
+
+func checkSecureAndUpgrade(dir network.Direction, gater connmgr.ConnectionGater, c *conn) error {
+	if gater == nil {
+		return nil
+	}
+	if !gater.InterceptSecured(dir, c.remote, c) {
+		return fmt.Errorf("%v rejected secure handshake with %v", c.local, c.remote)
+	}
+	allow, _ := gater.InterceptUpgraded(c)
+	if !allow {
+		return fmt.Errorf("%v rejected upgrade with %v", c.local, c.remote)
+	}
+	return nil
 }
 
 // addConnPair adds connection to both peernets at the same time
@@ -192,13 +242,16 @@ func (pn *peernet) addConn(c *conn) {
 	pn.notifyAll(func(n network.Notifiee) {
 		n.Connected(pn, c)
 	})
+
+	pn.emitter.Emit(event.EvtPeerConnectednessChanged{
+		Peer:          c.remote,
+		Connectedness: network.Connected,
+	})
 }
 
 // removeConn removes a given conn
 func (pn *peernet) removeConn(c *conn) {
 	pn.Lock()
-	defer pn.Unlock()
-
 	cs, found := pn.connsByLink[c.link]
 	if !found || len(cs) < 1 {
 		panic(fmt.Sprintf("attempting to remove a conn that doesnt exist %p", c.link))
@@ -210,6 +263,22 @@ func (pn *peernet) removeConn(c *conn) {
 		panic(fmt.Sprintf("attempting to remove a conn that doesnt exist %v", c.remote))
 	}
 	delete(cs, c)
+	pn.Unlock()
+
+	// notify asynchronously to mimic Swarm
+	// FIXME: IIRC, we wanted to make notify for Close synchronous
+	go func() {
+		c.notifLk.Lock()
+		defer c.notifLk.Unlock()
+		pn.notifyAll(func(n network.Notifiee) {
+			n.Disconnected(c.net, c)
+		})
+	}()
+
+	c.net.emitter.Emit(event.EvtPeerConnectednessChanged{
+		Peer:          c.remote,
+		Connectedness: network.NotConnected,
+	})
 }
 
 // LocalPeer the network's LocalPeer
@@ -331,7 +400,7 @@ func (pn *peernet) NewStream(ctx context.Context, p peer.ID) (network.Stream, er
 }
 
 // SetStreamHandler sets the new stream handler on the Network.
-// This operation is threadsafe.
+// This operation is thread-safe.
 func (pn *peernet) SetStreamHandler(h network.StreamHandler) {
 	pn.Lock()
 	pn.streamHandler = h
@@ -355,18 +424,11 @@ func (pn *peernet) StopNotify(f network.Notifiee) {
 // notifyAll runs the notification function on all Notifiees
 func (pn *peernet) notifyAll(notification func(f network.Notifiee)) {
 	pn.notifmu.Lock()
-	var wg sync.WaitGroup
+	// notify synchronously to mimic Swarm
 	for n := range pn.notifs {
-		// make sure we dont block
-		// and they dont block each other.
-		wg.Add(1)
-		go func(n network.Notifiee) {
-			defer wg.Done()
-			notification(n)
-		}(n)
+		notification(n)
 	}
 	pn.notifmu.Unlock()
-	wg.Wait()
 }
 
 func (pn *peernet) ResourceManager() network.ResourceManager {
