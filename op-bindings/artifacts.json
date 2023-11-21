@@ -51,5 +51,6 @@
   "SortedOracles",
   "AddressSortedLinkedListWithMedian",
   "FeeCurrency",
-  "BridgedETH"
+  "BridgedETH",
+  "MockSortedOracles"
 ]
