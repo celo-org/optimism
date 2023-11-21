@@ -1165,7 +1165,7 @@ func TestFees(t *testing.T) {
 	require.Equal(t, scalar.Uint64(), cfg.DeployConfig.GasPriceOracleScalar, "wrong gpo scalar")
 
 	// BaseFee Recipient
-	baseFeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.BaseFeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
+	baseFeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.FeeHandlerAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	require.Nil(t, err)
 
 	// L1Fee Recipient
@@ -1208,7 +1208,7 @@ func TestFees(t *testing.T) {
 	endBalance, err := l2Seq.BalanceAt(context.Background(), fromAddr, header.Number)
 	require.Nil(t, err)
 
-	baseFeeRecipientEndBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.BaseFeeVaultAddr, header.Number)
+	baseFeeRecipientEndBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.FeeHandlerAddr, header.Number)
 	require.Nil(t, err)
 
 	l1Header, err := l1.HeaderByNumber(context.Background(), nil)
