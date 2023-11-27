@@ -40,6 +40,10 @@ import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
 import { DataAvailabilityChallenge } from "src/L1/DataAvailabilityChallenge.sol";
 import { WETH } from "src/L2/WETH.sol";
 
+import { BridgedETH } from "src/celo/BridgedETH.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+import { BridgedETH } from "src/celo/BridgedETH.sol";
+
 /// @title Setup
 /// @dev This contact is responsible for setting up the contracts in state. It currently
 ///      sets the L2 contracts directly at the predeploy addresses instead of setting them
@@ -92,6 +96,7 @@ contract Setup {
     LegacyMessagePasser legacyMessagePasser = LegacyMessagePasser(Predeploys.LEGACY_MESSAGE_PASSER);
     GovernanceToken governanceToken = GovernanceToken(Predeploys.GOVERNANCE_TOKEN);
     WETH weth = WETH(payable(Predeploys.WETH));
+    BridgedETH bridgedETH = BridgedETH(Predeploys.BRIDGED_ETH);
 
     /// @dev Deploys the Deploy contract without including its bytecode in the bytecode
     ///      of this contract by fetching the bytecode dynamically using `vm.getCode()`.
@@ -223,6 +228,18 @@ contract Setup {
         labelPreinstall(Preinstalls.EntryPoint);
         labelPreinstall(Preinstalls.BeaconBlockRoots);
 
+        // Celo predeploys
+        labelCeloPredeploys(CeloPredeploys.CELO_REGISTRY);
+        labelCeloPredeploys(CeloPredeploys.GOLD_TOKEN);
+        labelCeloPredeploys(CeloPredeploys.FEE_HANDLER);
+        labelCeloPredeploys(CeloPredeploys.FEE_CURRENCY_WHITELIST);
+        labelCeloPredeploys(CeloPredeploys.MENTO_FEE_HANDLER_SELLER);
+        labelCeloPredeploys(CeloPredeploys.UNISWAP_FEE_HANDLER_SELLER);
+        labelCeloPredeploys(CeloPredeploys.SORTED_ORACLES);
+        // labelCeloPredeploys(CeloPredeploys.ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN);
+        labelCeloPredeploys(CeloPredeploys.FEE_CURRENCY);
+        labelCeloPredeploys(CeloPredeploys.BRIDGED_ETH);
+
         console.log("Setup: completed L2 genesis");
     }
 
@@ -232,5 +249,9 @@ contract Setup {
 
     function labelPreinstall(address _addr) internal {
         vm.label(_addr, Preinstalls.getName(_addr));
+    }
+
+    function labelCeloPredeploys(address _addr) internal {
+        vm.label(_addr, CeloPredeploys.getName(_addr));
     }
 }

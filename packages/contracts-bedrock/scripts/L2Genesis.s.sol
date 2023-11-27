@@ -25,10 +25,10 @@ import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
 import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { FeeVault } from "src/universal/FeeVault.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
-import { GoldToken } from "src/celo/GoldToken.sol";
 
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { CeloRegistry } from "src/celo/CeloRegistry.sol";
+import { GoldToken } from "src/celo/GoldToken.sol";
 import { FeeHandler } from "src/celo/FeeHandler.sol";
 import { FeeCurrencyWhitelist } from "src/celo/FeeCurrencyWhitelist.sol";
 import { MentoFeeHandlerSeller } from "src/celo/MentoFeeHandlerSeller.sol";
