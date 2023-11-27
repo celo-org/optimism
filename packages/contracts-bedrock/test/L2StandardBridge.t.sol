@@ -21,6 +21,8 @@ import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 contract L2StandardBridge_Test is Bridge_Initializer {
     using stdStorage for StdStorage;
 
+    event Burn(address indexed account, uint256 amount);
+
     /// @dev Tests that the bridge is initialized correctly.
     function test_initialize_succeeds() external {
         assertEq(address(l2StandardBridge.messenger()), address(l2CrossDomainMessenger));
@@ -30,9 +32,6 @@ contract L2StandardBridge_Test is Bridge_Initializer {
 
     /// @dev Tests that the bridge receives ETH and successfully initiates a withdrawal.
     function test_receive_succeeds() external {
-        // TODO: update test
-        return;
-
         assertEq(address(l2ToL1MessagePasser).balance, 0);
         uint256 nonce = l2CrossDomainMessenger.messageNonce();
 
@@ -44,7 +43,7 @@ contract L2StandardBridge_Test is Bridge_Initializer {
             nonce,
             address(l2StandardBridge),
             address(l1StandardBridge),
-            100,
+            0,
             200_000,
             message
         );
@@ -53,14 +52,14 @@ contract L2StandardBridge_Test is Bridge_Initializer {
                 nonce: nonce,
                 sender: address(l2CrossDomainMessenger),
                 target: address(l1CrossDomainMessenger),
-                value: 100,
+                value: 0,
                 gasLimit: baseGas,
                 data: withdrawalData
             })
         );
 
         vm.expectEmit(true, true, true, true);
-        emit WithdrawalInitiated(address(0), Predeploys.LEGACY_ERC20_ETH, alice, alice, 100, hex"");
+        emit Burn(alice, 100);
 
         vm.expectEmit(true, true, true, true);
         emit ETHBridgeInitiated(alice, alice, 100, hex"");
@@ -71,7 +70,7 @@ contract L2StandardBridge_Test is Bridge_Initializer {
             nonce,
             address(l2CrossDomainMessenger),
             address(l1CrossDomainMessenger),
-            100,
+            0,
             baseGas,
             withdrawalData,
             withdrawalHash
@@ -83,7 +82,7 @@ contract L2StandardBridge_Test is Bridge_Initializer {
 
         // SentMessageExtension1 event emitted by the CrossDomainMessenger
         vm.expectEmit(true, true, true, true, address(l2CrossDomainMessenger));
-        emit SentMessageExtension1(address(l2StandardBridge), 100);
+        emit SentMessageExtension1(address(l2StandardBridge), 0);
 
         vm.expectCall(
             address(l2CrossDomainMessenger),
@@ -105,10 +104,9 @@ contract L2StandardBridge_Test is Bridge_Initializer {
             )
         );
 
+        deal(address(bridgedETH), alice, 100, true);
         vm.prank(alice, alice);
-        (bool success,) = address(l2StandardBridge).call{ value: 100 }(hex"");
-        assertEq(success, true);
-        assertEq(address(l2ToL1MessagePasser).balance, 100);
+        l2StandardBridge.withdraw(address(bridgedETH), 100, 200_000, hex"");
     }
 
     /// @dev Tests that `withdraw` reverts if the amount is not equal to the value sent.
@@ -126,6 +124,7 @@ contract L2StandardBridge_Test is Bridge_Initializer {
         assertTrue(alice.balance >= 100);
         assertEq(Predeploys.L2_TO_L1_MESSAGE_PASSER.balance, 0);
 
+        /*
         vm.expectEmit(true, true, true, true, address(l2StandardBridge));
         emit WithdrawalInitiated({
             l1Token: address(0),
@@ -135,6 +134,7 @@ contract L2StandardBridge_Test is Bridge_Initializer {
             amount: 100,
             data: hex""
         });
+        */
 
         vm.expectEmit(true, true, true, true, address(l2StandardBridge));
         emit ETHBridgeInitiated({ from: alice, to: alice, amount: 100, data: hex"" });

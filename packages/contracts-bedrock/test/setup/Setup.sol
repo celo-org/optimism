@@ -28,6 +28,7 @@ import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
 import { AddressManager } from "src/legacy/AddressManager.sol";
 import { L1ERC721Bridge } from "src/L1/L1ERC721Bridge.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
+import { BridgedETH } from "src/celo/BridgedETH.sol";
 
 /// @title Setup
 /// @dev This contact is responsible for setting up the contracts in state. It currently
@@ -60,6 +61,7 @@ contract Setup is Deploy {
     LegacyMessagePasser legacyMessagePasser = LegacyMessagePasser(Predeploys.LEGACY_MESSAGE_PASSER);
     GovernanceToken governanceToken = GovernanceToken(Predeploys.GOVERNANCE_TOKEN);
     LegacyERC20ETH legacyERC20ETH = LegacyERC20ETH(Predeploys.LEGACY_ERC20_ETH);
+    BridgedETH bridgedETH = BridgedETH(Predeploys.BRIDGED_ETH);
 
     function setUp() public virtual override {
         Deploy.setUp();
@@ -171,6 +173,8 @@ contract Setup is Deploy {
         address finalSystemOwner = cfg.finalSystemOwner();
         vm.prank(governanceToken.owner());
         governanceToken.transferOwnership(finalSystemOwner);
+
+        vm.etch(address(bridgedETH), address(new BridgedETH(address(l2StandardBridge))).code);
 
         vm.label(Predeploys.OPTIMISM_MINTABLE_ERC20_FACTORY, "OptimismMintableERC20Factory");
         vm.label(Predeploys.LEGACY_ERC20_ETH, "LegacyERC20ETH");
