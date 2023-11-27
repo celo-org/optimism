@@ -183,6 +183,8 @@ contract L2StandardBridge is StandardBridge, ISemver {
         }
     }
 
+    /* Removed for Celo: Additional backwards compatibility no needed
+
     /// @notice Emits the legacy WithdrawalInitiated event followed by the ETHBridgeInitiated event.
     ///         This is necessary for backwards compatibility with the legacy bridge.
     /// @inheritdoc StandardBridge
@@ -198,6 +200,8 @@ contract L2StandardBridge is StandardBridge, ISemver {
         emit WithdrawalInitiated(address(0), Predeploys.LEGACY_ERC20_ETH, _from, _to, _amount, _extraData);
         super._emitETHBridgeInitiated(_from, _to, _amount, _extraData);
     }
+
+    */
 
     /// @notice Emits the legacy DepositFinalized event followed by the ETHBridgeFinalized event.
     ///         This is necessary for backwards compatibility with the legacy bridge.
