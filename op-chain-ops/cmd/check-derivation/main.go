@@ -222,7 +222,7 @@ func getRandomSignedTransaction(ctx context.Context, ethClient *ethclient.Client
 	var txData types.TxData
 	switch txType {
 	case types.LegacyTxType:
-		gasLimit, err := core.IntrinsicGas(data, nil, false, true, true, false)
+		gasLimit, err := core.IntrinsicGas(data, nil, false, true, true, false, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get intrinsicGas: %w", err)
 		}
@@ -239,7 +239,7 @@ func getRandomSignedTransaction(ctx context.Context, ethClient *ethclient.Client
 			Address:     randomAddress,
 			StorageKeys: []common.Hash{common.HexToHash("0x1234")},
 		}}
-		gasLimit, err := core.IntrinsicGas(data, accessList, false, true, true, false)
+		gasLimit, err := core.IntrinsicGas(data, accessList, false, true, true, false, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get intrinsicGas: %w", err)
 		}
@@ -254,7 +254,7 @@ func getRandomSignedTransaction(ctx context.Context, ethClient *ethclient.Client
 			Data:       data,
 		}
 	case types.DynamicFeeTxType:
-		gasLimit, err := core.IntrinsicGas(data, nil, false, true, true, false)
+		gasLimit, err := core.IntrinsicGas(data, nil, false, true, true, false, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get intrinsicGas: %w", err)
 		}
