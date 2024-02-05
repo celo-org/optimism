@@ -590,7 +590,7 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 }
 
 func (l *BatchSubmitter) queueTx(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue *txmgr.Queue[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
-	intrinsicGas, err := core.IntrinsicGas(candidate.TxData, nil, false, true, true, false)
+	intrinsicGas, err := core.IntrinsicGas(candidate.TxData, nil, false, true, true, false, nil, nil)
 	if err != nil {
 		// we log instead of return an error here because txmgr can do its own gas estimation
 		l.Log.Error("Failed to calculate intrinsic gas", "err", err)
