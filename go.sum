@@ -57,8 +57,8 @@ github.com/btcsuite/snappy-go v1.0.0/go.mod h1:8woku9dyThutzjeg+3xrA5iCpBRH8XEEg
 github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792/go.mod h1:ghJtEyQwv5/p4Mg4C0fgbePVuGr935/5ddU9Z3TmDRY=
 github.com/btcsuite/winsvc v1.0.0/go.mod h1:jsenWakMcC0zFBFurPLEAyrnc/teJEM1O46fmI40EZs=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
-github.com/celo-org/op-geth v0.0.0-20231117111846-c362c07d6b56 h1:vLgwFvIVIthyc5vsN0tM6X0ztMJT7QqhinAl/hD8uT0=
-github.com/celo-org/op-geth v0.0.0-20231117111846-c362c07d6b56/go.mod h1:12W+vBetjYbDj5D2+V8hizke5yWuLrUDf7UmVkXTnCQ=
+github.com/celo-org/op-geth v0.0.0-20240206143241-8845c5e0bc65 h1:qDDAo2HXxniKC9Hw2IvUTzUMdEX5JiHaZQgLa5D3mwA=
+github.com/celo-org/op-geth v0.0.0-20240206143241-8845c5e0bc65/go.mod h1:12W+vBetjYbDj5D2+V8hizke5yWuLrUDf7UmVkXTnCQ=
 github.com/cespare/cp v0.1.0 h1:SE+dxFebS7Iik5LK0tsi1k9ZCxEaFX4AjQmoyA+1dJk=
 github.com/cespare/cp v0.1.0/go.mod h1:SOGHArjBr4JWaSDEVpWpo/hNg6RoKrls6Oh40hiwW+s=
 github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
