@@ -302,7 +302,7 @@ func (s *L2Batcher) ActL2BatchSubmitRaw(t Testing, payload []byte, txOpts ...fun
 			opt(rawTx)
 		}
 
-		gas, err := core.IntrinsicGas(rawTx.Data, nil, false, true, true, false)
+		gas, err := core.IntrinsicGas(rawTx.Data, nil, false, true, true, false, nil, nil)
 		require.NoError(t, err, "need to compute intrinsic gas")
 		rawTx.Gas = gas
 		txData = rawTx
