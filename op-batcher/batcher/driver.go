@@ -340,7 +340,7 @@ func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[t
 func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txData], receiptsCh chan txmgr.TxReceipt[txData]) {
 	// Do the gas estimation offline. A value of 0 will cause the [txmgr] to estimate the gas limit.
 	data := txdata.Bytes()
-	intrinsicGas, err := core.IntrinsicGas(data, nil, false, true, true, false)
+	intrinsicGas, err := core.IntrinsicGas(data, nil, false, true, true, false, nil)
 	if err != nil {
 		l.Log.Error("Failed to calculate intrinsic gas", "error", err)
 		return
