@@ -1,0 +1,9 @@
+[
+  {
+    "bytes": "32",
+    "label": "numerators",
+    "offset": 0,
+    "slot": "0",
+    "type": "mapping(address => uint256)"
+  }
+]
