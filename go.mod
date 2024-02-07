@@ -235,7 +235,7 @@ require (
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
-replace github.com/ethereum/go-ethereum v1.14.8 => github.com/ethereum-optimism/op-geth v1.101408.0-rc.4.0.20240827042333-110c433a2469
+replace github.com/ethereum/go-ethereum => github.com/celo-org/op-geth v1.101408.1-0.20240910134951-c19ca140dcbe
 
 // replace github.com/ethereum/go-ethereum => ../op-geth
 
