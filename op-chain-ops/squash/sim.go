@@ -160,7 +160,7 @@ func (sim *SquashSim) AddUpgradeTxs(txs []hexutil.Bytes) error {
 		if err := tx.UnmarshalBinary(otx); err != nil {
 			return fmt.Errorf("failed to decode upgrade tx %d: %w", i, err)
 		}
-		msg, err := core.TransactionToMessage(&tx, sim.signer, sim.BlockContext().BaseFee)
+		msg, err := core.TransactionToMessage(&tx, sim.signer, sim.BlockContext().BaseFee, sim.BlockContext().ExchangeRates)
 		if err != nil {
 			return fmt.Errorf("failed to turn upgrade tx %d into message: %w", i, err)
 		}
@@ -185,10 +185,11 @@ func NewSimulator(db *state.MemoryStateDB) *SquashSim {
 	bc := &staticChain{startTime: genesisTime, blockTime: blockTime}
 	header := bc.GetHeader(common.Hash{}, genesisTime+offsetBlocks)
 	chainCfg := db.Genesis().Config
-	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, db)
+	simDB := &simState{MemoryStateDB: db}
+	simDB.tempAccessList = make(map[common.Address]map[common.Hash]struct{})
+	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, simDB)
 	vmCfg := vm.Config{}
 	signer := types.LatestSigner(db.Genesis().Config)
-	simDB := &simState{MemoryStateDB: db}
 	env := vm.NewEVM(blockContext, vm.TxContext{}, simDB, chainCfg, vmCfg)
 
 	return &SquashSim{
