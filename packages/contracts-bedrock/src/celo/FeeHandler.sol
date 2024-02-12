@@ -21,7 +21,7 @@ import "./common/interfaces/ICeloToken.sol";
 import "./stability/interfaces/ISortedOracles.sol";
 
 // Using the minimal required signatures in the interfaces so more contracts could be compatible
-import "./common/libraries/ReentrancyGuard.sol";
+import { ReentrancyGuard } from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 // An implementation of FeeHandler as described in CIP-52
 // See https://github.com/celo-org/celo-proposals/blob/master/CIPs/cip-0052.md
