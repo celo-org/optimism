@@ -573,6 +573,7 @@ func (cfg SystemConfig) Start(t *testing.T, _opts ...SystemConfigOption) (*Syste
 			FjordTime:               cfg.DeployConfig.FjordTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			GraniteTime:             cfg.DeployConfig.GraniteTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			InteropTime:             cfg.DeployConfig.InteropTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			Cel2Time:                cfg.DeployConfig.RegolithTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			ProtocolVersionsAddress: cfg.L1Deployments.ProtocolVersionsProxy,
 		}
 	}
