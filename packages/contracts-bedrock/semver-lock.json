@@ -20,8 +20,8 @@
     "sourceCodeHash": "0xd57acdbd001941e75cf4326ba7c1bdad809912f10b1e44ffaebe073917cdd296"
   },
   "src/L1/L1StandardBridge.sol": {
-    "initCodeHash": "0xb0166b741e0b6938c004c19de78f347171e2656056a0363434ebd0f34a6a32ca",
-    "sourceCodeHash": "0x654f9490dd2d0bc9e92dc31781e62f106f6b7d8b6fca0cfe718cd2a599c1b18b"
+    "initCodeHash": "0xc4f0385a7417ec46899fc726ee23c59c361c745735ff7474fb3053a6e8e0f396",
+    "sourceCodeHash": "0x99e28c9c540697176444e10414091f3a4e3fd06baa3b1ba7b8f99134577a5523"
   },
   "src/L1/L2OutputOracle.sol": {
     "initCodeHash": "0x14c3a582ca46ef2a6abad5590323f4de26ff4de54415c927c62e131ccbf8d9ba",
@@ -72,8 +72,8 @@
     "sourceCodeHash": "0xa7646a588275046f92525ef121e5a0fe149e7752ea51fe62f7e0686a21153542"
   },
   "src/L2/L2StandardBridge.sol": {
-    "initCodeHash": "0xe16aed4fc021c768d0ebcb8bb83db7cfe6b062663d034df9f351cdc6af2e5077",
-    "sourceCodeHash": "0xc86e370a8cd1277b203d18df154a50aed16b27156b755e6bd6672d068d44b9f2"
+    "initCodeHash": "0x2cb262e472901421603e6dd2cd0e00d963f132ad908bf41ac55176f87276cc7c",
+    "sourceCodeHash": "0xd909d062f3b5ab7aa6324db8b96a42737c58ed5b523c7ad840084b793b517570"
   },
   "src/L2/L2ToL1MessagePasser.sol": {
     "initCodeHash": "0x08bbede75cd6dfd076903b8f04d24f82fa7881576c135825098778632e37eebc",
