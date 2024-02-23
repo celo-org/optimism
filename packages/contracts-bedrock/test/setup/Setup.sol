@@ -31,6 +31,7 @@ import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { Executables } from "scripts/Executables.sol";
 import { Vm } from "forge-std/Vm.sol";
 import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
+import { DataAvailabilityChallenge } from "src/L1/DataAvailabilityChallenge.sol";
 import { BridgedETH } from "src/celo/BridgedETH.sol";
 
 /// @title Setup
@@ -56,6 +57,7 @@ contract Setup {
     OptimismMintableERC20Factory l1OptimismMintableERC20Factory;
     ProtocolVersions protocolVersions;
     SuperchainConfig superchainConfig;
+    DataAvailabilityChallenge dataAvailabilityChallenge;
 
     L2CrossDomainMessenger l2CrossDomainMessenger =
         L2CrossDomainMessenger(payable(Predeploys.L2_CROSS_DOMAIN_MESSENGER));
@@ -128,6 +130,13 @@ contract Setup {
         vm.label(address(superchainConfig), "SuperchainConfig");
         vm.label(deploy.mustGetAddress("SuperchainConfigProxy"), "SuperchainConfigProxy");
         vm.label(AddressAliasHelper.applyL1ToL2Alias(address(l1CrossDomainMessenger)), "L1CrossDomainMessenger_aliased");
+
+        if (deploy.cfg().usePlasma()) {
+            dataAvailabilityChallenge =
+                DataAvailabilityChallenge(deploy.mustGetAddress("DataAvailabilityChallengeProxy"));
+            vm.label(address(dataAvailabilityChallenge), "DataAvailabilityChallengeProxy");
+            vm.label(deploy.mustGetAddress("DataAvailabilityChallenge"), "DataAvailabilityChallenge");
+        }
     }
 
     /// @dev Sets up the L2 contracts. Depends on `L1()` being called first.

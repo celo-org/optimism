@@ -43,6 +43,7 @@
     "ISemver",
     "StorageSetter",
     "SuperchainConfig",
+    "DataAvailabilityChallenge",
     "CeloRegistry",
     "GoldToken",
     "FeeHandler",
