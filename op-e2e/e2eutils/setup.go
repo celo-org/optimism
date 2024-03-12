@@ -44,6 +44,7 @@ type TestParams struct {
 	SequencerWindowSize uint64
 	ChannelTimeout      uint64
 	L1BlockTime         uint64
+	UsePlasma           bool
 }
 
 func MakeDeployParams(t require.TestingT, tp *TestParams) *DeployParams {
@@ -57,6 +58,7 @@ func MakeDeployParams(t require.TestingT, tp *TestParams) *DeployParams {
 	deployConfig.SequencerWindowSize = tp.SequencerWindowSize
 	deployConfig.ChannelTimeout = tp.ChannelTimeout
 	deployConfig.L1BlockTime = tp.L1BlockTime
+	deployConfig.UsePlasma = tp.UsePlasma
 	ApplyDeployConfigForks(deployConfig)
 
 	require.NoError(t, deployConfig.Check())
@@ -161,6 +163,10 @@ func Setup(t require.TestingT, deployParams *DeployParams, alloc *AllocParams) *
 		EcotoneTime:            deployConf.EcotoneTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		FjordTime:              deployConf.FjordTime(uint64(deployConf.L1GenesisBlockTimestamp)),
 		InteropTime:            deployConf.InteropTime(uint64(deployConf.L1GenesisBlockTimestamp)),
+		DAChallengeAddress:     l1Deployments.DataAvailabilityChallengeProxy,
+		DAChallengeWindow:      deployConf.DAChallengeWindow,
+		DAResolveWindow:        deployConf.DAResolveWindow,
+		UsePlasma:              deployConf.UsePlasma,
 	}
 
 	require.NoError(t, rollupCfg.Check())
@@ -203,4 +209,8 @@ func ApplyDeployConfigForks(deployConfig *genesis.DeployConfig) {
 	// Canyon and lower is activated by default
 	deployConfig.L2GenesisCanyonTimeOffset = new(hexutil.Uint64)
 	deployConfig.L2GenesisRegolithTimeOffset = new(hexutil.Uint64)
+}
+
+func UsePlasma() bool {
+	return os.Getenv("OP_E2E_USE_PLASMA") == "true"
 }

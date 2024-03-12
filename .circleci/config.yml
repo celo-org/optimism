@@ -131,8 +131,11 @@ jobs:
             FOUNDRY_PROFILE: ci
           command: pnpm build
       - run:
-          name: Generate allocs
-          command: make devnet-allocs
+          name: Generate Plasma allocs
+          command: DEVNET_PLASMA="true" make devnet-allocs
+      - run:
+          name: Copy Plasma allocs to .devnet-plasma
+          command: cp -r .devnet/ .devnet-plasma/
       - persist_to_workspace:
           root: "."
           paths:
@@ -142,10 +145,8 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/tsconfig.tsbuildinfo"
             - "packages/contracts-bedrock/tsconfig.build.tsbuildinfo"
-            - ".devnet/allocs-l1.json"
-            - ".devnet/addresses.json"
-            - "packages/contracts-bedrock/deploy-config/devnetL1.json"
-            - "packages/contracts-bedrock/deployments/devnetL1"
+            - ".devnet-plasma/allocs-l1.json"
+            - ".devnet-plasma/addresses.json"
 
   contracts-bedrock-coverage:
     docker:
@@ -639,6 +640,13 @@ jobs:
     parallelism: <<parameters.parallelism>>
     steps:
       - checkout
+      - when:
+          condition:
+            equal: ['-plasma', <<parameters.fpac>>]
+          steps:
+            - run:
+                name: Set OP_E2E_USE_PLASMA = true
+                command: echo 'export OP_E2E_USE_PLASMA=true' >> $BASH_ENV
       - check-changed:
           patterns: op-(.+),cannon,contracts-bedrock
       - run:
@@ -1323,7 +1331,14 @@ workflows:
             - go-mod-download
             - pnpm-monorepo
       - go-e2e-test:
+<<<<<<< HEAD
           name: op-e2e-action-tests
+=======
+          name: op-e2e-action-tests<< matrix.fpac >>
+          matrix:
+            parameters:
+              fpac: ["", "-fault-proofs", "-plasma"]
+>>>>>>> 802c28399 (op-plasma: sync derivation with DA challenge contract state (#9682))
           module: op-e2e
           target: test-actions
           parallelism: 1

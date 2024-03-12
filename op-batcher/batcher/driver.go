@@ -386,6 +386,22 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 		}
 		l.Metr.RecordBlobUsedBytes(len(data))
 	} else {
+		// sanity check
+		if nf := len(txdata.frames); nf != 1 {
+			l.Log.Crit("unexpected number of frames in calldata tx", "num_frames", nf)
+		}
+		data := txdata.CallData()
+		// if plasma DA is enabled we post the txdata to the DA Provider and replace it with the commitment.
+		if l.Config.UsePlasma {
+			comm, err := l.PlasmaDA.SetInput(ctx, data)
+			if err != nil {
+				l.Log.Error("Failed to post input to Plasma DA", "error", err)
+				// requeue frame if we fail to post to the DA Provider so it can be retried
+				l.recordFailedTx(txdata, err)
+				return nil
+			}
+			data = comm.Encode()
+		}
 		candidate = l.calldataTxCandidate(data)
 	}
 
