@@ -51,6 +51,7 @@ func (s *PlasmaDataSource) Next(ctx context.Context) (eth.Data, error) {
 		if err != nil {
 			return nil, err
 		}
+
 		// validate batcher inbox data is a commitment.
 		comm, err := plasma.DecodeKeccak256(data)
 		if err != nil {
