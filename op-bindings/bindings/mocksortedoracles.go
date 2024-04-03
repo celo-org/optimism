@@ -30,8 +30,8 @@ var (
 
 // MockSortedOraclesMetaData contains all meta data concerning the MockSortedOracles contract.
 var MockSortedOraclesMetaData = &bind.MetaData{
-	ABI: "[{\"type\":\"function\",\"name\":\"DENOMINATOR\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"addOracle\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"isOldestReportExpired\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"pure\"},{\"type\":\"function\",\"name\":\"medianRate\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"pure\"},{\"type\":\"function\",\"name\":\"medianTimestamp\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"pure\"},{\"type\":\"function\",\"name\":\"numRates\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"pure\"},{\"type\":\"function\",\"name\":\"numTimestamps\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"pure\"},{\"type\":\"function\",\"name\":\"numerators\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"removeExpiredReports\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"removeOracle\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"report\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"}]",
-	Bin: "0x608060405234801561001057600080fd5b506103e4806100206000396000f3fe608060405234801561001057600080fd5b50600436106100c95760003560e01c8063bbc66a9411610081578063f0ca4adb1161005b578063f0ca4adb1461017d578063f7ca69631461018b578063ffe736bf146101ab57600080fd5b8063bbc66a941461012f578063dd34ca3b14610143578063ef90e1b01461015557600080fd5b80636dd6ef0c116100b25780636dd6ef0c146100ce57806380e507441461010a578063918f86741461011e57600080fd5b8063071b48fc146100ce57806353a57297146100f5575b600080fd5b6100e26100dc36600461028b565b50600090565b6040519081526020015b60405180910390f35b6101086101033660046102ad565b505050565b005b6101086101183660046102e9565b50505050565b6100e269d3c21bcecceda100000081565b6100e261013d36600461028b565b50600190565b610108610151366004610336565b5050565b61016861016336600461028b565b6101ef565b604080519283526020830191909152016100ec565b610108610151366004610360565b6100e261019936600461028b565b60006020819052908152604090205481565b6101c36101b936600461028b565b5060009061ce1090565b60408051921515835273ffffffffffffffffffffffffffffffffffffffff9091166020830152016100ec565b6000807fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff31ea73ffffffffffffffffffffffffffffffffffffffff8416016102575761024469d3c21bcecceda10000006002610393565b9369d3c21bcecceda10000009350915050565b506000928392509050565b803573ffffffffffffffffffffffffffffffffffffffff8116811461028657600080fd5b919050565b60006020828403121561029d57600080fd5b6102a682610262565b9392505050565b6000806000606084860312156102c257600080fd5b6102cb84610262565b92506102d960208501610262565b9150604084013590509250925092565b600080600080608085870312156102ff57600080fd5b61030885610262565b93506020850135925061031d60408601610262565b915061032b60608601610262565b905092959194509250565b6000806040838503121561034957600080fd5b61035283610262565b946020939093013593505050565b6000806040838503121561037357600080fd5b61037c83610262565b915061038a60208401610262565b90509250929050565b80820281158282048414176103d1577f4e487b7100000000000000000000000000000000000000000000000000000000600052601160045260246000fd5b9291505056fea164736f6c6343000813000a",
+	ABI: "[{\"type\":\"function\",\"name\":\"DENOMINATOR\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"expired\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"isOldestReportExpired\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"},{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"medianRate\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"medianTimestamp\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"numRates\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"numerators\",\"inputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"setMedianRate\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"numerator\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"setMedianTimestamp\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"timestamp\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"setMedianTimestampToNow\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"setNumRates\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"},{\"name\":\"rate\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"setOldestReportExpired\",\"inputs\":[{\"name\":\"token\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"}]",
+	Bin: "0x608060405234801561001057600080fd5b5061045f806100206000396000f3fe608060405234801561001057600080fd5b50600436106100d45760003560e01c8063b325dd1f11610081578063f06a10e01161005b578063f06a10e0146102c6578063f7ca6963146102e9578063ffe736bf1461030957600080fd5b8063b325dd1f14610235578063bbc66a941461027e578063ef90e1b01461029e57600080fd5b806376ea210e116100b257806376ea210e1461017c5780638d24fc51146101c7578063918f86741461022457600080fd5b8063071b48fc146100d95780631b7aa2db1461010c578063495182a614610145575b600080fd5b6100f96100e7366004610406565b60016020526000908152604090205481565b6040519081526020015b60405180910390f35b61014361011a366004610428565b73ffffffffffffffffffffffffffffffffffffffff909116600090815260016020526040902055565b005b610143610153366004610428565b73ffffffffffffffffffffffffffffffffffffffff909116600090815260026020526040902055565b6101b761018a366004610428565b73ffffffffffffffffffffffffffffffffffffffff91909116600090815260208190526040902055600190565b6040519015158152602001610103565b6101436101d5366004610406565b73ffffffffffffffffffffffffffffffffffffffff16600090815260036020526040902080547fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff00166001179055565b6100f969d3c21bcecceda100000081565b610143610243366004610406565b73ffffffffffffffffffffffffffffffffffffffff1660009081526001602052604090206fffffffffffffffffffffffffffffffff42169055565b6100f961028c366004610406565b60026020526000908152604090205481565b6102b16102ac366004610406565b61036f565b60408051928352602083019190915201610103565b6101b76102d4366004610406565b60036020526000908152604090205460ff1681565b6100f96102f7366004610406565b60006020819052908152604090205481565b610343610317366004610406565b73ffffffffffffffffffffffffffffffffffffffff811660009081526003602052604090205460ff1691565b60408051921515835273ffffffffffffffffffffffffffffffffffffffff909116602083015201610103565b73ffffffffffffffffffffffffffffffffffffffff81166000908152602081905260408120548190156103d257505073ffffffffffffffffffffffffffffffffffffffff166000908152602081905260409020549069d3c21bcecceda100000090565b506000928392509050565b803573ffffffffffffffffffffffffffffffffffffffff8116811461040157600080fd5b919050565b60006020828403121561041857600080fd5b610421826103dd565b9392505050565b6000806040838503121561043b57600080fd5b610444836103dd565b94602093909301359350505056fea164736f6c6343000813000a",
 }
 
 // MockSortedOraclesABI is the input ABI used to generate the binding from.
@@ -232,12 +232,43 @@ func (_MockSortedOracles *MockSortedOraclesCallerSession) DENOMINATOR() (*big.In
 	return _MockSortedOracles.Contract.DENOMINATOR(&_MockSortedOracles.CallOpts)
 }
 
+// Expired is a free data retrieval call binding the contract method 0xf06a10e0.
+//
+// Solidity: function expired(address ) view returns(bool)
+func (_MockSortedOracles *MockSortedOraclesCaller) Expired(opts *bind.CallOpts, arg0 common.Address) (bool, error) {
+	var out []interface{}
+	err := _MockSortedOracles.contract.Call(opts, &out, "expired", arg0)
+
+	if err != nil {
+		return *new(bool), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(bool)).(*bool)
+
+	return out0, err
+
+}
+
+// Expired is a free data retrieval call binding the contract method 0xf06a10e0.
+//
+// Solidity: function expired(address ) view returns(bool)
+func (_MockSortedOracles *MockSortedOraclesSession) Expired(arg0 common.Address) (bool, error) {
+	return _MockSortedOracles.Contract.Expired(&_MockSortedOracles.CallOpts, arg0)
+}
+
+// Expired is a free data retrieval call binding the contract method 0xf06a10e0.
+//
+// Solidity: function expired(address ) view returns(bool)
+func (_MockSortedOracles *MockSortedOraclesCallerSession) Expired(arg0 common.Address) (bool, error) {
+	return _MockSortedOracles.Contract.Expired(&_MockSortedOracles.CallOpts, arg0)
+}
+
 // IsOldestReportExpired is a free data retrieval call binding the contract method 0xffe736bf.
 //
-// Solidity: function isOldestReportExpired(address ) pure returns(bool, address)
-func (_MockSortedOracles *MockSortedOraclesCaller) IsOldestReportExpired(opts *bind.CallOpts, arg0 common.Address) (bool, common.Address, error) {
+// Solidity: function isOldestReportExpired(address token) view returns(bool, address)
+func (_MockSortedOracles *MockSortedOraclesCaller) IsOldestReportExpired(opts *bind.CallOpts, token common.Address) (bool, common.Address, error) {
 	var out []interface{}
-	err := _MockSortedOracles.contract.Call(opts, &out, "isOldestReportExpired", arg0)
+	err := _MockSortedOracles.contract.Call(opts, &out, "isOldestReportExpired", token)
 
 	if err != nil {
 		return *new(bool), *new(common.Address), err
@@ -252,21 +283,21 @@ func (_MockSortedOracles *MockSortedOraclesCaller) IsOldestReportExpired(opts *b
 
 // IsOldestReportExpired is a free data retrieval call binding the contract method 0xffe736bf.
 //
-// Solidity: function isOldestReportExpired(address ) pure returns(bool, address)
-func (_MockSortedOracles *MockSortedOraclesSession) IsOldestReportExpired(arg0 common.Address) (bool, common.Address, error) {
-	return _MockSortedOracles.Contract.IsOldestReportExpired(&_MockSortedOracles.CallOpts, arg0)
+// Solidity: function isOldestReportExpired(address token) view returns(bool, address)
+func (_MockSortedOracles *MockSortedOraclesSession) IsOldestReportExpired(token common.Address) (bool, common.Address, error) {
+	return _MockSortedOracles.Contract.IsOldestReportExpired(&_MockSortedOracles.CallOpts, token)
 }
 
 // IsOldestReportExpired is a free data retrieval call binding the contract method 0xffe736bf.
 //
-// Solidity: function isOldestReportExpired(address ) pure returns(bool, address)
-func (_MockSortedOracles *MockSortedOraclesCallerSession) IsOldestReportExpired(arg0 common.Address) (bool, common.Address, error) {
-	return _MockSortedOracles.Contract.IsOldestReportExpired(&_MockSortedOracles.CallOpts, arg0)
+// Solidity: function isOldestReportExpired(address token) view returns(bool, address)
+func (_MockSortedOracles *MockSortedOraclesCallerSession) IsOldestReportExpired(token common.Address) (bool, common.Address, error) {
+	return _MockSortedOracles.Contract.IsOldestReportExpired(&_MockSortedOracles.CallOpts, token)
 }
 
 // MedianRate is a free data retrieval call binding the contract method 0xef90e1b0.
 //
-// Solidity: function medianRate(address token) pure returns(uint256, uint256)
+// Solidity: function medianRate(address token) view returns(uint256, uint256)
 func (_MockSortedOracles *MockSortedOraclesCaller) MedianRate(opts *bind.CallOpts, token common.Address) (*big.Int, *big.Int, error) {
 	var out []interface{}
 	err := _MockSortedOracles.contract.Call(opts, &out, "medianRate", token)
@@ -284,21 +315,21 @@ func (_MockSortedOracles *MockSortedOraclesCaller) MedianRate(opts *bind.CallOpt
 
 // MedianRate is a free data retrieval call binding the contract method 0xef90e1b0.
 //
-// Solidity: function medianRate(address token) pure returns(uint256, uint256)
+// Solidity: function medianRate(address token) view returns(uint256, uint256)
 func (_MockSortedOracles *MockSortedOraclesSession) MedianRate(token common.Address) (*big.Int, *big.Int, error) {
 	return _MockSortedOracles.Contract.MedianRate(&_MockSortedOracles.CallOpts, token)
 }
 
 // MedianRate is a free data retrieval call binding the contract method 0xef90e1b0.
 //
-// Solidity: function medianRate(address token) pure returns(uint256, uint256)
+// Solidity: function medianRate(address token) view returns(uint256, uint256)
 func (_MockSortedOracles *MockSortedOraclesCallerSession) MedianRate(token common.Address) (*big.Int, *big.Int, error) {
 	return _MockSortedOracles.Contract.MedianRate(&_MockSortedOracles.CallOpts, token)
 }
 
 // MedianTimestamp is a free data retrieval call binding the contract method 0x071b48fc.
 //
-// Solidity: function medianTimestamp(address ) pure returns(uint256)
+// Solidity: function medianTimestamp(address ) view returns(uint256)
 func (_MockSortedOracles *MockSortedOraclesCaller) MedianTimestamp(opts *bind.CallOpts, arg0 common.Address) (*big.Int, error) {
 	var out []interface{}
 	err := _MockSortedOracles.contract.Call(opts, &out, "medianTimestamp", arg0)
@@ -315,21 +346,21 @@ func (_MockSortedOracles *MockSortedOraclesCaller) MedianTimestamp(opts *bind.Ca
 
 // MedianTimestamp is a free data retrieval call binding the contract method 0x071b48fc.
 //
-// Solidity: function medianTimestamp(address ) pure returns(uint256)
+// Solidity: function medianTimestamp(address ) view returns(uint256)
 func (_MockSortedOracles *MockSortedOraclesSession) MedianTimestamp(arg0 common.Address) (*big.Int, error) {
 	return _MockSortedOracles.Contract.MedianTimestamp(&_MockSortedOracles.CallOpts, arg0)
 }
 
 // MedianTimestamp is a free data retrieval call binding the contract method 0x071b48fc.
 //
-// Solidity: function medianTimestamp(address ) pure returns(uint256)
+// Solidity: function medianTimestamp(address ) view returns(uint256)
 func (_MockSortedOracles *MockSortedOraclesCallerSession) MedianTimestamp(arg0 common.Address) (*big.Int, error) {
 	return _MockSortedOracles.Contract.MedianTimestamp(&_MockSortedOracles.CallOpts, arg0)
 }
 
 // NumRates is a free data retrieval call binding the contract method 0xbbc66a94.
 //
-// Solidity: function numRates(address ) pure returns(uint256)
+// Solidity: function numRates(address ) view returns(uint256)
 func (_MockSortedOracles *MockSortedOraclesCaller) NumRates(opts *bind.CallOpts, arg0 common.Address) (*big.Int, error) {
 	var out []interface{}
 	err := _MockSortedOracles.contract.Call(opts, &out, "numRates", arg0)
@@ -346,47 +377,16 @@ func (_MockSortedOracles *MockSortedOraclesCaller) NumRates(opts *bind.CallOpts,
 
 // NumRates is a free data retrieval call binding the contract method 0xbbc66a94.
 //
-// Solidity: function numRates(address ) pure returns(uint256)
+// Solidity: function numRates(address ) view returns(uint256)
 func (_MockSortedOracles *MockSortedOraclesSession) NumRates(arg0 common.Address) (*big.Int, error) {
 	return _MockSortedOracles.Contract.NumRates(&_MockSortedOracles.CallOpts, arg0)
 }
 
 // NumRates is a free data retrieval call binding the contract method 0xbbc66a94.
 //
-// Solidity: function numRates(address ) pure returns(uint256)
+// Solidity: function numRates(address ) view returns(uint256)
 func (_MockSortedOracles *MockSortedOraclesCallerSession) NumRates(arg0 common.Address) (*big.Int, error) {
 	return _MockSortedOracles.Contract.NumRates(&_MockSortedOracles.CallOpts, arg0)
-}
-
-// NumTimestamps is a free data retrieval call binding the contract method 0x6dd6ef0c.
-//
-// Solidity: function numTimestamps(address ) pure returns(uint256)
-func (_MockSortedOracles *MockSortedOraclesCaller) NumTimestamps(opts *bind.CallOpts, arg0 common.Address) (*big.Int, error) {
-	var out []interface{}
-	err := _MockSortedOracles.contract.Call(opts, &out, "numTimestamps", arg0)
-
-	if err != nil {
-		return *new(*big.Int), err
-	}
-
-	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
-
-	return out0, err
-
-}
-
-// NumTimestamps is a free data retrieval call binding the contract method 0x6dd6ef0c.
-//
-// Solidity: function numTimestamps(address ) pure returns(uint256)
-func (_MockSortedOracles *MockSortedOraclesSession) NumTimestamps(arg0 common.Address) (*big.Int, error) {
-	return _MockSortedOracles.Contract.NumTimestamps(&_MockSortedOracles.CallOpts, arg0)
-}
-
-// NumTimestamps is a free data retrieval call binding the contract method 0x6dd6ef0c.
-//
-// Solidity: function numTimestamps(address ) pure returns(uint256)
-func (_MockSortedOracles *MockSortedOraclesCallerSession) NumTimestamps(arg0 common.Address) (*big.Int, error) {
-	return _MockSortedOracles.Contract.NumTimestamps(&_MockSortedOracles.CallOpts, arg0)
 }
 
 // Numerators is a free data retrieval call binding the contract method 0xf7ca6963.
@@ -420,86 +420,107 @@ func (_MockSortedOracles *MockSortedOraclesCallerSession) Numerators(arg0 common
 	return _MockSortedOracles.Contract.Numerators(&_MockSortedOracles.CallOpts, arg0)
 }
 
-// AddOracle is a paid mutator transaction binding the contract method 0xf0ca4adb.
+// SetMedianRate is a paid mutator transaction binding the contract method 0x76ea210e.
 //
-// Solidity: function addOracle(address , address ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactor) AddOracle(opts *bind.TransactOpts, arg0 common.Address, arg1 common.Address) (*types.Transaction, error) {
-	return _MockSortedOracles.contract.Transact(opts, "addOracle", arg0, arg1)
+// Solidity: function setMedianRate(address token, uint256 numerator) returns(bool)
+func (_MockSortedOracles *MockSortedOraclesTransactor) SetMedianRate(opts *bind.TransactOpts, token common.Address, numerator *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.contract.Transact(opts, "setMedianRate", token, numerator)
 }
 
-// AddOracle is a paid mutator transaction binding the contract method 0xf0ca4adb.
+// SetMedianRate is a paid mutator transaction binding the contract method 0x76ea210e.
 //
-// Solidity: function addOracle(address , address ) returns()
-func (_MockSortedOracles *MockSortedOraclesSession) AddOracle(arg0 common.Address, arg1 common.Address) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.AddOracle(&_MockSortedOracles.TransactOpts, arg0, arg1)
+// Solidity: function setMedianRate(address token, uint256 numerator) returns(bool)
+func (_MockSortedOracles *MockSortedOraclesSession) SetMedianRate(token common.Address, numerator *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetMedianRate(&_MockSortedOracles.TransactOpts, token, numerator)
 }
 
-// AddOracle is a paid mutator transaction binding the contract method 0xf0ca4adb.
+// SetMedianRate is a paid mutator transaction binding the contract method 0x76ea210e.
 //
-// Solidity: function addOracle(address , address ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactorSession) AddOracle(arg0 common.Address, arg1 common.Address) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.AddOracle(&_MockSortedOracles.TransactOpts, arg0, arg1)
+// Solidity: function setMedianRate(address token, uint256 numerator) returns(bool)
+func (_MockSortedOracles *MockSortedOraclesTransactorSession) SetMedianRate(token common.Address, numerator *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetMedianRate(&_MockSortedOracles.TransactOpts, token, numerator)
 }
 
-// RemoveExpiredReports is a paid mutator transaction binding the contract method 0xdd34ca3b.
+// SetMedianTimestamp is a paid mutator transaction binding the contract method 0x1b7aa2db.
 //
-// Solidity: function removeExpiredReports(address , uint256 ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactor) RemoveExpiredReports(opts *bind.TransactOpts, arg0 common.Address, arg1 *big.Int) (*types.Transaction, error) {
-	return _MockSortedOracles.contract.Transact(opts, "removeExpiredReports", arg0, arg1)
+// Solidity: function setMedianTimestamp(address token, uint256 timestamp) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactor) SetMedianTimestamp(opts *bind.TransactOpts, token common.Address, timestamp *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.contract.Transact(opts, "setMedianTimestamp", token, timestamp)
 }
 
-// RemoveExpiredReports is a paid mutator transaction binding the contract method 0xdd34ca3b.
+// SetMedianTimestamp is a paid mutator transaction binding the contract method 0x1b7aa2db.
 //
-// Solidity: function removeExpiredReports(address , uint256 ) returns()
-func (_MockSortedOracles *MockSortedOraclesSession) RemoveExpiredReports(arg0 common.Address, arg1 *big.Int) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.RemoveExpiredReports(&_MockSortedOracles.TransactOpts, arg0, arg1)
+// Solidity: function setMedianTimestamp(address token, uint256 timestamp) returns()
+func (_MockSortedOracles *MockSortedOraclesSession) SetMedianTimestamp(token common.Address, timestamp *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetMedianTimestamp(&_MockSortedOracles.TransactOpts, token, timestamp)
 }
 
-// RemoveExpiredReports is a paid mutator transaction binding the contract method 0xdd34ca3b.
+// SetMedianTimestamp is a paid mutator transaction binding the contract method 0x1b7aa2db.
 //
-// Solidity: function removeExpiredReports(address , uint256 ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactorSession) RemoveExpiredReports(arg0 common.Address, arg1 *big.Int) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.RemoveExpiredReports(&_MockSortedOracles.TransactOpts, arg0, arg1)
+// Solidity: function setMedianTimestamp(address token, uint256 timestamp) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactorSession) SetMedianTimestamp(token common.Address, timestamp *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetMedianTimestamp(&_MockSortedOracles.TransactOpts, token, timestamp)
 }
 
-// RemoveOracle is a paid mutator transaction binding the contract method 0x53a57297.
+// SetMedianTimestampToNow is a paid mutator transaction binding the contract method 0xb325dd1f.
 //
-// Solidity: function removeOracle(address , address , uint256 ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactor) RemoveOracle(opts *bind.TransactOpts, arg0 common.Address, arg1 common.Address, arg2 *big.Int) (*types.Transaction, error) {
-	return _MockSortedOracles.contract.Transact(opts, "removeOracle", arg0, arg1, arg2)
+// Solidity: function setMedianTimestampToNow(address token) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactor) SetMedianTimestampToNow(opts *bind.TransactOpts, token common.Address) (*types.Transaction, error) {
+	return _MockSortedOracles.contract.Transact(opts, "setMedianTimestampToNow", token)
 }
 
-// RemoveOracle is a paid mutator transaction binding the contract method 0x53a57297.
+// SetMedianTimestampToNow is a paid mutator transaction binding the contract method 0xb325dd1f.
 //
-// Solidity: function removeOracle(address , address , uint256 ) returns()
-func (_MockSortedOracles *MockSortedOraclesSession) RemoveOracle(arg0 common.Address, arg1 common.Address, arg2 *big.Int) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.RemoveOracle(&_MockSortedOracles.TransactOpts, arg0, arg1, arg2)
+// Solidity: function setMedianTimestampToNow(address token) returns()
+func (_MockSortedOracles *MockSortedOraclesSession) SetMedianTimestampToNow(token common.Address) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetMedianTimestampToNow(&_MockSortedOracles.TransactOpts, token)
 }
 
-// RemoveOracle is a paid mutator transaction binding the contract method 0x53a57297.
+// SetMedianTimestampToNow is a paid mutator transaction binding the contract method 0xb325dd1f.
 //
-// Solidity: function removeOracle(address , address , uint256 ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactorSession) RemoveOracle(arg0 common.Address, arg1 common.Address, arg2 *big.Int) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.RemoveOracle(&_MockSortedOracles.TransactOpts, arg0, arg1, arg2)
+// Solidity: function setMedianTimestampToNow(address token) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactorSession) SetMedianTimestampToNow(token common.Address) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetMedianTimestampToNow(&_MockSortedOracles.TransactOpts, token)
 }
 
-// Report is a paid mutator transaction binding the contract method 0x80e50744.
+// SetNumRates is a paid mutator transaction binding the contract method 0x495182a6.
 //
-// Solidity: function report(address , uint256 , address , address ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactor) Report(opts *bind.TransactOpts, arg0 common.Address, arg1 *big.Int, arg2 common.Address, arg3 common.Address) (*types.Transaction, error) {
-	return _MockSortedOracles.contract.Transact(opts, "report", arg0, arg1, arg2, arg3)
+// Solidity: function setNumRates(address token, uint256 rate) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactor) SetNumRates(opts *bind.TransactOpts, token common.Address, rate *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.contract.Transact(opts, "setNumRates", token, rate)
 }
 
-// Report is a paid mutator transaction binding the contract method 0x80e50744.
+// SetNumRates is a paid mutator transaction binding the contract method 0x495182a6.
 //
-// Solidity: function report(address , uint256 , address , address ) returns()
-func (_MockSortedOracles *MockSortedOraclesSession) Report(arg0 common.Address, arg1 *big.Int, arg2 common.Address, arg3 common.Address) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.Report(&_MockSortedOracles.TransactOpts, arg0, arg1, arg2, arg3)
+// Solidity: function setNumRates(address token, uint256 rate) returns()
+func (_MockSortedOracles *MockSortedOraclesSession) SetNumRates(token common.Address, rate *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetNumRates(&_MockSortedOracles.TransactOpts, token, rate)
 }
 
-// Report is a paid mutator transaction binding the contract method 0x80e50744.
+// SetNumRates is a paid mutator transaction binding the contract method 0x495182a6.
 //
-// Solidity: function report(address , uint256 , address , address ) returns()
-func (_MockSortedOracles *MockSortedOraclesTransactorSession) Report(arg0 common.Address, arg1 *big.Int, arg2 common.Address, arg3 common.Address) (*types.Transaction, error) {
-	return _MockSortedOracles.Contract.Report(&_MockSortedOracles.TransactOpts, arg0, arg1, arg2, arg3)
+// Solidity: function setNumRates(address token, uint256 rate) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactorSession) SetNumRates(token common.Address, rate *big.Int) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetNumRates(&_MockSortedOracles.TransactOpts, token, rate)
+}
+
+// SetOldestReportExpired is a paid mutator transaction binding the contract method 0x8d24fc51.
+//
+// Solidity: function setOldestReportExpired(address token) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactor) SetOldestReportExpired(opts *bind.TransactOpts, token common.Address) (*types.Transaction, error) {
+	return _MockSortedOracles.contract.Transact(opts, "setOldestReportExpired", token)
+}
+
+// SetOldestReportExpired is a paid mutator transaction binding the contract method 0x8d24fc51.
+//
+// Solidity: function setOldestReportExpired(address token) returns()
+func (_MockSortedOracles *MockSortedOraclesSession) SetOldestReportExpired(token common.Address) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetOldestReportExpired(&_MockSortedOracles.TransactOpts, token)
+}
+
+// SetOldestReportExpired is a paid mutator transaction binding the contract method 0x8d24fc51.
+//
+// Solidity: function setOldestReportExpired(address token) returns()
+func (_MockSortedOracles *MockSortedOraclesTransactorSession) SetOldestReportExpired(token common.Address) (*types.Transaction, error) {
+	return _MockSortedOracles.Contract.SetOldestReportExpired(&_MockSortedOracles.TransactOpts, token)
 }
