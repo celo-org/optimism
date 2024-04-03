@@ -18,23 +18,24 @@
         "internalType": "address",
         "name": "",
         "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
       }
     ],
-    "name": "addOracle",
-    "outputs": [],
-    "stateMutability": "nonpayable",
+    "name": "expired",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "token",
         "type": "address"
       }
     ],
@@ -51,7 +52,7 @@
         "type": "address"
       }
     ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -75,7 +76,7 @@
         "type": "uint256"
       }
     ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -94,7 +95,7 @@
         "type": "uint256"
       }
     ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -113,26 +114,7 @@
         "type": "uint256"
       }
     ],
-    "stateMutability": "pure",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "name": "numTimestamps",
-    "outputs": [
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
-      }
-    ],
-    "stateMutability": "pure",
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -158,16 +140,40 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "token",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "numerator",
         "type": "uint256"
       }
     ],
-    "name": "removeExpiredReports",
+    "name": "setMedianRate",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "token",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timestamp",
+        "type": "uint256"
+      }
+    ],
+    "name": "setMedianTimestamp",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -176,21 +182,11 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "token",
         "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "",
-        "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "",
-        "type": "uint256"
       }
     ],
-    "name": "removeOracle",
+    "name": "setMedianTimestampToNow",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -199,26 +195,29 @@
     "inputs": [
       {
         "internalType": "address",
-        "name": "",
+        "name": "token",
         "type": "address"
       },
       {
         "internalType": "uint256",
-        "name": "",
+        "name": "rate",
         "type": "uint256"
-      },
+      }
+    ],
+    "name": "setNumRates",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
       {
         "internalType": "address",
-        "name": "",
-        "type": "address"
-      },
-      {
-        "internalType": "address",
-        "name": "",
+        "name": "token",
         "type": "address"
       }
     ],
-    "name": "report",
+    "name": "setOldestReportExpired",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
