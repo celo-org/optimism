@@ -7,19 +7,24 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/mattn/go-isatty"
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 var (
@@ -200,7 +205,7 @@ func main() {
 			}
 			dbCache := ctx.Int("db-cache")
 			dbHandles := ctx.Int("db-handles")
-			// dryRun := ctx.Bool("dry-run")
+			dryRun := ctx.Bool("dry-run")
 			// TODO(pl): Move this into the function
 			log.Info("Opening database", "dbCache", dbCache, "dbHandles", dbHandles, "dbPath", dbPath)
 			ldb, err := Open(dbPath, dbCache, dbHandles)
@@ -208,7 +213,7 @@ func main() {
 				return fmt.Errorf("cannot open DB: %w", err)
 			}
 
-			if err := ApplyMigrationChangesToDB(ldb, l2Genesis); err != nil {
+			if err := ApplyMigrationChangesToDB(ldb, l2Genesis, !dryRun); err != nil {
 				return err
 			}
 
@@ -229,8 +234,185 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis) error {
-	panic("unimplemented")
+func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit bool) error {
+	log.Info("Migrating DB")
+
+	// Grab the hash of the tip of the legacy chain.
+	hash := rawdb.ReadHeadHeaderHash(ldb)
+	log.Info("Reading chain tip from database", "hash", hash)
+
+	// Grab the header number.
+	num := rawdb.ReadHeaderNumber(ldb, hash)
+	if num == nil {
+		return fmt.Errorf("cannot find header number for %s", hash)
+	}
+	log.Info("Reading chain tip num from database", "number", num)
+
+	// Grab the full header.
+	header := rawdb.ReadHeader(ldb, hash, *num)
+	// trieRoot := header.Root
+	log.Info("Read header from database", "number", header)
+
+	// We need to update the chain config to set the correct hardforks.
+	genesisHash := rawdb.ReadCanonicalHash(ldb, 0)
+	cfg := rawdb.ReadChainConfig(ldb, genesisHash)
+	if cfg == nil {
+		log.Crit("chain config not found")
+	}
+	log.Info("Read config from database", "config", cfg)
+
+	dbFactory := func() (*state.StateDB, error) {
+		// Set up the backing store.
+		underlyingDB := state.NewDatabaseWithConfig(ldb, &trie.Config{
+			Preimages: true,
+		})
+
+		// Open up the state database.
+		db, err := state.New(header.Root, underlyingDB, nil)
+		if err != nil {
+			return nil, fmt.Errorf("cannot open StateDB: %w", err)
+		}
+
+		return db, nil
+	}
+
+	db, err := dbFactory()
+	if err != nil {
+		return fmt.Errorf("cannot create StateDB: %w", err)
+	}
+
+	for k, v := range genesis.Alloc {
+		if db.Exist(k) {
+			log.Warn("Operating on existing state", "account", k)
+		}
+		// TODO(pl): decide what to do with existing accounts.
+		db.CreateAccount(k)
+
+		db.SetNonce(k, v.Nonce)
+		db.SetBalance(k, v.Balance)
+		db.SetCode(k, v.Code)
+		db.SetStorage(k, v.Storage)
+		log.Info("Moved account", "address", k)
+	}
+
+	// We're done messing around with the database, so we can now commit the changes to the DB.
+	// Note that this doesn't actually write the changes to disk.
+	log.Info("Committing state DB")
+	// TODO(pl): What block info to put here?
+	newRoot, err := db.Commit(1234, true)
+	if err != nil {
+		return err
+	}
+
+	log.Info("Creating new Genesis block")
+	// Create the header for the Bedrock transition block.
+	cel2Header := &types.Header{
+		ParentHash:  header.Hash(),
+		UncleHash:   types.EmptyUncleHash,
+		Coinbase:    predeploys.SequencerFeeVaultAddr, // TODO(pl)
+		Root:        newRoot,
+		TxHash:      types.EmptyRootHash,
+		ReceiptHash: types.EmptyRootHash,
+		Bloom:       types.Bloom{},
+		Difficulty:  common.Big0,
+		Number:      common.Big0,
+		GasLimit:    (uint64)(20_000_000),
+		GasUsed:     0,
+		Time:        uint64(12345),
+		Extra:       []byte("CeL2"),
+		MixDigest:   common.Hash{},
+		Nonce:       types.BlockNonce{},
+		BaseFee:     big.NewInt(params.InitialBaseFee),
+	}
+
+	// Create the Bedrock transition block from the header. Note that there are no transactions,
+	// uncle blocks, or receipts in the Bedrock transition block.
+	cel2Block := types.NewBlock(cel2Header, nil, nil, nil, trie.NewStackTrie(nil))
+
+	// We did it!
+	log.Info(
+		"Built Celo migration block",
+		"hash", cel2Block.Hash(),
+		"root", cel2Block.Root(),
+		"number", cel2Block.NumberU64(),
+		"gas-used", cel2Block.GasUsed(),
+		"gas-limit", cel2Block.GasLimit(),
+	)
+
+	log.Info("Header", "header", cel2Header)
+	log.Info("Body", "Body", cel2Block)
+
+	// Create the result of the migration.
+	// res := &MigrationResult{
+	// 	TransitionHeight:    cel2Block.NumberU64(),
+	// 	TransitionTimestamp: cel2Block.Time(),
+	// 	TransitionBlockHash: cel2Block.Hash(),
+	// }
+
+	// If we're not actually writing this to disk, then we're done.
+	if !commit {
+		log.Info("Dry run complete")
+		return nil
+	}
+
+	// Otherwise we need to write the changes to disk. First we commit the state changes.
+	log.Info("Committing trie DB")
+	if err := db.Database().TrieDB().Commit(newRoot, true); err != nil {
+		return err
+	}
+
+	// Next we write the Cel2 genesis block to the database.
+	rawdb.WriteTd(ldb, cel2Block.Hash(), cel2Block.NumberU64(), cel2Block.Difficulty())
+	rawdb.WriteBlock(ldb, cel2Block)
+	rawdb.WriteReceipts(ldb, cel2Block.Hash(), cel2Block.NumberU64(), nil)
+	rawdb.WriteCanonicalHash(ldb, cel2Block.Hash(), cel2Block.NumberU64())
+	rawdb.WriteHeadBlockHash(ldb, cel2Block.Hash())
+	rawdb.WriteHeadFastBlockHash(ldb, cel2Block.Hash())
+	rawdb.WriteHeadHeaderHash(ldb, cel2Block.Hash())
+
+	// TODO(pl): What does this mean?
+	// Make the first CeL2 block a finalized block.
+	rawdb.WriteFinalizedBlockHash(ldb, cel2Block.Hash())
+
+	// Set the standard options.
+	// TODO: What about earlier hardforks, e.g. does berlin have to be enabled as it never was on Celo?
+	cfg.LondonBlock = cel2Block.Number()
+	cfg.ArrowGlacierBlock = cel2Block.Number()
+	cfg.GrayGlacierBlock = cel2Block.Number()
+	cfg.MergeNetsplitBlock = cel2Block.Number()
+	cfg.TerminalTotalDifficulty = big.NewInt(0)
+	cfg.TerminalTotalDifficultyPassed = true
+
+	// Set the Optimism options.
+	cfg.BedrockBlock = cel2Block.Number()
+	// Enable Regolith from the start of Bedrock
+	cfg.RegolithTime = new(uint64) // what are those? do we need those?
+	cfg.Optimism = &params.OptimismConfig{
+		EIP1559Denominator: EIP1559Denominator,
+		EIP1559Elasticity:  EIP1559Elasticity,
+	}
+	// TODO(pl) Add Ecotone and other hardforks
+
+	// Write the chain config to disk.
+	rawdb.WriteChainConfig(ldb, cel2Block.Hash(), cfg)
+
+	// Yay!
+	log.Info(
+		"Wrote chain config",
+		"1559-denominator", EIP1559Denominator,
+		"1559-elasticity", EIP1559Elasticity,
+	)
+
+	// We're done!
+	log.Info(
+		"Wrote CeL2 transition block",
+		"height", cel2Header.Number,
+		"root", cel2Header.Root.String(),
+		"hash", cel2Header.Hash().String(),
+		"timestamp", cel2Header.Time,
+	)
+
+	return nil
 }
 
 func Open(path string, cache int, handles int) (ethdb.Database, error) {

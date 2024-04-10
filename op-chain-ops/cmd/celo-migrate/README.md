@@ -19,6 +19,12 @@ build/bin/mycelo load-bot tmp/testenv
 ```
 
 To run the migration, run in `op-chain-ops` (set `CELO_DATADIR` if the `celo-blockchain` repo is not located at `~/celo-blockchain`):
+
 ```sh
 make && ./migrate.sh
 ```
+
+## Tasks
+
+- Import and change `BuildL2Genesis`
+  - Don't set balances for predeploys/precompiles
