@@ -1,4 +1,4 @@
-# State migrator
+# Celo L1 -> Cel2 migrator
 
 This tool allows migrating the state of a Celo chain to a genesis block for a CeL2 chain.
 
