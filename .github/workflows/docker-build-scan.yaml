@@ -1,92 +1,217 @@
 name: Docker Build Scan
 on:
   workflow_dispatch:
+    inputs:
+      image:
+        description: 'Image to build'
+        required: true
+        type: choice
+        options:
+          - 'op-ci-builder'
+          - 'op-node'
+          - 'op-batcher'
+          - 'op-proposer'
+          - 'op-proxyd'
+          - 'op-ufm'
+          - 'op-bedrock-l1'
+          - 'op-bedrock-l2'
+          - 'ops-bedrock'
+          - 'op-indexer'
+          - 'op-heartbeat'
+          - 'op-exporter'
+          - 'op-program'
+          - 'op-indexer-ui'
+          - 'op-challenger'
+          - 'op-endpoint-monitor'
+          - 'op-opwheel'
+      sha:
+        description: 'SHA of the commit to build. Required for all images except op-ci-builder'
+        required: false
+        default: ''
+env:
+  OP_STACK_GO_BUILDER: us-west1-docker.pkg.dev/devopsre/dev-images/optimism/op-ci-builder:${{ inputs.sha }}
 
 jobs:
-  Build-Scan-Container-op-ufm:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
-    with:
-      dockerfile: op-ufm/Dockerfile
+  check-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check workflow inputs
+        run: |
+          if [ -z "${{ github.event.inputs.image }}" ]; then
+            echo "Image is required"
+            exit 1
+          else if [ "${{ github.event.inputs.image }}" != "op-ci-builder" ] && [ -z "${{ github.event.inputs.sha }}" ]; then
+            echo "SHA is required for all images except op-ci-builder"
+            exit 1
+          fi
 
-  Build-Scan-Container-ops-bedrock-l1:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-ci-builder:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: ops-bedrock/Dockerfile.l1
-      context: ops-bedrock
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-ci-builder-${{ github.sha }}
+      file: ops/docker/ci-builder/Dockerfile
+      context: .
 
-  Build-Scan-Container-ops-bedrock-l2:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-node:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: ops-bedrock/Dockerfile.l2
-      context: ops-bedrock
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-node-${{ github.sha }}
+      file: op-node/Dockerfile
+      context: .
 
-  Build-Scan-Container-indexer:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-batcher:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: indexer/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-batcher-${{ github.sha }}
+      file: op-batcher/Dockerfile
+      context: .
 
-  Build-Scan-Container-op-heartbeat:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-proposer:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-heartbeat/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-proposer-${{ github.sha }}
+      file: op-proposer/Dockerfile
+      context: .
 
-  Build-Scan-Container-op-exporter:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-proxyd:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-exporter/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-proxyd-${{ github.sha }}
+      file: proxyd/Dockerfile
+      context: .
 
-  Build-Scan-Container-op-program:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-ufm:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-program/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-ufm-${{ github.sha }}
+      file: op-ufm/Dockerfile
+      context: .
+      build-args: OP_STACK_GO_BUILDER=${{ env.OP_STACK_GO_BUILDER }}
 
-  Build-Scan-Container-ops-bedrock:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-ops-bedrock-l1:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: ops-bedrock/Dockerfile.stateviz
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-bedrock-l1-${{ github.sha }}
+      file: ops-bedrock/Dockerfile.l1
+      context: .
 
-  Build-Scan-Container-ci-builder:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-ops-bedrock-l2:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: ops/docker/ci-builder/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-bedrock-l2-${{ github.sha }}
+      file: ops-bedrock/Dockerfile.l2
+      context: .
 
-  Build-Scan-Container-proxyd:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-ops-bedrock:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: proxyd/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: ops-bedrock-${{ github.sha }}
+      file: ops-bedrock/Dockerfile.stateviz
+      context: .
 
-  Build-Scan-Container-op-node:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-indexer:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-node/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-indexer-${{ github.sha }}
+      file: indexer/Dockerfile
+      context: .
 
-  Build-Scan-Container-op-batcher:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-heartbeat:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-batcher/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-heartbeat-${{ github.sha }}
+      file: op-heartbeat/Dockerfile
+      context: .
 
-  Build-Scan-Container-indexer-ui:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-exporter:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: indexer/ui/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-exporter-${{ github.sha }}
+      file: op-exporter/Dockerfile
+      context: .
 
-  Build-Scan-Container-op-proposer:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-program:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-proposer/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-program-${{ github.sha }}
+      file: op-program/Dockerfile
+      context: .
 
-  Build-Scan-Container-op-challenger:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-indexer-ui:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-challenger/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-indexer-ui-${{ github.sha }}
+      file: indexer/ui/Dockerfile
+      context: .
 
-  Build-Scan-Container-endpoint-monitor:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-op-challenger:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: endpoint-monitor/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-challenger-${{ github.sha }}
+      file: op-challenger/Dockerfile
+      context: .
 
-  Build-Scan-Container-opwheel:
-    uses: celo-org/reusable-workflows/.github/workflows/container-cicd-local.yaml@v1.11.2
+  build-scan-container-endpoint-monitor:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     with:
-      dockerfile: op-wheel/Dockerfile
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-endpoint-monitor-${{ github.sha }}
+      file: endpoint-monitor/Dockerfile
+      context: .
 
+  build-scan-container-opwheel:
+    uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
+    with:
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
+      artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-opwheel-${{ github.sha }}
+      file: op-wheel/Dockerfile
+      context: .
