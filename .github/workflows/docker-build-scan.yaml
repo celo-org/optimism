@@ -37,7 +37,7 @@ jobs:
           if [ -z "${{ github.event.inputs.image }}" ]; then
             echo "Image is required"
             exit 1
-          else if [ "${{ github.event.inputs.image }}" != "op-ci-builder" ] && [ -z "${{ github.event.inputs.sha }}" ]; then
+          elif [ "${{ github.event.inputs.image }}" != "op-ci-builder" ] && [ -z "${{ github.event.inputs.sha }}" ]; then
             echo "SHA is required for all images except op-ci-builder"
             exit 1
           fi
