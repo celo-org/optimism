@@ -1,0 +1,50 @@
+---
+name: Build container and push to cLabs registry
+on:
+  workflow_call:
+    inputs:
+      registry:
+        description: "Registry to push the image to"
+        type: string
+        required: true
+      tags:
+        description: "CSV list of tags to apply to the image"
+        type: string
+        required: true
+        default: latest
+      dockerfile:
+        description: "Dockerfile path"
+        type: string
+        required: true
+      build-args:
+        description: "List of build-time variables"
+        type: string
+        required: false
+jobs:
+  build:
+    runs-on: ['self-hosted', 'org', '8-cpu']
+    permissions: # Required for workload identity auth and push the trivy results to GitHub
+      contents: read
+      id-token: write
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Authenticate to Google Cloud
+        uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@main
+        with:
+          workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
+          service-account: celo-optimism-gh@devopsre.iam.gserviceaccount.com
+          access-token-lifetime: "60m"
+          docker-gcp-registries: us-west1-docker.pkg.dev
+      - name: Build, push and scan the container
+        uses: celo-org/reusable-workflows/.github/actions/build-container@main
+        with:
+          platforms: linux/amd64
+          registry: ${{ inputs.registry }}
+          tags: ${{ inputs.tags }}
+          context: .
+          dockerfile: ${{ inputs.dockerfile }}
+          build-args: ${{ inputs.build-args }}
+          push: true
+          trivy: false
