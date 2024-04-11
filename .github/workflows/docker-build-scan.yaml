@@ -45,8 +45,9 @@ jobs:
   build-scan-container-ci-builder:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-ci-builder' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-ci-builder-${{ github.sha }}
@@ -56,8 +57,9 @@ jobs:
   build-scan-container-op-node:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-node' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-node-${{ github.sha }}
@@ -67,8 +69,9 @@ jobs:
   build-scan-container-op-batcher:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-batcher' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-batcher-${{ github.sha }}
@@ -78,8 +81,9 @@ jobs:
   build-scan-container-op-proposer:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-proposer' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-proposer-${{ github.sha }}
@@ -89,8 +93,9 @@ jobs:
   build-scan-container-proxyd:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-proxyd' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-proxyd-${{ github.sha }}
@@ -100,8 +105,9 @@ jobs:
   build-scan-container-op-ufm:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-ufm' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-ufm-${{ github.sha }}
@@ -112,8 +118,9 @@ jobs:
   build-scan-container-ops-bedrock-l1:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-bedrock-l1' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-bedrock-l1-${{ github.sha }}
@@ -123,8 +130,9 @@ jobs:
   build-scan-container-ops-bedrock-l2:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-bedrock-l2' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-bedrock-l2-${{ github.sha }}
@@ -134,8 +142,9 @@ jobs:
   build-scan-container-ops-bedrock:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'ops-bedrock' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: ops-bedrock-${{ github.sha }}
@@ -145,8 +154,9 @@ jobs:
   build-scan-container-indexer:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-indexer' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-indexer-${{ github.sha }}
@@ -156,8 +166,9 @@ jobs:
   build-scan-container-op-heartbeat:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-heartbeat' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-heartbeat-${{ github.sha }}
@@ -167,8 +178,9 @@ jobs:
   build-scan-container-op-exporter:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-exporter' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-exporter-${{ github.sha }}
@@ -178,8 +190,9 @@ jobs:
   build-scan-container-op-program:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-program' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-program-${{ github.sha }}
@@ -189,8 +202,9 @@ jobs:
   build-scan-container-indexer-ui:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-indexer-ui' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-indexer-ui-${{ github.sha }}
@@ -200,8 +214,9 @@ jobs:
   build-scan-container-op-challenger:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-challenger' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-challenger-${{ github.sha }}
@@ -211,8 +226,9 @@ jobs:
   build-scan-container-endpoint-monitor:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-endpoint-monitor' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-endpoint-monitor-${{ github.sha }}
@@ -222,8 +238,9 @@ jobs:
   build-scan-container-opwheel:
     uses: celo-org/reusable-workflows/.github/workflows/container-cicd.yaml@v2.0.2
     needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-opwheel' }}
     with:
-      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-celo-monorepo/providers/github-by-repos
+      workload-id-provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
       service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
       artifact-registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-opwheel-${{ github.sha }}
