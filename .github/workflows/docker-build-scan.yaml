@@ -100,7 +100,6 @@ jobs:
       tags: op-ufm-${{ github.sha }}
       dockerfile: op-ufm/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism/op-ci-builder:${{ inputs.sha }}
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism/op-ci-builder:${{ inputs.sha }}
 
   build-scan-container-ops-bedrock-l1:
     uses: ./.github/workflows/docker-generic-workflow.yaml
