@@ -7,6 +7,7 @@ on:
         required: true
         type: choice
         options:
+          - 'op-stack-go'
           - 'op-ci-builder'
           - 'op-node'
           - 'op-batcher'
@@ -37,176 +38,185 @@ jobs:
           if [ -z "${{ github.event.inputs.image }}" ]; then
             echo "Image is required"
             exit 1
-          elif [ "${{ github.event.inputs.image }}" != "op-ci-builder" ] && [ -z "${{ github.event.inputs.sha }}" ]; then
-            echo "SHA is required for all images except op-ci-builder"
+          elif [[ "${{ github.event.inputs.image }}" != "op-stack-go" && "${{ github.event.inputs.image }}" != "op-ci-builder" ]] && [ -z "${{ github.event.inputs.sha }}" ]; then
+            echo "SHA is required for all images except op-stack-go or op-ci-builder"
             exit 1
           fi
 
-  build-scan-container-ci-builder:
+  build-container-op-stack-go:
+    uses: ./.github/workflows/docker-generic-workflow.yaml
+    needs: check-inputs
+    if: ${{ github.event.inputs.image == 'op-stack-go' }}
+    with:
+      registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-stack-go-${{ inputs.sha }}
+      dockerfile: ops/docker/op-stack-go/Dockerfile
+
+  build-container-ci-builder:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-ci-builder' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-ci-builder-${{ github.sha }}
+      tags: op-ci-builder-${{ inputs.sha }}
       dockerfile: ops/docker/ci-builder/Dockerfile
 
-  build-scan-container-op-node:
+  build-container-op-node:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-node' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-node-${{ github.sha }}
+      tags: op-node-${{ inputs.sha }}
       dockerfile: op-node/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ inputs.sha }}
 
-  build-scan-container-op-batcher:
+  build-container-op-batcher:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-batcher' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-batcher-${{ github.sha }}
+      tags: op-batcher-${{ inputs.sha }}
       dockerfile: op-batcher/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-op-proposer:
+  build-container-op-proposer:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-proposer' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-proposer-${{ github.sha }}
+      tags: op-proposer-${{ inputs.sha }}
       dockerfile: op-proposer/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-proxyd:
+  build-container-proxyd:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-proxyd' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-proxyd-${{ github.sha }}
+      tags: op-proxyd-${{ inputs.sha }}
       dockerfile: proxyd/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-op-ufm:
+  build-container-op-ufm:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-ufm' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-ufm-${{ github.sha }}
+      tags: op-ufm-${{ inputs.sha }}
       dockerfile: op-ufm/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-ops-bedrock-l1:
+  build-container-ops-bedrock-l1:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-bedrock-l1' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-bedrock-l1-${{ github.sha }}
+      tags: op-bedrock-l1-${{ inputs.sha }}
       dockerfile: ops-bedrock/Dockerfile.l1
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-ops-bedrock-l2:
+  build-container-ops-bedrock-l2:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-bedrock-l2' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-bedrock-l2-${{ github.sha }}
+      tags: op-bedrock-l2-${{ inputs.sha }}
       dockerfile: ops-bedrock/Dockerfile.l2
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-ops-bedrock:
+  build-container-ops-bedrock:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'ops-bedrock' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: ops-bedrock-${{ github.sha }}
+      tags: ops-bedrock-${{ inputs.sha }}
       dockerfile: ops-bedrock/Dockerfile.stateviz
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-indexer:
+  build-container-indexer:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-indexer' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-indexer-${{ github.sha }}
+      tags: op-indexer-${{ inputs.sha }}
       dockerfile: indexer/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-op-heartbeat:
+  build-container-op-heartbeat:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-heartbeat' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-heartbeat-${{ github.sha }}
+      tags: op-heartbeat-${{ inputs.sha }}
       dockerfile: op-heartbeat/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-op-exporter:
+  build-container-op-exporter:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-exporter' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-exporter-${{ github.sha }}
+      tags: op-exporter-${{ inputs.sha }}
       dockerfile: op-exporter/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-op-program:
+  build-container-op-program:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-program' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-program-${{ github.sha }}
+      tags: op-program-${{ inputs.sha }}
       dockerfile: op-program/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-indexer-ui:
+  build-container-indexer-ui:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-indexer-ui' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-indexer-ui-${{ github.sha }}
+      tags: op-indexer-ui-${{ inputs.sha }}
       dockerfile: indexer/ui/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-op-challenger:
+  build-container-op-challenger:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-challenger' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-challenger-${{ github.sha }}
+      tags: op-challenger-${{ inputs.sha }}
       dockerfile: op-challenger/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-endpoint-monitor:
+  build-container-endpoint-monitor:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-endpoint-monitor' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-endpoint-monitor-${{ github.sha }}
+      tags: op-endpoint-monitor-${{ inputs.sha }}
       dockerfile: endpoint-monitor/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}
 
-  build-scan-container-opwheel:
+  build-container-opwheel:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: check-inputs
     if: ${{ github.event.inputs.image == 'op-opwheel' }}
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-opwheel-${{ github.sha }}
+      tags: op-opwheel-${{ inputs.sha }}
       dockerfile: op-wheel/Dockerfile
       build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ inputs.sha }}

@@ -20,6 +20,7 @@ on:
         description: "List of build-time variables"
         type: string
         required: false
+
 jobs:
   build:
     runs-on: ['self-hosted', 'org', '8-cpu']
@@ -28,8 +29,17 @@ jobs:
       id-token: write
       security-events: write
     steps:
+
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Export git related environment variables
+        id: export-git-related-environment-variables
+        run: |
+          echo "GIT_COMMIT=${{ github.event.inputs.sha }}" >> $GITHUB_ENV
+          echo "GIT_DATE=$(git show -s --format=%ct)" >> $GITHUB_ENV
+          echo "IMAGE_TAGS=${{ github.event.inputs.sha }},latest" >> $GITHUB_ENV
+
       - name: Authenticate to Google Cloud
         uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@main
         with:
@@ -37,6 +47,7 @@ jobs:
           service-account: celo-optimism-gh@devopsre.iam.gserviceaccount.com
           access-token-lifetime: "60m"
           docker-gcp-registries: us-west1-docker.pkg.dev
+
       - name: Build, push and scan the container
         uses: celo-org/reusable-workflows/.github/actions/build-container@main
         with:
