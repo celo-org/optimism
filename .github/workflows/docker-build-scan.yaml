@@ -5,22 +5,16 @@ on:
 jobs:
   build-container-op-stack-go:
     uses: ./.github/workflows/docker-generic-workflow.yaml
+    if: true
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-stack-go-${{ github.sha }}
       dockerfile: ops/docker/op-stack-go/Dockerfile
 
-  build-container-ci-builder:
-    uses: ./.github/workflows/docker-generic-workflow.yaml
-    if: false
-    with:
-      registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
-      tags: op-ci-builder-${{ github.sha }}
-      dockerfile: ops/docker/ci-builder/Dockerfile
-
   build-container-op-node:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: build-container-op-stack-go
+    if: true
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-node-${{ github.sha }}
@@ -30,6 +24,7 @@ jobs:
   build-container-op-batcher:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: build-container-op-stack-go
+    if: true
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-batcher-${{ github.sha }}
@@ -39,6 +34,7 @@ jobs:
   build-container-op-proposer:
     uses: ./.github/workflows/docker-generic-workflow.yaml
     needs: build-container-op-stack-go
+    if: true
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-proposer-${{ github.sha }}
@@ -47,7 +43,8 @@ jobs:
 
   build-container-op-challenger:
     uses: ./.github/workflows/docker-generic-workflow.yaml
-    if: false
+    needs: build-container-op-stack-go
+    if: true
     with:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-challenger-${{ github.sha }}
@@ -61,6 +58,14 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-proxyd-${{ github.sha }}
       dockerfile: proxyd/Dockerfile
+
+  build-container-ci-builder:
+    uses: ./.github/workflows/docker-generic-workflow.yaml
+    if: false
+    with:
+      registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
+      tags: op-ci-builder-${{ github.sha }}
+      dockerfile: ops/docker/ci-builder/Dockerfile
 
   build-container-op-ufm:
     uses: ./.github/workflows/docker-generic-workflow.yaml
