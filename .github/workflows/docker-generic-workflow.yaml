@@ -33,6 +33,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # These variables are exported in Makefile (target golang-docker)
       - name: Export git related environment variables
         id: export-git-related-environment-variables
         run: |

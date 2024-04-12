@@ -29,7 +29,7 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-batcher-${{ github.sha }}
       dockerfile: op-batcher/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ github.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ github.sha }}
 
   build-container-op-proposer:
     uses: ./.github/workflows/docker-generic-workflow.yaml
@@ -39,7 +39,7 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-proposer-${{ github.sha }}
       dockerfile: op-proposer/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ github.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ github.sha }}
 
   build-container-op-challenger:
     uses: ./.github/workflows/docker-generic-workflow.yaml
@@ -49,7 +49,7 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-challenger-${{ github.sha }}
       dockerfile: op-challenger/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ github.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ github.sha }}
 
   build-container-proxyd:
     uses: ./.github/workflows/docker-generic-workflow.yaml
@@ -115,7 +115,7 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-heartbeat-${{ github.sha }}
       dockerfile: op-heartbeat/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ github.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ github.sha }}
 
   build-container-op-program:
     uses: ./.github/workflows/docker-generic-workflow.yaml
@@ -125,7 +125,7 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-program-${{ github.sha }}
       dockerfile: op-program/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ github.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ github.sha }}
 
   build-container-endpoint-monitor:
     uses: ./.github/workflows/docker-generic-workflow.yaml
@@ -143,4 +143,4 @@ jobs:
       registry: us-west1-docker.pkg.dev/devopsre/dev-images/optimism
       tags: op-opwheel-${{ github.sha }}
       dockerfile: op-wheel/Dockerfile
-      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-ci-builder-${{ github.sha }}
+      build-args: OP_STACK_GO_BUILDER=us-west1-docker.pkg.dev/devopsre/dev-images/optimism:op-stack-go-${{ github.sha }}
