@@ -36,9 +36,9 @@ jobs:
       - name: Export git related environment variables
         id: export-git-related-environment-variables
         run: |
-          echo "GIT_COMMIT=${{ github.event.inputs.sha }}" >> $GITHUB_ENV
+          echo "GIT_COMMIT=${{ github.sha }}" >> $GITHUB_ENV
           echo "GIT_DATE=$(git show -s --format=%ct)" >> $GITHUB_ENV
-          echo "IMAGE_TAGS=${{ github.event.inputs.sha }},latest" >> $GITHUB_ENV
+          echo "IMAGE_TAGS=${{ github.sha }},latest" >> $GITHUB_ENV
 
       - name: Authenticate to Google Cloud
         uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@main
