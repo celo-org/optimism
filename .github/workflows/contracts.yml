@@ -19,9 +19,26 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup
-        uses: ./.github/actions/setup
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: 8.6.5
+      - name: Setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version-file: .nvmrc
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
 
+      - name: Setup foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Install node dependencies
+        shell: bash
+        run: pnpm install:ci
+
+      #- name: Setup
+      #  uses: ./.github/actions/setup
       #- name: Setup foundry
       #  uses: foundry-rs/foundry-toolchain@v1
 
