@@ -48,3 +48,4 @@ jobs:
         env:
           L1_RPC_KIND: alchemy
           DEPLOYMENT_CONTEXT: getting-started
+          GS_ADMIN_ADDRESS: 0x19c1696408E63d670ab8177bfafB0D37e9F3ed82
