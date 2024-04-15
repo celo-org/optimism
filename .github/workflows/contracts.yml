@@ -4,6 +4,11 @@ on:
     branches:
       - alvarof2/contracts
   workflow_dispatch:
+    inputs:
+      simulate:
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   deploy-contracts:
@@ -61,9 +66,15 @@ jobs:
           export IMPL_SALT=$(openssl rand -hex 32)
           cd packages/contracts-bedrock
           ./scripts/getting-started/config.sh
-          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
-          # --broadcast
+          if [ $SIMULATE ]
+          then
+            forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
+          else
+            echo "--broadcast"
+            # forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
+          fi
         env:
+          SIMULATE: ${{ inputs.simulate }}
           L1_RPC_KIND: alchemy
           DEPLOYMENT_CONTEXT: getting-started
           GS_ADMIN_ADDRESS: '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82'
