@@ -42,4 +42,5 @@ jobs:
       - name: Deploy L1 contracts
         run: |
           cd packages/contracts-bedrock
-          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
+          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
+          # --broadcast
