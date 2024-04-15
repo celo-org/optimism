@@ -8,6 +8,9 @@ on:
 jobs:
   deploy-contracts:
     runs-on: ubuntu-latest
+    permissions: # Must change the job token permissions to use Akeyless JWT auth
+      id-token: write
+      contents: read
     steps:
 
       - uses: actions/checkout@v4
