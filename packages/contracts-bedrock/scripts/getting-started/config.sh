@@ -98,7 +98,7 @@ config=$(cat << EOL
 
   "preimageOracleMinProposalSize": 1800000,
   "preimageOracleChallengePeriod": 86400,
-  "preimageOracleCancunActivationTimestamp": 0
+  "preimageOracleCancunActivationTimestamp": 0,
 
   "proofMaturityDelaySeconds": 12,
   "disputeGameFinalityDelaySeconds": 6,
