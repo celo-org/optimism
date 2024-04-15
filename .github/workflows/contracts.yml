@@ -60,6 +60,7 @@ jobs:
         run: |
           export IMPL_SALT=$(openssl rand -hex 32)
           cd packages/contracts-bedrock
+          ./scripts/getting-started/config.sh
           forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
           # --broadcast
         env:
