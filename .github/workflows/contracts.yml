@@ -1,5 +1,8 @@
 name: Deploy Contracts
 on:
+  push:
+    branches:
+      - alvarof2/contracts
   workflow_dispatch:
 
 jobs:
