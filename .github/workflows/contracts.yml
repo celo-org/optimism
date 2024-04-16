@@ -101,12 +101,14 @@ jobs:
 
       - name: Generate genesis files
         run: |
+          mkdir l2-config-files/$DEPLOYMENT_CONTEXT
+          openssl rand -hex 32 > l2-config-files/$DEPLOYMENT_CONTEXT/jwt-$(date +%s).txt
           cd op-node
           go run cmd/main.go genesis l2 \
             --deploy-config ../packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json \
             --l1-deployments ../packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy \
-            --outfile.l2 genesis.json \
-            --outfile.rollup rollup.json \
+            --outfile.l2 ../l2-config-files/$DEPLOYMENT_CONTEXT/genesis-$(date +%s).json \
+            --outfile.rollup ../l2-config-files/$DEPLOYMENT_CONTEXT/rollup-$(date +%s).json \
             --l1-rpc $L1_RPC_URL
 
       - name: "Commit genesis files"
