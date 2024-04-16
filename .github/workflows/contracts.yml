@@ -90,4 +90,5 @@ jobs:
 
       - name: Generate L1 contract artifacts
         run: |
+          cd packages/contracts-bedrock
           forge script scripts/Deploy.s.sol:Deploy --sig 'sync()' --rpc-url $L1_RPC_URL
