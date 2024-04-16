@@ -41,6 +41,9 @@ jobs:
           access-id: p-kf9vjzruht6l
           static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Deploy L1 contracts
         run: |
           export IMPL_SALT=$(openssl rand -hex 32)
