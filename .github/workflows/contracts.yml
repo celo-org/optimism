@@ -24,28 +24,8 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 8.6.5
-      - name: Setup node
-        uses: actions/setup-node@v3
-        with:
-          node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
-          cache: pnpm
-
-      - name: Setup foundry
-        uses: foundry-rs/foundry-toolchain@v1
-
-      - name: Install node dependencies
-        shell: bash
-        run: pnpm install:ci
-
-      #- name: Setup
-      #  uses: ./.github/actions/setup
-      #- name: Setup foundry
-      #  uses: foundry-rs/foundry-toolchain@v1
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Akeyless get L1 URL
         uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
@@ -76,7 +56,7 @@ jobs:
         env:
           SIMULATE: ${{ inputs.simulate }}
           L1_RPC_KIND: alchemy
-          DEPLOYMENT_CONTEXT: getting-started
+          DEPLOYMENT_CONTEXT: test-alvaro
           GS_ADMIN_ADDRESS: '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82'
           GS_BATCHER_ADDRESS: '0x0F82E82268FA5de5070A088e54eAbc2dec07D615'
           GS_PROPOSER_ADDRESS: '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb'
