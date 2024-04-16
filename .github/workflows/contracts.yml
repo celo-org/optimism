@@ -99,12 +99,17 @@ jobs:
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           fi
 
-      - name: Generate L1 contract artifacts
+      - name: Generate genesis files
         run: |
-          cd packages/contracts-bedrock
-          forge script scripts/Deploy.s.sol:Deploy --sig 'sync()' --rpc-url $L1_RPC_URL
+          cd op-node
+          go run cmd/main.go genesis l2 \
+            --deploy-config ../packages/contracts-bedrock/deploy-config/getting-started.json \
+            --deployment-dir ../packages/contracts-bedrock/deployments/getting-started/ \
+            --outfile.l2 genesis.json \
+            --outfile.rollup rollup.json \
+            --l1-rpc $L1_RPC_URL
 
-      - name: "Commit changed files"
+      - name: "Commit genesis files"
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: '[Automatic] - Commit files'
+          commit_message: '[Automatic] - Commit genesis files'
