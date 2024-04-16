@@ -9,6 +9,31 @@ on:
         required: false
         type: boolean
         default: true
+      l1_rpc_kind:
+        required: false
+        type: string
+        default: 'any'
+      deployment_context:
+        required: false
+        type: string
+        default: 'test-alvaro'
+      gs_admin_address:
+        required: false
+        type: string
+        default: '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82'
+      gs_batcher_address:
+        required: false
+        type: string
+        default: '0x0F82E82268FA5de5070A088e54eAbc2dec07D615'
+      gs_proposer_address:
+        required: false
+        type: string
+        default: '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb'
+      gs_sequenncer_address:
+        required: false
+        type: string
+        default: '0xF20B236A87e26D1Ac7290D0F70f637af8145D54e'
+
 
 jobs:
   deploy-contracts:
@@ -41,9 +66,6 @@ jobs:
           access-id: p-kf9vjzruht6l
           static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-
       - name: Deploy L1 contracts
         run: |
           export IMPL_SALT=$(openssl rand -hex 32)
@@ -57,10 +79,10 @@ jobs:
             # forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           fi
         env:
-          SIMULATE: ${{ inputs.simulate }}
-          L1_RPC_KIND: alchemy
-          DEPLOYMENT_CONTEXT: test-alvaro
-          GS_ADMIN_ADDRESS: '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82'
-          GS_BATCHER_ADDRESS: '0x0F82E82268FA5de5070A088e54eAbc2dec07D615'
-          GS_PROPOSER_ADDRESS: '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb'
-          GS_SEQUENCER_ADDRESS: '0xF20B236A87e26D1Ac7290D0F70f637af8145D54e'
+          SIMULATE: ${{ github.event_name == 'push' && false || inputs.simulate }}
+          L1_RPC_KIND: ${{ github.event_name == 'push' && 'alchemy' || inputs.l1_rpc_kind }}
+          DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro' || inputs.deployment_context }}
+          GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
+          GS_BATCHER_ADDRESS: ${{ github.event_name == 'push' && '0x0F82E82268FA5de5070A088e54eAbc2dec07D615' || inputs.gs_batcher_address }}
+          GS_PROPOSER_ADDRESS: ${{ github.event_name == 'push' && '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb' || inputs.gs_proposer_address }}
+          GS_SEQUENCER_ADDRESS: ${{ github.event_name == 'push' && '0xF20B236A87e26D1Ac7290D0F70f637af8145D54e' || inputs.gs_sequenncer_address }}
