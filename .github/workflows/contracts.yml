@@ -103,8 +103,8 @@ jobs:
         run: |
           cd op-node
           go run cmd/main.go genesis l2 \
-            --deploy-config ../packages/contracts-bedrock/deploy-config/getting-started.json \
-            --deployment-dir ../packages/contracts-bedrock/deployments/getting-started/ \
+            --deploy-config ../packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json \
+            --deployment-dir ../packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/ \
             --outfile.l2 genesis.json \
             --outfile.rollup rollup.json \
             --l1-rpc $L1_RPC_URL
