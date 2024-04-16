@@ -79,12 +79,12 @@ jobs:
           export IMPL_SALT=$(openssl rand -hex 32)
           cd packages/contracts-bedrock
           ./scripts/getting-started/config.sh
-          if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST = "true" ]]
+          if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST == 'false' ]]
           then
-            echo "Simulating"
+            echo "Simulating ..."
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
           else
-            echo "Broadcasting"
+            echo "Broadcasting ..."
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           fi
 
