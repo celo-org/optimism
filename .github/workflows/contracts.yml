@@ -42,7 +42,7 @@ jobs:
       id-token: write
       contents: read
     env:
-      BROADCAST: ${{ github.event_name == 'push' && true || inputs.broadcast }}
+      BROADCAST: ${{ github.event_name == 'push' && 'true' || inputs.broadcast }}
       L1_RPC_KIND: ${{ github.event_name == 'push' && 'alchemy' || inputs.l1_rpc_kind }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro' || inputs.deployment_context }}
       GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
@@ -79,10 +79,12 @@ jobs:
           export IMPL_SALT=$(openssl rand -hex 32)
           cd packages/contracts-bedrock
           ./scripts/getting-started/config.sh
-          if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST ]]
+          if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST = "true" ]]
           then
+            echo "Simulating"
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
           else
+            echo "Broadcasting"
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           fi
 
