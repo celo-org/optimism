@@ -391,7 +391,12 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		EIP1559Denominator: EIP1559Denominator,
 		EIP1559Elasticity:  EIP1559Elasticity,
 	}
-	// TODO(pl) Add Ecotone and other hardforks
+	cfg.CanyonTime = &cel2Header.Time
+	cfg.EcotoneTime = &cel2Header.Time
+
+	// TODO(pl): What about Ethereum hardforks
+
+	log.Info("Write new config to database", "config", cfg)
 
 	// Write the chain config to disk.
 	rawdb.WriteChainConfig(ldb, cel2Block.Hash(), cfg)
