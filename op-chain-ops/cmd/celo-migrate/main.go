@@ -123,6 +123,16 @@ func main() {
 				return fmt.Errorf("must specify --l1-rpc")
 			}
 
+			outfileL2 := ctx.Path("outfile.l2")
+			if outfileL2 == "" {
+				return fmt.Errorf("must specify --outfile.l2")
+			}
+
+			outfileRollup := ctx.Path("outfile.rollup")
+			if outfileRollup == "" {
+				return fmt.Errorf("must specify --outfile.rollup")
+			}
+
 			var l1StartBlock *types.Block
 			client, err := ethclient.Dial(l1RPC)
 			if err != nil {
@@ -167,32 +177,6 @@ func main() {
 				return fmt.Errorf("error creating l2 genesis: %w", err)
 			}
 
-			l2GenesisBlock := l2Genesis.ToBlock()
-			rollupConfig, err := config.RollupConfig(l1StartBlock, l2GenesisBlock.Hash(), l2GenesisBlock.Number().Uint64())
-			if err != nil {
-				return err
-			}
-			if err := rollupConfig.Check(); err != nil {
-				return fmt.Errorf("generated rollup config does not pass validation: %w", err)
-			}
-
-			outfileL2 := ctx.Path("outfile.l2")
-			if outfileL2 == "" {
-				return fmt.Errorf("must specify --outfile.l2")
-			}
-
-			outfileRollup := ctx.Path("outfile.rollup")
-			if outfileRollup == "" {
-				return fmt.Errorf("must specify --outfile.rollup")
-			}
-
-			if err := jsonutil.WriteJSON(outfileL2, l2Genesis); err != nil {
-				return err
-			}
-			if err := jsonutil.WriteJSON(outfileRollup, rollupConfig); err != nil {
-				return err
-			}
-
 			// So far we applied changes in the memory VM and collected changes in the genesis struct
 			// No we iterate through all accounts that have been written there and set them inside the statedb.
 			// This will change the state root
@@ -213,8 +197,10 @@ func main() {
 			if err != nil {
 				return fmt.Errorf("cannot open DB: %w", err)
 			}
+			log.Info("Loaded Celo L1 DB", "db", ldb)
 
-			if err := ApplyMigrationChangesToDB(ldb, l2Genesis, !dryRun); err != nil {
+			cel2Header, err := ApplyMigrationChangesToDB(ldb, l2Genesis, !dryRun)
+			if err != nil {
 				return err
 			}
 
@@ -223,7 +209,26 @@ func main() {
 				return err
 			}
 
-			log.Info("Loaded Celo L1 DB", "db", ldb)
+			log.Info("Updated Cel2 state")
+
+			log.Info("Writing state diff", "file", outfileL2)
+			// Write genesis file to check created state
+			if err := jsonutil.WriteJSON(outfileL2, l2Genesis); err != nil {
+				return err
+			}
+
+			rollupConfig, err := config.RollupConfig(l1StartBlock, cel2Header.Hash(), cel2Header.Number.Uint64())
+			if err != nil {
+				return err
+			}
+			if err := rollupConfig.Check(); err != nil {
+				return fmt.Errorf("generated rollup config does not pass validation: %w", err)
+			}
+
+			log.Info("Writing rollup config", "file", outfileRollup)
+			if err := jsonutil.WriteJSON(outfileRollup, rollupConfig); err != nil {
+				return err
+			}
 
 			return nil
 		},
@@ -235,7 +240,7 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit bool) error {
+func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit bool) (*types.Header, error) {
 	log.Info("Migrating DB")
 
 	// Grab the hash of the tip of the legacy chain.
@@ -245,7 +250,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	// Grab the header number.
 	num := rawdb.ReadHeaderNumber(ldb, hash)
 	if num == nil {
-		return fmt.Errorf("cannot find header number for %s", hash)
+		return nil, fmt.Errorf("cannot find header number for %s", hash)
 	}
 	log.Info("Reading chain tip num from database", "number", num)
 
@@ -279,7 +284,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 
 	db, err := dbFactory()
 	if err != nil {
-		return fmt.Errorf("cannot create StateDB: %w", err)
+		return nil, fmt.Errorf("cannot create StateDB: %w", err)
 	}
 
 	for k, v := range genesis.Alloc {
@@ -302,7 +307,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	// TODO(pl): What block info to put here?
 	newRoot, err := db.Commit(1234, true)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	log.Info("Creating new Genesis block")
@@ -310,20 +315,20 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	cel2Header := &types.Header{
 		ParentHash:  header.Hash(),
 		UncleHash:   types.EmptyUncleHash,
-		Coinbase:    predeploys.SequencerFeeVaultAddr, // TODO(pl)
+		Coinbase:    predeploys.SequencerFeeVaultAddr,
 		Root:        newRoot,
 		TxHash:      types.EmptyRootHash,
 		ReceiptHash: types.EmptyRootHash,
 		Bloom:       types.Bloom{},
-		Difficulty:  common.Big0,
-		Number:      common.Big0,
-		GasLimit:    (uint64)(20_000_000),
+		Difficulty:  new(big.Int).Set(common.Big0),
+		Number:      new(big.Int).Add(header.Number, common.Big1),
+		GasLimit:    header.GasLimit,
 		GasUsed:     0,
-		Time:        uint64(12345),
-		Extra:       []byte("CeL2"),
+		Time:        header.Time,
+		Extra:       []byte("CeL2 migration"),
 		MixDigest:   common.Hash{},
 		Nonce:       types.BlockNonce{},
-		BaseFee:     big.NewInt(params.InitialBaseFee),
+		BaseFee:     new(big.Int).Set(header.BaseFee),
 	}
 
 	// Create the Bedrock transition block from the header. Note that there are no transactions,
@@ -341,25 +346,17 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	)
 
 	log.Info("Header", "header", cel2Header)
-	log.Info("Body", "Body", cel2Block)
-
-	// Create the result of the migration.
-	// res := &MigrationResult{
-	// 	TransitionHeight:    cel2Block.NumberU64(),
-	// 	TransitionTimestamp: cel2Block.Time(),
-	// 	TransitionBlockHash: cel2Block.Hash(),
-	// }
 
 	// If we're not actually writing this to disk, then we're done.
 	if !commit {
 		log.Info("Dry run complete")
-		return nil
+		return nil, nil
 	}
 
 	// Otherwise we need to write the changes to disk. First we commit the state changes.
 	log.Info("Committing trie DB")
 	if err := db.Database().TrieDB().Commit(newRoot, true); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Next we write the Cel2 genesis block to the database.
@@ -418,7 +415,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		"timestamp", cel2Header.Time,
 	)
 
-	return nil
+	return cel2Header, nil
 }
 
 func Open(path string, cache int, handles int) (ethdb.Database, error) {
