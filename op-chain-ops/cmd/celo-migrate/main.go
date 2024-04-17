@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -421,6 +422,10 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 }
 
 func Open(path string, cache int, handles int) (ethdb.Database, error) {
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
 	chaindataPath := filepath.Join(path, "celo", "chaindata")
 	ancientPath := filepath.Join(chaindataPath, "ancient")
 	ldb, err := rawdb.Open(rawdb.OpenOptions{
