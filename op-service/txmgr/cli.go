@@ -36,6 +36,10 @@ const (
 	TxSendTimeoutFlagName             = "txmgr.send-timeout"
 	TxNotInMempoolTimeoutFlagName     = "txmgr.not-in-mempool-timeout"
 	ReceiptQueryIntervalFlagName      = "txmgr.receipt-query-interval"
+	EnableHsmFlagName                 = "enable-hsm"
+	HsmCredentialFlagName             = "hsm-address"
+	HsmAddressFlagName                = "hsm-api-name"
+	HsmAPINameFlagName                = "hsm-creden"
 )
 
 var (
@@ -63,6 +67,10 @@ type DefaultFlagValues struct {
 	TxSendTimeout             time.Duration
 	TxNotInMempoolTimeout     time.Duration
 	ReceiptQueryInterval      time.Duration
+	EnableHsm                 bool
+	HsmAddress                string
+	HsmAPIName                string
+	HsmCredential             string
 }
 
 var (
@@ -73,9 +81,13 @@ var (
 		FeeLimitThresholdGwei:     100.0,
 		ResubmissionTimeout:       48 * time.Second,
 		NetworkTimeout:            10 * time.Second,
-		TxSendTimeout:             0 * time.Second,
+		TxSendTimeout:             2 * time.Minute, // Enough time for HSM signers. Fail if it does not respond
 		TxNotInMempoolTimeout:     2 * time.Minute,
 		ReceiptQueryInterval:      12 * time.Second,
+		EnableHsm:                 false,
+		HsmAddress:                "",
+		HsmAPIName:                "",
+		HsmCredential:             "",
 	}
 	DefaultChallengerFlagValues = DefaultFlagValues{
 		NumConfirmations:          uint64(3),
@@ -87,6 +99,10 @@ var (
 		TxSendTimeout:             2 * time.Minute,
 		TxNotInMempoolTimeout:     1 * time.Minute,
 		ReceiptQueryInterval:      12 * time.Second,
+		EnableHsm:                 false,
+		HsmAddress:                "",
+		HsmAPIName:                "",
+		HsmCredential:             "",
 	}
 )
 
@@ -178,6 +194,30 @@ func CLIFlagsWithDefaults(envPrefix string, defaults DefaultFlagValues) []cli.Fl
 			Value:   defaults.ReceiptQueryInterval,
 			EnvVars: prefixEnvVars("TXMGR_RECEIPT_QUERY_INTERVAL"),
 		},
+		&cli.BoolFlag{
+			Name:    EnableHsmFlagName,
+			Usage:   "Whether or not to use cloud hsm",
+			Value:   defaults.EnableHsm,
+			EnvVars: prefixEnvVars("ENABLE_HSM"),
+		},
+		&cli.StringFlag{
+			Name:    HsmAddressFlagName,
+			Usage:   "The address of private-key in hsm",
+			Value:   defaults.HsmAddress,
+			EnvVars: prefixEnvVars("HSM_ADDRESS"),
+		},
+		&cli.StringFlag{
+			Name:    HsmAPINameFlagName,
+			Usage:   "The api-name of private-key in hsm",
+			Value:   defaults.HsmAPIName,
+			EnvVars: prefixEnvVars("HSM_API_NAME"),
+		},
+		&cli.StringFlag{
+			Name:    HsmCredentialFlagName,
+			Usage:   "The credential of private-key in hsm",
+			Value:   defaults.HsmCredential,
+			EnvVars: prefixEnvVars("HSM_CREDEN"),
+		},
 	}, opsigner.CLIFlags(envPrefix)...)
 }
 
@@ -200,6 +240,10 @@ type CLIConfig struct {
 	NetworkTimeout            time.Duration
 	TxSendTimeout             time.Duration
 	TxNotInMempoolTimeout     time.Duration
+	EnableHsm                 bool
+	HsmAddress                string
+	HsmAPIName                string
+	HsmCredential             string
 }
 
 func NewCLIConfig(l1RPCURL string, defaults DefaultFlagValues) CLIConfig {
@@ -214,6 +258,10 @@ func NewCLIConfig(l1RPCURL string, defaults DefaultFlagValues) CLIConfig {
 		TxSendTimeout:             defaults.TxSendTimeout,
 		TxNotInMempoolTimeout:     defaults.TxNotInMempoolTimeout,
 		ReceiptQueryInterval:      defaults.ReceiptQueryInterval,
+		EnableHsm:                 defaults.EnableHsm,
+		HsmAddress:                defaults.HsmAddress,
+		HsmAPIName:                defaults.HsmAPIName,
+		HsmCredential:             defaults.HsmCredential,
 		SignerCLIConfig:           opsigner.NewCLIConfig(),
 	}
 }
@@ -273,6 +321,10 @@ func ReadCLIConfig(ctx *cli.Context) CLIConfig {
 		NetworkTimeout:            ctx.Duration(NetworkTimeoutFlagName),
 		TxSendTimeout:             ctx.Duration(TxSendTimeoutFlagName),
 		TxNotInMempoolTimeout:     ctx.Duration(TxNotInMempoolTimeoutFlagName),
+		EnableHsm:                 ctx.Bool(EnableHsmFlagName),
+		HsmAddress:                ctx.String(HsmAddressFlagName),
+		HsmAPIName:                ctx.String(HsmAPINameFlagName),
+		HsmCredential:             ctx.String(HsmCredentialFlagName),
 	}
 }
 
@@ -303,7 +355,7 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		hdPath = cfg.L2OutputHDPath
 	}
 
-	signerFactory, from, err := opcrypto.SignerFactoryFromConfig(l, cfg.PrivateKey, cfg.Mnemonic, hdPath, cfg.SignerCLIConfig)
+	signerFactory, from, err := opcrypto.SignerFactoryFromConfig(l, cfg.PrivateKey, cfg.Mnemonic, hdPath, cfg.SignerCLIConfig, ctx, cfg.EnableHsm, cfg.HsmAPIName, cfg.HsmAddress, cfg.HsmCredential)
 	if err != nil {
 		return Config{}, fmt.Errorf("could not init signer: %w", err)
 	}
@@ -339,6 +391,10 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		SafeAbortNonceTooLowCount: cfg.SafeAbortNonceTooLowCount,
 		Signer:                    signerFactory(chainID),
 		From:                      from,
+		EnableHsm:                 cfg.EnableHsm,
+		HsmCredential:             cfg.HsmCredential,
+		HsmAddress:                cfg.HsmAddress,
+		HsmAPIName:                cfg.HsmAPIName,
 	}, nil
 }
 
@@ -397,6 +453,12 @@ type Config struct {
 	// Signer is used to sign transactions when the gas price is increased.
 	Signer opcrypto.SignerFn
 	From   common.Address
+
+	// Use GCP Cloud HSM to sign
+	EnableHsm     bool
+	HsmCredential string
+	HsmAddress    string
+	HsmAPIName    string
 }
 
 func (m Config) Check() error {
