@@ -27,7 +27,6 @@ deployments/900
 deployments/901
 deployments/hardhat
 deployments/getting-started
-deployments/*/.deploy
 deployments/1337
 
 # Devnet config which changes with each 'make devnet-up'
