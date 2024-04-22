@@ -7,6 +7,7 @@ import { ERC20Permit } from "@openzeppelin/contracts/token/ERC20/extensions/draf
 
 // Libraries
 import { Preinstalls } from "src/libraries/Preinstalls.sol";
+import { AbstractFeeCurrency } from "src/celo/AbstractFeeCurrency.sol";
 
 // Interfaces
 import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
@@ -20,7 +21,7 @@ import { ILegacyMintableERC20 } from "interfaces/legacy/ILegacyMintableERC20.sol
 ///         use an OptimismMintablERC20 as the L2 representation of an L1 token, or vice-versa.
 ///         Designed to be backwards compatible with the older StandardL2ERC20 token which was only
 ///         meant for use on L2.
-contract OptimismMintableERC20 is ERC20Permit, ISemver {
+contract OptimismMintableERC20 is ERC20Permit, ISemver, AbstractFeeCurrency {
     /// @notice Address of the corresponding version of this token on the remote chain.
     address public immutable REMOTE_TOKEN;
 
