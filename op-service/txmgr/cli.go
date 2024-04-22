@@ -37,9 +37,8 @@ const (
 	TxNotInMempoolTimeoutFlagName     = "txmgr.not-in-mempool-timeout"
 	ReceiptQueryIntervalFlagName      = "txmgr.receipt-query-interval"
 	EnableHsmFlagName                 = "enable-hsm"
-	HsmCredentialFlagName             = "hsm-address"
-	HsmAddressFlagName                = "hsm-api-name"
-	HsmAPINameFlagName                = "hsm-creden"
+	HsmAPINameFlagName                = "hsm-api-name"
+	HsmAddressFlagName                = "hsm-address"
 )
 
 var (
@@ -70,7 +69,6 @@ type DefaultFlagValues struct {
 	EnableHsm                 bool
 	HsmAddress                string
 	HsmAPIName                string
-	HsmCredential             string
 }
 
 var (
@@ -87,7 +85,6 @@ var (
 		EnableHsm:                 false,
 		HsmAddress:                "",
 		HsmAPIName:                "",
-		HsmCredential:             "",
 	}
 	DefaultChallengerFlagValues = DefaultFlagValues{
 		NumConfirmations:          uint64(3),
@@ -102,7 +99,6 @@ var (
 		EnableHsm:                 false,
 		HsmAddress:                "",
 		HsmAPIName:                "",
-		HsmCredential:             "",
 	}
 )
 
@@ -212,12 +208,6 @@ func CLIFlagsWithDefaults(envPrefix string, defaults DefaultFlagValues) []cli.Fl
 			Value:   defaults.HsmAPIName,
 			EnvVars: prefixEnvVars("HSM_API_NAME"),
 		},
-		&cli.StringFlag{
-			Name:    HsmCredentialFlagName,
-			Usage:   "The credential of private-key in hsm",
-			Value:   defaults.HsmCredential,
-			EnvVars: prefixEnvVars("HSM_CREDEN"),
-		},
 	}, opsigner.CLIFlags(envPrefix)...)
 }
 
@@ -243,7 +233,6 @@ type CLIConfig struct {
 	EnableHsm                 bool
 	HsmAddress                string
 	HsmAPIName                string
-	HsmCredential             string
 }
 
 func NewCLIConfig(l1RPCURL string, defaults DefaultFlagValues) CLIConfig {
@@ -261,7 +250,6 @@ func NewCLIConfig(l1RPCURL string, defaults DefaultFlagValues) CLIConfig {
 		EnableHsm:                 defaults.EnableHsm,
 		HsmAddress:                defaults.HsmAddress,
 		HsmAPIName:                defaults.HsmAPIName,
-		HsmCredential:             defaults.HsmCredential,
 		SignerCLIConfig:           opsigner.NewCLIConfig(),
 	}
 }
@@ -324,7 +312,6 @@ func ReadCLIConfig(ctx *cli.Context) CLIConfig {
 		EnableHsm:                 ctx.Bool(EnableHsmFlagName),
 		HsmAddress:                ctx.String(HsmAddressFlagName),
 		HsmAPIName:                ctx.String(HsmAPINameFlagName),
-		HsmCredential:             ctx.String(HsmCredentialFlagName),
 	}
 }
 
@@ -355,7 +342,7 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		hdPath = cfg.L2OutputHDPath
 	}
 
-	signerFactory, from, err := opcrypto.SignerFactoryFromConfig(l, cfg.PrivateKey, cfg.Mnemonic, hdPath, cfg.SignerCLIConfig, ctx, cfg.EnableHsm, cfg.HsmAPIName, cfg.HsmAddress, cfg.HsmCredential)
+	signerFactory, from, err := opcrypto.SignerFactoryFromConfig(l, cfg.PrivateKey, cfg.Mnemonic, hdPath, cfg.SignerCLIConfig, ctx, cfg.EnableHsm, cfg.HsmAPIName, cfg.HsmAddress)
 	if err != nil {
 		return Config{}, fmt.Errorf("could not init signer: %w", err)
 	}
@@ -392,7 +379,6 @@ func NewConfig(cfg CLIConfig, l log.Logger) (Config, error) {
 		Signer:                    signerFactory(chainID),
 		From:                      from,
 		EnableHsm:                 cfg.EnableHsm,
-		HsmCredential:             cfg.HsmCredential,
 		HsmAddress:                cfg.HsmAddress,
 		HsmAPIName:                cfg.HsmAPIName,
 	}, nil
@@ -455,10 +441,9 @@ type Config struct {
 	From   common.Address
 
 	// Use GCP Cloud HSM to sign
-	EnableHsm     bool
-	HsmCredential string
-	HsmAddress    string
-	HsmAPIName    string
+	EnableHsm  bool
+	HsmAddress string
+	HsmAPIName string
 }
 
 func (m Config) Check() error {
