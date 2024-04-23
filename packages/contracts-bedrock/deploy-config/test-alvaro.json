@@ -1,5 +1,5 @@
 {
-  "l1StartingBlockTag": "0xd31b1c9f7249d21e085bd66146d2f3fda0588f35868b9f9d95f68d94aca3de63",
+  "l1StartingBlockTag": "0x22ee2011d8241a6e111012706c18434269e32c3de70573752eaff2e28ffad414",
 
   "l1ChainID": 11155111,
   "l2ChainID": 42069,
@@ -16,7 +16,7 @@
 
   "l2OutputOracleSubmissionInterval": 120,
   "l2OutputOracleStartingBlockNumber": 0,
-  "l2OutputOracleStartingTimestamp": 1713537888,
+  "l2OutputOracleStartingTimestamp": 1713877728,
 
   "l2OutputOracleProposer": "0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb",
   "l2OutputOracleChallenger": "0x19c1696408E63d670ab8177bfafB0D37e9F3ed82",
@@ -69,11 +69,5 @@
   "faultGameSplitDepth": 14,
 
   "preimageOracleMinProposalSize": 1800000,
-  "preimageOracleChallengePeriod": 86400,
-  "preimageOracleCancunActivationTimestamp": 0,
-
-  "proofMaturityDelaySeconds": 12,
-  "disputeGameFinalityDelaySeconds": 6,
-  "respectedGameType": 0,
-  "useFaultProofs": false
+  "preimageOracleChallengePeriod": 86400
 }

@@ -1,8 +1,8 @@
 name: Deploy Contracts
 on:
-  push:
-    branches:
-      - alvarof2/contracts
+  # push:
+  #   branches:
+  #     - alvarof2/contracts
   workflow_dispatch:
     inputs:
       broadcast:
@@ -61,7 +61,7 @@ jobs:
           access-id: p-kf9vjzruht6l
           dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT"}'
 
-      - name: "Checkout current PR"
+      - name: "Checkout"
         uses: actions/checkout@v4
         with:
           token: ${{ env.PAT }}
