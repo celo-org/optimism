@@ -128,11 +128,11 @@ jobs:
             --outfile.rollup ../../l2-config-files/$DEPLOYMENT_CONTEXT/rollup-$(date +%s).json \
             --l1-rpc $L1_RPC_URL
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3.17
+      # - name: Setup tmate session
+      #   uses: mxschmitt/action-tmate@v3.17
 
       - name: "Commit genesis files"
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: '[Automatic] - Commit genesis files'
-          file_pattern: 'l2-config-files/$DEPLOYMENT_CONTEXT/*.json packages/contracts-bedrock/**'
+          file_pattern: 'l2-config-files packages/contracts-bedrock/**'
