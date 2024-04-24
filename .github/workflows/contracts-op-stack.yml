@@ -9,6 +9,10 @@ on:
         required: false
         type: boolean
         default: true
+      contracts_tag:
+        required: false
+        type: string
+        default: 'op-contracts/v1.3.0'
       l1_rpc_kind:
         required: false
         type: string
@@ -44,6 +48,7 @@ jobs:
     if: ${{ ! startsWith(github.triggering_actor, 'akeyless') }}
     env:
       BROADCAST: ${{ github.event_name == 'push' && 'true' || inputs.broadcast }}
+      CONTRACTS_TAG: ${{ github.event_name == 'push' && 'true' || inputs.contracts_tag }}
       L1_RPC_KIND: ${{ github.event_name == 'push' && 'alchemy' || inputs.l1_rpc_kind }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro' || inputs.deployment_context }}
       GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
@@ -86,7 +91,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'ethereum-optimism/optimism'
-          ref: 'op-contracts/v1.3.0'
+          ref: '${{ env.CONTRACTS_TAG }}'
           path: ethereum-optimism
           submodules: recursive
           fetch-depth: 0
@@ -112,7 +117,8 @@ jobs:
             echo "Broadcasting ..."
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           fi
-          cp deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json
+          mkdir -p /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
+          cp deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
       - name: Generate genesis files
         run: |

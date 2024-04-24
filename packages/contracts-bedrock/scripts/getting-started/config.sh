@@ -97,13 +97,7 @@ config=$(cat << EOL
   "faultGameSplitDepth": 14,
 
   "preimageOracleMinProposalSize": 1800000,
-  "preimageOracleChallengePeriod": 86400,
-  "preimageOracleCancunActivationTimestamp": 0,
-
-  "proofMaturityDelaySeconds": 12,
-  "disputeGameFinalityDelaySeconds": 6,
-  "respectedGameType": 0,
-  "useFaultProofs": false
+  "preimageOracleChallengePeriod": 86400
 }
 EOL
 )
