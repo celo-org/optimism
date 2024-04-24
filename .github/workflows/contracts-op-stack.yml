@@ -1,8 +1,8 @@
 name: Deploy Contracts
 on:
-  # push:
-  #   branches:
-  #     - alvarof2/contracts
+  push:
+    branches:
+      - alvarof2/contracts
   workflow_dispatch:
     inputs:
       broadcast:
@@ -61,16 +61,6 @@ jobs:
           access-id: p-kf9vjzruht6l
           dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT"}'
 
-      - name: "Checkout"
-        uses: actions/checkout@v4
-        with:
-          token: ${{ env.PAT }}
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Setup
-        uses: ./.github/actions/setup
-
       - name: Akeyless get L1 URL
         uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
         with:
@@ -84,6 +74,27 @@ jobs:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
           static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
+
+      - name: "Checkout"
+        uses: actions/checkout@v4
+        with:
+          token: ${{ env.PAT }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: "Checkout OP Repo"
+        uses: actions/checkout@v4
+        with:
+          repository: 'ethereum-optimism/optimism'
+          ref: 'op-contracts/v1.3.0'
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
+      - name: Setup
+        uses: ./.github/actions/setup
 
       - name: Deploy L1 contracts
         run: |
