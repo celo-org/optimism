@@ -91,7 +91,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+        uses: mxschmitt/action-tmate@v3.18
 
       - name: Setup
         uses: ./.github/actions/setup
