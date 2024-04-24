@@ -87,11 +87,12 @@ jobs:
         with:
           repository: 'ethereum-optimism/optimism'
           ref: 'op-contracts/v1.3.0'
+          path: ethereum-optimism
           submodules: recursive
           fetch-depth: 0
 
       - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3.18
+        uses: mxschmitt/action-tmate@v3.17
 
       - name: Setup
         uses: ./.github/actions/setup
