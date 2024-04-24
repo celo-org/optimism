@@ -1,5 +1,5 @@
 {
-  "l1StartingBlockTag": "0x22ee2011d8241a6e111012706c18434269e32c3de70573752eaff2e28ffad414",
+  "l1StartingBlockTag": "0xe1c0a49a47f84612ff85b04c423abedcf23456c2716dbf05b52179e155715ca1",
 
   "l1ChainID": 11155111,
   "l2ChainID": 42069,
@@ -16,7 +16,7 @@
 
   "l2OutputOracleSubmissionInterval": 120,
   "l2OutputOracleStartingBlockNumber": 0,
-  "l2OutputOracleStartingTimestamp": 1713877728,
+  "l2OutputOracleStartingTimestamp": 1713968352,
 
   "l2OutputOracleProposer": "0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb",
   "l2OutputOracleChallenger": "0x19c1696408E63d670ab8177bfafB0D37e9F3ed82",
