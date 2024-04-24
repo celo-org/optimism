@@ -91,8 +91,8 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3.17
+      #- name: Setup tmate session
+      #  uses: mxschmitt/action-tmate@v3.17
 
       - name: Setup
         uses: ./.github/actions/setup
@@ -100,7 +100,7 @@ jobs:
       - name: Deploy L1 contracts
         run: |
           export IMPL_SALT=$(openssl rand -hex 32)
-          cd packages/contracts-bedrock
+          cd ethereum-optimism/packages/contracts-bedrock
           ./scripts/getting-started/config.sh
           if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST == 'false' ]]
           then
@@ -114,15 +114,16 @@ jobs:
       - name: Generate genesis files
         run: |
           mkdir -p l2-config-files/$DEPLOYMENT_CONTEXT
-          cd op-node
+          cd ethereum-optimism/op-node
           go run cmd/main.go genesis l2 \
             --deploy-config ../packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json \
             --l1-deployments ../packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy \
-            --outfile.l2 ../l2-config-files/$DEPLOYMENT_CONTEXT/genesis-$(date +%s).json \
-            --outfile.rollup ../l2-config-files/$DEPLOYMENT_CONTEXT/rollup-$(date +%s).json \
+            --outfile.l2 ../../l2-config-files/$DEPLOYMENT_CONTEXT/genesis-$(date +%s).json \
+            --outfile.rollup ../../l2-config-files/$DEPLOYMENT_CONTEXT/rollup-$(date +%s).json \
             --l1-rpc $L1_RPC_URL
 
       - name: "Commit genesis files"
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: '[Automatic] - Commit genesis files'
+          file_pattern: './optimism/l2-config-files/$DEPLOYMENT_CONTEXT/*.json ./optimism/packages/contracts-bedrock/**'
