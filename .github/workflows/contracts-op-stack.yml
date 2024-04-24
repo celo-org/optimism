@@ -96,9 +96,6 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3.17
-
       - name: Setup
         uses: ./.github/actions/setup
 
@@ -130,6 +127,9 @@ jobs:
             --outfile.l2 ../../l2-config-files/$DEPLOYMENT_CONTEXT/genesis-$(date +%s).json \
             --outfile.rollup ../../l2-config-files/$DEPLOYMENT_CONTEXT/rollup-$(date +%s).json \
             --l1-rpc $L1_RPC_URL
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3.17
 
       - name: "Commit genesis files"
         uses: stefanzweifel/git-auto-commit-action@v5
