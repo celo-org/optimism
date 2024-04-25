@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-bindings/predeploys"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
@@ -193,7 +194,7 @@ func main() {
 			dryRun := ctx.Bool("dry-run")
 			// TODO(pl): Move this into the function
 			log.Info("Opening database", "dbCache", dbCache, "dbHandles", dbHandles, "dbPath", dbPath)
-			ldb, err := Open(dbPath, dbCache, dbHandles)
+			ldb, err := openCeloDb(dbPath, dbCache, dbHandles)
 			if err != nil {
 				return fmt.Errorf("cannot open DB: %w", err)
 			}
@@ -324,7 +325,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		Number:      new(big.Int).Add(header.Number, common.Big1),
 		GasLimit:    header.GasLimit,
 		GasUsed:     0,
-		Time:        header.Time,
+		Time:        uint64(time.Now().Unix()), // TODO(pl): Needed to avoid L1-L2 time mismatches
 		Extra:       []byte("CeL2 migration"),
 		MixDigest:   common.Hash{},
 		Nonce:       types.BlockNonce{},
@@ -368,13 +369,13 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	rawdb.WriteHeadFastBlockHash(ldb, cel2Block.Hash())
 	rawdb.WriteHeadHeaderHash(ldb, cel2Block.Hash())
 
-	// TODO(pl): What does this mean?
+	// TODO(pl): What does finalized mean here?
 	// Make the first CeL2 block a finalized block.
 	rawdb.WriteFinalizedBlockHash(ldb, cel2Block.Hash())
 
 	// Set the standard options.
-	// TODO: What about earlier hardforks, e.g. does berlin have to be enabled as it never was on Celo?
 	cfg.LondonBlock = cel2Block.Number()
+	cfg.BerlinBlock = cel2Block.Number()
 	cfg.ArrowGlacierBlock = cel2Block.Number()
 	cfg.GrayGlacierBlock = cel2Block.Number()
 	cfg.MergeNetsplitBlock = cel2Block.Number()
@@ -391,13 +392,14 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	}
 	cfg.CanyonTime = &cel2Header.Time
 	cfg.EcotoneTime = &cel2Header.Time
-
-	// TODO(pl): What about Ethereum hardforks
+	cfg.ShanghaiTime = &cel2Header.Time
+	cfg.Cel2Time = &cel2Header.Time
 
 	log.Info("Write new config to database", "config", cfg)
 
 	// Write the chain config to disk.
-	rawdb.WriteChainConfig(ldb, cel2Block.Hash(), cfg)
+	// TODO(pl): Why do we need to write this with the genesis hash, not `cel2Block.Hash()`?`
+	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
 
 	// Yay!
 	log.Info(
@@ -418,7 +420,8 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	return cel2Header, nil
 }
 
-func Open(path string, cache int, handles int) (ethdb.Database, error) {
+// Opens a Celo database, stored in the `celo` subfolder
+func openCeloDb(path string, cache int, handles int) (ethdb.Database, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
