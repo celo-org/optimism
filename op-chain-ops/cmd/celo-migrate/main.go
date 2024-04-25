@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -178,12 +179,6 @@ func main() {
 				return fmt.Errorf("error creating l2 genesis: %w", err)
 			}
 
-			// So far we applied changes in the memory VM and collected changes in the genesis struct
-			// No we iterate through all accounts that have been written there and set them inside the statedb.
-			// This will change the state root
-			// TODO(pl): We should have some checks that check we don't write accounts that aren't necessary, e.g. dev account
-			// Another property is that the total balance changes must be 0
-
 			// Write changes to state to actual state database
 			dbPath := ctx.String("db-path")
 			if dbPath == "" {
@@ -288,9 +283,20 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		return nil, fmt.Errorf("cannot create StateDB: %w", err)
 	}
 
+	// So far we applied changes in the memory VM and collected changes in the genesis struct
+	// No we iterate through all accounts that have been written there and set them inside the statedb.
+	// This will change the state root
+	// Another property is that the total balance changes must be 0
+	accountCounter := 0
+	overwriteCounter := 0
+	balanceDiff := big.NewInt(0)
 	for k, v := range genesis.Alloc {
+		accountCounter++
 		if db.Exist(k) {
-			log.Warn("Operating on existing state", "account", k)
+			equal := bytes.Equal(db.GetCode(k), v.Code)
+
+			log.Warn("Operating on existing state", "account", k, "equalCode", equal)
+			overwriteCounter++
 		}
 		// TODO(pl): decide what to do with existing accounts.
 		db.CreateAccount(k)
@@ -299,7 +305,13 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		db.SetBalance(k, v.Balance)
 		db.SetCode(k, v.Code)
 		db.SetStorage(k, v.Storage)
+
 		log.Info("Moved account", "address", k)
+		balanceDiff = balanceDiff.Add(balanceDiff, v.Balance)
+	}
+	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+	if balanceDiff.Sign() != 0 {
+		log.Warn("Deploying OP contracts changed native balance", "diff", balanceDiff)
 	}
 
 	// We're done messing around with the database, so we can now commit the changes to the DB.
