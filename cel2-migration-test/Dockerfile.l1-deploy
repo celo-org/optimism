@@ -1,7 +1,0 @@
-FROM ghcr.io/foundry-rs/foundry
-
-RUN apk add --no-cache jq bash curl openssl
-
-COPY entrypoint-l1-deploy.sh /entrypoint.sh
-
-ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]

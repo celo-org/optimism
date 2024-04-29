@@ -23,15 +23,16 @@ All commands are expected to be run from inside this directory.
 
 1. **Deploy the OP L1 contracts**
 
-   Now it is necessary to deploy the L1 contracts. This is currently done in the
-   `l1-deploy` service.
+   Now it is necessary to deploy the L1 contracts. This is done by the
+   `deploy-l1-contracts.sh` script.
 
-   Initiate the deployment by running `docker compose up l1-deploy`. This
-   creates a config file (`config/config.json`) and a file containing L1
-   addresses (`deployment-l1.json`).
+   Start the script `./deploy-l1-contracts.sh`. This creates a config file
+   (`config/config.json`) and a file containing L1 addresses
+   (`deployment-l1.json`).
 
-   This service checks if the config file has already been created. If you want
-   to rerun it, delete `config/config.json`.
+   Running the script overwrites prior deployments. If it fails without a
+   readable error message, it might be caused by re-using an old salt. In this
+   case you can create a new one with `direnv allow`.
 
 1. **Setup Celo datadir and run migration**
 

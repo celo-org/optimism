@@ -28,16 +28,6 @@ services:
     environment:
       GETH_MINER_RECOMMIT: 100m
 
-  l1-deploy:
-    depends_on:
-      - l1
-    build:
-      context: .
-      dockerfile: Dockerfile.l1-deploy
-    volumes:
-      - "${PWD}/config:/config"
-      - "${PWD}/..:/repo"
-
   l2:
     build:
       context: .

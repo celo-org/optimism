@@ -109,7 +109,4 @@ EOL
 )
 
 # Write the config file
-echo "$config" > /config/config.json
-
-ls /config
-cat /config/config.json
+echo "$config" > config/config.json
