@@ -78,4 +78,5 @@ All commands are expected to be run from inside this directory.
 
 1. **Run `op-batcher` and `op-proposer`**
 
-   To be done.
+   Run `docker compose up op-batcher op-proposer`. If this fails with unset
+   environment variables, reload the `.envrc` file with `direnv allow`.
