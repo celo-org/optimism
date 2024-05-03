@@ -105,7 +105,7 @@ jobs:
         uses: ./.github/actions/setup
 
       - name: Deploy L1 contracts
-        if: '${{ env.DEPLOY_CONTRACTS }}'
+        if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
         run: |
           export IMPL_SALT=$(openssl rand -hex 32)
           cd packages/contracts-bedrock
