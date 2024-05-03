@@ -129,6 +129,7 @@ jobs:
       - name: Copy old .deploy file if contracts not deployed
         if: ${{ env.DEPLOY_CONTRACTS == 'false' }}
         run: |
+          mkdir -p ethereum-optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
           cp packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy ethereum-optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
       - name: Generate genesis files
