@@ -104,14 +104,17 @@ jobs:
       - name: Setup
         uses: ./.github/actions/setup
 
-      - name: Deploy L1 contracts
-        if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
+      - name: Generate config JSON
         run: |
           export IMPL_SALT=$(openssl rand -hex 32)
           cd packages/contracts-bedrock
           ./scripts/getting-started/config.sh
           cp deploy-config/$DEPLOYMENT_CONTEXT.json /home/runner/work/optimism/optimism/ethereum-optimism/packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json
-          cd ../../ethereum-optimism/packages/contracts-bedrock
+
+      - name: Deploy L1 contracts
+        if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
+        run: |
+          cd ethereum-optimism/packages/contracts-bedrock
           if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST == 'false' ]]
           then
             echo "Simulating ..."
@@ -120,8 +123,11 @@ jobs:
             echo "Broadcasting ..."
             forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           fi
+
+      - name: Copy .deploy file
+        run: |
           mkdir -p /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
-          cp deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
+          cp ethereum-optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
       - name: Generate genesis files
         run: |
