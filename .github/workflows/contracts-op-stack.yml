@@ -126,6 +126,11 @@ jobs:
           mkdir -p /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
           cp ethereum-optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
+      - name: Copy old .deploy file if contracts not deployed
+        if: ${{ env.DEPLOY_CONTRACTS == 'false' }}
+        run: |
+          cp optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy ethereum-optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
+
       - name: Generate genesis files
         run: |
           mkdir -p l2-config-files/$DEPLOYMENT_CONTEXT
