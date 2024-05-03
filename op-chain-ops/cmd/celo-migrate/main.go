@@ -38,11 +38,11 @@ var (
 	}
 	l1DeploymentsFlag = &cli.PathFlag{
 		Name:  "l1-deployments",
-		Usage: "Path to L1 deployments JSON file. Cannot be used with --deployment-dir",
+		Usage: "Path to L1 deployments JSON file",
 	}
 	l1RPCFlag = &cli.StringFlag{
 		Name:  "l1-rpc",
-		Usage: "RPC URL for an Ethereum L1 node. Cannot be used with --l1-starting-block",
+		Usage: "RPC URL for an Ethereum L1 node",
 	}
 	outfileL2Flag = &cli.PathFlag{
 		Name:  "outfile.l2",
@@ -52,7 +52,6 @@ var (
 		Name:  "outfile.rollup",
 		Usage: "Path to rollup output file",
 	}
-
 	dbPathFlag = &cli.StringFlag{
 		Name:     "db-path",
 		Usage:    "Path to database",
@@ -85,8 +84,8 @@ var (
 		dryRunFlag,
 	}
 
-	// from `packages/contracts-bedrock/deploy-config/internal-devnet.json`
-	EIP1559Denominator = uint64(50) // TODO(pl): select values
+	// TODO: read those form the deploy config
+	EIP1559Denominator = uint64(50)
 	EIP1559Elasticity  = uint64(10)
 )
 
@@ -102,6 +101,31 @@ func main() {
 			if deployConfig == "" {
 				return fmt.Errorf("must specify --deploy-config")
 			}
+			l1Deployments := ctx.Path("l1-deployments")
+			if l1Deployments == "" {
+				return fmt.Errorf("must specify --l1-deployments")
+			}
+			l1RPC := ctx.String("l1-rpc")
+			if l1RPC == "" {
+				return fmt.Errorf("must specify --l1-rpc")
+			}
+			outfileL2 := ctx.Path("outfile.l2")
+			if outfileL2 == "" {
+				return fmt.Errorf("must specify --outfile.l2")
+			}
+			outfileRollup := ctx.Path("outfile.rollup")
+			if outfileRollup == "" {
+				return fmt.Errorf("must specify --outfile.rollup")
+			}
+			dbPath := ctx.String("db-path")
+			if dbPath == "" {
+				return fmt.Errorf("must specify --db-path")
+			}
+			dbCache := ctx.Int("db-cache")
+			dbHandles := ctx.Int("db-handles")
+			dryRun := ctx.Bool("dry-run")
+
+			// Read deployment configuration
 			log.Info("Deploy config", "path", deployConfig)
 			config, err := genesis.NewDeployConfig(deployConfig)
 			if err != nil {
@@ -109,10 +133,6 @@ func main() {
 			}
 
 			// Try reading the L1 deployment information
-			l1Deployments := ctx.Path("l1-deployments")
-			if l1Deployments == "" {
-				return fmt.Errorf("must specify --l1-deployments")
-			}
 			deployments, err := genesis.NewL1Deployments(l1Deployments)
 			if err != nil {
 				return fmt.Errorf("cannot read L1 deployments at %s: %w", l1Deployments, err)
@@ -120,21 +140,6 @@ func main() {
 			config.SetDeployments(deployments)
 
 			// Get latest block information from L1
-			l1RPC := ctx.String("l1-rpc")
-			if l1RPC == "" {
-				return fmt.Errorf("must specify --l1-rpc")
-			}
-
-			outfileL2 := ctx.Path("outfile.l2")
-			if outfileL2 == "" {
-				return fmt.Errorf("must specify --outfile.l2")
-			}
-
-			outfileRollup := ctx.Path("outfile.rollup")
-			if outfileRollup == "" {
-				return fmt.Errorf("must specify --outfile.rollup")
-			}
-
 			var l1StartBlock *types.Block
 			client, err := ethclient.Dial(l1RPC)
 			if err != nil {
@@ -180,31 +185,10 @@ func main() {
 			}
 
 			// Write changes to state to actual state database
-			dbPath := ctx.String("db-path")
-			if dbPath == "" {
-				return fmt.Errorf("must specify --db-path")
-			}
-			dbCache := ctx.Int("db-cache")
-			dbHandles := ctx.Int("db-handles")
-			dryRun := ctx.Bool("dry-run")
-			// TODO(pl): Move this into the function
-			log.Info("Opening database", "dbCache", dbCache, "dbHandles", dbHandles, "dbPath", dbPath)
-			ldb, err := openCeloDb(dbPath, dbCache, dbHandles)
-			if err != nil {
-				return fmt.Errorf("cannot open DB: %w", err)
-			}
-			log.Info("Loaded Celo L1 DB", "db", ldb)
-
-			cel2Header, err := ApplyMigrationChangesToDB(ldb, l2Genesis, !dryRun)
+			cel2Header, err := ApplyMigrationChangesToDB(l2Genesis, dbPath, dbCache, dbHandles, !dryRun)
 			if err != nil {
 				return err
 			}
-
-			// Close the database handle
-			if err := ldb.Close(); err != nil {
-				return err
-			}
-
 			log.Info("Updated Cel2 state")
 
 			log.Info("Writing state diff", "file", outfileL2)
@@ -236,8 +220,13 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit bool) (*types.Header, error) {
-	log.Info("Migrating DB")
+func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int, dbHandles int, commit bool) (*types.Header, error) {
+	log.Info("Opening celo database", "dbCache", dbCache, "dbHandles", dbHandles, "dbPath", dbPath)
+	ldb, err := openCeloDb(dbPath, dbCache, dbHandles)
+	if err != nil {
+		return nil, fmt.Errorf("cannot open DB: %w", err)
+	}
+	log.Info("Loaded Celo L1 DB", "db", ldb)
 
 	// Grab the hash of the tip of the legacy chain.
 	hash := rawdb.ReadHeadHeaderHash(ldb)
@@ -261,7 +250,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	if cfg == nil {
 		log.Crit("chain config not found")
 	}
-	log.Info("Read config from database", "config", cfg)
+	log.Info("Read chain config from database", "config", cfg)
 
 	dbFactory := func() (*state.StateDB, error) {
 		// Set up the backing store.
@@ -323,7 +312,6 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		return nil, err
 	}
 
-	log.Info("Creating new Genesis block")
 	// Create the header for the Bedrock transition block.
 	cel2Header := &types.Header{
 		ParentHash:  header.Hash(),
@@ -343,6 +331,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 		Nonce:       types.BlockNonce{},
 		BaseFee:     new(big.Int).Set(header.BaseFee),
 	}
+	log.Info("Build Cel2 migration header", "header", cel2Header)
 
 	// Create the Bedrock transition block from the header. Note that there are no transactions,
 	// uncle blocks, or receipts in the Bedrock transition block.
@@ -350,15 +339,13 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 
 	// We did it!
 	log.Info(
-		"Built Celo migration block",
+		"Built Cel2 migration block",
 		"hash", cel2Block.Hash(),
 		"root", cel2Block.Root(),
 		"number", cel2Block.NumberU64(),
 		"gas-used", cel2Block.GasUsed(),
 		"gas-limit", cel2Block.GasLimit(),
 	)
-
-	log.Info("Header", "header", cel2Header)
 
 	// If we're not actually writing this to disk, then we're done.
 	if !commit {
@@ -407,27 +394,24 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	cfg.ShanghaiTime = &cel2Header.Time
 	cfg.Cel2Time = &cel2Header.Time
 
-	log.Info("Write new config to database", "config", cfg)
-
 	// Write the chain config to disk.
 	// TODO(pl): Why do we need to write this with the genesis hash, not `cel2Block.Hash()`?`
 	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
-
-	// Yay!
-	log.Info(
-		"Wrote chain config",
-		"1559-denominator", EIP1559Denominator,
-		"1559-elasticity", EIP1559Elasticity,
-	)
+	log.Info("Wrote updated chain config", "config", cfg)
 
 	// We're done!
 	log.Info(
-		"Wrote CeL2 transition block",
+		"Wrote CeL2 migration block",
 		"height", cel2Header.Number,
 		"root", cel2Header.Root.String(),
 		"hash", cel2Header.Hash().String(),
 		"timestamp", cel2Header.Time,
 	)
+
+	// Close the database handle
+	if err := ldb.Close(); err != nil {
+		return nil, err
+	}
 
 	return cel2Header, nil
 }
