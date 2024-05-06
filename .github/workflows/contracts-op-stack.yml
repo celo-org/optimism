@@ -17,6 +17,13 @@ on:
         required: false
         type: string
         default: 'op-contracts/v1.3.0'
+      l1_chain_id:
+        required: false
+        type: string
+        default: '11155111'
+      l1_rpc_url:
+        required: false
+        type: string
       l1_rpc_kind:
         required: false
         type: string
@@ -52,8 +59,10 @@ jobs:
     if: ${{ ! startsWith(github.triggering_actor, 'akeyless') }}
     env:
       BROADCAST: ${{ github.event_name == 'push' && 'true' || inputs.broadcast }}
-      DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'false' || inputs.deploy_contracts }}
+      DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
+      L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
+      L1_RPC_URL: ${{ github.event_name == 'push' && 'https://holesky.drpc.org' || inputs.l1_rpc_url }}
       L1_RPC_KIND: ${{ github.event_name == 'push' && 'alchemy' || inputs.l1_rpc_kind }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro' || inputs.deployment_context }}
       GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
@@ -73,6 +82,7 @@ jobs:
 
       - name: Akeyless get L1 URL
         uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
+        if: ${{ env.L1_RPC_URL != 'false' }}
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
