@@ -5,10 +5,6 @@ on:
       - alvarof2/contracts
   workflow_dispatch:
     inputs:
-      broadcast:
-        required: false
-        type: boolean
-        default: true
       deploy_contracts:
         required: false
         type: boolean
@@ -58,7 +54,6 @@ jobs:
       contents: read
     if: ${{ ! startsWith(github.triggering_actor, 'akeyless') }}
     env:
-      BROADCAST: ${{ github.event_name == 'push' && 'true' || inputs.broadcast }}
       DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
@@ -125,14 +120,8 @@ jobs:
         if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
         run: |
           cd ethereum-optimism/packages/contracts-bedrock
-          if [[ -z "${BROADCAST}" ]] || [[ $BROADCAST == 'false' ]]
-          then
-            echo "Simulating ..."
-            forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --rpc-url $L1_RPC_URL --slow
-          else
-            echo "Broadcasting ..."
-            forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
-          fi
+          echo "Broadcasting ..."
+          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --slow
           mkdir -p /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
           cp ethereum-optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
