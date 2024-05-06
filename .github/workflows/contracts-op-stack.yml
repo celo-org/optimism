@@ -63,8 +63,8 @@ jobs:
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
       L1_RPC_URL: ${{ github.event_name == 'push' && 'https://holesky.drpc.org' || inputs.l1_rpc_url }}
-      L1_RPC_KIND: ${{ github.event_name == 'push' && 'alchemy' || inputs.l1_rpc_kind }}
-      DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro' || inputs.deployment_context }}
+      L1_RPC_KIND: ${{ github.event_name == 'push' && 'any' || inputs.l1_rpc_kind }}
+      DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro-holesky' || inputs.deployment_context }}
       GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
       GS_BATCHER_ADDRESS: ${{ github.event_name == 'push' && '0x0F82E82268FA5de5070A088e54eAbc2dec07D615' || inputs.gs_batcher_address }}
       GS_PROPOSER_ADDRESS: ${{ github.event_name == 'push' && '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb' || inputs.gs_proposer_address }}
