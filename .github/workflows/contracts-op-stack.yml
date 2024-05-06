@@ -57,7 +57,7 @@ jobs:
       DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
-      L1_RPC_URL: ${{ github.event_name == 'push' && 'https://holesky.drpc.org' || inputs.l1_rpc_url }}
+      L1_RPC_URL: ${{ github.event_name == 'push' && 'https://ethereum-holesky-rpc.publicnode.com' || inputs.l1_rpc_url }}
       L1_RPC_KIND: ${{ github.event_name == 'push' && 'any' || inputs.l1_rpc_kind }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro-holesky' || inputs.deployment_context }}
       GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
