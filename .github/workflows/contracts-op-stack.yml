@@ -77,7 +77,7 @@ jobs:
 
       - name: Akeyless get L1 URL
         uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
-        if: ${{ env.L1_RPC_URL != 'false' }}
+        if: ${{ env.L1_RPC_URL == 'false' }}
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
