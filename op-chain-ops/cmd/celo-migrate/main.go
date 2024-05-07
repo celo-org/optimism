@@ -241,8 +241,7 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 
 	// Grab the full header.
 	header := rawdb.ReadHeader(ldb, hash, *num)
-	// trieRoot := header.Root
-	log.Info("Read header from database", "number", header)
+	log.Info("Read header from database", "header", header)
 
 	// We need to update the chain config to set the correct hardforks.
 	genesisHash := rawdb.ReadCanonicalHash(ldb, 0)
@@ -273,12 +272,11 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 	}
 
 	// So far we applied changes in the memory VM and collected changes in the genesis struct
-	// No we iterate through all accounts that have been written there and set them inside the statedb.
+	// Now we iterate through all accounts that have been written there and set them inside the statedb.
 	// This will change the state root
 	// Another property is that the total balance changes must be 0
 	accountCounter := 0
 	overwriteCounter := 0
-	balanceDiff := big.NewInt(0)
 	for k, v := range genesis.Alloc {
 		accountCounter++
 		if db.Exist(k) {
@@ -290,24 +288,27 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 		// TODO(pl): decide what to do with existing accounts.
 		db.CreateAccount(k)
 
+		// CreateAccount above copied the balance, check if we change it
+		if db.GetBalance(k).Cmp(v.Balance) != 0 {
+			// TODO(pl): make this a hard error once the migration has been tested more
+			log.Warn("Moving account changed native balance", "address", k, "oldBalance", db.GetBalance(k), "newBalance", v.Balance)
+		}
+
 		db.SetNonce(k, v.Nonce)
 		db.SetBalance(k, v.Balance)
 		db.SetCode(k, v.Code)
 		db.SetStorage(k, v.Storage)
 
 		log.Info("Moved account", "address", k)
-		balanceDiff = balanceDiff.Add(balanceDiff, v.Balance)
 	}
 	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
-	if balanceDiff.Sign() != 0 {
-		log.Warn("Deploying OP contracts changed native balance", "diff", balanceDiff)
-	}
+
+	migrationBlock := new(big.Int).Add(header.Number, common.Big1)
 
 	// We're done messing around with the database, so we can now commit the changes to the DB.
 	// Note that this doesn't actually write the changes to disk.
 	log.Info("Committing state DB")
-	// TODO(pl): What block info to put here?
-	newRoot, err := db.Commit(1234, true)
+	newRoot, err := db.Commit(migrationBlock.Uint64(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -318,11 +319,11 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 		UncleHash:   types.EmptyUncleHash,
 		Coinbase:    predeploys.SequencerFeeVaultAddr,
 		Root:        newRoot,
-		TxHash:      types.EmptyRootHash,
-		ReceiptHash: types.EmptyRootHash,
+		TxHash:      types.EmptyTxsHash,
+		ReceiptHash: types.EmptyReceiptsHash,
 		Bloom:       types.Bloom{},
 		Difficulty:  new(big.Int).Set(common.Big0),
-		Number:      new(big.Int).Add(header.Number, common.Big1),
+		Number:      migrationBlock,
 		GasLimit:    header.GasLimit,
 		GasUsed:     0,
 		Time:        uint64(time.Now().Unix()), // TODO(pl): Needed to avoid L1-L2 time mismatches
@@ -368,8 +369,7 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 	rawdb.WriteHeadFastBlockHash(ldb, cel2Block.Hash())
 	rawdb.WriteHeadHeaderHash(ldb, cel2Block.Hash())
 
-	// TODO(pl): What does finalized mean here?
-	// Make the first CeL2 block a finalized block.
+	// Mark the first CeL2 block as finalized
 	rawdb.WriteFinalizedBlockHash(ldb, cel2Block.Hash())
 
 	// Set the standard options.
@@ -380,6 +380,8 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 	cfg.MergeNetsplitBlock = cel2Block.Number()
 	cfg.TerminalTotalDifficulty = big.NewInt(0)
 	cfg.TerminalTotalDifficultyPassed = true
+	cfg.ShanghaiTime = &cel2Header.Time
+	cfg.CancunTime = &cel2Header.Time
 
 	// Set the Optimism options.
 	cfg.BedrockBlock = cel2Block.Number()
@@ -391,7 +393,6 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 	}
 	cfg.CanyonTime = &cel2Header.Time
 	cfg.EcotoneTime = &cel2Header.Time
-	cfg.ShanghaiTime = &cel2Header.Time
 	cfg.Cel2Time = &cel2Header.Time
 
 	// Write the chain config to disk.
