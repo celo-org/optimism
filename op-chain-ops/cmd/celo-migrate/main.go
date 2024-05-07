@@ -251,24 +251,15 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 	}
 	log.Info("Read chain config from database", "config", cfg)
 
-	dbFactory := func() (*state.StateDB, error) {
-		// Set up the backing store.
-		underlyingDB := state.NewDatabaseWithConfig(ldb, &trie.Config{
-			Preimages: true,
-		})
+	// Set up the backing store.
+	underlyingDB := state.NewDatabaseWithConfig(ldb, &trie.Config{
+		Preimages: true,
+	})
 
-		// Open up the state database.
-		db, err := state.New(header.Root, underlyingDB, nil)
-		if err != nil {
-			return nil, fmt.Errorf("cannot open StateDB: %w", err)
-		}
-
-		return db, nil
-	}
-
-	db, err := dbFactory()
+	// Open up the state database.
+	db, err := state.New(header.Root, underlyingDB, nil)
 	if err != nil {
-		return nil, fmt.Errorf("cannot create StateDB: %w", err)
+		return nil, fmt.Errorf("cannot open StateDB: %w", err)
 	}
 
 	// So far we applied changes in the memory VM and collected changes in the genesis struct
