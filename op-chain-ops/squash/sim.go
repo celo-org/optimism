@@ -165,7 +165,7 @@ func (sim *SquashSim) AddUpgradeTxs(txs []hexutil.Bytes) error {
 			return fmt.Errorf("failed to turn upgrade tx %d into message: %w", i, err)
 		}
 		if !msg.IsDepositTx {
-			return fmt.Errorf("upgrade tx %d is not a depost", i)
+			return fmt.Errorf("upgrade tx %d is not a deposit", i)
 		}
 		if res, err := sim.AddMessage(msg); err != nil {
 			return fmt.Errorf("invalid upgrade tx %d, EVM invocation failed: %w", i, err)

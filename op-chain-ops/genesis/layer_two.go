@@ -122,6 +122,8 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 }
 
 func PerformUpgradeTxs(db *state.MemoryStateDB) error {
+	log.Info("Running Ecotone upgrade transactions")
+
 	// Only the Ecotone upgrade is performed with upgrade-txs.
 	if !db.Genesis().Config.IsEcotone(db.Genesis().Timestamp) {
 		return nil

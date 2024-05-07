@@ -7,6 +7,9 @@ ecotone-scalar:
 receipt-reference-builder:
 	go build -o ./bin/receipt-reference-builder ./cmd/receipt-reference-builder/*.go
 
+celo-migrate:
+	go build -o ./bin/celo-migrate ./cmd/celo-migrate/*.go
+
 test:
 	go test ./...
 
