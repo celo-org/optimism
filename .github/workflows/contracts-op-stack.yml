@@ -16,7 +16,7 @@ on:
       l1_chain_id:
         required: false
         type: string
-        default: '11155111'
+        default: '17000'
       l1_rpc_url:
         required: false
         type: string
