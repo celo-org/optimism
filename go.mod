@@ -222,4 +222,6 @@ require (
 //replace github.com/ethereum/go-ethereum => github.com/celo-org/op-geth v0.0.0-20240220150757-6c346a984571
 
 //replace github.com/ethereum-optimism/superchain-registry/superchain => ../superchain-registry/superchain
-replace github.com/ethereum/go-ethereum => ../op-geth
+replace github.com/ethereum/go-ethereum => github.com/celo-org/op-geth v0.0.0-20240509214009-57109af77703
+
+//replace github.com/ethereum/go-ethereum => ../op-geth
