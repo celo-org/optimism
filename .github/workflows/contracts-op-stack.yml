@@ -50,7 +50,7 @@ jobs:
       contents: read
     if: ${{ ! startsWith(github.triggering_actor, 'akeyless') }}
     env:
-      DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'false' || inputs.deploy_contracts }}
+      DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
       L1_RPC_URL: ${{ github.event_name == 'push' && 'false' || inputs.l1_rpc_url }}
