@@ -1,8 +1,5 @@
 name: Alfajores-Holesky Deploy OP-Stack L1 Contracts
 on:
-  push:
-    branches:
-      - alvarof2/contracts
   workflow_dispatch:
     inputs:
       deploy_contracts:
@@ -33,7 +30,7 @@ jobs:
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
       L2_CHAIN_ID: ${{ github.event_name == 'push' && '42069' || inputs.l2_chain_id }}
-      L1_CHAIN_ID: '17000'
+      L1_CHAIN_ID: '17000' # Holesky
       L1_RPC_URL: 'https://ethereum-holesky-rpc.publicnode.com'
       GS_ADMIN_ADDRESS: '0xb2397dF29AFB4B4661559436180019bEb7912985'
       GS_BATCHER_ADDRESS: '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4'
@@ -82,11 +79,8 @@ jobs:
       - name: Generate config JSON
         run: |
           cd packages/contracts-bedrock
-          ./scripts/getting-started/config.sh
+          ./scripts/getting-started/config-vars-op-stack.sh
           cp deploy-config/$DEPLOYMENT_CONTEXT.json /home/runner/work/optimism/optimism/ethereum-optimism/packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json
-
-      #- name: Setup tmate session
-      #  uses: mxschmitt/action-tmate@v3.17
 
       - name: Deploy L1 contracts
         if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
@@ -119,4 +113,5 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: '[Automatic] - Commit genesis files'
+          branch: alvarof2/contracts
           file_pattern: 'l2-config-files packages/contracts-bedrock/**'
