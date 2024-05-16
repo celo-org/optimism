@@ -20,10 +20,6 @@ on:
       l1_rpc_url:
         required: false
         type: string
-      l1_rpc_kind:
-        required: false
-        type: string
-        default: 'any'
       deployment_context:
         required: false
         type: string
@@ -54,16 +50,15 @@ jobs:
       contents: read
     if: ${{ ! startsWith(github.triggering_actor, 'akeyless') }}
     env:
-      DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
+      DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'false' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
       L1_RPC_URL: ${{ github.event_name == 'push' && 'https://ethereum-holesky-rpc.publicnode.com' || inputs.l1_rpc_url }}
-      L1_RPC_KIND: ${{ github.event_name == 'push' && 'any' || inputs.l1_rpc_kind }}
-      DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test-alvaro-holesky' || inputs.deployment_context }}
-      GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82' || inputs.gs_admin_address }}
-      GS_BATCHER_ADDRESS: ${{ github.event_name == 'push' && '0x0F82E82268FA5de5070A088e54eAbc2dec07D615' || inputs.gs_batcher_address }}
-      GS_PROPOSER_ADDRESS: ${{ github.event_name == 'push' && '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb' || inputs.gs_proposer_address }}
-      GS_SEQUENCER_ADDRESS: ${{ github.event_name == 'push' && '0xF20B236A87e26D1Ac7290D0F70f637af8145D54e' || inputs.gs_sequenncer_address }}
+      DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
+      GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0xb2397dF29AFB4B4661559436180019bEb7912985' || inputs.gs_admin_address }}
+      GS_BATCHER_ADDRESS: ${{ github.event_name == 'push' && '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4' || inputs.gs_batcher_address }}
+      GS_PROPOSER_ADDRESS: ${{ github.event_name == 'push' && '0xdCf30236Fa0aBE2ca0BEc2eE0a2F40b16A144DB3' || inputs.gs_proposer_address }}
+      GS_SEQUENCER_ADDRESS: ${{ github.event_name == 'push' && '0x3e2Df8efB6fA1d6E6021572a99BB67BA9ab2C59D' || inputs.gs_sequenncer_address }}
     steps:
 
       - name: "Get GitHub Token from Akeyless"
@@ -73,22 +68,22 @@ jobs:
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
-          dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT"}'
+          dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"}'
 
-      - name: Akeyless get L1 URL
-        uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
-        if: ${{ env.L1_RPC_URL == 'false' }}
-        with:
-          api-url: https://api.gateway.akeyless.celo-networks-dev.org
-          access-id: p-kf9vjzruht6l
-          static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/l1-rpc-url":"L1_RPC_URL"}'
+      # - name: Akeyless get L1 URL
+      #   uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
+      #   if: ${{ env.L1_RPC_URL == 'false' }}
+      #   with:
+      #     api-url: https://api.gateway.akeyless.celo-networks-dev.org
+      #     access-id: p-kf9vjzruht6l
+      #     static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/l1-rpc-url":"L1_RPC_URL", "/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
 
-      - name: Akeyless get GS ADMIN private key
-        uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
-        with:
-          api-url: https://api.gateway.akeyless.celo-networks-dev.org
-          access-id: p-kf9vjzruht6l
-          static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
+      # - name: Akeyless get GS ADMIN private key
+      #   uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
+      #   with:
+      #     api-url: https://api.gateway.akeyless.celo-networks-dev.org
+      #     access-id: p-kf9vjzruht6l
+      #     static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
 
       - name: "Checkout"
         uses: actions/checkout@v4
