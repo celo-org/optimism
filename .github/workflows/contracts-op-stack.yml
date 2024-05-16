@@ -17,6 +17,9 @@ on:
         required: false
         type: string
         default: 'test-alvaro'
+      l2_chain_id:
+        required: false
+        default: '42069'
 
 jobs:
   deploy-contracts:
@@ -29,6 +32,7 @@ jobs:
       DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
+      L2_CHAIN_ID: ${{ github.event_name == 'push' && '42069' || inputs.l2_chain_id }}
       L1_CHAIN_ID: '17000'
       GS_ADMIN_ADDRESS: '0xb2397dF29AFB4B4661559436180019bEb7912985'
       GS_BATCHER_ADDRESS: '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4'
@@ -50,7 +54,10 @@ jobs:
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
-          static-secrets: '{"/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"}'
+          static-secrets: '{
+            "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL",
+            "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"
+            }'
 
       - name: "Checkout"
         uses: actions/checkout@v4
@@ -83,7 +90,7 @@ jobs:
           export IMPL_SALT=$(openssl rand -hex 32)
           cd ethereum-optimism/packages/contracts-bedrock
           echo "Broadcasting ..."
-          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --legacy
+          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL
           mkdir -p /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
           cp deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
