@@ -68,15 +68,15 @@ jobs:
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
-          dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"}'
+          dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT"}'
 
-      # - name: Akeyless get L1 URL
-      #   uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
-      #   if: ${{ env.L1_RPC_URL == 'false' }}
-      #   with:
-      #     api-url: https://api.gateway.akeyless.celo-networks-dev.org
-      #     access-id: p-kf9vjzruht6l
-      #     static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/l1-rpc-url":"L1_RPC_URL", "/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
+      - name: Akeyless get L1 URL
+        uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
+        if: ${{ env.L1_RPC_URL == 'false' }}
+        with:
+          api-url: https://api.gateway.akeyless.celo-networks-dev.org
+          access-id: p-kf9vjzruht6l
+          static-secrets: '{"/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"}'
 
       # - name: Akeyless get GS ADMIN private key
       #   uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
