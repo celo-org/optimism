@@ -34,6 +34,7 @@ jobs:
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
       L2_CHAIN_ID: ${{ github.event_name == 'push' && '42069' || inputs.l2_chain_id }}
       L1_CHAIN_ID: '17000'
+      L1_RPC_URL: 'https://holesky.drpc.org'
       GS_ADMIN_ADDRESS: '0xb2397dF29AFB4B4661559436180019bEb7912985'
       GS_BATCHER_ADDRESS: '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4'
       GS_PROPOSER_ADDRESS: '0xdCf30236Fa0aBE2ca0BEc2eE0a2F40b16A144DB3'
@@ -49,13 +50,13 @@ jobs:
           access-id: p-kf9vjzruht6l
           dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT"}'
 
+      # "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_QUICKNODE_URL":"L1_RPC_URL",
       - name: Akeyless get secrets
         uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
           static-secrets: '{
-            "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_QUICKNODE_URL":"L1_RPC_URL",
             "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"
             }'
 
@@ -84,8 +85,8 @@ jobs:
           ./scripts/getting-started/config.sh
           cp deploy-config/$DEPLOYMENT_CONTEXT.json /home/runner/work/optimism/optimism/ethereum-optimism/packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json
 
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3.17
+      #- name: Setup tmate session
+      #  uses: mxschmitt/action-tmate@v3.17
 
       - name: Deploy L1 contracts
         if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
