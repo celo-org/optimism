@@ -34,7 +34,7 @@ jobs:
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
       L2_CHAIN_ID: ${{ github.event_name == 'push' && '42069' || inputs.l2_chain_id }}
       L1_CHAIN_ID: '17000'
-      L1_RPC_URL: 'https://holesky.drpc.org'
+      L1_RPC_URL: 'https://ethereum-holesky-rpc.publicnode.com'
       GS_ADMIN_ADDRESS: '0xb2397dF29AFB4B4661559436180019bEb7912985'
       GS_BATCHER_ADDRESS: '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4'
       GS_PROPOSER_ADDRESS: '0xdCf30236Fa0aBE2ca0BEc2eE0a2F40b16A144DB3'
