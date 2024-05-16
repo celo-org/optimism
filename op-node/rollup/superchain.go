@@ -62,6 +62,15 @@ func LoadOPStackRollupConfig(chainID uint64) (*Config, error) {
 		return nil, fmt.Errorf("unable to retrieve deposit contract address")
 	}
 
+	var plasma *PlasmaConfig
+	if chConfig.Plasma != nil {
+		plasma = &PlasmaConfig{
+			DAChallengeAddress: common.Address(*chConfig.Plasma.DAChallengeAddress),
+			DAChallengeWindow:  *chConfig.Plasma.DAChallengeWindow,
+			DAResolveWindow:    *chConfig.Plasma.DAResolveWindow,
+		}
+	}
+
 	regolithTime := uint64(0)
 	// three goerli testnets test-ran Bedrock and later upgraded to Regolith.
 	// All other OP-Stack chains have Regolith enabled from the start.
@@ -115,6 +124,7 @@ func LoadOPStackRollupConfig(chainID uint64) (*Config, error) {
 		BatchInboxAddress:      common.Address(chConfig.BatchInboxAddr),
 		DepositContractAddress: depositContractAddress,
 		L1SystemConfigAddress:  common.Address(chConfig.SystemConfigAddr),
+		PlasmaConfig:           plasma,
 	}
 	if superChain.Config.ProtocolVersionsAddr != nil { // Set optional protocol versions address
 		cfg.ProtocolVersionsAddress = common.Address(*superChain.Config.ProtocolVersionsAddr)
