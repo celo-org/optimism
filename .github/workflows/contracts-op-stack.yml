@@ -53,7 +53,7 @@ jobs:
       DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'false' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
       L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
-      L1_RPC_URL: ${{ github.event_name == 'push' && 'https://ethereum-holesky-rpc.publicnode.com' || inputs.l1_rpc_url }}
+      L1_RPC_URL: ${{ github.event_name == 'push' && 'false' || inputs.l1_rpc_url }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
       GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0xb2397dF29AFB4B4661559436180019bEb7912985' || inputs.gs_admin_address }}
       GS_BATCHER_ADDRESS: ${{ github.event_name == 'push' && '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4' || inputs.gs_batcher_address }}
