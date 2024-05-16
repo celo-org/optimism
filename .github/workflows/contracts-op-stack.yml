@@ -84,6 +84,9 @@ jobs:
           ./scripts/getting-started/config.sh
           cp deploy-config/$DEPLOYMENT_CONTEXT.json /home/runner/work/optimism/optimism/ethereum-optimism/packages/contracts-bedrock/deploy-config/$DEPLOYMENT_CONTEXT.json
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3.17
+
       - name: Deploy L1 contracts
         if: ${{ env.DEPLOY_CONTRACTS != 'false' }}
         run: |
@@ -110,9 +113,6 @@ jobs:
             --outfile.l2 ../../l2-config-files/$DEPLOYMENT_CONTEXT/genesis-$(date +%s).json \
             --outfile.rollup ../../l2-config-files/$DEPLOYMENT_CONTEXT/rollup-$(date +%s).json \
             --l1-rpc $L1_RPC_URL
-
-      # - name: Setup tmate session
-      #   uses: mxschmitt/action-tmate@v3.17
 
       - name: "Commit genesis files"
         uses: stefanzweifel/git-auto-commit-action@v5
