@@ -55,7 +55,7 @@ jobs:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
           static-secrets: '{
-            "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL",
+            "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_QUICKNODE_URL":"L1_RPC_URL",
             "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"
             }'
 
