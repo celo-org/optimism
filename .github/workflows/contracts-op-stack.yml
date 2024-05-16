@@ -1,4 +1,4 @@
-name: Deploy Contracts
+name: Alfajores-Holesky Deploy OP-Stack L1 Contracts
 on:
   push:
     branches:
@@ -13,34 +13,10 @@ on:
         required: false
         type: string
         default: 'op-contracts/v1.3.0'
-      l1_chain_id:
-        required: false
-        type: string
-        default: '17000'
-      l1_rpc_url:
-        required: false
-        type: string
       deployment_context:
         required: false
         type: string
         default: 'test-alvaro'
-      gs_admin_address:
-        required: false
-        type: string
-        default: '0x19c1696408E63d670ab8177bfafB0D37e9F3ed82'
-      gs_batcher_address:
-        required: false
-        type: string
-        default: '0x0F82E82268FA5de5070A088e54eAbc2dec07D615'
-      gs_proposer_address:
-        required: false
-        type: string
-        default: '0x8D20f1E387cDF78c4AF42F61FB48B1Be72056FEb'
-      gs_sequenncer_address:
-        required: false
-        type: string
-        default: '0xF20B236A87e26D1Ac7290D0F70f637af8145D54e'
-
 
 jobs:
   deploy-contracts:
@@ -52,13 +28,12 @@ jobs:
     env:
       DEPLOY_CONTRACTS: ${{ github.event_name == 'push' && 'true' || inputs.deploy_contracts }}
       CONTRACTS_TAG: ${{ github.event_name == 'push' && 'op-contracts/v1.3.0' || inputs.contracts_tag }}
-      L1_CHAIN_ID: ${{ github.event_name == 'push' && '17000' || inputs.l1_chain_id }}
-      L1_RPC_URL: ${{ github.event_name == 'push' && 'false' || inputs.l1_rpc_url }}
       DEPLOYMENT_CONTEXT: ${{ github.event_name == 'push' && 'test' || inputs.deployment_context }}
-      GS_ADMIN_ADDRESS: ${{ github.event_name == 'push' && '0xb2397dF29AFB4B4661559436180019bEb7912985' || inputs.gs_admin_address }}
-      GS_BATCHER_ADDRESS: ${{ github.event_name == 'push' && '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4' || inputs.gs_batcher_address }}
-      GS_PROPOSER_ADDRESS: ${{ github.event_name == 'push' && '0xdCf30236Fa0aBE2ca0BEc2eE0a2F40b16A144DB3' || inputs.gs_proposer_address }}
-      GS_SEQUENCER_ADDRESS: ${{ github.event_name == 'push' && '0x3e2Df8efB6fA1d6E6021572a99BB67BA9ab2C59D' || inputs.gs_sequenncer_address }}
+      L1_CHAIN_ID: '17000'
+      GS_ADMIN_ADDRESS: '0xb2397dF29AFB4B4661559436180019bEb7912985'
+      GS_BATCHER_ADDRESS: '0x7fDBe8F4D22ab511340667d7Ce5675568d09eBB4'
+      GS_PROPOSER_ADDRESS: '0xdCf30236Fa0aBE2ca0BEc2eE0a2F40b16A144DB3'
+      GS_SEQUENCER_ADDRESS: '0x3e2Df8efB6fA1d6E6021572a99BB67BA9ab2C59D'
     steps:
 
       - name: "Get GitHub Token from Akeyless"
@@ -70,20 +45,12 @@ jobs:
           access-id: p-kf9vjzruht6l
           dynamic-secrets: '{"/dynamic-secrets/keys/github/optimism/contents=write,pull_requests=write":"PAT"}'
 
-      - name: Akeyless get L1 URL
+      - name: Akeyless get secrets
         uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
-        if: ${{ env.L1_RPC_URL == 'false' }}
         with:
           api-url: https://api.gateway.akeyless.celo-networks-dev.org
           access-id: p-kf9vjzruht6l
           static-secrets: '{"/static-secrets/devops-circle/alfajores/op-testnet-alfajores/HOLESKY_INFURA_URL":"L1_RPC_URL", "/static-secrets/devops-circle/alfajores/op-testnet-alfajores/GS_ADMIN_PRIVATE_KEY":"GS_ADMIN_PRIVATE_KEY"}'
-
-      # - name: Akeyless get GS ADMIN private key
-      #   uses: docker://us-west1-docker.pkg.dev/devopsre/akeyless-public/akeyless-action:latest
-      #   with:
-      #     api-url: https://api.gateway.akeyless.celo-networks-dev.org
-      #     access-id: p-kf9vjzruht6l
-      #     static-secrets: '{"/static-secrets/devops-circle/alvaro-test-opstack-sepolia/gs-admin-private-key":"GS_ADMIN_PRIVATE_KEY"}'
 
       - name: "Checkout"
         uses: actions/checkout@v4
@@ -116,7 +83,7 @@ jobs:
           export IMPL_SALT=$(openssl rand -hex 32)
           cd ethereum-optimism/packages/contracts-bedrock
           echo "Broadcasting ..."
-          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL
+          forge script scripts/Deploy.s.sol:Deploy --private-key $GS_ADMIN_PRIVATE_KEY --broadcast --rpc-url $L1_RPC_URL --legacy
           mkdir -p /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT
           cp deployments/$DEPLOYMENT_CONTEXT/.deploy /home/runner/work/optimism/optimism/packages/contracts-bedrock/deployments/$DEPLOYMENT_CONTEXT/.deploy
 
