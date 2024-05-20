@@ -1,0 +1,11 @@
+# TODO: build arm64 images
+# This currently requires op-geth from https://github.com/celo-org/op-geth/tree/alecps/piersy/data-migration
+FROM --platform=linux/amd64 us-west1-docker.pkg.dev/blockchaintestsglobaltestnet/dev-images/op-geth:3d6a0e48e00137e581ee064db9cafa8300598771
+
+RUN apk add --no-cache jq
+
+COPY entrypoint-l2.sh /entrypoint.sh
+
+# VOLUME ["/db"]
+
+ENTRYPOINT ["/bin/sh", "/entrypoint.sh"]
