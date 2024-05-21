@@ -34,6 +34,7 @@ import { FeeHandler } from "src/celo/FeeHandler.sol";
 import { MentoFeeHandlerSeller } from "src/celo/MentoFeeHandlerSeller.sol";
 import { UniswapFeeHandlerSeller } from "src/celo/UniswapFeeHandlerSeller.sol";
 import { SortedOracles } from "src/celo/stability/SortedOracles.sol";
+import { FeeCurrencyDirectory } from "src/celo/FeeCurrencyDirectory.sol";
 import { FeeCurrency } from "src/celo/testing/FeeCurrency.sol";
 import { AddressSortedLinkedListWithMedian } from "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol";
 
@@ -622,6 +623,7 @@ contract L2Genesis is Deployer {
         // setCeloSortedOracles();
         // setCeloAddressSortedLinkedListWithMedian();
         setCeloFeeCurrency();
+        setFeeCurrencyDirectory();
     }
 
     /// @notice Sets up a proxy for the given impl address
@@ -700,6 +702,17 @@ contract L2Genesis is Deployer {
 
         vm.resetNonce(address(kontract));
         _setupProxy(precompile, address(kontract));
+    }
+
+    function setFeeCurrencyDirectory() internal {
+        FeeCurrencyDirectory feeCurrencyDirectory = new FeeCurrencyDirectory({ test: false });
+
+        address precompile = CeloPredeploys.FEE_CURRENCY_DIRECTORY;
+        string memory cname = CeloPredeploys.getName(precompile);
+        console.log("Deploying %s implementation at: %s", cname, address(feeCurrencyDirectory));
+
+        vm.resetNonce(address(feeCurrencyDirectory));
+        _setupProxy(precompile, address(feeCurrencyDirectory));
     }
 
     // function setCeloAddressSortedLinkedListWithMedian() internal {

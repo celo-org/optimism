@@ -14,6 +14,7 @@ library CeloPredeploys {
     address internal constant SORTED_ORACLES = 0xefB84935239dAcdecF7c5bA76d8dE40b077B7b33;
     address internal constant ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN = 0xED477A99035d0c1e11369F1D7A4e587893cc002B;
     address internal constant FEE_CURRENCY = 0x4200000000000000000000000000000000001022;
+    address internal constant FEE_CURRENCY_DIRECTORY = 0x4200000000000000000000000000000000001024;
 
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {
@@ -27,6 +28,7 @@ library CeloPredeploys {
         if (_addr == SORTED_ORACLES) return "SortedOracles";
         if (_addr == ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN) return "AddressSortedLinkedListWithMedian";
         if (_addr == FEE_CURRENCY) return "FeeCurrency";
+        if (_addr == FEE_CURRENCY_DIRECTORY) return "FeeCurrencyDirectory";
 
         revert("Predeploys: unnamed predeploy");
     }
