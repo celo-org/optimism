@@ -10,10 +10,14 @@ import (
 )
 
 const (
-	ListenAddrFlagName    = "addr"
-	PortFlagName          = "port"
-	S3BucketFlagName      = "s3.bucket"
-	FileStorePathFlagName = "file.path"
+	ListenAddrFlagName        = "addr"
+	PortFlagName              = "port"
+	S3BucketFlagName          = "s3.bucket"
+	S3EndpointFlagName        = "s3.endpoint"
+	S3AccessKeyIDFlagName     = "s3.access-key-id"
+	S3AccessKeySecretFlagName = "s3.access-key-secret"
+	FileStorePathFlagName     = "file.path"
+	GenericCommFlagName       = "generic-commitment"
 )
 
 const EnvVarPrefix = "OP_PLASMA_DA_SERVER"
@@ -40,6 +44,12 @@ var (
 		Usage:   "path to directory for file storage",
 		EnvVars: prefixEnvVars("FILESTORE_PATH"),
 	}
+	GenericCommFlag = &cli.BoolFlag{
+		Name:    GenericCommFlagName,
+		Usage:   "enable generic commitments for testing. Not for production use.",
+		EnvVars: prefixEnvVars("GENERIC_COMMITMENT"),
+		Value:   false,
+	}
 	S3BucketFlag = &cli.StringFlag{
 		Name:    S3BucketFlagName,
 		Usage:   "bucket name for S3 storage",
@@ -55,6 +65,10 @@ var requiredFlags = []cli.Flag{
 var optionalFlags = []cli.Flag{
 	FileStorePathFlag,
 	S3BucketFlag,
+	S3EndpointFlag,
+	S3AccessKeyIDFlag,
+	S3AccessKeySecretFlag,
+	GenericCommFlag,
 }
 
 func init() {
@@ -66,14 +80,22 @@ func init() {
 var Flags []cli.Flag
 
 type CLIConfig struct {
-	FileStoreDirPath string
-	S3Bucket         string
+	FileStoreDirPath  string
+	S3Bucket          string
+	S3Endpoint        string
+	S3AccessKeyID     string
+	S3AccessKeySecret string
+	UseGenericComm    bool
 }
 
 func ReadCLIConfig(ctx *cli.Context) CLIConfig {
 	return CLIConfig{
-		FileStoreDirPath: ctx.String(FileStorePathFlagName),
-		S3Bucket:         ctx.String(S3BucketFlagName),
+		FileStoreDirPath:  ctx.String(FileStorePathFlagName),
+		S3Bucket:          ctx.String(S3BucketFlagName),
+		S3Endpoint:        ctx.String(S3EndpointFlagName),
+		S3AccessKeyID:     ctx.String(S3AccessKeyIDFlagName),
+		S3AccessKeySecret: ctx.String(S3AccessKeySecretFlagName),
+		UseGenericComm:    ctx.Bool(GenericCommFlagName),
 	}
 }
 

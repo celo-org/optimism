@@ -274,7 +274,11 @@ contract Deploy is Deployer {
         deploySafe();
         setupSuperchain();
         if (cfg.usePlasma()) {
-            setupOpPlasma();
+            bytes32 typeHash = keccak256(bytes(cfg.daCommitmentType()));
+            bytes32 keccakHash = keccak256(bytes("KeccakCommitment"));
+            if (typeHash == keccakHash) {
+                setupOpPlasma();
+            }
         }
         setupOpChain();
     }

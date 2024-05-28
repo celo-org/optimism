@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-chain-ops/immutables"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/state"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	plasma "github.com/ethereum-optimism/optimism/op-plasma"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
@@ -248,6 +249,8 @@ type DeployConfig struct {
 
 	// UsePlasma is a flag that indicates if the system is using op-plasma
 	UsePlasma bool `json:"usePlasma"`
+	// DACommitmentType specifies the allowed commitment
+	DACommitmentType string `json:"daCommitmentType"`
 	// DAChallengeWindow represents the block interval during which the availability of a data commitment can be challenged.
 	DAChallengeWindow uint64 `json:"daChallengeWindow"`
 	// DAResolveWindow represents the block interval during which a data availability challenge can be resolved.
@@ -417,8 +420,8 @@ func (d *DeployConfig) Check() error {
 		if d.DAResolveWindow == 0 {
 			return fmt.Errorf("%w: DAResolveWindow cannot be 0 when using plasma mode", ErrInvalidDeployConfig)
 		}
-		if d.DAChallengeProxy == (common.Address{}) {
-			return fmt.Errorf("%w: DAChallengeContract cannot be empty when using plasma mode", ErrInvalidDeployConfig)
+		if !(d.DACommitmentType == plasma.KeccakCommitmentString || d.DACommitmentType == plasma.GenericCommitmentString) {
+			return fmt.Errorf("%w: DACommitmentType must be either KeccakCommtiment or GenericCommitment", ErrInvalidDeployConfig)
 		}
 	}
 	// checkFork checks that fork A is before or at the same time as fork B
@@ -471,6 +474,11 @@ func (d *DeployConfig) CheckAddresses() error {
 	}
 	if d.OptimismPortalProxy == (common.Address{}) {
 		return fmt.Errorf("%w: OptimismPortalProxy cannot be address(0)", ErrInvalidDeployConfig)
+	}
+	if d.UsePlasma && d.DACommitmentType == plasma.KeccakCommitmentString && d.DAChallengeProxy == (common.Address{}) {
+		return fmt.Errorf("%w: DAChallengeContract cannot be address(0) when using plasma mode", ErrInvalidDeployConfig)
+	} else if d.UsePlasma && d.DACommitmentType == plasma.GenericCommitmentString && d.DAChallengeProxy != (common.Address{}) {
+		return fmt.Errorf("%w: DAChallengeContract must be address(0) when using generic commitments in plasma mode", ErrInvalidDeployConfig)
 	}
 	return nil
 }
@@ -612,6 +620,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Block, l2GenesisBlockHas
 	var plasma *rollup.PlasmaConfig
 	if d.UsePlasma {
 		plasma = &rollup.PlasmaConfig{
+			CommitmentType:     d.DACommitmentType,
 			DAChallengeAddress: d.DAChallengeProxy,
 			DAChallengeWindow:  d.DAChallengeWindow,
 			DAResolveWindow:    d.DAResolveWindow,

@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"testing"
 
+	plasma "github.com/ethereum-optimism/optimism/op-plasma"
 	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/require"
 
@@ -1255,6 +1256,7 @@ func TestPlasmaFinalityData(t *testing.T) {
 	plasmaCfg := &rollup.PlasmaConfig{
 		DAChallengeWindow: 90,
 		DAResolveWindow:   90,
+		CommitmentType:    plasma.KeccakCommitmentString,
 	}
 	// shoud return l1 finality if plasma is not enabled
 	require.Equal(t, uint64(finalityLookback), calcFinalityLookback(cfg))
