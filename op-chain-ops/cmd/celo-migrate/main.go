@@ -86,8 +86,9 @@ var (
 	}
 
 	// from `packages/contracts-bedrock/deploy-config/internal-devnet.json`
-	EIP1559Denominator = uint64(50) // TODO(pl): select values
-	EIP1559Elasticity  = uint64(10)
+	EIP1559Denominator       = uint64(50)  // TODO(pl): select values
+	EIP1559DenominatorCanyon = uint64(250) // TODO(pl): select values
+	EIP1559Elasticity        = uint64(10)
 )
 
 func main() {
@@ -399,8 +400,9 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	// Enable Regolith from the start of Bedrock
 	cfg.RegolithTime = new(uint64) // what are those? do we need those?
 	cfg.Optimism = &params.OptimismConfig{
-		EIP1559Denominator: EIP1559Denominator,
-		EIP1559Elasticity:  EIP1559Elasticity,
+		EIP1559Denominator:       EIP1559Denominator,
+		EIP1559DenominatorCanyon: EIP1559DenominatorCanyon,
+		EIP1559Elasticity:        EIP1559Elasticity,
 	}
 	cfg.CanyonTime = &cel2Header.Time
 	cfg.EcotoneTime = &cel2Header.Time
@@ -417,6 +419,7 @@ func ApplyMigrationChangesToDB(ldb ethdb.Database, genesis *core.Genesis, commit
 	log.Info(
 		"Wrote chain config",
 		"1559-denominator", EIP1559Denominator,
+		"1559-denominator-canyon", EIP1559DenominatorCanyon,
 		"1559-elasticity", EIP1559Elasticity,
 	)
 
