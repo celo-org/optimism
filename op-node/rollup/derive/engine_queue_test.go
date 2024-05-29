@@ -1273,7 +1273,7 @@ func TestPlasmaFinalityData(t *testing.T) {
 
 	ec := NewEngineController(eng, logger, metrics.NoopMetrics, &rollup.Config{}, sync.CLSync)
 
-	eq := NewEngineQueue(logger, cfg, eng, ec, metrics.NoopMetrics, prev, l1F, &sync.Config{}, safedb.Disabled)
+	eq := NewEngineQueue(logger, cfg, eng, ec, metrics.NoopMetrics, prev, l1F, &sync.Config{})
 	require.Equal(t, expFinalityLookback, cap(eq.finalityData))
 
 	l1parent := refA
