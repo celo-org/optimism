@@ -131,6 +131,9 @@ jobs:
             FOUNDRY_PROFILE: ci
           command: pnpm build
       - run:
+          name: Generate allocs
+          command: make devnet-allocs
+      - run:
           name: Generate Plasma allocs
           command: DEVNET_PLASMA="true" make devnet-allocs
       - run:
@@ -151,6 +154,11 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/tsconfig.tsbuildinfo"
             - "packages/contracts-bedrock/tsconfig.build.tsbuildinfo"
+            - ".devnet/allocs-l1.json"
+            - ".devnet/allocs-l2.json"
+            - ".devnet/allocs-l2-delta.json"
+            - ".devnet/allocs-l2-ecotone.json"
+            - ".devnet/addresses.json"
             - ".devnet-plasma/allocs-l1.json"
             - ".devnet-plasma/addresses.json"
             - ".devnet-plasma/allocs-l2.json"
@@ -161,6 +169,9 @@ jobs:
             - ".devnet-plasma-generic/allocs-l2.json"
             - ".devnet-plasma-generic/allocs-l2-delta.json"
             - ".devnet-plasma-generic/allocs-l2-ecotone.json"
+            - "packages/contracts-bedrock/deploy-config/devnetL1.json"
+            - "packages/contracts-bedrock/deployments/devnetL1"
+
   contracts-bedrock-coverage:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
@@ -628,6 +639,9 @@ jobs:
 
   go-e2e-test:
     parameters:
+      fpac:
+        type: string
+        default: ''
       module:
         description: Go Module Name
         type: string
@@ -676,9 +690,14 @@ jobs:
       - run:
           name: Load devnet-allocs
           command: |
+            name: Load devnet-allocs
+          command: |
             mkdir -p .devnet
-            cp /tmp/workspace/.devnet/allocs-l1.json .devnet/allocs-l1.json
-            cp /tmp/workspace/.devnet/addresses.json .devnet/addresses.json
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l2.json .devnet/allocs-l2.json
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l2-delta.json .devnet/allocs-l2-delta.json
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l2-ecotone.json .devnet/allocs-l2-ecotone.json
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l1.json .devnet/allocs-l1.json
+            cp /tmp/workspace/.devnet<<parameters.fpac>>/addresses.json .devnet/addresses.json
             cp /tmp/workspace/packages/contracts-bedrock/deploy-config/devnetL1.json packages/contracts-bedrock/deploy-config/devnetL1.json
             cp -r /tmp/workspace/packages/contracts-bedrock/deployments/devnetL1 packages/contracts-bedrock/deployments/devnetL1
       - run:
@@ -857,11 +876,12 @@ jobs:
     machine:
       image: <<pipeline.parameters.base_image>>
     parameters:
-      devnet_fpac:
+      fpac:
         type: string
     environment:
       DOCKER_BUILDKIT: 1
       DEVNET_NO_BUILD: 'true'
+      # Default value; Can be overridden.
       DEVNET_FPAC: 'false'
       DEVNET_PLASMA: 'false'
     steps:
@@ -1380,7 +1400,7 @@ workflows:
           name: op-e2e-action-tests<< matrix.fpac >>
           matrix:
             parameters:
-              fpac: ["", "-fault-proofs", "-plasma"]
+              fpac: ["", "-plasma"]
           module: op-e2e
           target: test-actions
           parallelism: 1
@@ -1427,72 +1447,10 @@ workflows:
             - op-e2e-HTTP-tests
             - op-e2e-action-tests
             - op-e2e-ext-geth-tests
-      - docker-build: # just to warm up the cache (other jobs run in parallel)
-          name: op-stack-go-docker-build
-          docker_name: op-stack-go
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-node-docker-build
-          docker_name: op-node
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-batcher-docker-build
-          docker_name: op-batcher
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-program-docker-build
-          docker_name: op-program
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-proposer-docker-build
-          docker_name: op-proposer
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-challenger-docker-build
-          docker_name: op-challenger
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-dispute-mon-docker-build
-          docker_name: op-dispute-mon
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-conductor-docker-build
-          docker_name: op-conductor
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: op-heartbeat-docker-build
-          docker_name: op-heartbeat
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - docker-build:
-          name: da-server-docker-build
-          docker_name: da-server
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          requires: ['op-stack-go-docker-build']
-          save_image_tag: <<pipeline.git.revision>> # for devnet later
-      - cannon-prestate:
-          requires:
-            - go-mod-download
       - devnet:
           matrix:
             parameters:
-              fpac: ["legacy", "fault-proofs", "plasma", "plasma-generic"]
+              fpac: ["legacy", "plasma", "plasma-generic"]
           requires:
             - pnpm-monorepo
             - op-batcher-docker-build
