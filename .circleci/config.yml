@@ -1331,14 +1331,10 @@ workflows:
             - go-mod-download
             - pnpm-monorepo
       - go-e2e-test:
-<<<<<<< HEAD
-          name: op-e2e-action-tests
-=======
           name: op-e2e-action-tests<< matrix.fpac >>
           matrix:
             parameters:
               fpac: ["", "-fault-proofs", "-plasma"]
->>>>>>> 802c28399 (op-plasma: sync derivation with DA challenge contract state (#9682))
           module: op-e2e
           target: test-actions
           parallelism: 1
