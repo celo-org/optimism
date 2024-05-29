@@ -690,8 +690,6 @@ jobs:
       - run:
           name: Load devnet-allocs
           command: |
-            name: Load devnet-allocs
-          command: |
             mkdir -p .devnet
             cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l2.json .devnet/allocs-l2.json
             cp /tmp/workspace/.devnet<<parameters.fpac>>/allocs-l2-delta.json .devnet/allocs-l2-delta.json
