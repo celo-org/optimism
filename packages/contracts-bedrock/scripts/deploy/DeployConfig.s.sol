@@ -102,6 +102,8 @@ contract DeployConfig is Script {
     ///         for testing.
     address public l1FeesDepositor;
 
+    bool public deployCeloContracts;
+
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
         try vm.readFile(_path) returns (string memory data_) {
@@ -190,6 +192,9 @@ contract DeployConfig is Script {
         faultGameV2SplitDepth = _readOr(_json, "$.faultGameV2SplitDepth", 30);
         faultGameV2ClockExtension = _readOr(_json, "$.faultGameV2ClockExtension", 10800);
         faultGameV2MaxClockDuration = _readOr(_json, "$.faultGameV2MaxClockDuration", 302400);
+
+        // Celo specific config
+        deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
     }
 
     function fork() public view returns (Fork fork_) {
@@ -264,6 +269,11 @@ contract DeployConfig is Script {
     /// @notice Allow the `devFeatureBitmap` config to be overridden in testing environments
     function setDevFeatureBitmap(bytes32 _devFeatureBitmap) public {
         devFeatureBitmap = _devFeatureBitmap;
+    }
+
+    /// @notice Allow the `deployCeloContracts` config to be overridden.
+    function setDeployCeloContracts(bool _deployCeloContracts) public {
+        deployCeloContracts = _deployCeloContracts;
     }
 
     /// @notice Allow the `useUpgradedFork` config to be overridden in testing environments

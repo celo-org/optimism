@@ -102,5 +102,6 @@
   "daResolveWindow": 0,
   "daResolverRefundPercentage": 0,
   "useRevenueShare": true,
-  "chainFeesRecipient": "0x0000000000000000000000000000000000000444"
+  "chainFeesRecipient": "0x0000000000000000000000000000000000000444",
+  "deployCeloContracts": false
 }
