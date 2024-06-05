@@ -92,6 +92,8 @@ contract DeployConfig is Script {
     bool public useInterop;
     bool public useUpgradedFork;
 
+    bool public deployCeloContracts;
+
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
         try vm.readFile(_path) returns (string memory data_) {
@@ -178,6 +180,9 @@ contract DeployConfig is Script {
 
         useInterop = _readOr(_json, "$.useInterop", false);
         useUpgradedFork;
+
+        // Celo specific config
+        deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
     }
 
     function fork() public view returns (Fork fork_) {
@@ -232,6 +237,11 @@ contract DeployConfig is Script {
     /// @notice Allow the `fundDevAccounts` config to be overridden.
     function setFundDevAccounts(bool _fundDevAccounts) public {
         fundDevAccounts = _fundDevAccounts;
+    }
+
+    /// @notice Allow the `deployCeloContracts` config to be overridden.
+    function setDeployCeloContracts(bool _deployCeloContracts) public {
+        deployCeloContracts = _deployCeloContracts;
     }
 
     /// @notice Allow the `useUpgradedFork` config to be overridden in testing environments
