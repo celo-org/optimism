@@ -145,7 +145,9 @@ contract L2Genesis is Script {
         vm.startPrank(deployer);
         vm.chainId(_input.l2ChainID);
 
-        dealEthToPrecompiles();
+        if (cfg.deployCeloContracts()) {
+            dealEthToPrecompiles();
+        }
         setPredeployProxies(_input);
         vm.stopPrank();
 
@@ -154,7 +156,9 @@ contract L2Genesis is Script {
 
         vm.startPrank(deployer);
         setPreinstalls();
-        setCeloPredeploys();
+        if (cfg.deployCeloContracts()) {
+            setCeloPredeploys();
+        }
         if (_input.fundDevAccounts) {
             fundDevAccounts();
         }

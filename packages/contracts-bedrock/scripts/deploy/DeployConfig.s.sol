@@ -108,6 +108,8 @@ contract DeployConfig is Script {
     bool public useInterop;
     bytes32 public devFeatureBitmap;
 
+    bool public deployCeloContracts;
+
     function read(string memory _path) public {
         // If no path provided, use hardcoded defaults only
         if (bytes(_path).length == 0) {
@@ -210,6 +212,8 @@ contract DeployConfig is Script {
         zkDisputeGameMaxChallengeDuration = _readOr(_json, "$.zkDisputeGameMaxChallengeDuration", uint256(604800));
         zkDisputeGameMaxProveDuration = _readOr(_json, "$.zkDisputeGameMaxProveDuration", uint256(259200));
         zkDisputeGameChallengerBond = _readOr(_json, "$.zkDisputeGameChallengerBond", uint256(1 ether));
+        // Celo specific config
+        deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
     }
 
     function fork() public view returns (Fork fork_) {
@@ -269,6 +273,10 @@ contract DeployConfig is Script {
     /// @notice Allow the `devFeatureBitmap` config to be overridden in testing environments
     function setDevFeatureBitmap(bytes32 _devFeatureBitmap) public {
         devFeatureBitmap = _devFeatureBitmap;
+    }
+    /// @notice Allow the `deployCeloContracts` config to be overridden.
+    function setDeployCeloContracts(bool _deployCeloContracts) public {
+        deployCeloContracts = _deployCeloContracts;
     }
 
     /// @notice Allow the `useUpgradedFork` config to be overridden in testing environments
