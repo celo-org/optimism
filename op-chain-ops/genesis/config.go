@@ -821,6 +821,11 @@ type DeployConfig struct {
 
 	// Legacy, ignored, here for strict-JSON decoding to be accepted.
 	LegacyDeployConfig
+	// UseInterop is a flag that indicates if the system is using interop
+	UseInterop bool `json:"useInterop,omitempty"`
+
+	// DeployCeloContracts indicates whether to deploy Celo contracts.
+	DeployCeloContracts bool `json:"deployCeloContracts"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
