@@ -171,11 +171,15 @@ contract L2Genesis is Deployer {
         vm.startPrank(deployer);
         vm.chainId(cfg.l2ChainID());
 
-        dealEthToPrecompiles();
+        if (cfg.deployCeloContracts()) {
+            dealEthToPrecompiles();
+        }
         setPredeployProxies();
         setPredeployImplementations(_l1Dependencies);
         setPreinstalls();
-        setCeloPredeploys();
+        if (cfg.deployCeloContracts()) {
+            setCeloPredeploys();
+        }
         if (cfg.fundDevAccounts()) {
             fundDevAccounts();
         }
