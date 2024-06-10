@@ -30,6 +30,7 @@ log = logging.getLogger()
 DEVNET_NO_BUILD = os.getenv('DEVNET_NO_BUILD') == "true"
 DEVNET_FPAC = os.getenv('DEVNET_FPAC') == "true"
 DEVNET_PLASMA = os.getenv('DEVNET_PLASMA') == "true"
+DEVNET_CELO = os.getenv('DEVNET_CELO') == "true"
 
 class Bunch:
     def __init__(self, **kwds):
@@ -135,6 +136,11 @@ def init_devnet_l1_deploy_config(paths, update_timestamp=False):
         deploy_config['faultGameWithdrawalDelay'] = 0
     if DEVNET_PLASMA:
         deploy_config['usePlasma'] = True
+    if DEVNET_CELO:
+        deploy_config['useCustomGasToken'] = True
+    #  Usage of the zero address in combination of the useCustomGasToken == True
+    # will deploy a new contract
+        deploy_config['customGasTokenAddress'] = "0x0000000000000000000000000000000000000000"
     write_json(paths.devnet_config_path, deploy_config)
 
 def devnet_l1_allocs(paths):
