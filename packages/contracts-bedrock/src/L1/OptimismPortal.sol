@@ -138,7 +138,8 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         initialize({
             _l2Oracle: L2OutputOracle(address(0)),
             _systemConfig: SystemConfig(address(0)),
-            _superchainConfig: SuperchainConfig(address(0))
+            _superchainConfig: SuperchainConfig(address(0)),
+            _initialBalance: 0
         });
     }
 
@@ -146,10 +147,12 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     /// @param _l2Oracle Contract of the L2OutputOracle.
     /// @param _systemConfig Contract of the SystemConfig.
     /// @param _superchainConfig Contract of the SuperchainConfig.
+    /// @param _initialBalance the initial balance assigned to the portal without using deposit txs.
     function initialize(
         L2OutputOracle _l2Oracle,
         SystemConfig _systemConfig,
-        SuperchainConfig _superchainConfig
+        SuperchainConfig _superchainConfig,
+        uint256 _initialBalance
     )
         public
         initializer
@@ -160,6 +163,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         if (l2Sender == address(0)) {
             l2Sender = Constants.DEFAULT_L2_SENDER;
         }
+        _balance = _initialBalance;
         __ResourceMetering_init();
     }
 

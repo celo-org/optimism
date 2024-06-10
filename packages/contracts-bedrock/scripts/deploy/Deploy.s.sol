@@ -58,6 +58,8 @@ import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 import { ForgeArtifacts } from "scripts/ForgeArtifacts.sol";
 import { Process } from "scripts/libraries/Process.sol";
 
+import {CeloToken} from 'src/celo/NativeToken.sol';
+
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
 ///         To add a new contract to the system, add a public function that deploys that individual contract.
@@ -397,6 +399,9 @@ contract Deploy is Deployer {
     /// @notice Initialize all of the implementations
     function initializeImplementations() public {
         console.log("Initializing implementations");
+
+        setupCustomGasToken();
+
         // Selectively initialize either the original OptimismPortal or the new OptimismPortal2. Since this will upgrade
         // the proxy, we cannot initialize both.
         if (cfg.useFaultProofs()) {
@@ -1234,6 +1239,12 @@ contract Deploy is Deployer {
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
 
+        
+        address customGasTokenAddress = Constants.ETHER;
+        if (cfg.useCustomGasToken()) {
+          customGasTokenAddress = cfg.customGasTokenAddress();
+        }
+
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),
             _implementation: optimismPortal,
@@ -1242,7 +1253,10 @@ contract Deploy is Deployer {
                 (
                     L2OutputOracle(l2OutputOracleProxy),
                     SystemConfig(systemConfigProxy),
-                    SuperchainConfig(superchainConfigProxy)
+                    SuperchainConfig(superchainConfigProxy),
+                    //TODO: use same source of truth as in
+                    // setupCustomGasToken()
+                    1000000000000 * 1e18
                 )
             )
         });
@@ -1560,4 +1574,22 @@ contract Deploy is Deployer {
         require(dac.bondSize() == daBondSize);
         require(dac.resolverRefundPercentage() == daResolverRefundPercentage);
     }
+
+    function setupCustomGasToken() internal returns (address addr_) {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress()==address(0)) {
+            console.log('Setting up Custom gas token');
+            // TODO: make parametrizable
+            uint256 totalSupply = 1000000000000 * 1e18;
+            address portalProxyAddress = mustGetAddress('OptimismPortalProxy');
+            CeloToken cgt = new CeloToken{salt: _implSalt()}();
+            cgt.initialize(totalSupply, portalProxyAddress);
+            addr_ = address(cgt);
+            save('CustomGasToken', addr_);
+            console.log('Minted cutom gas token supply to optismism portal');
+            cfg.setUseCustomGasToken(addr_);
+        }
+        return cfg.customGasTokenAddress();
+    }
+
+      }
 }
