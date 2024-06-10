@@ -11,6 +11,7 @@ import (
 )
 
 // UserDeposits transforms the L2 block-height and L1 receipts into the transaction inputs for a full L2 block
+
 func UserDeposits(receipts []*types.Receipt, depositContractAddr common.Address) ([]*types.DepositTx, error) {
 	var out []*types.DepositTx
 	var result error
@@ -32,6 +33,8 @@ func UserDeposits(receipts []*types.Receipt, depositContractAddr common.Address)
 	return out, result
 }
 
+// XXX: This l1-derivation function will look for the user deposit events
+// on the l1 bridge contracts
 func DeriveDeposits(receipts []*types.Receipt, depositContractAddr common.Address) ([]hexutil.Bytes, error) {
 	var result error
 	userDeposits, err := UserDeposits(receipts, depositContractAddr)

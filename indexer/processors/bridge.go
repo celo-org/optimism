@@ -21,6 +21,11 @@ import (
 
 var blocksLimit = 500
 
+// XXX: the BridgeProcessor can listen on the l1 events
+// like TransactionDeposited on the OptimismPortal.
+// How exactly are the events processed?
+// What is the l1 start block for this being considered?
+//   - Is it the L1StartingHeight config?
 type BridgeProcessor struct {
 	log     log.Logger
 	db      *database.DB
