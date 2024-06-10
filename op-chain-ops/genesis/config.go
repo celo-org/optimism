@@ -534,6 +534,8 @@ func (d *DeployConfig) SetDeployments(deployments *L1Deployments) {
 	d.SystemConfigProxy = deployments.SystemConfigProxy
 	d.OptimismPortalProxy = deployments.OptimismPortalProxy
 	d.DAChallengeProxy = deployments.DataAvailabilityChallengeProxy
+
+	d.CustomGasTokenAddress = deployments.CustomGasToken
 }
 
 func (d *DeployConfig) GovernanceEnabled() bool {
@@ -712,6 +714,8 @@ type L1Deployments struct {
 	ProtocolVersionsProxy             common.Address `json:"ProtocolVersionsProxy"`
 	DataAvailabilityChallenge         common.Address `json:"DataAvailabilityChallenge"`
 	DataAvailabilityChallengeProxy    common.Address `json:"DataAvailabilityChallengeProxy"`
+
+	CustomGasToken common.Address `json:"CustomGasToken"`
 }
 
 // GetName will return the name of the contract given an address.
