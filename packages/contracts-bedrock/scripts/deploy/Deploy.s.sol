@@ -63,6 +63,8 @@ import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistr
 import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimismMintableERC20Factory.sol";
 
+import {CeloToken} from 'src/celo/NativeToken.sol';
+
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
 ///         To add a new contract to the system, add a public function that deploys that individual contract.
@@ -451,13 +453,18 @@ contract Deploy is Deployer {
     /// @notice Initialize all of the implementations
     function initializeImplementations() public {
         console.log("Initializing implementations");
+
+        setupCustomGasToken();
+
+        address storageSetter = deployStorageSetter();
+
         // Selectively initialize either the original OptimismPortal or the new OptimismPortal2. Since this will upgrade
         // the proxy, we cannot initialize both.
         if (cfg.useFaultProofs()) {
             console.log("Fault proofs enabled. Initializing the OptimismPortal proxy with the OptimismPortal2.");
             initializeOptimismPortal2();
         } else {
-            initializeOptimismPortal();
+            initializeOptimismPortal(storageSetter);
         }
 
         initializeSystemConfig();
@@ -470,6 +477,8 @@ contract Deploy is Deployer {
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
         initializeAnchorStateRegistry();
+
+        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 
     /// @notice Add AltDA setup to the OP chain
@@ -1278,13 +1287,28 @@ contract Deploy is Deployer {
     }
 
     /// @notice Initialize the OptimismPortal
-    function initializeOptimismPortal() public broadcast {
+    function initializeOptimismPortal(address strorageSetter) public broadcast {
         console.log("Upgrading and initializing OptimismPortal proxy");
         address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
         address optimismPortal = mustGetAddress("OptimismPortal");
         address l2OutputOracleProxy = mustGetAddress("L2OutputOracleProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+
+        address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
+        if (cfg.useCustomGasToken()) {
+            customGasTokenAddress = cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            initialBalance = token.balanceOf(optimismPortalProxy);
+
+            uint256 balanceStorageSlot = 61; // slot of _balance variable
+            _upgradeAndCallViaSafe({
+                _proxy: payable(optimismPortalProxy),
+                _implementation: strorageSetter,
+                _innerCallData: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+            });
+        }
 
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),
@@ -1705,5 +1729,21 @@ contract Deploy is Deployer {
         require(addr_ != address(0), "deployment failed");
         save(_nickname, addr_);
         console.log("%s deployed at %s", _nickname, addr_);
+    }
+
+    function setupCustomGasToken() internal returns (address addr_) {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress()==address(0)) {
+            console.log('Setting up Custom gas token');
+            // TODO: make parametrizable
+            uint256 totalSupply = 1000000000000 * 1e18;
+            address portalProxyAddress = mustGetAddress('OptimismPortalProxy');
+            CeloToken cgt = new CeloToken{salt: _implSalt()}();
+            cgt.initialize(totalSupply, portalProxyAddress);
+            addr_ = address(cgt);
+            save('CustomGasToken', addr_);
+            console.log('Minted cutom gas token supply to optismism portal');
+            cfg.setUseCustomGasToken(addr_);
+        }
+        return cfg.customGasTokenAddress();
     }
 }
