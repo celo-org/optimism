@@ -60,6 +60,9 @@ import { IAddressManager } from "src/legacy/interfaces/IAddressManager.sol";
 import { IL1ChugSplashProxy } from "src/legacy/interfaces/IL1ChugSplashProxy.sol";
 import { IResolvedDelegateProxy } from "src/legacy/interfaces/IResolvedDelegateProxy.sol";
 
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
 ///         To add a new contract to the system, add a public function that deploys that individual contract.
@@ -915,6 +918,22 @@ contract Deploy is Deployer {
         string memory version = portal.version();
         console.log("OptimismPortal version: %s", version);
 
+        address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
+        if (cfg.useCustomGasToken()) {
+            customGasTokenAddress = cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            initialBalance = token.balanceOf(optimismPortalProxy);
+
+            uint256 balanceStorageSlot = 61; // slot of _balance variable
+            // TODO: fix later
+            // proxyAdmin.upgradeAndCall({
+            //     _proxy: payable(optimismPortalProxy),
+            //     _implementation: storageSetter,
+            //     _data: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+            // });
+        }
+
         ChainAssertions.checkOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 
@@ -1282,5 +1301,19 @@ contract Deploy is Deployer {
         value = value & ~(0xFF << (slot.offset * 8));
         slotVal = bytes32(value);
         vm.store(proxy, bytes32(vm.parseUint(slot.slot)), slotVal);
+    }
+
+    function setupCustomGasToken() internal returns (address addr_) {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress() == address(0)) {
+            console.log("Setting up Custom gas token");
+            address portalProxyAddress = mustGetAddress("OptimismPortalProxy");
+            CeloTokenL1 cgt = new CeloTokenL1{ salt: _implSalt() }();
+            cgt.initialize(portalProxyAddress);
+            addr_ = address(cgt);
+            save("CustomGasToken", addr_);
+            console.log("Minted cutom gas token supply to optismism portal");
+            cfg.setUseCustomGasToken(addr_);
+        }
+        return cfg.customGasTokenAddress();
     }
 }
