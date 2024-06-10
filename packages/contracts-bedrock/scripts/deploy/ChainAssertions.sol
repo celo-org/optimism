@@ -32,6 +32,9 @@ import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { IMIPS } from "src/cannon/interfaces/IMIPS.sol";
 import { OPContractsManager } from "src/L1/OPContractsManager.sol";
 
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 library ChainAssertions {
     Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
 
@@ -450,6 +453,32 @@ library ChainAssertions {
             require(address(portal.systemConfig()) == address(0), "CHECK-OP-90");
             require(address(portal.superchainConfig()) == address(0), "CHECK-OP-100");
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER, "CHECK-OP-110");
+        }
+    }
+
+    /// @notice Asserts the OptimismPortal custom gas token is setup correctly
+    function checkCustomGasTokenOptimismPortal(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy
+    )
+        internal
+        view
+    {
+        IOptimismPortal portal = IOptimismPortal(payable(_contracts.OptimismPortal));
+
+        uint256 expectedInitialBalance = 0;
+        if (_isProxy && _cfg.useCustomGasToken()) {
+            address customGasTokenAddress = _cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            expectedInitialBalance = token.balanceOf(address(portal));
+            console.log("custom gas token expectedInitialBalance", expectedInitialBalance);
+        }
+
+        if (_isProxy) {
+            require(portal.balance() == expectedInitialBalance);
+        } else {
+            require(portal.balance() == 0);
         }
     }
 
