@@ -67,16 +67,6 @@ var (
 		Usage:    "Path to the Celo database, not including the `celo/chaindata` part",
 		Required: true,
 	}
-	dbCacheFlag = &cli.IntFlag{
-		Name:  "db-cache",
-		Usage: "LevelDB cache size in mb",
-		Value: 1024,
-	}
-	dbHandlesFlag = &cli.IntFlag{
-		Name:  "db-handles",
-		Usage: "LevelDB number of handles",
-		Value: 60,
-	}
 	dryRunFlag = &cli.BoolFlag{
 		Name:  "dry-run",
 		Usage: "Dry run the upgrade by not committing the database",
@@ -89,8 +79,6 @@ var (
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
 		dbPathFlag,
-		dbCacheFlag,
-		dbHandlesFlag,
 		dryRunFlag,
 	}
 
@@ -119,8 +107,6 @@ func main() {
 			l2AllocsPath := ctx.Path("l2-allocs")
 			outfileRollupConfig := ctx.Path("outfile.rollup-config")
 			dbPath := ctx.String("db-path")
-			dbCache := ctx.Int("db-cache")
-			dbHandles := ctx.Int("db-handles")
 			dryRun := ctx.Bool("dry-run")
 
 			// Read deployment configuration
@@ -195,7 +181,7 @@ func main() {
 			}
 
 			// Write changes to state to actual state database
-			cel2Header, err := ApplyMigrationChangesToDB(l2Genesis, dbPath, dbCache, dbHandles, !dryRun)
+			cel2Header, err := ApplyMigrationChangesToDB(l2Genesis, dbPath, !dryRun)
 			if err != nil {
 				return err
 			}
@@ -224,9 +210,9 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int, dbHandles int, commit bool) (*types.Header, error) {
-	log.Info("Opening celo database", "dbCache", dbCache, "dbHandles", dbHandles, "dbPath", dbPath)
-	ldb, err := openCeloDb(dbPath, dbCache, dbHandles)
+func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, commit bool) (*types.Header, error) {
+	log.Info("Opening Celo database", "dbPath", dbPath)
+	ldb, err := openCeloDb(dbPath)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open DB: %w", err)
 	}
@@ -413,7 +399,7 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 }
 
 // Opens a Celo database, stored in the `celo` subfolder
-func openCeloDb(path string, cache int, handles int) (ethdb.Database, error) {
+func openCeloDb(path string) (ethdb.Database, error) {
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
@@ -425,8 +411,8 @@ func openCeloDb(path string, cache int, handles int) (ethdb.Database, error) {
 		Directory:         chaindataPath,
 		AncientsDirectory: ancientPath,
 		Namespace:         "",
-		Cache:             cache,
-		Handles:           handles,
+		Cache:             1024,
+		Handles:           60,
 		ReadOnly:          false,
 	})
 	if err != nil {
