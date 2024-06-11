@@ -8,16 +8,17 @@ import (
 	"path/filepath"
 	"runtime/debug"
 
+	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/mattn/go-isatty"
+	"golang.org/x/exp/slog"
 )
 
 // How to run:
 // 		go run ./op-chain-ops/cmd/celo-dbmigrate -oldDB /path/to/oldDB -newDB /path/to/newDB [-batchSize 1000] [-verbosity 3] [-memoryLimit 7500] [-clear-all] [-clear-nonAncients]
 //
 // This script will migrate block data from the old database to the new database
-// You can set the log level using the -verbosity flag
 // The number of ancient records to migrate in one batch can be set using the -batchSize flag
 // The default batch size is 1000
 // You can set a memory limit in MB using the -memoryLimit flag. Defaults to 7500 MB. Make sure to set a limit that is less than your machine's available memory.
@@ -28,14 +29,15 @@ func main() {
 	oldDBPath := flag.String("oldDB", "", "Path to the old database chaindata directory (read-only)")
 	newDBPath := flag.String("newDB", "", "Path to the new database")
 	batchSize := flag.Uint64("batchSize", 10000, "Number of records to migrate in one batch")
-	verbosity := flag.Uint64("verbosity", 3, "Log level (0:crit, 1:err, 2:warn, 3:info, 4:debug, 5:trace)")
 	memoryLimit := flag.Int64("memoryLimit", 7500, "Memory limit in MB")
 
 	clearAll := flag.Bool("clear-all", false, "Use this to start with a fresh new database")
 	clearNonAncients := flag.Bool("clear-nonAncients", false, "Use to keep migrated ancients, but not non-ancients")
 	flag.Parse()
 
-	log.Root().SetHandler(log.LvlFilterHandler(log.Lvl(*verbosity), log.StreamHandler(os.Stderr, log.TerminalFormat(isatty.IsTerminal(os.Stderr.Fd())))))
+	color := isatty.IsTerminal(os.Stderr.Fd())
+	handler := log.NewTerminalHandlerWithLevel(os.Stderr, slog.LevelDebug, color)
+	oplog.SetGlobalLogHandler(handler)
 
 	debug.SetMemoryLimit(*memoryLimit * 1 << 20) // Set memory limit, converting from MB to bytes
 
