@@ -249,37 +249,11 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, commit bool
 		return nil, fmt.Errorf("cannot open StateDB: %w", err)
 	}
 
-	// So far we applied changes in the memory VM and collected changes in the genesis struct
-	// Now we iterate through all accounts that have been written there and set them inside the statedb.
-	// This will change the state root
-	// Another property is that the total balance changes must be 0
-	accountCounter := 0
-	overwriteCounter := 0
-	for k, v := range genesis.Alloc {
-		accountCounter++
-		if db.Exist(k) {
-			equal := bytes.Equal(db.GetCode(k), v.Code)
-
-			log.Warn("Operating on existing state", "account", k, "equalCode", equal)
-			overwriteCounter++
-		}
-		// TODO(pl): decide what to do with existing accounts.
-		db.CreateAccount(k)
-
-		// CreateAccount above copied the balance, check if we change it
-		if db.GetBalance(k).Cmp(uint256.MustFromBig(v.Balance)) != 0 {
-			// TODO(pl): make this a hard error once the migration has been tested more
-			log.Warn("Moving account changed native balance", "address", k, "oldBalance", db.GetBalance(k), "newBalance", v.Balance)
-		}
-
-		db.SetNonce(k, v.Nonce)
-		db.SetBalance(k, uint256.MustFromBig(v.Balance))
-		db.SetCode(k, v.Code)
-		db.SetStorage(k, v.Storage)
-
-		log.Info("Moved account", "address", k)
+	// Apply allocations to the state database
+	err = addAllocsToCeloState(db, genesis)
+	if err != nil {
+		return nil, err
 	}
-	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
 
 	// Celo contract addresses are now fixed, so we need to take care to move proxies to the expected addresses
 	err = migrateTestnetAccounts(db, cfg)
@@ -423,6 +397,43 @@ func openCeloDb(path string) (ethdb.Database, error) {
 		return nil, err
 	}
 	return ldb, nil
+}
+
+// addAllocsToCeloState adds the allocated accounts to the Celo state database.
+// It iterates through the accounts in the provided `genesis` struct and sets them inside the `db` state database.
+// This will change the state root
+// Another property is that the total balance changes must be 0
+func addAllocsToCeloState(db *state.StateDB, genesis *core.Genesis) error {
+	log.Info("Migrating OP contracts into state DB", "num_allocs", len(genesis.Alloc))
+
+	accountCounter := 0
+	overwriteCounter := 0
+	for k, v := range genesis.Alloc {
+		accountCounter++
+		if db.Exist(k) {
+			equal := bytes.Equal(db.GetCode(k), v.Code)
+
+			log.Warn("Operating on existing state", "account", k, "equalCode", equal)
+			overwriteCounter++
+		}
+		// TODO(pl): decide what to do with existing accounts.
+		db.CreateAccount(k)
+
+		// CreateAccount above copied the balance, check if we change it
+		if db.GetBalance(k).Cmp(uint256.MustFromBig(v.Balance)) != 0 {
+			// TODO(pl): make this a hard error once the migration has been tested more
+			log.Warn("Moving account changed native balance", "address", k, "oldBalance", db.GetBalance(k), "newBalance", v.Balance)
+		}
+
+		db.SetNonce(k, v.Nonce)
+		db.SetBalance(k, uint256.MustFromBig(v.Balance))
+		db.SetCode(k, v.Code)
+		db.SetStorage(k, v.Storage)
+
+		log.Info("Moved account", "address", k)
+	}
+	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+	return nil
 }
 
 func dbValueToHash(enc []byte) common.Hash {
