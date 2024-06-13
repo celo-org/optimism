@@ -25,7 +25,7 @@ import (
 var (
 	deployConfigFlag = &cli.PathFlag{
 		Name:     "deploy-config",
-		Usage:    "Path to the JSON file that was used for the bedrock contracts deployment. A test example can be found here 'op-chain-ops/genesis/testdata/test-deploy-config-full.json' and documentation for the fields is at https://docs.optimism.io/builders/chain-operators/management/configuration",
+		Usage:    "Path to the JSON file that was used for the l1 contracts deployment",
 		Required: true,
 	}
 	l1DeploymentsFlag = &cli.PathFlag{
@@ -59,14 +59,14 @@ var (
 		Required: true,
 	}
 	batchSizeFlag = &cli.Uint64Flag{
-		Name:        "batch-size",
-		Usage:       "Dry run the upgrade by not committing the database",
-		DefaultText: "10000",
+		Name:  "batch-size",
+		Usage: "batch size to use for block migration",
+		Value: 10000,
 	}
 	memoryLimitFlag = &cli.Int64Flag{
-		Name:        "memory-limit",
-		Usage:       "Memory limit in MB",
-		DefaultText: "7500",
+		Name:  "memory-limit",
+		Usage: "Memory limit in MB",
+		Value: 7500,
 	}
 	dryRunFlag = &cli.BoolFlag{ // TODO
 		Name:  "dry-run",
@@ -123,21 +123,21 @@ func main() {
 			l1RPC := ctx.String("l1-rpc")
 			l2AllocsPath := ctx.Path("l2-allocs")
 			outfileRollupConfig := ctx.Path("outfile.rollup-config")
-			oldDBPath := ctx.String("old-db")
+			// oldDBPath := ctx.String("old-db")
 			newDBPath := ctx.String("new-db")
-			batchSize := ctx.Uint64("batch-size")
-			memoryLimit := ctx.Int64("memory-limit")
+			// batchSize := ctx.Uint64("batch-size")
+			// memoryLimit := ctx.Int64("memory-limit")
 			dryRun := ctx.Bool("dry-run")
-			clearAll := ctx.Bool("clear-all")
-			clearNonAncients := ctx.Bool("clear-nonAncients")
+			// clearAll := ctx.Bool("clear-all")
+			// clearNonAncients := ctx.Bool("clear-nonAncients")
 
 			color := isatty.IsTerminal(os.Stderr.Fd())
 			handler := log.NewTerminalHandlerWithLevel(os.Stderr, slog.LevelDebug, color)
 			oplog.SetGlobalLogHandler(handler)
 
-			if err := runBlockMigration(oldDBPath, newDBPath, batchSize, memoryLimit, clearAll, clearNonAncients); err != nil {
-				return fmt.Errorf("failed to run block migration: %v", err)
-			}
+			// if err := runBlockMigration(oldDBPath, newDBPath, batchSize, memoryLimit, clearAll, clearNonAncients); err != nil {
+			// 	return fmt.Errorf("failed to run block migration: %v", err)
+			// }
 
 			if err := runStateMigration(newDBPath, deployConfig, l1Deployments, l1RPC, l2AllocsPath, outfileRollupConfig, dryRun); err != nil {
 				return fmt.Errorf("failed to run state migration: %v", err)

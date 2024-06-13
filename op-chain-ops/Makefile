@@ -21,6 +21,9 @@ celo-migrate-blocks:
 celo-migrate-state:
 	go build -o ./bin/celo-migrate-state ./cmd/celo-migrate-state/*.go
 
+celo-migrate:
+	go build -o ./bin/celo-migrate ./cmd/celo-migrate/*.go
+
 test:
 	go test ./...
 
