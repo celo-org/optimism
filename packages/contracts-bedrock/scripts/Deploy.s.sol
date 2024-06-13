@@ -384,6 +384,9 @@ contract Deploy is Deployer {
         deployPreimageOracle();
         deployMips();
         deployAnchorStateRegistry();
+
+        // Multicall3
+        deployMulticall3();
     }
 
     /// @notice Initialize all of the implementations
@@ -1200,7 +1203,7 @@ contract Deploy is Deployer {
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
 
-        
+
         address customGasTokenAddress = Constants.ETHER;
         if (cfg.useCustomGasToken()) {
           customGasTokenAddress = cfg.customGasTokenAddress();
