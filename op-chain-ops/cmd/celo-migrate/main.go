@@ -68,6 +68,14 @@ var (
 		Name:  "dry-run",
 		Usage: "Dry run the upgrade by not committing the database",
 	}
+	gasLimitFlag = &cli.Uint64Flag{
+		Name:  "gas-limit",
+		Usage: "Sets the gas limit for the migration block, required when the last celo block is a pre gingerbread block, current mainnet value at 13/06/2024 is 50000000",
+	}
+	baseFeeFlag = &cli.Uint64Flag{
+		Name:  "gas-limit",
+		Usage: "Sets the base fee for the migration block, required when the last celo block is a pre gingerbread block, current mainnet value at 13/06/2024 is 5000000000",
+	}
 
 	flags = []cli.Flag{
 		deployConfigFlag,
@@ -77,6 +85,8 @@ var (
 		outfileRollupConfigFlag,
 		dbPathFlag,
 		dryRunFlag,
+		gasLimitFlag,
+		baseFeeFlag,
 	}
 
 	// TODO: read those form the deploy config
@@ -178,7 +188,7 @@ func main() {
 			}
 
 			// Write changes to state to actual state database
-			cel2Header, err := ApplyMigrationChangesToDB(l2Genesis, dbPath, !dryRun)
+			cel2Header, err := ApplyMigrationChangesToDB(ctx, l2Genesis, dbPath, !dryRun)
 			if err != nil {
 				return err
 			}
@@ -207,7 +217,7 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, commit bool) (*types.Header, error) {
+func ApplyMigrationChangesToDB(ctx *cli.Context, genesis *core.Genesis, dbPath string, commit bool) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 	ldb, err := openCeloDb(dbPath)
 	if err != nil {
@@ -229,6 +239,20 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, commit bool
 	// Grab the full header.
 	header := rawdb.ReadHeader(ldb, hash, *num)
 	log.Info("Read header from database", "header", header)
+
+	// Check if GasLimit and BaseFee are unset and set them from the flags if so. If unset and the flags are unset then fail.
+	if header.GasLimit == 0 {
+		if !ctx.IsSet(gasLimitFlag.Name) {
+			return nil, fmt.Errorf("block has unset GasLimit and %s flag was not set", gasLimitFlag.Name)
+		}
+		header.GasLimit = ctx.Uint64(gasLimitFlag.Name)
+	}
+	if header.BaseFee == nil {
+		if !ctx.IsSet(baseFeeFlag.Name) {
+			return nil, fmt.Errorf("block has unset BaseFee and %s flag was not set", baseFeeFlag.Name)
+		}
+		header.BaseFee = new(big.Int).SetUint64(ctx.Uint64(baseFeeFlag.Name))
+	}
 
 	// We need to update the chain config to set the correct hardforks.
 	genesisHash := rawdb.ReadCanonicalHash(ldb, 0)
