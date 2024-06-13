@@ -1,9 +1,13 @@
 import { chainConfig } from 'viem/op-stack'
-import { optimismGoerli } from 'viem/chains'
+import { optimismGoerli, goerli } from 'viem/chains'
 import { readFileSync } from 'fs'
 import { defineChain } from 'viem'
 
-const contract_addrs = JSON.parse(readFileSync('../../.devnet/addresses.json', 'utf8'))
+const contract_addrs = JSON.parse(
+  readFileSync('../../.devnet/addresses.json', 'utf8')
+)
+const l1ChainID = 900
+const l2ChainID = 901
 
 // const contract_addresses = {
 //   AddressManager: contract_addrs.AddressManager,
@@ -21,11 +25,9 @@ const contract_addrs = JSON.parse(readFileSync('../../.devnet/addresses.json', '
 
 //TODO: do we need this, e.g. for the contracts? what do we need?
 export const cel2 = defineChain({
-  ...chainConfig.contracts,
   ...chainConfig.formatters,
   ...chainConfig.serializers,
-  //TODO: check the id
-  id: 7777777,
+  id: l2ChainID,
   name: 'Celo',
   nativeCurrency: {
     decimals: 18,
@@ -34,17 +36,33 @@ export const cel2 = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.ETH_RPC_URL],
+      http: ['http://localhost:9545'],
+    },
+  },
+  contracts: {
+    ...chainConfig.contracts,
+    l2OutputOracle: {
+      [l1ChainID]: {
+        address: contract_addrs.L2OutputOracleProxy,
+      },
+    },
+    portal: {
+      [l1ChainID]: {
+        address: contract_addrs.OptimismPortalProxy,
+      },
+    },
+    l1StandardBridge: {
+      [l1ChainID]: {
+        address: contract_addrs.L1StandardBridgeProxy,
+      },
     },
   },
 })
 
-//TODO: check the id
-const sourceId = 42;
 export const testnetl1 = defineChain({
-  id: sourceId,
+  id: l1ChainID,
   testnet: true,
-  name: 'CeloL1',
+  name: 'Ethereum L1',
   nativeCurrency: {
     decimals: 18,
     name: 'Ether',
@@ -52,24 +70,30 @@ export const testnetl1 = defineChain({
   },
   rpcUrls: {
     default: {
-      http: [process.env.ETH_RPC_URL_L1],
+      http: ['http://localhost:8545'],
     },
   },
-  ...chainConfig.contracts,
-  l2OutputOracle: {
-    [sourceId]: {
-      address: contract_addrs.L2OutputOracleProxy,
+  contracts: {
+    multicall3: {
+      address: contract_addrs.Multicall3,
     },
-  },
-  portal: {
-    [sourceId]: {
-      address: contract_addrs.OptimismPortalProxy,
+    l2OutputOracle: {
+      [l1ChainID]: {
+        address: contract_addrs.L2OutputOracleProxy,
+      },
     },
-  },
-  l1StandardBridge: {
-    [sourceId]: {
-      address: contract_addrs.L1StandardBridgeProxy,
+    portal: {
+      [l1ChainID]: {
+        address: contract_addrs.OptimismPortalProxy,
+      },
     },
+    l1StandardBridge: {
+      [l1ChainID]: {
+        address: contract_addrs.L1StandardBridgeProxy,
+      },
+    },
+    // l1StandardBridge: {
+    //   address: contract_addrs.L1StandardBridgeProxy,
+    // },
   },
 })
-

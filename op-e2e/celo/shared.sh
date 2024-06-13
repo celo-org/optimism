@@ -1,7 +1,8 @@
 #!/bin/bash
 #shellcheck disable=SC2034  # unused vars make sense in a shared file
 
-export ETH_RPC_URL=http://127.0.0.1:9545
+export ETH_RPC_URL_L1=http://127.0.0.1:8545
+export ETH_RPC_URL_L2=http://127.0.0.1:9545
 
 # pre-funded with native token (first default anvil account)
 ACC_FUNDED_PRIVKEY=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80

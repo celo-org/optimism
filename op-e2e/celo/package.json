@@ -1,0 +1,15 @@
+{
+  "name": "testsuite",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "dist/test.js",
+  "scripts": {
+    "test": "jest tests"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "viem": "^2.13.1"
+  }
+}
