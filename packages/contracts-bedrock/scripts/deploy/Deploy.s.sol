@@ -60,6 +60,7 @@ import { Process } from "scripts/libraries/Process.sol";
 
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Multicall3 } from '@multicall/Multicall3.sol';
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -401,6 +402,9 @@ contract Deploy is Deployer {
         deployPreimageOracle();
         deployMips();
         deployAnchorStateRegistry();
+
+        // Multicall3 
+        deployMulticall3();
     }
 
     /// @notice Initialize all of the implementations
@@ -1279,7 +1283,7 @@ contract Deploy is Deployer {
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
 
-        
+
         address customGasTokenAddress = Constants.ETHER;
         uint256 initialBalance = 0;
         if (cfg.useCustomGasToken()) {
@@ -1674,4 +1678,14 @@ contract Deploy is Deployer {
 
         ChainAssertions.checkCeloTokenL1({ _contracts:_proxies(), _isProxy: false });
     }
+
+    function deployMulticall3() internal onlyDevnet returns (address addr_) {
+        // Necessary to be deployed on the L! for viems withdraw logic
+        // Only necessary on local devnet, since on the common public testnets
+        // the multicall3 is already deployed.
+        console.log('Deploying up Multicall3 contact');
+        Multicall3 mc3 = new Multicall3();
+        addr_ = address(mc3);
+        save('Multicall3', addr_);
+      }
 }
