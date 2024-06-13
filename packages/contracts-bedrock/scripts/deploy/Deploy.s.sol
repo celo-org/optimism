@@ -62,6 +62,7 @@ import { IResolvedDelegateProxy } from "src/legacy/interfaces/IResolvedDelegateP
 
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Multicall3 } from "@multicall/Multicall3.sol";
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -478,6 +479,9 @@ contract Deploy is Deployer {
         // Check if the permissionless game implementation is already set
         IDisputeGameFactory factory = IDisputeGameFactory(mustGetAddress("DisputeGameFactoryProxy"));
         address permissionlessGameImpl = address(factory.gameImpls(GameTypes.CANNON));
+
+        // Multicall3
+        deployMulticall3();
 
         // Deploy and setup the PermissionlessDelayedWeth not provided by the OPCM.
         // If the following require statement is hit, you can delete the block of code after it.
@@ -1345,5 +1349,15 @@ contract Deploy is Deployer {
         });
 
         ChainAssertions.checkCeloTokenL1({ _contracts: _proxies(), _isProxy: false });
+    }
+
+    function deployMulticall3() internal onlyDevnet returns (address addr_) {
+        // Necessary to be deployed on the L1 for viems withdraw logic
+        // Only necessary on local devnet, since on the common public testnets
+        // the multicall3 is already deployed.
+        console.log("Deploying up Multicall3 contact");
+        Multicall3 mc3 = new Multicall3();
+        addr_ = address(mc3);
+        save("Multicall3", addr_);
     }
 }
