@@ -136,11 +136,11 @@ func main() {
 			oplog.SetGlobalLogHandler(handler)
 
 			// if err := runBlockMigration(oldDBPath, newDBPath, batchSize, memoryLimit, clearAll, clearNonAncients); err != nil {
-			// 	return fmt.Errorf("failed to run block migration: %v", err)
+			// 	return fmt.Errorf("failed to run block migration: %w", err)
 			// }
 
 			if err := runStateMigration(newDBPath, deployConfig, l1Deployments, l1RPC, l2AllocsPath, outfileRollupConfig, dryRun); err != nil {
-				return fmt.Errorf("failed to run state migration: %v", err)
+				return fmt.Errorf("failed to run state migration: %w", err)
 			}
 
 			return nil
@@ -160,27 +160,27 @@ func runBlockMigration(oldDBPath, newDBPath string, batchSize uint64, memoryLimi
 
 	if clearAll {
 		if err = os.RemoveAll(newDBPath); err != nil {
-			return fmt.Errorf("failed to remove new database: %v", err)
+			return fmt.Errorf("failed to remove new database: %w", err)
 		}
 	}
 	if clearNonAncients {
 		if err = cleanupNonAncientDb(newDBPath); err != nil {
-			return fmt.Errorf("failed to cleanup non-ancient database: %v", err)
+			return fmt.Errorf("failed to cleanup non-ancient database: %w", err)
 		}
 	}
 
 	if err = createEmptyNewDb(newDBPath); err != nil {
-		return fmt.Errorf("failed to create new database: %v", err)
+		return fmt.Errorf("failed to create new database: %w", err)
 	}
 
 	var numAncientsNew uint64
 	if numAncientsNew, err = migrateAncientsDb(oldDBPath, newDBPath, batchSize); err != nil {
-		return fmt.Errorf("failed to migrate ancients database: %v", err)
+		return fmt.Errorf("failed to migrate ancients database: %w", err)
 	}
 
 	var numNonAncients uint64
 	if numNonAncients, err = migrateNonAncientsDb(oldDBPath, newDBPath, numAncientsNew-1, batchSize); err != nil {
-		return fmt.Errorf("failed to migrate non-ancients database: %v", err)
+		return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 	}
 
 	log.Info("Block Migration Completed", "migratedAncients", numAncientsNew, "migratedNonAncients", numNonAncients)

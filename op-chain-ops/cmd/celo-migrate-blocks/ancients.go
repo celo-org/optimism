@@ -25,24 +25,24 @@ type RLPBlockRange struct {
 func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, error) {
 	oldFreezer, err := rawdb.NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // TODO can't be readonly because we need the .meta files to be created
 	if err != nil {
-		return 0, fmt.Errorf("failed to open old freezer: %v", err)
+		return 0, fmt.Errorf("failed to open old freezer: %w", err)
 	}
 	defer oldFreezer.Close()
 
 	newFreezer, err := rawdb.NewChainFreezer(filepath.Join(newDBPath, "ancient"), "", false)
 	if err != nil {
-		return 0, fmt.Errorf("failed to open new freezer: %v", err)
+		return 0, fmt.Errorf("failed to open new freezer: %w", err)
 	}
 	defer newFreezer.Close()
 
 	numAncientsOld, err := oldFreezer.Ancients()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get number of ancients in old freezer: %v", err)
+		return 0, fmt.Errorf("failed to get number of ancients in old freezer: %w", err)
 	}
 
 	numAncientsNew, err := newFreezer.Ancients()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %v", err)
+		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
 	log.Info("Migration Started", "process", "ancients migration", "startBlock", numAncientsNew, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNew+1)
@@ -59,12 +59,12 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, e
 	g.Go(func() error { return writeAncientBlocks(ctx, newFreezer, transformChan) })
 
 	if err = g.Wait(); err != nil {
-		return 0, fmt.Errorf("failed to migrate ancients: %v", err)
+		return 0, fmt.Errorf("failed to migrate ancients: %w", err)
 	}
 
 	numAncientsNew, err = newFreezer.Ancients()
 	if err != nil {
-		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %v", err)
+		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
 	log.Info("Migration End", "process", "ancients migration", "totalBlocks", numAncientsNew)
@@ -94,23 +94,23 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 
 			blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
 			if err != nil {
-				return fmt.Errorf("failed to read hashes from old freezer: %v", err)
+				return fmt.Errorf("failed to read hashes from old freezer: %w", err)
 			}
 			blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
 			if err != nil {
-				return fmt.Errorf("failed to read headers from old freezer: %v", err)
+				return fmt.Errorf("failed to read headers from old freezer: %w", err)
 			}
 			blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
 			if err != nil {
-				return fmt.Errorf("failed to read bodies from old freezer: %v", err)
+				return fmt.Errorf("failed to read bodies from old freezer: %w", err)
 			}
 			blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
 			if err != nil {
-				return fmt.Errorf("failed to read receipts from old freezer: %v", err)
+				return fmt.Errorf("failed to read receipts from old freezer: %w", err)
 			}
 			blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
 			if err != nil {
-				return fmt.Errorf("failed to read tds from old freezer: %v", err)
+				return fmt.Errorf("failed to read tds from old freezer: %w", err)
 			}
 
 			out <- blockRange
@@ -132,11 +132,11 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 
 				newHeader, err := transformHeader(blockRange.headers[i])
 				if err != nil {
-					return fmt.Errorf("can't transform header: %v", err)
+					return fmt.Errorf("can't transform header: %w", err)
 				}
 				newBody, err := transformBlockBody(blockRange.bodies[i])
 				if err != nil {
-					return fmt.Errorf("can't transform body: %v", err)
+					return fmt.Errorf("can't transform body: %w", err)
 				}
 
 				if yes, newHash := hasSameHash(newHeader, blockRange.hashes[i]); !yes {
@@ -164,25 +164,25 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 				for i := range blockRange.hashes {
 					blockNumber := blockRange.start + uint64(i)
 					if err := aWriter.AppendRaw(rawdb.ChainFreezerHashTable, blockNumber, blockRange.hashes[i]); err != nil {
-						return fmt.Errorf("can't write hash to Freezer: %v", err)
+						return fmt.Errorf("can't write hash to Freezer: %w", err)
 					}
 					if err := aWriter.AppendRaw(rawdb.ChainFreezerHeaderTable, blockNumber, blockRange.headers[i]); err != nil {
-						return fmt.Errorf("can't write header to Freezer: %v", err)
+						return fmt.Errorf("can't write header to Freezer: %w", err)
 					}
 					if err := aWriter.AppendRaw(rawdb.ChainFreezerBodiesTable, blockNumber, blockRange.bodies[i]); err != nil {
-						return fmt.Errorf("can't write body to Freezer: %v", err)
+						return fmt.Errorf("can't write body to Freezer: %w", err)
 					}
 					if err := aWriter.AppendRaw(rawdb.ChainFreezerReceiptTable, blockNumber, blockRange.receipts[i]); err != nil {
-						return fmt.Errorf("can't write receipts to Freezer: %v", err)
+						return fmt.Errorf("can't write receipts to Freezer: %w", err)
 					}
 					if err := aWriter.AppendRaw(rawdb.ChainFreezerDifficultyTable, blockNumber, blockRange.tds[i]); err != nil {
-						return fmt.Errorf("can't write td to Freezer: %v", err)
+						return fmt.Errorf("can't write td to Freezer: %w", err)
 					}
 				}
 				return nil
 			})
 			if err != nil {
-				return fmt.Errorf("failed to write block range: %v", err)
+				return fmt.Errorf("failed to write block range: %w", err)
 			}
 			log.Info("Wrote ancient blocks", "start", blockRange.start, "end", blockRange.start+uint64(len(blockRange.hashes)-1), "count", len(blockRange.hashes))
 		}

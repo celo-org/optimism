@@ -80,7 +80,7 @@ func openDB(chaindataPath string) (ethdb.Database, error) {
 
 func createEmptyNewDb(newDBPath string) error {
 	if err := os.MkdirAll(newDBPath, 0755); err != nil {
-		return fmt.Errorf("failed to create new database directory: %v", err)
+		return fmt.Errorf("failed to create new database directory: %w", err)
 	}
 	return nil
 }
@@ -88,13 +88,13 @@ func createEmptyNewDb(newDBPath string) error {
 func cleanupNonAncientDb(dir string) error {
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("failed to read directory: %v", err)
+		return fmt.Errorf("failed to read directory: %w", err)
 	}
 	for _, file := range files {
 		if file.Name() != "ancient" {
 			err := os.RemoveAll(filepath.Join(dir, file.Name()))
 			if err != nil {
-				return fmt.Errorf("failed to remove file: %v", err)
+				return fmt.Errorf("failed to remove file: %w", err)
 			}
 		}
 	}
