@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
@@ -256,7 +255,7 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, commit bool
 	}
 
 	// Celo contract addresses are now fixed, so we need to take care to move proxies to the expected addresses
-	err = migrateTestnetAccounts(db, cfg)
+	err = migrateTestnetAccounts(db, cfg, contractMigrations)
 	if err != nil {
 		return nil, err
 	}
@@ -436,20 +435,20 @@ func addAllocsToCeloState(db *state.StateDB, genesis *core.Genesis) error {
 	return nil
 }
 
-func dbValueToHash(enc []byte) common.Hash {
-	var value common.Hash
-	if len(enc) > 0 {
-		_, content, _, err := rlp.Split(enc)
-		if err != nil {
-			panic(err)
-		}
-		value.SetBytes(content)
-	}
-	return value
-}
+// func dbValueToHash(enc []byte) common.Hash {
+// 	var value common.Hash
+// 	if len(enc) > 0 {
+// 		_, content, _, err := rlp.Split(enc)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 		value.SetBytes(content)
+// 	}
+// 	return value
+// }
 
-func migrateTestnetAccounts(db *state.StateDB, config *params.ChainConfig) error {
-	if mapping, exists := contractMigrations[config.ChainID.Uint64()]; exists {
+func migrateTestnetAccounts(db *state.StateDB, config *params.ChainConfig, migrations ChainContractMigrations) error {
+	if mapping, exists := migrations[config.ChainID.Uint64()]; exists {
 		log.Info("Found contract migrations for chain", "chainID", config.ChainID, "mappings", len(mapping))
 		for source, target := range mapping {
 			if !db.Exist(source) {
@@ -466,18 +465,22 @@ func migrateTestnetAccounts(db *state.StateDB, config *params.ChainConfig) error
 			db.SetNonce(target, db.GetNonce(source))
 			db.SetBalance(target, db.GetBalance(source))
 			db.SetCode(target, db.GetCode(source))
+			// db.SetStorage()
 			t, err := db.OpenStorageTrie(source)
 			if err != nil {
 				return err
 			}
-
+			// t.UpdateAccount()
+			// t.UpdateStorage()
 			nodeIter, err := t.NodeIterator([]byte{})
 			if err != nil {
 				return err
 			}
 			iter := trie.NewIterator(nodeIter)
+			// db.OpenStorageTrie()
 			for iter.Next() {
-				db.SetState(target, common.BytesToHash(iter.Key), dbValueToHash(iter.Value))
+				log.Info("storage", "key", common.BytesToHash(iter.Key), "value", common.BytesToHash(iter.Value))
+				db.SetState(target, common.BytesToHash(iter.Key), common.BytesToHash(iter.Value))
 			}
 			log.Info("Migrated account", "source", source, "target", target)
 		}
