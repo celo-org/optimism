@@ -68,7 +68,7 @@ var (
 		Usage: "Memory limit in MB",
 		Value: 7500,
 	}
-	dryRunFlag = &cli.BoolFlag{ // TODO(Alec)
+	dryRunFlag = &cli.BoolFlag{ // TODO(Alec) this doesn't really apply to both scripts, what should we do with this?
 		Name:  "dry-run",
 		Usage: "Dry run the upgrade by not committing the database",
 	}
@@ -80,8 +80,13 @@ var (
 		Name:  "clear-nonAncients",
 		Usage: "Use to keep migrated ancients, but not non-ancients",
 	}
+	onlyAncientsFlag = &cli.BoolFlag{
+		Name:  "only-ancients",
+		Usage: "Use to only migrate ancient blocks. Ignored when running full migration",
+	}
 
 	blockMigrationFlags = []cli.Flag{
+		onlyAncientsFlag,
 		oldDBPathFlag,
 		newDBPathFlag,
 		batchSizeFlag,
@@ -98,7 +103,8 @@ var (
 		outfileRollupConfigFlag,
 		dryRunFlag,
 	}
-	fullMigrationFlags = append(blockMigrationFlags, stateMigrationFlags[1:]...) // skip duplicate newDBPathFlag
+	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
+	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
 
 	// TODO: read those form the deploy config
 	// TODO(pl): select values
@@ -116,6 +122,7 @@ type blockMigrationOptions struct {
 	memoryLimit      int64
 	clearAll         bool
 	clearNonAncients bool
+	onlyAncients     bool
 }
 
 type stateMigrationOptions struct {
@@ -136,6 +143,7 @@ func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 		memoryLimit:      ctx.Int64("memory-limit"),
 		clearAll:         ctx.Bool("clear-all"),
 		clearNonAncients: ctx.Bool("clear-nonAncients"),
+		onlyAncients:     ctx.Bool("only-ancients"),
 	}
 }
 
@@ -180,8 +188,8 @@ func main() {
 				},
 			},
 			{
-				Name:    "all",
-				Aliases: []string{"a"},
+				Name:    "full",
+				Aliases: []string{"f", "all", "a"},
 				Usage:   "Perform a full migration of both block and state data to a CeL2 DB",
 				Flags:   fullMigrationFlags,
 				Action: func(ctx *cli.Context) error {
@@ -234,7 +242,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 		}
 	}
 
-	if err = createEmptyNewDb(opts.newDBPath); err != nil {
+	if err = createNewDbIfNotExists(opts.newDBPath); err != nil {
 		return fmt.Errorf("failed to create new database: %w", err)
 	}
 
@@ -244,8 +252,12 @@ func runBlockMigration(opts blockMigrationOptions) error {
 	}
 
 	var numNonAncients uint64
-	if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNew-1, opts.batchSize); err != nil {
-		return fmt.Errorf("failed to migrate non-ancients database: %w", err)
+	if !opts.onlyAncients {
+		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNew-1, opts.batchSize); err != nil {
+			return fmt.Errorf("failed to migrate non-ancients database: %w", err)
+		}
+	} else {
+		log.Info("Skipping non-ancients migration")
 	}
 
 	log.Info("Block Migration Completed", "migratedAncients", numAncientsNew, "migratedNonAncients", numNonAncients)

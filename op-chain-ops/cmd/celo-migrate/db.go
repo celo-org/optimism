@@ -78,7 +78,7 @@ func openDB(chaindataPath string) (ethdb.Database, error) {
 	return ldb, nil
 }
 
-func createEmptyNewDb(newDBPath string) error {
+func createNewDbIfNotExists(newDBPath string) error {
 	if err := os.MkdirAll(newDBPath, 0755); err != nil {
 		return fmt.Errorf("failed to create new database directory: %w", err)
 	}
