@@ -29,6 +29,7 @@ import { Process } from "scripts/libraries/Process.sol";
 import { GoldToken } from "src/celo/GoldToken.sol";
 
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+import { CallProxy } from "src/celo/CallProxy.sol";
 import { CeloRegistry } from "src/celo/CeloRegistry.sol";
 import { FeeHandler } from "src/celo/FeeHandler.sol";
 import { FeeCurrencyWhitelist } from "src/celo/FeeCurrencyWhitelist.sol";
@@ -159,6 +160,7 @@ contract L2Genesis is Deployer {
         if (cfg.fundDevAccounts()) {
             fundDevAccounts();
         }
+        setCeloTestnetProxies();
         vm.stopPrank();
 
         if (writeForkGenesisAllocs(_fork, Fork.DELTA, _mode)) {
@@ -608,6 +610,20 @@ contract L2Genesis is Deployer {
         uint256[] memory initialBalances = new uint256[](1);
         initialBalances[0] = 100_000 ether;
         //deploycUSD(initialBalanceAddresses, initialBalances, 2);
+    }
+
+    function setCeloTestnetProxies() internal {
+        console.log("Setting up Celo testnet proxies");
+
+        setupCallProxy(CeloPredeploys.GOLD_TOKEN, CeloPredeploys.ALFAJORES_GOLD_TOKEN);
+        setupCallProxy(CeloPredeploys.FEE_HANDLER, CeloPredeploys.ALFAJORES_FEE_HANDLER);
+    }
+
+    function setupCallProxy(address addr, address impl) internal {
+        bytes memory code = vm.getDeployedCode("CallProxy.sol:CallProxy");
+
+        vm.etch(addr, code);
+        vm.store(addr, bytes32(uint256(0)), bytes32(impl));
     }
 
     /// @notice Sets up a proxy for the given impl address

@@ -19,6 +19,11 @@ library CeloPredeploys {
     address internal constant FEE_CURRENCY_DIRECTORY = 0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB;
     address internal constant cUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
 
+    // Alfajores addresses that need an additional proxy to be reachable under mainnet address
+    address internal constant ALFAJORES_GOLD_TOKEN = 0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9;
+    // TODO: find out real address
+    address internal constant ALFAJORES_FEE_HANDLER = 0x7d21685C17607338b313a7174bAb6620baD0aaB7;
+
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {
         // require(isPredeployNamespace(_addr), "Predeploys: address must be a predeploy");
