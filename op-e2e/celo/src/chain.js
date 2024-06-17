@@ -92,8 +92,5 @@ export const testnetl1 = defineChain({
         address: contract_addrs.L1StandardBridgeProxy,
       },
     },
-    // l1StandardBridge: {
-    //   address: contract_addrs.L1StandardBridgeProxy,
-    // },
   },
 })

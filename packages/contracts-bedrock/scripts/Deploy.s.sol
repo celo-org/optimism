@@ -55,6 +55,7 @@ import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 import { ForgeArtifacts } from "scripts/ForgeArtifacts.sol";
 
 import {CeloTokenL1} from 'src/celo/CeloTokenL1.sol';
+import {Multicall3} from '@multicall/Multicall3.sol';
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -385,7 +386,7 @@ contract Deploy is Deployer {
         deployMips();
         deployAnchorStateRegistry();
 
-        // Multicall3
+        // Multicall3 
         deployMulticall3();
     }
 
@@ -1526,4 +1527,14 @@ contract Deploy is Deployer {
         }
         return cfg.customGasTokenAddress();
     }
+
+    function deployMulticall3() internal onlyDevnet returns (address addr_) {
+        // Necessary to be deployed on the L! for viems withdraw logic
+        // Only necessary on local devnet, since on the common public testnets
+        // the multicall3 is already deployed.
+        console.log('Deploying up Multicall3 contact');
+        Multicall3 mc3 = new Multicall3();
+        addr_ = address(mc3);
+        save('Multicall3', addr_);
+      }
 }

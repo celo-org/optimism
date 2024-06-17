@@ -1,4 +1,5 @@
 import { withdraw } from '../src/withdraw.js'
+import { parseEther } from 'viem'
 import { exec, spawn, execSync } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -13,22 +14,36 @@ const execOpts = {
   cwd: '/Users/maximilian/code/optimism',
 }
 
-const opts = {
-  privKey: '0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e',
-}
-
 // beforeAll(() => {
 //   console.log(execSync('"make" devnet-up', execOpts))
 // })
 // afterAll(() => {
 //   console.log(execSync('"make" devnet-down', execOpts))
 // })
+//
+//
+const minute = 60 * 1000
+const privKey =
+  '0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e'
+const config = {
+  account: privateKeyToAccount(privKey),
+}
 
 test(
-  'tries a simple withdraw',
+  'execute a withdraw (L2 to L1)',
   async () => {
-    const success = await withdraw('1', opts)
-    expect(success).toBe(true)
+    // TODO: balance before
+    expect(
+      withdraw(
+        {
+          amount: parseEther('1'),
+          to: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
+        },
+        config
+      )
+    ).resolves.toBe(true)
+    // TODO: balance after == +amount
+    // TODO: check the currency
   },
-  5 * 60 * 1000
+  2 * minute
 )
