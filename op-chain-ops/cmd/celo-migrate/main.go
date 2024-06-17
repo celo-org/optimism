@@ -451,36 +451,9 @@ func migrateTestnetAccounts(db *state.StateDB, config *params.ChainConfig, migra
 	if mapping, exists := migrations[config.ChainID.Uint64()]; exists {
 		log.Info("Found contract migrations for chain", "chainID", config.ChainID, "mappings", len(mapping))
 		for source, target := range mapping {
-			if !db.Exist(source) {
-				log.Warn("Source account does not exist", "source", source)
-				continue
-			}
-
-			if db.Exist(target) {
-				log.Warn("Target account already exists, overwriting...", "target", target)
-			}
-
-			db.CreateAccount(target)
-
-			db.SetNonce(target, db.GetNonce(source))
-			db.SetBalance(target, db.GetBalance(source))
-			db.SetCode(target, db.GetCode(source))
-			// db.SetStorage()
-			t, err := db.OpenStorageTrie(source)
+			err := db.MoveAccount(source, target)
 			if err != nil {
 				return err
-			}
-			// t.UpdateAccount()
-			// t.UpdateStorage()
-			nodeIter, err := t.NodeIterator([]byte{})
-			if err != nil {
-				return err
-			}
-			iter := trie.NewIterator(nodeIter)
-			// db.OpenStorageTrie()
-			for iter.Next() {
-				log.Info("storage", "key", common.BytesToHash(iter.Key), "value", common.BytesToHash(iter.Value))
-				db.SetState(target, common.BytesToHash(iter.Key), common.BytesToHash(iter.Value))
 			}
 			log.Info("Migrated account", "source", source, "target", target)
 		}

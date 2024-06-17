@@ -83,7 +83,11 @@ func TestUpdateState(t *testing.T) {
 	err = migrateTestnetAccounts(statedb, l2Genesis.Config, migrations)
 	require.NoError(t, err)
 
+	statedb.Commit(genesisBlock.Number().Uint64(), true)
+
 	require.Equal(t, code, statedb.GetCode(account2))
 	require.Equal(t, uint256.MustFromBig(balance), statedb.GetBalance(account2))
 	require.Equal(t, common.HexToHash("0x11"), statedb.GetState(account2, common.HexToHash("0x01")))
+
+	require.False(t, !statedb.Exist(account1))
 }
