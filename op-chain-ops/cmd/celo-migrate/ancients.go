@@ -23,7 +23,7 @@ type RLPBlockRange struct {
 }
 
 func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, error) {
-	oldFreezer, err := rawdb.NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // TODO can't be readonly because we need the .meta files to be created
+	oldFreezer, err := rawdb.NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
 	if err != nil {
 		return 0, fmt.Errorf("failed to open old freezer: %w", err)
 	}
@@ -45,12 +45,11 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, e
 		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
-	log.Info("Migration Started", "process", "ancients migration", "startBlock", numAncientsNew, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNew+1)
+	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNew, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNew+1, "step", batchSize)
+
 	g, ctx := errgroup.WithContext(context.Background())
 	readChan := make(chan RLPBlockRange, 10)
 	transformChan := make(chan RLPBlockRange, 10)
-
-	log.Info("Migrating data", "start", numAncientsNew, "end", numAncientsOld, "step", batchSize)
 
 	g.Go(func() error {
 		return readAncientBlocks(ctx, oldFreezer, numAncientsNew, numAncientsOld, batchSize, readChan)
@@ -67,7 +66,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, e
 		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
-	log.Info("Migration End", "process", "ancients migration", "totalBlocks", numAncientsNew)
+	log.Info("Ancient Block Migration Ended", "process", "ancients", "totalBlocks", numAncientsNew)
 	return numAncientsNew, nil
 }
 

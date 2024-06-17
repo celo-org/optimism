@@ -11,7 +11,7 @@ import (
 
 func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSize uint64) (uint64, error) {
 	// First copy files from old database to new database
-	log.Info("Copy files from old database", "process", "db migration")
+	log.Info("Copy files from old database (excluding ancients)", "process", "non-ancients")
 	cmd := exec.Command("rsync", "-v", "-a", "--exclude=ancient", oldDbPath+"/", newDbPath)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -31,15 +31,15 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
 	lastMigratedBlock := readLastMigratedBlock(newDB)
 
-	// if migration was interrupted, start from the last migrated block
+	// if migration was interrupted, start from the last migrated block TODO(Alec)
 	fromBlock := max(lastAncientBlock, lastMigratedBlock) + 1
 
-	log.Info("Migration started", "process", "db migration", "startBlock", fromBlock, "endBlock", lastBlock, "count", lastBlock-fromBlock)
+	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", fromBlock, "endBlock", lastBlock, "count", lastBlock-fromBlock)
 
 	for i := fromBlock; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
 
-		log.Info("Processing Range", "process", "db migration", "from", i, "to(inclusve)", i+batchSize-1, "count", len(numbersHash))
+		log.Info("Processing Block Range", "process", "non-ancients", "from", i, "to(inclusve)", i+batchSize-1, "count", len(numbersHash))
 		for _, numberHash := range numbersHash {
 			// read header and body
 			header := rawdb.ReadHeaderRLP(newDB, numberHash.Hash, numberHash.Number)
@@ -72,7 +72,7 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	}
 
 	toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, lastAncientBlock)
-	log.Info("Removing frozen blocks", "process", "db migration", "count", len(toBeRemoved))
+	log.Info("Removing frozen blocks", "process", "non-ancients", "count", len(toBeRemoved))
 	batch := newDB.NewBatch()
 	for _, numberHash := range toBeRemoved {
 		rawdb.DeleteBlockWithoutNumber(batch, numberHash.Hash, numberHash.Number)
@@ -86,7 +86,7 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	if err := deleteLastMigratedBlock(newDB); err != nil {
 		return 0, fmt.Errorf("failed to delete last migration number: %w", err)
 	}
-	log.Info("Migration ended", "process", "db migration", "migratedBlocks", lastBlock-fromBlock+1, "removedBlocks", len(toBeRemoved))
+	log.Info("Non-Ancient Block Migration Ended", "process", "non-ancients", "migratedBlocks", lastBlock-fromBlock+1, "removedBlocks", len(toBeRemoved))
 
 	return lastBlock - fromBlock + 1, nil
 }
