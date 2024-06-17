@@ -31,7 +31,9 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
 	lastMigratedBlock := readLastMigratedBlock(newDB)
 
-	// if migration was interrupted, start from the last migrated block TODO(Alec)
+	// TODO(Alec) debug behavior when running this twice with --keepNonAncients flag
+
+	// if migration was interrupted, start from the last migrated block
 	fromBlock := max(lastAncientBlock, lastMigratedBlock) + 1
 
 	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", fromBlock, "endBlock", lastBlock, "count", lastBlock-fromBlock)

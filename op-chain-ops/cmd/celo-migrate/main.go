@@ -68,17 +68,17 @@ var (
 		Usage: "Memory limit in MB",
 		Value: 7500,
 	}
-	dryRunFlag = &cli.BoolFlag{ // TODO(Alec) this doesn't really apply to both scripts, what should we do with this?
-		Name:  "dry-run",
-		Usage: "Dry run the upgrade by not committing the database",
+	stateDryRunFlag = &cli.BoolFlag{
+		Name:  "state-dry-run",
+		Usage: "Dry run the state upgrade by not committing the new db changes",
 	}
 	clearAllFlag = &cli.BoolFlag{
 		Name:  "clear-all",
-		Usage: "Use this to start with a fresh new database",
+		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
 	}
-	clearNonAncientsFlag = &cli.BoolFlag{
-		Name:  "clear-nonAncients",
-		Usage: "Use to keep migrated ancients, but not non-ancients",
+	keepNonAncientsFlag = &cli.BoolFlag{
+		Name:  "keep-nonAncients",
+		Usage: "CAUTION: Not recommended for production. Use to keep all data in the new db as is, including any partially migrated non-ancient blocks and state data. If non-ancient blocks are partially migrated, the script will attempt to resume the migration.",
 	}
 	onlyAncientsFlag = &cli.BoolFlag{
 		Name:  "only-ancients",
@@ -92,7 +92,7 @@ var (
 		batchSizeFlag,
 		memoryLimitFlag,
 		clearAllFlag,
-		clearNonAncientsFlag,
+		keepNonAncientsFlag,
 	}
 	stateMigrationFlags = []cli.Flag{
 		newDBPathFlag,
@@ -101,7 +101,7 @@ var (
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
-		dryRunFlag,
+		stateDryRunFlag,
 	}
 	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
 	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
@@ -116,13 +116,13 @@ var (
 )
 
 type blockMigrationOptions struct {
-	oldDBPath        string
-	newDBPath        string
-	batchSize        uint64
-	memoryLimit      int64
-	clearAll         bool
-	clearNonAncients bool
-	onlyAncients     bool
+	oldDBPath       string
+	newDBPath       string
+	batchSize       uint64
+	memoryLimit     int64
+	clearAll        bool
+	keepNonAncients bool
+	onlyAncients    bool
 }
 
 type stateMigrationOptions struct {
@@ -137,13 +137,13 @@ type stateMigrationOptions struct {
 
 func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 	return blockMigrationOptions{
-		oldDBPath:        ctx.String("old-db"),
-		newDBPath:        ctx.String("new-db"),
-		batchSize:        ctx.Uint64("batch-size"),
-		memoryLimit:      ctx.Int64("memory-limit"),
-		clearAll:         ctx.Bool("clear-all"),
-		clearNonAncients: ctx.Bool("clear-nonAncients"),
-		onlyAncients:     ctx.Bool("only-ancients"),
+		oldDBPath:       ctx.String("old-db"),
+		newDBPath:       ctx.String("new-db"),
+		batchSize:       ctx.Uint64("batch-size"),
+		memoryLimit:     ctx.Int64("memory-limit"),
+		clearAll:        ctx.Bool("clear-all"),
+		keepNonAncients: ctx.Bool("keep-nonAncients"),
+		onlyAncients:    ctx.Bool("only-ancients"),
 	}
 }
 
@@ -155,7 +155,7 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l1RPC:               ctx.String("l1-rpc"),
 		l2AllocsPath:        ctx.Path("l2-allocs"),
 		outfileRollupConfig: ctx.Path("outfile.rollup-config"),
-		dryRun:              ctx.Bool("dry-run"),
+		dryRun:              ctx.Bool("state-dry-run"),
 	}
 }
 
@@ -235,10 +235,9 @@ func runBlockMigration(opts blockMigrationOptions) error {
 		if err = os.RemoveAll(opts.newDBPath); err != nil {
 			return fmt.Errorf("failed to remove new database: %w", err)
 		}
-	}
-	if opts.clearNonAncients {
+	} else if !opts.keepNonAncients {
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
-			return fmt.Errorf("failed to cleanup non-ancient database: %w", err)
+			return fmt.Errorf("failed to reset non-ancient database: %w", err)
 		}
 	}
 
