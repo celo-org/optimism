@@ -211,7 +211,7 @@ func main() {
 			if isSubcommand {
 				return err
 			}
-			cli.ShowAppHelp(ctx)
+			_ = cli.ShowAppHelp(ctx)
 			return fmt.Errorf("Please provide a valid command")
 		},
 	}
