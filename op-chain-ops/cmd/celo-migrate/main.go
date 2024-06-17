@@ -165,6 +165,8 @@ func main() {
 	handler := log.NewTerminalHandlerWithLevel(os.Stderr, slog.LevelDebug, color)
 	oplog.SetGlobalLogHandler(handler)
 
+	log.Info("Beginning Cel2 Migration")
+
 	app := &cli.App{
 		Name:  "celo-migrate",
 		Usage: "Migrate Celo block and state data to a CeL2 DB",
@@ -229,6 +231,8 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MB to bytes
 
+	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "keepNonAncients", opts.keepNonAncients, "onlyAncients", opts.onlyAncients)
+
 	var err error
 
 	if opts.clearAll {
@@ -265,8 +269,9 @@ func runBlockMigration(opts blockMigrationOptions) error {
 }
 
 func runStateMigration(opts stateMigrationOptions) error {
+	log.Info("State Migration Started", "newDBPath", opts.newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig, "dryRun", opts.dryRun)
+
 	// Read deployment configuration
-	log.Info("Deploy config", "path", opts.deployConfig)
 	config, err := genesis.NewDeployConfig(opts.deployConfig)
 	if err != nil {
 		return err
@@ -355,6 +360,8 @@ func runStateMigration(opts stateMigrationOptions) error {
 	if err := jsonutil.WriteJSON(opts.outfileRollupConfig, rollupConfig, OutFilePerm); err != nil {
 		return err
 	}
+
+	log.Info("State Migration Completed")
 
 	return nil
 }
