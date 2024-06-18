@@ -61,7 +61,7 @@ var (
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
 		Usage: "batch size to use for block migration",
-		Value: 10000,
+		Value: 100000,
 	}
 	memoryLimitFlag = &cli.Int64Flag{
 		Name:  "memory-limit",
