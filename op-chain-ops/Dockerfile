@@ -9,12 +9,12 @@ WORKDIR /app
 
 RUN go mod download
 
-COPY ./op-bindings /app/op-bindings
 COPY ./op-service /app/op-service
 COPY ./op-node /app/op-node
+COPY ./op-plasma /app/op-plasma
 COPY ./op-chain-ops /app/op-chain-ops
 WORKDIR /app/op-chain-ops
-RUN make celo-migrate-blocks celo-migrate-state
+RUN make celo-migrate
 
 FROM alpine:3.18
 RUN apk --no-cache add ca-certificates bash rsync
@@ -23,8 +23,7 @@ RUN apk --no-cache add ca-certificates bash rsync
 # USER app
 WORKDIR /app
 
-COPY --from=builder /app/op-chain-ops/bin/celo-migrate-blocks /app
-COPY --from=builder /app/op-chain-ops/bin/celo-migrate-state /app
+COPY --from=builder /app/op-chain-ops/bin/celo-migrate /app
 ENV PATH="/app:${PATH}"
 
 ENTRYPOINT ["/app/celo-migrate-blocks"]
