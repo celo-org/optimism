@@ -25,7 +25,7 @@ import (
 var (
 	deployConfigFlag = &cli.PathFlag{
 		Name:     "deploy-config",
-		Usage:    "Path to the JSON file that was used for the l1 contracts deployment",
+		Usage:    "Path to the JSON file that was used for the l1 contracts deployment. A test example can be found here 'op-chain-ops/genesis/testdata/test-deploy-config-full.json' and documentation for the fields is at https://docs.optimism.io/builders/chain-operators/management/configuration",
 		Required: true,
 	}
 	l1DeploymentsFlag = &cli.PathFlag{
