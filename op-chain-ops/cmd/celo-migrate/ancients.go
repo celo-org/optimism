@@ -48,8 +48,8 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, e
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNew, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNew+1, "step", batchSize)
 
 	g, ctx := errgroup.WithContext(context.Background())
-	readChan := make(chan RLPBlockRange, 10)
-	transformChan := make(chan RLPBlockRange, 10)
+	readChan := make(chan RLPBlockRange)
+	transformChan := make(chan RLPBlockRange)
 
 	g.Go(func() error {
 		return readAncientBlocks(ctx, oldFreezer, numAncientsNew, numAncientsOld, batchSize, readChan)
