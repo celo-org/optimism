@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
@@ -434,18 +433,6 @@ func addAllocsToCeloState(db *state.StateDB, genesis *core.Genesis) error {
 	}
 	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
 	return nil
-}
-
-func dbValueToHash(enc []byte) common.Hash {
-	var value common.Hash
-	if len(enc) > 0 {
-		_, content, _, err := rlp.Split(enc)
-		if err != nil {
-			panic(err)
-		}
-		value.SetBytes(content)
-	}
-	return value
 }
 
 func migrateTestnetAccounts(db *state.StateDB, config *params.ChainConfig) error {
