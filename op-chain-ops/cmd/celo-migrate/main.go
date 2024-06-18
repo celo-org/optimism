@@ -77,7 +77,7 @@ var (
 		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
 	}
 	keepNonAncientsFlag = &cli.BoolFlag{
-		Name:  "keep-nonAncients",
+		Name:  "keep-non-ancients",
 		Usage: "CAUTION: Not recommended for production. Use to keep all data in the new db as is, including any partially migrated non-ancient blocks and state data. If non-ancient blocks are partially migrated, the script will attempt to resume the migration.",
 	}
 	onlyAncientsFlag = &cli.BoolFlag{
@@ -142,7 +142,7 @@ func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 		batchSize:       ctx.Uint64("batch-size"),
 		memoryLimit:     ctx.Int64("memory-limit"),
 		clearAll:        ctx.Bool("clear-all"),
-		keepNonAncients: ctx.Bool("keep-nonAncients"),
+		keepNonAncients: ctx.Bool("keep-non-ancients"),
 		onlyAncients:    ctx.Bool("only-ancients"),
 	}
 }
