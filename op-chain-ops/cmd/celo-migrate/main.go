@@ -235,6 +235,10 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	var err error
 
+	if err = createNewDbIfNotExists(opts.newDBPath); err != nil {
+		return fmt.Errorf("failed to create new database: %w", err)
+	}
+
 	if opts.clearAll {
 		if err = os.RemoveAll(opts.newDBPath); err != nil {
 			return fmt.Errorf("failed to remove new database: %w", err)
@@ -243,10 +247,6 @@ func runBlockMigration(opts blockMigrationOptions) error {
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
 			return fmt.Errorf("failed to reset non-ancient database: %w", err)
 		}
-	}
-
-	if err = createNewDbIfNotExists(opts.newDBPath); err != nil {
-		return fmt.Errorf("failed to create new database: %w", err)
 	}
 
 	var numAncientsNew uint64
