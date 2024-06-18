@@ -2,13 +2,21 @@
 
 ## Overview
 
-This script has two main sections that were originally separate scripts. One migrates Celo blocks to a format compatible with `op-geth`, while the other performs necessary state changes (TODO: add more info on state changes here).
+This script has two main sections. The first migrates Celo blocks to a format compatible with `op-geth`, and the second performs necessary state changes such as deploying L2 smart contracts.
+
+### Block migration
 
 The block migration itself has two parts: It first migrates the ancient / frozen blocks, which is all blocks before the last 90000. Because the ancients db is append-only, it copies these blocks into a new database after making the necessary transformations. The script then copies the rest of the chaindata directory (excluding `/ancients`) using the system level `rsync` command. All non-ancient blocks are then transformed in-place in the new db, leaving the old db unchanged.
 
-After all blocks have been migrated, the script performs a series of modifications to the state db. This is also done in-place in the `--new-db` directory.
+### State migration
+
+After all blocks have been migrated, the script performs a series of modifications to the state db. This is also done in-place in the `--new-db` directory. First, the state migration deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary. For testnets, the state migration script will also migrate core celo contracts to their mainnet addresses for consistency across celo networks. Finally, the state migration will commit the state changes to produce a new state root and create the first Cel2 block.
+
+### Notes
 
 Once the state changes are complete the migration is finished. The longest running section of the script is the ancients migration, and it can be resumed / skipped if interupted part way. The rest of the script cannot be resumed and will restart from the last migrated ancient block if interupted or re-run.
+
+The script outputs a `rollup-config.json` file that is passed to the sequencer in order to start the L2 network.
 
 See `--help` for how to run each portion of the script individually, along with other configuration options.
 
@@ -32,7 +40,7 @@ NOTE: You will need `rsync` to run this script if it's not already installed
 
 #### Running with local test setup (Alfajores / Holesky)
 
-To test the script locally, we can migrate an alfajores database and use Holesky as our L1. The input files needed for this can be found in `./testdata`.
+To test the script locally, we can migrate an alfajores database and use Holesky as our L1. The input files needed for this can be found in `./testdata`. The necessary smart contracts have already been deployed on Holesky.
 
 Pull down the latest alfajores database snapshot
 
