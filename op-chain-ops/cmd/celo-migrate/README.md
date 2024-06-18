@@ -2,7 +2,7 @@
 
 ## Overview
 
-This script has two main sections that were originally separate scripts. One migrates Celo blocks to a format compatible with `op-geth`, while the other performs necessary state changes (TODO: add more info here?).
+This script has two main sections that were originally separate scripts. One migrates Celo blocks to a format compatible with `op-geth`, while the other performs necessary state changes (TODO: add more info on state changes here).
 
 The block migration itself has two parts: It first migrates the ancient / frozen blocks, which is all blocks before the last 90000. Because the ancients db is append-only, it copies these blocks into a new database after making the necessary transformations. The script then copies the rest of the chaindata directory (excluding `/ancients`) using the system level `rsync` command. All non-ancient blocks are then transformed in-place in the new db, leaving the old db unchanged.
 
