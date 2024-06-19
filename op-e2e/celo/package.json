@@ -5,11 +5,12 @@
   "type": "module",
   "main": "dist/test.js",
   "scripts": {
-    "test": "jest tests"
+    "test": "jest tests --detectOpenHandles"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "reverse-mirage": "^1.1.0",
     "viem": "^2.13.1"
   }
 }

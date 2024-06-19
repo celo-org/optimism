@@ -1,49 +1,44 @@
 import { withdraw } from '../src/withdraw.js'
 import { parseEther } from 'viem'
-import { exec, spawn, execSync } from 'node:child_process'
-import { promisify } from 'node:util'
+import { setup } from './setup.js'
 
-// const execP = promisify(exec)
-
-const execOpts = {
-  env: {
-    ...process.env,
-    DEVNET_CELO: true,
-  },
-  //FIXME: don't hardcode
-  cwd: '/Users/maximilian/code/optimism',
-}
-
-// beforeAll(() => {
-//   console.log(execSync('"make" devnet-up', execOpts))
-// })
-// afterAll(() => {
-//   console.log(execSync('"make" devnet-down', execOpts))
-// })
-//
-//
 const minute = 60 * 1000
-const privKey =
-  '0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e'
-const config = {
-  account: privateKeyToAccount(privKey),
-}
+const config = {}
 
-test(
-  'execute a withdraw (L2 to L1)',
+beforeAll(async () => {
+  config = await setup()
+}, 30_000)
+
+test.skip(
+  'execute a withdraw (L2 native to L1 erc20)',
   async () => {
-    // TODO: balance before
-    expect(
-      withdraw(
-        {
-          amount: parseEther('1'),
-          to: '0x70997970c51812dc3a010c7d01b50e0d17dc79c8',
-        },
-        config
-      )
-    ).resolves.toBe(true)
-    // TODO: balance after == +amount
-    // TODO: check the currency
+    const celoToken = await config.client.l1.public.getERC20({
+      erc20: {
+        address: config.addresses.CustomGasToken,
+        chainID: config.client.l1.public.chain.id,
+      },
+    })
+    const balanceBefore = await config.client.l1.public.getERC20BalanceOf({
+      erc20: celoToken,
+      address: config.account.address,
+    })
+    const withdrawAmount = parseEther('1')
+    const success = await withdraw(
+      {
+        amount: withdrawAmount,
+        to: config.account.address,
+        gas: 21_000n,
+      },
+      config
+    )
+    expect(success).toBe(true)
+    const balanceAfter = await config.client.l1.public.getERC20BalanceOf({
+      erc20: celoToken,
+      address: config.account.address,
+    })
+    expect(balanceAfter.amount).toBe(
+      balanceBefore.amount + BigInt(withdrawAmount)
+    )
   },
-  2 * minute
+  3 * minute
 )

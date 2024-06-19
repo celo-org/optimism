@@ -1,12 +1,13 @@
+import { createPublicClient, createWalletClient, http } from 'viem'
+import { readFileSync } from 'fs'
+import { readContract } from 'viem/actions'
 import {
-  createPublicClient,
-  createWalletClient,
-  custom,
-  http,
-  publicActions,
-} from 'viem'
-import { mainnet, optimism, optimismGoerli } from 'viem/chains'
-import { cel2, testnetl1 } from './chain.js'
+  getERC20,
+  simulateERC20Transfer,
+  getERC20BalanceOf,
+  getERC20Symbol,
+  getERC20Decimals,
+} from 'reverse-mirage'
 import {
   publicActionsL1,
   publicActionsL2,
@@ -14,39 +15,71 @@ import {
   walletActionsL2,
 } from 'viem/op-stack'
 
-// TODO: check what contracts have to be defined on the l1 chain
-// and implement them in the chain
-export const publicClientL1 = createPublicClient({
-  batch: {
-    multicall: false,
-  },
-  chain: testnetl1,
-  transport: http(),
-}).extend((client) => {
-  var i = publicActionsL1()(client)
-  i.multicall = (args) => multicallBackport(client, args)
-  return i
-})
-
-const multicallBackport = function(client, args) {
-  console.log('called multicall itnercept')
-  return false
+export function makeReadContract(contractAddress, contractABI) {
+  return (client) => {
+    return {
+      readContract: (args) => {
+        const rcArgs = {
+          address: contractAddress,
+          abi: contractABI,
+          functionName: args.functionName,
+          args: args.args,
+        }
+        return readContract(client, rcArgs)
+      },
+    }
+  }
 }
 
-export const walletClientL1 = createWalletClient({
-  batch: {
-    multicall: false,
-  },
-  chain: testnetl1,
-  transport: http(),
-}).extend(walletActionsL1())
+export function erc20PublicActions(client) {
+  return {
+    getERC20: (args) => getERC20(client, args),
+    getERC20Symbol: (args) => getERC20Symbol(client, args),
+    getERC20BalanceOf: (args) => getERC20BalanceOf(client, args),
+    getERC20Decimals: (args) => getERC20Decimals(client, args),
+  }
+}
+export function erc20WalletActions(client) {
+  return {
+    simulateERC20Transfer: (args) => {
+      return simulateERC20Transfer(client, { args: args })
+    },
+  }
+}
 
-export const walletClientL2 = createWalletClient({
-  chain: cel2,
-  transport: http(),
-}).extend(walletActionsL2())
-
-export const publicClientL2 = createPublicClient({
-  chain: cel2,
-  transport: http(),
-}).extend(publicActionsL2())
+export function setupClients(l1ChainConfig, l2ChainConfig, account, addresses) {
+  return {
+    l1: {
+      public: createPublicClient({
+        account,
+        chain: l1ChainConfig,
+        transport: http(),
+      })
+        .extend(publicActionsL1())
+        .extend(erc20PublicActions),
+      wallet: createWalletClient({
+        account,
+        chain: l1ChainConfig,
+        transport: http(),
+      })
+        .extend(erc20WalletActions)
+        .extend(walletActionsL1()),
+    },
+    l2: {
+      public: createPublicClient({
+        account,
+        chain: l2ChainConfig,
+        transport: http(),
+      })
+        .extend(publicActionsL2())
+        .extend(erc20PublicActions),
+      wallet: createWalletClient({
+        account,
+        chain: l2ChainConfig,
+        transport: http(),
+      })
+        .extend(erc20WalletActions)
+        .extend(walletActionsL2()),
+    },
+  }
+}
