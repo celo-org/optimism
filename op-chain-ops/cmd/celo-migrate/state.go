@@ -20,7 +20,7 @@ import (
 	"github.com/holiman/uint256"
 )
 
-func applyStateMigrationChanges(genesis *core.Genesis, dbPath string, commit bool) (*types.Header, error) {
+func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDB(dbPath)
@@ -139,13 +139,6 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string, commit boo
 		"gas-limit", cel2Block.GasLimit(),
 	)
 
-	// If we're not actually writing this to disk, then we're done.
-	if !commit {
-		log.Info("Dry run complete")
-		return nil, nil
-	}
-
-	// Otherwise we need to write the changes to disk. First we commit the state changes.
 	log.Info("Committing trie DB")
 	if err := db.Database().TrieDB().Commit(newRoot, true); err != nil {
 		return nil, err

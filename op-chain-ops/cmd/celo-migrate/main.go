@@ -68,10 +68,6 @@ var (
 		Usage: "Memory limit in MB",
 		Value: 7500,
 	}
-	stateDryRunFlag = &cli.BoolFlag{
-		Name:  "state-dry-run",
-		Usage: "Dry run the state upgrade by not committing the new db changes",
-	}
 	clearAllFlag = &cli.BoolFlag{
 		Name:  "clear-all",
 		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
@@ -101,7 +97,6 @@ var (
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
-		stateDryRunFlag,
 	}
 	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
 	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
@@ -132,7 +127,6 @@ type stateMigrationOptions struct {
 	l2AllocsPath        string
 	outfileRollupConfig string
 	newDBPath           string
-	dryRun              bool
 }
 
 func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
@@ -155,7 +149,6 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l1RPC:               ctx.String("l1-rpc"),
 		l2AllocsPath:        ctx.Path("l2-allocs"),
 		outfileRollupConfig: ctx.Path("outfile.rollup-config"),
-		dryRun:              ctx.Bool("state-dry-run"),
 	}
 }
 
@@ -269,7 +262,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 }
 
 func runStateMigration(opts stateMigrationOptions) error {
-	log.Info("State Migration Started", "newDBPath", opts.newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig, "dryRun", opts.dryRun)
+	log.Info("State Migration Started", "newDBPath", opts.newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
 
 	// Read deployment configuration
 	config, err := genesis.NewDeployConfig(opts.deployConfig)
@@ -342,7 +335,7 @@ func runStateMigration(opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(l2Genesis, opts.newDBPath, !opts.dryRun)
+	cel2Header, err := applyStateMigrationChanges(l2Genesis, opts.newDBPath)
 	if err != nil {
 		return err
 	}
