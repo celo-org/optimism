@@ -63,7 +63,7 @@ import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistr
 import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimismMintableERC20Factory.sol";
 
-import {CeloToken} from 'src/celo/NativeToken.sol';
+import {CeloTokenL1} from 'src/celo/CeloTokenL1.sol';
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -1734,11 +1734,9 @@ contract Deploy is Deployer {
     function setupCustomGasToken() internal returns (address addr_) {
         if (cfg.useCustomGasToken() && cfg.customGasTokenAddress()==address(0)) {
             console.log('Setting up Custom gas token');
-            // TODO: make parametrizable
-            uint256 totalSupply = 1000000000000 * 1e18;
             address portalProxyAddress = mustGetAddress('OptimismPortalProxy');
-            CeloToken cgt = new CeloToken{salt: _implSalt()}();
-            cgt.initialize(totalSupply, portalProxyAddress);
+            CeloTokenL1 cgt = new CeloTokenL1{salt: _implSalt()}();
+            cgt.initialize(portalProxyAddress);
             addr_ = address(cgt);
             save('CustomGasToken', addr_);
             console.log('Minted cutom gas token supply to optismism portal');
