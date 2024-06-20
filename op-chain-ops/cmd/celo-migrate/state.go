@@ -7,9 +7,13 @@ import (
 	"math/big"
 	"os"
 
+	"github.com/ethereum-optimism/optimism/op-chain-ops/cmd/celo-migrate/bindings"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts"
+	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -25,13 +29,22 @@ import (
 var (
 	OutFilePerm = os.FileMode(0o440)
 
-	alfajoresChainId          uint64 = 44787
-	accountOverwriteWhitelist        = map[uint64]map[common.Address]struct{}{
+	alfajoresChainId uint64 = 44787
+	mainnetChainId   uint64 = 42220
+
+	accountOverwriteWhitelist = map[uint64]map[common.Address]struct{}{
 		// Add any addresses that should be allowed to overwrite existing accounts here.
 		alfajoresChainId: {
 			// Create2Deployer
 			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): {},
 		},
+	}
+	distributionScheduleAddressMap = map[uint64]common.Address{
+		alfajoresChainId: common.HexToAddress("0x1234567890123456789012345678901234567890"),
+	}
+	celoTokenAddressMap = map[uint64]common.Address{
+		alfajoresChainId: addresses.CeloTokenAlfajoresAddress,
+		mainnetChainId:   addresses.CeloTokenAddress,
 	}
 )
 
@@ -83,6 +96,14 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		return nil, err
 	}
 
+	// Initialize the distribution schedule contract
+	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
+	// This is fine, as the token uses solc 0.5.x and therefore compatible bytecode
+	err = setupDistributionSchedule(db, cfg)
+	if err != nil {
+		return nil, err
+	}
+
 	migrationBlock := new(big.Int).Add(header.Number, common.Big1)
 
 	// We're done messing around with the database, so we can now commit the changes to the DB.
@@ -97,6 +118,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	if header.BaseFee != nil {
 		baseFee = header.BaseFee
 	}
+
 	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
 		ParentHash:      header.Hash(),
@@ -248,5 +270,68 @@ func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params
 		log.Info("Moved account", "address", k)
 	}
 	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+	return nil
+}
+
+// setupDistributionSchedule sets up the distribution schedule contract with the correct balance
+// The balance is set to the difference between the ceiling and the total supply of the token
+func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) error {
+	log.Info("Setting up CeloDistributionSchedule balance")
+
+	celoDistributionScheduleAddress, exists := distributionScheduleAddressMap[config.ChainID.Uint64()]
+	if !exists {
+		log.Error("DistributionSchedule address not configured for this chain, skipping migration step", "chainID", config.ChainID)
+		return fmt.Errorf("distributionSchedule address not configured")
+	}
+
+	if !db.Exist(celoDistributionScheduleAddress) {
+		log.Error("DistributionSchedule account does not exist, skipping migration step", "address", celoDistributionScheduleAddress)
+		return fmt.Errorf("distributionSchedule account does not exist")
+	}
+
+	tokenAddress, exists := celoTokenAddressMap[config.ChainID.Uint64()]
+	if !exists {
+		log.Error("CeloToken address not configured for this chain, skipping migration step", "chainID", config.ChainID)
+		return fmt.Errorf("celoToken address not configured")
+	}
+
+	backend := contracts.CeloBackend{
+		ChainConfig: config,
+		State:       db,
+	}
+
+	// Get total supply of celo token
+	big10 := uint256.NewInt(10)
+	big9 := uint256.NewInt(9)
+	big18 := uint256.NewInt(18)
+
+	billion := new(uint256.Int).Exp(big10, big9)
+	ethInWei := new(uint256.Int).Exp(big10, big18)
+
+	ceiling := new(uint256.Int).Mul(billion, ethInWei)
+
+	token, err := bindings.NewCeloTokenCaller(tokenAddress, &backend)
+	if err != nil {
+		return err
+	}
+	totalSupply, err := token.TotalSupply(&bind.CallOpts{})
+	if err != nil {
+		return err
+	}
+	supplyU256, overflow := uint256.FromBig(totalSupply)
+	if overflow {
+		return fmt.Errorf("supply %s is too large", totalSupply)
+	}
+
+	if supplyU256.Cmp(ceiling) > 0 {
+		return fmt.Errorf("supply %s is greater than ceiling %s", totalSupply, ceiling)
+	}
+
+	balance := new(uint256.Int).Sub(ceiling, supplyU256)
+	// Don't discard existing balance of the account
+	balance = new(uint256.Int).Add(balance, db.GetBalance(celoDistributionScheduleAddress))
+	db.SetBalance(celoDistributionScheduleAddress, balance)
+
+	log.Info("Set up CeloDistributionSchedule balance", "address", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
 	return nil
 }
