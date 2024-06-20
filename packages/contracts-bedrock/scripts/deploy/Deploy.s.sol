@@ -161,7 +161,8 @@ contract Deploy is Deployer {
             SystemConfig: mustGetAddress("SystemConfigProxy"),
             L1ERC721Bridge: mustGetAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: mustGetAddress("ProtocolVersionsProxy"),
-            SuperchainConfig: mustGetAddress("SuperchainConfigProxy")
+            SuperchainConfig: mustGetAddress("SuperchainConfigProxy"),
+            CustomGasToken: mustGetAddress("CustomGasTokenProxy")
         });
     }
 
@@ -181,7 +182,8 @@ contract Deploy is Deployer {
             SystemConfig: getAddress("SystemConfigProxy"),
             L1ERC721Bridge: getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
-            SuperchainConfig: getAddress("SuperchainConfigProxy")
+            SuperchainConfig: getAddress("SuperchainConfigProxy"),
+            CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
 
@@ -1630,17 +1632,57 @@ contract Deploy is Deployer {
         require(dac.resolverRefundPercentage() == daResolverRefundPercentage);
     }
 
-    function setupCustomGasToken() internal returns (address addr_) {
+    function setupCustomGasToken() internal {
         if (cfg.useCustomGasToken() && cfg.customGasTokenAddress()==address(0)) {
+            deployERC1967Proxy("CustomGasTokenProxy");
+
             console.log('Setting up Custom gas token');
-            address portalProxyAddress = mustGetAddress('OptimismPortalProxy');
-            CeloTokenL1 cgt = new CeloTokenL1{salt: _implSalt()}();
-            cgt.initialize(portalProxyAddress);
-            addr_ = address(cgt);
-            save('CustomGasToken', addr_);
-            console.log('Minted cutom gas token supply to optismism portal');
-            cfg.setUseCustomGasToken(addr_);
+            deployCustomGasToken();
+            initializeCustomGasToken();
+
+            address proxyAddress = mustGetAddress("CustomGasTokenProxy");
+            cfg.setUseCustomGasToken(proxyAddress);
         }
-        return cfg.customGasTokenAddress();
+    }
+
+    function deployCustomGasToken() public broadcast  returns (address addr_) {
+        console.log("Deploying CustomGasToken implementation");
+
+        CeloTokenL1 customGasToken = new CeloTokenL1{ salt: _implSalt() }();
+
+        save("CustomGasToken", address(customGasToken));
+        console.log("CustomGasToken deployed at %s", address(customGasToken));
+
+        // Override the `CustomGasToken` contract to the deployed implementation. This is necessary
+        // to check the `CustomGasToken` implementation alongside dependent contracts, which
+        // are always proxies.
+        Types.ContractSet memory contracts = _proxiesUnstrict();
+        contracts.CustomGasToken = address(customGasToken);
+        //TODO:
+        // ChainAssertions.checkOptimismPortal({ _contracts: contracts, _cfg: cfg, _isProxy: false });
+
+        addr_ = address(customGasToken);
+    }
+
+    /// @notice Initialize the CustomGasToken
+    function initializeCustomGasToken() public broadcast {
+        console.log("Upgrading and initializing CustomGasToken proxy");
+        address customGasTokenProxyAddress = mustGetAddress("CustomGasTokenProxy");
+        address customGasTokenAddress = mustGetAddress("CustomGasToken");
+        address portalProxyAddress = mustGetAddress('OptimismPortalProxy');
+
+        _upgradeAndCallViaSafe({
+            _proxy: payable(customGasTokenProxyAddress),
+            _implementation: customGasTokenAddress,
+            _innerCallData: abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
+        });
+
+        CeloTokenL1 customGasToken = CeloTokenL1(customGasTokenProxyAddress);
+        //TODO:
+        // string memory version = customGasTokenAddress.version();
+        // console.log("CustomGasToken version: %s", version);
+
+        //TODO:
+        // ChainAssertions.checkOptimismMintableERC20Factory({ _contracts: _proxies(), _isProxy: true });
     }
 }
