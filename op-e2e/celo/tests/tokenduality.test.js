@@ -2,7 +2,7 @@ import { createAmountFromString } from 'reverse-mirage'
 import { setup } from './setup.js'
 
 const minute = 60 * 1000
-const config = {}
+var config = {}
 
 beforeAll(async () => {
   config = await setup()
@@ -18,28 +18,25 @@ test(
         chainID: config.client.l2.public.chain.id,
       },
     })
-    console.log(dualityToken)
     const balanceBefore = await config.client.l2.public.getBalance({
       address: receiverAddr,
     })
 
     const sendAmount = createAmountFromString(dualityToken, '100')
-    console.log(sendAmount)
     const { request } = await config.client.l2.wallet.simulateERC20Transfer({
       to: receiverAddr,
       amount: sendAmount,
     })
-    console.log(request)
     const transferHash = await config.client.l2.wallet.writeContract(request)
     const receipt = await config.client.l2.public.waitForTransactionReceipt({
       hash: transferHash,
     })
-    console.log(receipt)
+    expect(receipt.status).toBe('success')
     const balanceAfter = await config.client.l2.public.getBalance({
       address: receiverAddr,
     })
 
-    expect(balanceAfter.amount).toBe(balanceBefore.amount + sendAmount.amount)
+    expect(balanceAfter).toBe(balanceBefore + sendAmount.amount)
   },
   1 * minute
 )

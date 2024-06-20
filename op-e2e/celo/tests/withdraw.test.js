@@ -3,18 +3,18 @@ import { parseEther } from 'viem'
 import { setup } from './setup.js'
 
 const minute = 60 * 1000
-const config = {}
+var config = {}
 
 beforeAll(async () => {
   config = await setup()
 }, 30_000)
 
-test.skip(
+test(
   'execute a withdraw (L2 native to L1 erc20)',
   async () => {
     const celoToken = await config.client.l1.public.getERC20({
       erc20: {
-        address: config.addresses.CustomGasToken,
+        address: config.addresses.CustomGasTokenProxy,
         chainID: config.client.l1.public.chain.id,
       },
     })
