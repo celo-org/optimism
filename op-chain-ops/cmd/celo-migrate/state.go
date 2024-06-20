@@ -62,37 +62,11 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.He
 		return nil, fmt.Errorf("cannot open StateDB: %w", err)
 	}
 
-	// So far we applied changes in the memory VM and collected changes in the genesis struct
-	// Now we iterate through all accounts that have been written there and set them inside the statedb.
-	// This will change the state root
-	// Another property is that the total balance changes must be 0
-	accountCounter := 0
-	overwriteCounter := 0
-	for k, v := range genesis.Alloc {
-		accountCounter++
-		if db.Exist(k) {
-			equal := bytes.Equal(db.GetCode(k), v.Code)
-
-			log.Warn("Operating on existing state", "account", k, "equalCode", equal)
-			overwriteCounter++
-		}
-		// TODO(pl): decide what to do with existing accounts.
-		db.CreateAccount(k)
-
-		// CreateAccount above copied the balance, check if we change it
-		if db.GetBalance(k).Cmp(uint256.MustFromBig(v.Balance)) != 0 {
-			// TODO(pl): make this a hard error once the migration has been tested more
-			log.Warn("Moving account changed native balance", "address", k, "oldBalance", db.GetBalance(k), "newBalance", v.Balance)
-		}
-
-		db.SetNonce(k, v.Nonce)
-		db.SetBalance(k, uint256.MustFromBig(v.Balance))
-		db.SetCode(k, v.Code)
-		db.SetStorage(k, v.Storage)
-
-		log.Info("Moved account", "address", k)
+	// Apply the changes to the state DB.
+	err = applyAllocsToState(db, genesis)
+	if err != nil {
+		return nil, err
 	}
-	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
 
 	migrationBlock := new(big.Int).Add(header.Number, common.Big1)
 
@@ -104,7 +78,7 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.He
 		return nil, err
 	}
 
-	// Create the header for the Bedrock transition block.
+	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
 		ParentHash:  header.Hash(),
 		UncleHash:   types.EmptyUncleHash,
@@ -125,8 +99,8 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.He
 	}
 	log.Info("Build Cel2 migration header", "header", cel2Header)
 
-	// Create the Bedrock transition block from the header. Note that there are no transactions,
-	// uncle blocks, or receipts in the Bedrock transition block.
+	// Create the Cel2 transition block from the header. Note that there are no transactions,
+	// uncle blocks, or receipts in the Cel2 transition block.
 	cel2Block := types.NewBlock(cel2Header, nil, nil, nil, trie.NewStackTrie(nil))
 
 	// We did it!
@@ -135,8 +109,6 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.He
 		"hash", cel2Block.Hash(),
 		"root", cel2Block.Root(),
 		"number", cel2Block.NumberU64(),
-		"gas-used", cel2Block.GasUsed(),
-		"gas-limit", cel2Block.GasLimit(),
 	)
 
 	log.Info("Committing trie DB")
@@ -200,4 +172,39 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.He
 	}
 
 	return cel2Header, nil
+}
+
+func applyAllocsToState(db *state.StateDB, genesis *core.Genesis) error {
+	// So far we applied changes in the memory VM and collected changes in the genesis struct
+	// Now we iterate through all accounts that have been written there and set them inside the statedb.
+	// This will change the state root
+	// Another property is that the total balance changes must be 0
+	accountCounter := 0
+	overwriteCounter := 0
+	for k, v := range genesis.Alloc {
+		accountCounter++
+		if db.Exist(k) {
+			equal := bytes.Equal(db.GetCode(k), v.Code)
+
+			log.Warn("Operating on existing state", "account", k, "equalCode", equal)
+			overwriteCounter++
+		}
+		// TODO(pl): decide what to do with existing accounts.
+		db.CreateAccount(k)
+
+		// CreateAccount above copied the balance, check if we change it
+		if db.GetBalance(k).Cmp(uint256.MustFromBig(v.Balance)) != 0 {
+			// TODO(pl): make this a hard error once the migration has been tested more
+			log.Warn("Moving account changed native balance", "address", k, "oldBalance", db.GetBalance(k), "newBalance", v.Balance)
+		}
+
+		db.SetNonce(k, v.Nonce)
+		db.SetBalance(k, uint256.MustFromBig(v.Balance))
+		db.SetCode(k, v.Code)
+		db.SetStorage(k, v.Storage)
+
+		log.Info("Moved account", "address", k)
+	}
+	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+	return nil
 }
