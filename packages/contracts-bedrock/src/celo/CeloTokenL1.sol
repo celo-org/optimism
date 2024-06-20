@@ -8,7 +8,7 @@ string constant SYMBOL = 'CELO';
 uint256 constant TOTAL_MARKET_CAP = 1000000000e18; // 1 billion CELO
 
 contract CeloTokenL1 is ERC20Upgradeable {
-  function initialize(address portalProxyAddress) public {
+  function initialize(address portalProxyAddress) public initializer {
     __ERC20_init(NAME, SYMBOL);
     _mint(portalProxyAddress, TOTAL_MARKET_CAP);
   }
