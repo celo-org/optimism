@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"time"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
@@ -95,7 +94,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		Number:      migrationBlock,
 		GasLimit:    header.GasLimit,
 		GasUsed:     0,
-		Time:        uint64(time.Now().Unix()), // TODO(pl): Needed to avoid L1-L2 time mismatches
+		Time:        header.Time + 5,
 		Extra:       []byte("CeL2 migration"),
 		MixDigest:   common.Hash{},
 		Nonce:       types.BlockNonce{},
