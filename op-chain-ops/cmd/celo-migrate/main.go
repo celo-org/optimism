@@ -106,14 +106,6 @@ var (
 	}
 	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
 	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
-
-	// TODO: read those form the deploy config
-	// TODO(pl): select values
-	EIP1559Denominator       = uint64(50)
-	EIP1559DenominatorCanyon = uint64(250)
-	EIP1559Elasticity        = uint64(10)
-
-	OutFilePerm = os.FileMode(0o440)
 )
 
 type blockMigrationOptions struct {
@@ -344,7 +336,7 @@ func runStateMigration(opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(l2Genesis, opts.newDBPath)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath)
 	if err != nil {
 		return err
 	}
