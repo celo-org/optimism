@@ -154,6 +154,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 	cfg.CanyonTime = &cel2Header.Time
 	cfg.EcotoneTime = &cel2Header.Time
+	cfg.FjordTime = &cel2Header.Time
 	cfg.Cel2Time = &cel2Header.Time
 
 	// Write the chain config to disk.
