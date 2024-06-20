@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"math/big"
+	"os"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -20,7 +22,9 @@ import (
 	"github.com/holiman/uint256"
 )
 
-func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.Header, error) {
+var OutFilePerm = os.FileMode(0o440)
+
+func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDB(dbPath)
@@ -144,9 +148,9 @@ func applyStateMigrationChanges(genesis *core.Genesis, dbPath string) (*types.He
 	// Enable Regolith from the start of Bedrock
 	cfg.RegolithTime = new(uint64) // what are those? do we need those?
 	cfg.Optimism = &params.OptimismConfig{
-		EIP1559Denominator:       EIP1559Denominator,
-		EIP1559DenominatorCanyon: EIP1559DenominatorCanyon,
-		EIP1559Elasticity:        EIP1559Elasticity,
+		EIP1559Denominator:       config.EIP1559Denominator,
+		EIP1559DenominatorCanyon: config.EIP1559DenominatorCanyon,
+		EIP1559Elasticity:        config.EIP1559Elasticity,
 	}
 	cfg.CanyonTime = &cel2Header.Time
 	cfg.EcotoneTime = &cel2Header.Time
