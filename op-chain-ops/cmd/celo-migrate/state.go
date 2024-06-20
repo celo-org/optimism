@@ -22,7 +22,18 @@ import (
 	"github.com/holiman/uint256"
 )
 
-var OutFilePerm = os.FileMode(0o440)
+var (
+	OutFilePerm = os.FileMode(0o440)
+
+	alfajoresChainId          uint64 = 44787
+	accountOverwriteWhitelist        = map[uint64]map[common.Address]struct{}{
+		// Add any addresses that should be allowed to overwrite existing accounts here.
+		alfajoresChainId: {
+			// Create2Deployer
+			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): {},
+		},
+	}
+)
 
 func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
@@ -67,7 +78,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	err = applyAllocsToState(db, genesis)
+	err = applyAllocsToState(db, genesis, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -190,34 +201,49 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	return cel2Header, nil
 }
 
-func applyAllocsToState(db *state.StateDB, genesis *core.Genesis) error {
-	// So far we applied changes in the memory VM and collected changes in the genesis struct
-	// Now we iterate through all accounts that have been written there and set them inside the statedb.
-	// This will change the state root
-	// Another property is that the total balance changes must be 0
+// applyAllocsToState applies the account allocations from the allocation file to the state database.
+// It creates new accounts, sets their nonce, balance, code, and storage values.
+// If an account already exists, it adds the balance of the new account to the existing balance.
+// If the code of an existing account is different from the code in the genesis block, it logs a warning.
+// This changes the state root, so `Commit` needs to be called after this function.
+func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
+	log.Info("Starting to migrate OP contracts into state DB")
+
 	accountCounter := 0
 	overwriteCounter := 0
 	for k, v := range genesis.Alloc {
 		accountCounter++
-		if db.Exist(k) {
-			equal := bytes.Equal(db.GetCode(k), v.Code)
 
-			log.Warn("Operating on existing state", "account", k, "equalCode", equal)
-			overwriteCounter++
+		balance := uint256.MustFromBig(v.Balance)
+
+		if db.Exist(k) {
+			// If the account already has balance, add it to the balance of the new account
+			balance = balance.Add(balance, db.GetBalance(k))
+
+			currentCode := db.GetCode(k)
+			equalCode := bytes.Equal(currentCode, v.Code)
+			if currentCode != nil && !equalCode {
+				if whitelist, exists := accountOverwriteWhitelist[config.ChainID.Uint64()]; exists {
+					if _, ok := whitelist[k]; ok {
+						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k)
+					} else {
+						log.Warn("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+					}
+				} else {
+					log.Warn("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+				}
+
+				overwriteCounter++
+			}
 		}
-		// TODO(pl): decide what to do with existing accounts.
 		db.CreateAccount(k)
 
-		// CreateAccount above copied the balance, check if we change it
-		if db.GetBalance(k).Cmp(uint256.MustFromBig(v.Balance)) != 0 {
-			// TODO(pl): make this a hard error once the migration has been tested more
-			log.Warn("Moving account changed native balance", "address", k, "oldBalance", db.GetBalance(k), "newBalance", v.Balance)
-		}
-
 		db.SetNonce(k, v.Nonce)
-		db.SetBalance(k, uint256.MustFromBig(v.Balance))
+		db.SetBalance(k, balance)
 		db.SetCode(k, v.Code)
-		db.SetStorage(k, v.Storage)
+		for key, value := range v.Storage {
+			db.SetState(k, key, value)
+		}
 
 		log.Info("Moved account", "address", k)
 	}
