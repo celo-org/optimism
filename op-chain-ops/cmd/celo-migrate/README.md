@@ -10,7 +10,7 @@ The block migration itself has two parts: It first migrates the ancient / frozen
 
 ### State migration
 
-After all blocks have been migrated, the script performs a series of modifications to the state db. This is also done in-place in the `--new-db` directory. First, the state migration deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary. For testnets, the state migration script will also migrate core celo contracts to their mainnet addresses for consistency across celo networks. Finally, the state migration will commit the state changes to produce a new state root and create the first Cel2 block.
+After all blocks have been migrated, the script performs a series of modifications to the state db. This is also done in-place in the `--new-db` directory. First, the state migration deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary. Finally, the state migration will commit the state changes to produce a new state root and create the first Cel2 block.
 
 ### Notes
 
