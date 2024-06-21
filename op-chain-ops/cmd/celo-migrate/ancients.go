@@ -53,7 +53,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, u
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNewBefore, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNewBefore, "step", batchSize)
 
 	g, ctx := errgroup.WithContext(context.Background())
-	readChan := make(chan RLPBlockRange)
+	readChan := make(chan RLPBlockRange) // TODO(Alec) make buffer size configurable?
 	transformChan := make(chan RLPBlockRange)
 
 	g.Go(func() error {
