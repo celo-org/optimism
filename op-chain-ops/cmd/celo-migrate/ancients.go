@@ -47,7 +47,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, e
 
 	if numAncientsNew >= numAncientsOld {
 		log.Info("Ancient Block Migration Skipped", "process", "ancients", "ancientsInNewDB", numAncientsNew, "ancientsInOldDB", numAncientsOld)
-		return 0, nil
+		return numAncientsNew, nil
 	}
 
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNew, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNew+1, "step", batchSize)
