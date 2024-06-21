@@ -60,8 +60,13 @@ var (
 	}
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
-		Usage: "batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
+		Usage: "Batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
 		Value: 50000,
+	}
+	bufferSizeFlag = &cli.Uint64Flag{
+		Name:  "buffer-size",
+		Usage: "Buffer size to use for ancient block migration channels. Defaults to 0. Included to facilitate testing for performance improvements.",
+		Value: 0,
 	}
 	memoryLimitFlag = &cli.Int64Flag{
 		Name:  "memory-limit",
@@ -86,6 +91,7 @@ var (
 		oldDBPathFlag,
 		newDBPathFlag,
 		batchSizeFlag,
+		bufferSizeFlag,
 		memoryLimitFlag,
 		clearAllFlag,
 		keepNonAncientsFlag,
@@ -114,6 +120,7 @@ type blockMigrationOptions struct {
 	oldDBPath       string
 	newDBPath       string
 	batchSize       uint64
+	bufferSize      uint64
 	memoryLimit     int64
 	clearAll        bool
 	keepNonAncients bool
@@ -134,6 +141,7 @@ func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 		oldDBPath:       ctx.String(oldDBPathFlag.Name),
 		newDBPath:       ctx.String(newDBPathFlag.Name),
 		batchSize:       ctx.Uint64(batchSizeFlag.Name),
+		bufferSize:      ctx.Uint64(bufferSizeFlag.Name),
 		memoryLimit:     ctx.Int64(memoryLimitFlag.Name),
 		clearAll:        ctx.Bool(clearAllFlag.Name),
 		keepNonAncients: ctx.Bool(keepNonAncientsFlag.Name),
@@ -244,7 +252,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	var numAncientsNewBefore uint64
 	var numAncientsNewAfter uint64
-	if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(opts.oldDBPath, opts.newDBPath, opts.batchSize); err != nil {
+	if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
 		return fmt.Errorf("failed to migrate ancients database: %w", err)
 	}
 
