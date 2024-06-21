@@ -50,22 +50,22 @@ var (
 	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
-		Usage:    "Path to the old Celo chaindata",
+		Usage:    "Path to the old Celo chaindata dir, can be found at '<datadir>/celo/chaindata'",
 		Required: true,
 	}
 	newDBPathFlag = &cli.PathFlag{
 		Name:     "new-db",
-		Usage:    "Path to write migrated Celo chaindata",
+		Usage:    "Path to write migrated Celo chaindata, note the new node implementation expects to find this chaindata at the following path '<datadir>/geth/chaindata",
 		Required: true,
 	}
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
-		Usage: "batch size to use for block migration",
+		Usage: "batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
 		Value: 50000,
 	}
 	memoryLimitFlag = &cli.Int64Flag{
 		Name:  "memory-limit",
-		Usage: "Memory limit in MB",
+		Usage: "Memory limit in MiB, should be set lower than the available amount of memory in your system to prevent out of memory errors",
 		Value: 7500,
 	}
 	clearAllFlag = &cli.BoolFlag{
@@ -131,24 +131,24 @@ type stateMigrationOptions struct {
 
 func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 	return blockMigrationOptions{
-		oldDBPath:       ctx.String("old-db"),
-		newDBPath:       ctx.String("new-db"),
-		batchSize:       ctx.Uint64("batch-size"),
-		memoryLimit:     ctx.Int64("memory-limit"),
-		clearAll:        ctx.Bool("clear-all"),
-		keepNonAncients: ctx.Bool("keep-non-ancients"),
-		onlyAncients:    ctx.Bool("only-ancients"),
+		oldDBPath:       ctx.String(oldDBPathFlag.Name),
+		newDBPath:       ctx.String(newDBPathFlag.Name),
+		batchSize:       ctx.Uint64(batchSizeFlag.Name),
+		memoryLimit:     ctx.Int64(memoryLimitFlag.Name),
+		clearAll:        ctx.Bool(clearAllFlag.Name),
+		keepNonAncients: ctx.Bool(keepNonAncientsFlag.Name),
+		onlyAncients:    ctx.Bool(onlyAncientsFlag.Name),
 	}
 }
 
 func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 	return stateMigrationOptions{
-		newDBPath:           ctx.String("new-db"),
-		deployConfig:        ctx.Path("deploy-config"),
-		l1Deployments:       ctx.Path("l1-deployments"),
-		l1RPC:               ctx.String("l1-rpc"),
-		l2AllocsPath:        ctx.Path("l2-allocs"),
-		outfileRollupConfig: ctx.Path("outfile.rollup-config"),
+		newDBPath:           ctx.String(newDBPathFlag.Name),
+		deployConfig:        ctx.Path(deployConfigFlag.Name),
+		l1Deployments:       ctx.Path(l1DeploymentsFlag.Name),
+		l1RPC:               ctx.String(l1RPCFlag.Name),
+		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
+		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
 	}
 }
 
@@ -222,7 +222,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 		return fmt.Errorf("Please install `rsync` to run block migration")
 	}
 
-	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MB to bytes
+	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes
 
 	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "keepNonAncients", opts.keepNonAncients, "onlyAncients", opts.onlyAncients)
 
