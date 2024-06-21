@@ -67,6 +67,8 @@ jobs:
       GIT_COMMIT: ${{ github.sha }}
       GIT_DATE: ${{ github.event.head_commit.timestamp }}
       IMAGE_TAGS: ${{ github.sha }},latest
+      REGISTRY: us-west1-docker.pkg.dev
+      REPOSITORY: blockchaintestsglobaltestnet/dev-images
     steps:
       - uses: actions/checkout@v4
       - name: Login at GCP Artifact Registry
