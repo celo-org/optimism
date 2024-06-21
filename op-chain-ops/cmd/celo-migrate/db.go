@@ -14,9 +14,9 @@ import (
 
 // Constants for the database
 const (
-	DBCache              = 1024 // size of the cache in MB
-	DBHandles            = 60   // number of handles
-	LastMigratedBlockKey = "celoLastMigratedBlock"
+	DBCache                        = 1024 // size of the cache in MB
+	DBHandles                      = 60   // number of handles
+	LastMigratedNonAncientBlockKey = "celoLastMigratedNonAncientBlock"
 )
 
 var (
@@ -35,9 +35,9 @@ func headerKey(number uint64, hash common.Hash) []byte {
 	return append(append(headerPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }
 
-// readLastMigratedBlock returns the last migration number.
-func readLastMigratedBlock(db ethdb.KeyValueReader) uint64 {
-	data, err := db.Get([]byte(LastMigratedBlockKey))
+// readLastMigratedNonAncientBlock returns the last migration number. If it doesn't exist, it returns 0.
+func readLastMigratedNonAncientBlock(db ethdb.KeyValueReader) uint64 {
+	data, err := db.Get([]byte(LastMigratedNonAncientBlockKey))
 	if err != nil {
 		return 0
 	}
@@ -45,16 +45,16 @@ func readLastMigratedBlock(db ethdb.KeyValueReader) uint64 {
 	return number
 }
 
-// writeLastMigratedBlock stores the last migration number.
-func writeLastMigratedBlock(db ethdb.KeyValueWriter, number uint64) error {
+// writeLastMigratedNonAncientBlock stores the last migration number.
+func writeLastMigratedNonAncientBlock(db ethdb.KeyValueWriter, number uint64) error {
 	enc := make([]byte, 8)
 	binary.BigEndian.PutUint64(enc, number)
-	return db.Put([]byte(LastMigratedBlockKey), enc)
+	return db.Put([]byte(LastMigratedNonAncientBlockKey), enc)
 }
 
-// deleteLastMigratedBlock removes the last migration number.
-func deleteLastMigratedBlock(db ethdb.KeyValueWriter) error {
-	return db.Delete([]byte(LastMigratedBlockKey))
+// deleteLastMigratedNonAncientBlock removes the last migration number.
+func deleteLastMigratedNonAncientBlock(db ethdb.KeyValueWriter) error {
+	return db.Delete([]byte(LastMigratedNonAncientBlockKey))
 }
 
 // openDB opens the chaindata database at the given path. Note this path is below the datadir

@@ -72,7 +72,7 @@ var (
 		Name:  "clear-all",
 		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
 	}
-	keepNonAncientsFlag = &cli.BoolFlag{
+	keepNonAncientsFlag = &cli.BoolFlag{ // TODO(Alec) invert this flag again?
 		Name:  "keep-non-ancients",
 		Usage: "CAUTION: Not recommended for production. Use to keep all data in the new db as is, including any partially migrated non-ancient blocks and state data. If non-ancient blocks are partially migrated, the script will attempt to resume the migration.",
 	}
@@ -242,21 +242,22 @@ func runBlockMigration(opts blockMigrationOptions) error {
 		}
 	}
 
-	var numAncientsNew uint64
-	if numAncientsNew, err = migrateAncientsDb(opts.oldDBPath, opts.newDBPath, opts.batchSize); err != nil {
+	var numAncientsNewBefore uint64
+	var numAncientsNewAfter uint64
+	if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(opts.oldDBPath, opts.newDBPath, opts.batchSize); err != nil {
 		return fmt.Errorf("failed to migrate ancients database: %w", err)
 	}
 
 	var numNonAncients uint64
 	if !opts.onlyAncients {
-		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNew-1, opts.batchSize); err != nil {
+		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNewAfter-1, opts.batchSize); err != nil {
 			return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 		}
 	} else {
 		log.Info("Skipping non-ancients migration")
 	}
 
-	log.Info("Block Migration Completed", "migratedAncients", numAncientsNew, "migratedNonAncients", numNonAncients)
+	log.Info("Block Migration Completed", "migratedAncients", numAncientsNewAfter-numAncientsNewBefore, "migratedNonAncients", numNonAncients)
 
 	return nil
 }
