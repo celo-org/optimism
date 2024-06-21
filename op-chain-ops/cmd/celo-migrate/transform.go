@@ -87,6 +87,11 @@ func transformBlockBody(oldBodyData []byte) ([]byte, error) {
 		EpochSnarkData rlp.RawValue
 	}
 	if err := rlp.DecodeBytes(oldBodyData, &celoBody); err != nil {
+		// body may have already been transformed in a previous migration
+		body := types.Body{}
+		if err := rlp.DecodeBytes(oldBodyData, &body); err == nil {
+			return oldBodyData, nil
+		}
 		return nil, fmt.Errorf("failed to RLP decode body: %w", err)
 	}
 
