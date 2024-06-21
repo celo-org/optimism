@@ -45,6 +45,11 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize uint64) (uint64, e
 		return 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
+	if numAncientsNew >= numAncientsOld {
+		log.Info("Ancient Block Migration Skipped", "process", "ancients", "ancientsInNewDB", numAncientsNew, "ancientsInOldDB", numAncientsOld)
+		return 0, nil
+	}
+
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNew, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNew+1, "step", batchSize)
 
 	g, ctx := errgroup.WithContext(context.Background())
