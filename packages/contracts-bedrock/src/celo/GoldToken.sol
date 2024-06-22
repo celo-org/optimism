@@ -17,7 +17,10 @@ contract GoldToken is Initializable, CalledByVm, UsingRegistry, IERC20, ICeloTok
     string constant NAME = "Celo native asset";
     string constant SYMBOL = "CELO";
     uint8 constant DECIMALS = 18;
+    uint256 constant CELO_SUPPLY_CAP = 1000000000 ether; // 1 billion Celo
     uint256 internal totalSupply_;
+    // Total amount that was withdrawn from L2 (Celo) to L1 (Ethereum)
+    uint256 public withdrawn;
     // solhint-enable state-visibility
 
     mapping(address => mapping(address => uint256)) internal allowed;
@@ -26,6 +29,11 @@ contract GoldToken is Initializable, CalledByVm, UsingRegistry, IERC20, ICeloTok
     address constant BURN_ADDRESS = address(0x000000000000000000000000000000000000dEaD);
 
     event TransferComment(string comment);
+
+    modifier onlyL2ToL1MessagePasser() {
+        require(msg.sender == 0x4200000000000000000000000000000000000016, "Only L2ToL1MessagePasser can call.");
+        _;
+    }
 
     /**
      * @notice Sets initialized == true on implementation contracts
@@ -224,6 +232,22 @@ contract GoldToken is Initializable, CalledByVm, UsingRegistry, IERC20, ICeloTok
      */
     function increaseSupply(uint256 amount) external onlyVm {
         totalSupply_ = totalSupply_ + amount;
+    }
+
+      /**
+    * @notice Increases the total withdrawn CELO from L2 to L1.
+    * @param _withdrawAmount The amount to decrease counter by
+    */
+    function withdrawAmount(uint256 _withdrawAmount) external onlyL2ToL1MessagePasser {
+        withdrawn = withdrawn + _withdrawAmount;
+    }
+
+    /**
+    * @notice Decreases the total withdrawn CELO from L2 to L1.
+    * @param _depositAmount The amount to decrease counter by
+    */
+    function depositAmount(uint256 _depositAmount) external onlyVm {
+        withdrawn = withdrawn - _depositAmount;
     }
 
     /**

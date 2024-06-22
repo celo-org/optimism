@@ -7,6 +7,7 @@ import { CommonTest } from "test/setup/CommonTest.sol";
 // Libraries
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
+import "forge-std/console.sol";
 
 contract L2ToL1MessagePasserTest is CommonTest {
     /// @dev Tests that `initiateWithdrawal` succeeds and correctly sets the state
@@ -118,5 +119,12 @@ contract L2ToL1MessagePasserTest is CommonTest {
 
         // The Withdrawer should have no balance
         assertEq(address(l2ToL1MessagePasser).balance, 0);
+    }
+
+    function test_setCeloToken_succeeds() external {
+        address randomAddress = address(0x1);
+        vm.prank(l2ToL1MessagePasser.owner());
+        l2ToL1MessagePasser.setCeloToken(randomAddress);
+        assertEq(address(l2ToL1MessagePasser.celoToken()), address(randomAddress));
     }
 }
