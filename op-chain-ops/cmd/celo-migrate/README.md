@@ -80,8 +80,12 @@ Note that partial migration progress beyond the ancient blocks (i.e. non-frozen 
 
 To minimize downtime caused by the migration, node operators can prepare their Cel2 databases by running this script a day ahead of the actual migration. This will pre-populate the new database with most of the ancient blocks needed for the final migration, and will also serve as a dress rehearsal for the rest of the migration.
 
+NOTE: The pre-migration should be run using a chaindata snapshot, rather than a db that is being used by a node. To avoid network downtime, we recommend that node operators do not stop any nodes in order to perform the pre-migration.
+
 Node operators should inspect their migration logs after the dress rehearsal to ensure the migration completed succesfully and direct any questions to the Celo developer community on Discord before the actual migration.
 
 ##### Final migration
 
 On the day of the actual cel2 migration, this script can be re-run using the same parameters as for the dress rehearsal but with the latest Celo Mainnet database snapshot as `--old-db`. The script will only need to migrate any ancient blocks frozen after the dress rehearsal, all non-frozen blocks, and state.
+
+Unlike the pre-migration, the final migration can be run directly on the db used by the Celo node rather than a snapshot.
