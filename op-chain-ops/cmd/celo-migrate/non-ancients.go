@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -12,7 +13,25 @@ import (
 func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSize uint64) (uint64, error) {
 	// First copy files from old database to new database
 	log.Info("Copy files from old database (excluding ancients)", "process", "non-ancients")
-	cmd := exec.Command("rsync", "-v", "-a", "--exclude=ancient", oldDbPath+"/", newDbPath)
+
+	// Get rsync help output
+	cmdHelp := exec.Command("rsync", "--help")
+	output, _ := cmdHelp.CombinedOutput()
+
+	// Convert output to string
+	outputStr := string(output)
+
+	// Check for supported options
+	var cmd *exec.Cmd
+	// Prefer --info=progress2 over --progress
+	if strings.Contains(outputStr, "--info") {
+		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", oldDbPath+"/", newDbPath)
+	} else if strings.Contains(outputStr, "--progress") {
+		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", oldDbPath+"/", newDbPath)
+	} else {
+		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", oldDbPath+"/", newDbPath)
+	}
+	log.Info("Running rsync command", "command", cmd.String())
 	cmd.Stdout = os.Stdout // TODO(Alec) debug what happens when rsync is run multiple times
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
