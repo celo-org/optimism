@@ -11,4 +11,6 @@ interface ICeloToken {
     function symbol() external view returns (string memory);
     function decimals() external view returns (uint8);
     function burn(uint256 value) external returns (bool);
+    function withdrawAmount(uint256 _withdrawAmount) external;
+    function depositAmount(uint256 _depositAmount) external;
 }

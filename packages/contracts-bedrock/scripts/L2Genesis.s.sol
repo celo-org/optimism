@@ -20,6 +20,7 @@ import { OptimismMintableERC20Factory } from "src/universal/OptimismMintableERC2
 import { OptimismMintableERC721Factory } from "src/universal/OptimismMintableERC721Factory.sol";
 import { BaseFeeVault } from "src/L2/BaseFeeVault.sol";
 import { L1FeeVault } from "src/L2/L1FeeVault.sol";
+import { L2ToL1MessagePasser } from "src/L2/L2ToL1MessagePasser.sol";
 import { GovernanceToken } from "src/governance/GovernanceToken.sol";
 import { L1CrossDomainMessenger } from "src/L1/L1CrossDomainMessenger.sol";
 import { L1StandardBridge } from "src/L1/L1StandardBridge.sol";
@@ -634,6 +635,8 @@ contract L2Genesis is Deployer {
 
         vm.resetNonce(address(kontract));
         _setupProxy(precompile, address(kontract));
+
+        L2ToL1MessagePasser(payable(Predeploys.L2_TO_L1_MESSAGE_PASSER)).setCeloToken(address(kontract));
     }
 
     function setCeloFeeHandler() internal {
