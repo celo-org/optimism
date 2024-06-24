@@ -636,7 +636,12 @@ contract L2Genesis is Deployer {
         vm.resetNonce(address(kontract));
         _setupProxy(precompile, address(kontract));
 
-        L2ToL1MessagePasser(payable(Predeploys.L2_TO_L1_MESSAGE_PASSER)).setCeloToken(address(kontract));
+        console.log("setting L2ToL1MessagePasser");
+        L2ToL1MessagePasser l2ToL1MessagePasser = L2ToL1MessagePasser(payable(Predeploys.L2_TO_L1_MESSAGE_PASSER));
+        vm.startPrank(l2ToL1MessagePasser.owner());
+        l2ToL1MessagePasser.setCeloToken(address(kontract));
+        vm.stopPrank();
+        console.log("done setting L2ToL1MessagePasser");
     }
 
     function setCeloFeeHandler() internal {
@@ -743,7 +748,7 @@ contract L2Genesis is Deployer {
 
         SortedOracles sortedOracles = SortedOracles(CeloPredeploys.SORTED_ORACLES);
 
-        console.log("beofre add oracle");
+        console.log("before add oracle");
 
         vm.startPrank(sortedOracles.owner());
         sortedOracles.addOracle(cusdProxyAddress, deployer);
