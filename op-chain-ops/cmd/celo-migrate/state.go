@@ -143,6 +143,11 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	cfg.ShanghaiTime = &cel2Header.Time
 	cfg.CancunTime = &cel2Header.Time
 
+	// Configure inital base fee for transition block
+	cfg.Cel2Config = &params.Cel2Config{
+		TransitionBlockBaseFee: cel2Header.BaseFee.Uint64(),
+	}
+
 	// Set the Optimism options.
 	cfg.BedrockBlock = cel2Block.Number()
 	// Enable Regolith from the start of Bedrock
