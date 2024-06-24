@@ -26,4 +26,4 @@ WORKDIR /app
 COPY --from=builder /app/op-chain-ops/bin/celo-migrate /app
 ENV PATH="/app:${PATH}"
 
-ENTRYPOINT ["/app/celo-migrate-blocks"]
+ENTRYPOINT ["/app/celo-migrate"]
