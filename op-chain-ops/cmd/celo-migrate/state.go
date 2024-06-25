@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"os"
@@ -166,7 +167,11 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	// Write the chain config to disk.
 	// TODO(pl): Why do we need to write this with the genesis hash, not `cel2Block.Hash()`?`
 	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
-	log.Info("Wrote updated chain config", "config", cfg)
+	marhslledConfig, err := json.Marshal(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal chain config to JSON: %w", err)
+	}
+	log.Info("Wrote updated chain config", "config", string(marhslledConfig))
 
 	// We're done!
 	log.Info(
