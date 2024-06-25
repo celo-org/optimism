@@ -51,6 +51,7 @@ fs_permissions = [
   { access='read-write', path='./.testdata/' },
   { access='read', path='./kout-deployment' },
   { access='read', path='./test/fixtures' },
+  { access='read-write', path='../../op-chain-ops/cmd/celo-migrate/testdata/' },
 ]
 libs = ["node_modules", "lib"]
 
