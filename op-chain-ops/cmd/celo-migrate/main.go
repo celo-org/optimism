@@ -205,7 +205,7 @@ func main() {
 				return err
 			}
 			_ = cli.ShowAppHelp(ctx)
-			return fmt.Errorf("Please provide a valid command")
+			return fmt.Errorf("please provide a valid command")
 		},
 	}
 
@@ -219,7 +219,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	// Check that `rsync` command is available. We use this to copy the db excluding ancients, which we will copy separately
 	if _, err := exec.LookPath("rsync"); err != nil {
-		return fmt.Errorf("Please install `rsync` to run block migration")
+		return fmt.Errorf("please install `rsync` to run block migration")
 	}
 
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes

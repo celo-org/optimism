@@ -58,7 +58,7 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	if fromBlock >= lastBlock {
 		log.Info("Non-Ancient Block Migration Skipped", "process", "non-ancients", "lastMigratedNonAncientBlock", lastMigratedNonAncientBlock, "lastAncientBlock", lastAncientBlock, "endBlock", lastBlock)
 		if lastMigratedNonAncientBlock != lastBlock {
-			return 0, fmt.Errorf("Migration range empty but last migrated block is not the last block in the database")
+			return 0, fmt.Errorf("migration range empty but last migrated block is not the last block in the database")
 		}
 		return 0, nil
 	}
