@@ -81,6 +81,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		return nil, err
 	}
 
+	baseFee := new(big.Int).SetUint64(params.InitialBaseFee)
+	if header.BaseFee != nil {
+		baseFee = header.BaseFee
+	}
 	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
 		ParentHash:      header.Hash(),
@@ -98,7 +102,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		Extra:           []byte("CeL2 migration"),
 		MixDigest:       common.Hash{},
 		Nonce:           types.BlockNonce{},
-		BaseFee:         new(big.Int).Set(header.BaseFee),
+		BaseFee:         baseFee,
 		WithdrawalsHash: &types.EmptyWithdrawalsHash,
 		BlobGasUsed:     new(uint64),
 		ExcessBlobGas:   new(uint64),
