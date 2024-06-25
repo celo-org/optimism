@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/cmd/celo-migrate/bindings"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -53,7 +54,7 @@ var (
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, genesisPath string) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDB(dbPath)
@@ -149,6 +150,30 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	// Create the Cel2 transition block from the header. Note that there are no transactions,
 	// uncle blocks, or receipts in the Cel2 transition block.
 	cel2Block := types.NewBlock(cel2Header, nil, nil, nil, trie.NewStackTrie(nil))
+
+	// Create genesis block for new chains to sync
+	genesisBlock := rawdb.ReadBlock(ldb, genesisHash, 0)
+	syncGenesis := core.Genesis{
+		Config:        cfg,
+		Nonce:         genesisBlock.Nonce(),
+		Timestamp:     genesisBlock.Time(),
+		ExtraData:     genesisBlock.Extra(),
+		GasLimit:      genesisBlock.GasLimit(),
+		Difficulty:    genesis.Difficulty,
+		Mixhash:       genesisBlock.MixDigest(),
+		Coinbase:      genesisBlock.Coinbase(),
+		Alloc:         map[common.Address]types.Account{},
+		Number:        genesisBlock.NumberU64(),
+		GasUsed:       genesisBlock.GasUsed(),
+		ParentHash:    genesisBlock.ParentHash(),
+		BaseFee:       genesisBlock.BaseFee(),
+		ExcessBlobGas: new(uint64),
+		BlobGasUsed:   new(uint64),
+		StateHash:     &genesisBlock.Header().Root,
+	}
+
+	jsonutil.WriteJSON(genesisPath, syncGenesis, OutFilePerm)
+	log.Info("Wrote genesis file for syncing new nodes", "path", genesisPath)
 
 	// We did it!
 	log.Info(

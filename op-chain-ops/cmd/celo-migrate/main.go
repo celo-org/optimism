@@ -48,6 +48,11 @@ var (
 		Usage:    "Path to write the rollup config JSON file, to be provided to op-node with the 'rollup.config' flag",
 		Required: true,
 	}
+	outfileGenesisFlag = &cli.PathFlag{
+		Name:     "outfile.genesis",
+		Usage:    "Path to write the genesis JSON file, to be used to sync new nodes",
+		Required: true,
+	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
 		Usage:    "Path to the old Celo chaindata dir, can be found at '<datadir>/celo/chaindata'",
@@ -103,6 +108,7 @@ var (
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
+		outfileGenesisFlag,
 	}
 	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
 	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
@@ -125,6 +131,7 @@ type stateMigrationOptions struct {
 	l1RPC               string
 	l2AllocsPath        string
 	outfileRollupConfig string
+	outfileGenesis      string
 	newDBPath           string
 }
 
@@ -149,11 +156,11 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l1RPC:               ctx.String(l1RPCFlag.Name),
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
+		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
 	}
 }
 
 func main() {
-
 	color := isatty.IsTerminal(os.Stderr.Fd())
 	handler := log.NewTerminalHandlerWithLevel(os.Stderr, slog.LevelDebug, color)
 	oplog.SetGlobalLogHandler(handler)
@@ -336,7 +343,7 @@ func runStateMigration(opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath, opts.outfileGenesis)
 	if err != nil {
 		return err
 	}
