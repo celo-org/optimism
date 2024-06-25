@@ -100,6 +100,8 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		Nonce:           types.BlockNonce{},
 		BaseFee:         new(big.Int).Set(header.BaseFee),
 		WithdrawalsHash: &types.EmptyWithdrawalsHash,
+		BlobGasUsed:     new(uint64),
+		ExcessBlobGas:   new(uint64),
 	}
 	log.Info("Build Cel2 migration header", "header", cel2Header)
 
