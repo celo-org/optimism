@@ -54,6 +54,7 @@ fs_permissions = [
   { access='read', path='./kout-deployment' },
   { access='read', path='./test/fixtures' },
   { access='read', path='./lib/superchain-registry/superchain/configs/' },
+  { access='read-write', path='../../op-chain-ops/cmd/celo-migrate/testdata/' },
 ]
 
 # 5159 error code is selfdestruct error code
