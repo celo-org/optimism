@@ -21,6 +21,9 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	// Convert output to string
 	outputStr := string(output)
 
+	// TODO(Alec) have rsync run as part of pre-migration (but not the transformation or state)
+	// can use --update and --delete to keep things synced between dbs
+
 	// Check for supported options
 	var cmd *exec.Cmd
 	// Prefer --info=progress2 over --progress
@@ -32,7 +35,7 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", oldDbPath+"/", newDbPath)
 	}
 	log.Info("Running rsync command", "command", cmd.String())
-	cmd.Stdout = os.Stdout // TODO(Alec) debug what happens when rsync is run multiple times
+	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return 0, fmt.Errorf("failed to copy old database to new database: %w", err)
@@ -53,17 +56,15 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 	// if migration was interrupted, start from the last migrated block
 	fromBlock := max(lastAncientBlock, lastMigratedNonAncientBlock) + 1
 
-	// TODO(Alec) keep logging of lastMigratedNonAncientBlock here if always 0?
-
 	if fromBlock >= lastBlock {
-		log.Info("Non-Ancient Block Migration Skipped", "process", "non-ancients", "lastMigratedNonAncientBlock", lastMigratedNonAncientBlock, "lastAncientBlock", lastAncientBlock, "endBlock", lastBlock)
+		log.Info("Non-Ancient Block Migration Skipped", "process", "non-ancients", "lastAncientBlock", lastAncientBlock, "endBlock", lastBlock, "lastMigratedNonAncientBlock", lastMigratedNonAncientBlock)
 		if lastMigratedNonAncientBlock != lastBlock {
 			return 0, fmt.Errorf("migration range empty but last migrated block is not the last block in the database")
 		}
 		return 0, nil
 	}
 
-	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", fromBlock, "endBlock", lastBlock, "count", lastBlock-fromBlock, "lastMigratedNonAncientBlock", lastMigratedNonAncientBlock, "lastAncientBlock", lastAncientBlock)
+	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", fromBlock, "endBlock", lastBlock, "count", lastBlock-fromBlock, "lastAncientBlock", lastAncientBlock, "lastMigratedNonAncientBlock", lastMigratedNonAncientBlock)
 
 	for i := fromBlock; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
@@ -111,7 +112,6 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, lastAncientBlock, batchSi
 		return 0, fmt.Errorf("failed to delete frozen blocks: %w", err)
 	}
 
-	// TODO(Alec) decide whether to keep this or not
 	// if migration finished, remove the last migration number
 	if err := deleteLastMigratedNonAncientBlock(newDB); err != nil {
 		return 0, fmt.Errorf("failed to delete last migration number: %w", err)

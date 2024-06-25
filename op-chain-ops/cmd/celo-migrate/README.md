@@ -42,7 +42,7 @@ NOTE: You will need `rsync` to run this script if it's not already installed
 
 To test the script locally, we can migrate an alfajores database and use Holesky as our L1. The input files needed for this can be found in `./testdata`. The necessary smart contracts have already been deployed on Holesky.
 
-Pull down the latest alfajores database snapshot
+##### Pull down the latest alfajores database snapshot
 
 ```bash
 gcloud alpha storage cp gs://celo-chain-backup/alfajores/chaindata-latest.tar.zst alfajores.tar.zst
@@ -55,14 +55,28 @@ tar --use-compress-program=unzstd -xvf alfajores.tar.zst
 mv chaindata ./data/alfajores_old
 ```
 
-Run script with test configuration
+##### Generate test allocs file
+
+The state migration takes in a allocs file that specifies the l2 state changes to be made during the migration. This file can be generated from the deploy config and l1 contract addresses by running the following from the `contracts-bedrock` directory.
+
+```bash
+CONTRACT_ADDRESSES_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deployment-l1-holesky.json \
+DEPLOY_CONFIG_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deploy-config-holesky-alfajores.json \
+STATE_DUMP_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/l2-allocs-alfajores.json \
+forge script ./scripts/L2Genesis.s.sol:L2Genesis \
+--sig 'runWithStateDump()'
+```
+
+This should output the allocs file to `./testdata/l2-allocs-alfajores.json`. If you encounter difficulties with this and want to just continue testing the script, you can alternatively find the allocs file [here](https://gist.github.com/jcortejoso/7f90ba9b67c669791014661ccb6de81a).
+
+##### Run script with test configuration
 
 ```bash
 go run ./cmd/celo-migrate full \
 --deploy-config ./cmd/celo-migrate/testdata/deploy-config-holesky-alfajores.json \
 --l1-deployments ./cmd/celo-migrate/testdata/deployment-l1-holesky.json \
 --l1-rpc https://ethereum-holesky-rpc.publicnode.com  \
---l2-allocs ./cmd/celo-migrate/testdata/alloc-alfajores.json \
+--l2-allocs ./cmd/celo-migrate/testdata/l2-allocs-alfajores.json \
 --outfile.rollup-config ./cmd/celo-migrate/testdata/rollup-config.json \
 --old-db ./data/alfajores_old \
 --new-db ./data/alfajores_new
@@ -75,6 +89,18 @@ During the ancients migration you can play around with stopping and re-running t
 Note that partial migration progress beyond the ancient blocks (i.e. non-frozen blocks and state changes) will not be preserved between runs by default.
 
 #### Running for Cel2 migration
+
+##### Generate allocs file
+
+You can generate the allocs file needed to run the migration with the following script in `contracts-bedrock`
+
+```bash
+CONTRACT_ADDRESSES_PATH=<PATH_TO_CONTRACT_ADDRESSES> \
+DEPLOY_CONFIG_PATH=<PATH_TO_MY_DEPLOY_CONFIG> \
+STATE_DUMP_PATH=<PATH_TO_WRITE_L2_ALLOCS> \
+forge script scripts/L2Genesis.s.sol:L2Genesis \
+--sig 'runWithStateDump()'
+```
 
 ##### Dress rehearsal / pre-migration
 

@@ -40,7 +40,7 @@ var (
 	}
 	l2AllocsFlag = &cli.PathFlag{
 		Name:     "l2-allocs",
-		Usage:    "Path to L2 genesis allocs file",
+		Usage:    "Path to L2 genesis allocs file. You can find instructions on how to generate this file in the README",
 		Required: true,
 	}
 	outfileRollupConfigFlag = &cli.PathFlag{
@@ -61,7 +61,7 @@ var (
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
 		Usage: "Batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
-		Value: 50000,
+		Value: 50000, // TODO(Alec) optimize default parameters
 	}
 	bufferSizeFlag = &cli.Uint64Flag{
 		Name:  "buffer-size",
@@ -77,7 +77,7 @@ var (
 		Name:  "clear-all",
 		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
 	}
-	keepNonAncientsFlag = &cli.BoolFlag{ // TODO(Alec) invert this flag again?
+	keepNonAncientsFlag = &cli.BoolFlag{
 		Name:  "keep-non-ancients",
 		Usage: "CAUTION: Not recommended for production. Use to keep all data in the new db as is, including any partially migrated non-ancient blocks and state data. If non-ancient blocks are partially migrated, the script will attempt to resume the migration.",
 	}
