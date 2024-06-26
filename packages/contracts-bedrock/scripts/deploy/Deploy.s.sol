@@ -166,6 +166,8 @@ contract Deploy is Deployer {
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
             SuperchainConfig: getAddress("SuperchainConfigProxy"),
             OPContractsManager: getAddress("OPContractsManagerProxy"),
+            // allow for address(0) since it is not strictly required for all
+            // combinations of chain configs
             CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
