@@ -250,7 +250,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	var numNonAncients uint64
 	if !opts.onlyAncients {
-		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNewAfter-1, opts.batchSize); err != nil {
+		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNewAfter, opts.batchSize); err != nil {
 			return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 		}
 	} else {
