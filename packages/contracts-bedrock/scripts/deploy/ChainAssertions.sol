@@ -442,26 +442,14 @@ library ChainAssertions {
         );
     }
 
-  /// @notice Asserts the CeloTokenL1 is setup correctly
-  function checkCeloTokenL1(
-    Types.ContractSet memory _contracts,
-    bool _isProxy
-  ) internal view {
-    console.log('Running chain assertions on the CeloTokenL1');
+    /// @notice Asserts the CeloTokenL1 is setup correctly
+    function checkCeloTokenL1(Types.ContractSet memory _contracts, bool _isProxy) internal view {
+        console.log("Running chain assertions on the CeloTokenL1");
 
-    CeloTokenL1 celoToken = CeloTokenL1(payable(_contracts.CustomGasToken));
+        CeloTokenL1 celoToken = CeloTokenL1(payable(_contracts.CustomGasToken));
 
-    // Check that the contract is initialized
-    assertSlotValueIsOne({
-      _contractAddress: address(celoToken),
-      _slot: 0,
-      _offset: 0
-    });
-
-    if (_isProxy) {
-      require(celoToken.totalSupply() ==  1000000000e18); // 1 billion CELO
-    }
-  }
+        // Check that the contract is initialized
+        assertSlotValueIsOne({ _contractAddress: address(celoToken), _slot: 0, _offset: 0 });
 
         if (_isProxy) {
             require(celoToken.totalSupply() == 1000000000e18); // 1 billion CELO
