@@ -161,7 +161,9 @@ contract Deploy is Deployer {
             L1ERC721Bridge: mustGetAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: mustGetAddress("ProtocolVersionsProxy"),
             SuperchainConfig: mustGetAddress("SuperchainConfigProxy"),
-            CustomGasToken: mustGetAddress("CustomGasTokenProxy")
+            // allow for address(0) since it is not strictly required for all
+            // combinations of chain configs
+            CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
 

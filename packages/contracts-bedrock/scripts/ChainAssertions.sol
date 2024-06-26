@@ -434,6 +434,7 @@ library ChainAssertions {
 
     if (_isProxy) {
       require(celoToken.totalSupply() ==  1000000000e18); // 1 billion CELO
+      require(celoToken.balanceOf(_contracts.OptimismPortal) ==  1000000000e18); 
     }
   }
 
