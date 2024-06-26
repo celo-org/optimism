@@ -152,26 +152,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	cel2Block := types.NewBlock(cel2Header, nil, nil, nil, trie.NewStackTrie(nil))
 
 	// Create genesis block for new chains to sync
-	genesisBlock := rawdb.ReadBlock(ldb, genesisHash, 0)
-	syncGenesis := core.Genesis{
-		Config:        cfg,
-		Nonce:         genesisBlock.Nonce(),
-		Timestamp:     genesisBlock.Time(),
-		ExtraData:     genesisBlock.Extra(),
-		GasLimit:      genesisBlock.GasLimit(),
-		Difficulty:    genesis.Difficulty,
-		Mixhash:       genesisBlock.MixDigest(),
-		Coinbase:      genesisBlock.Coinbase(),
-		Alloc:         map[common.Address]types.Account{},
-		Number:        genesisBlock.NumberU64(),
-		GasUsed:       genesisBlock.GasUsed(),
-		ParentHash:    genesisBlock.ParentHash(),
-		BaseFee:       genesisBlock.BaseFee(),
-		ExcessBlobGas: new(uint64),
-		BlobGasUsed:   new(uint64),
-		StateHash:     &genesisBlock.Header().Root,
-	}
-
+	syncGenesis := AlfajoresGenesisBlockFromConfig(cfg)
 	jsonutil.WriteJSON(genesisPath, syncGenesis, OutFilePerm)
 	log.Info("Wrote genesis file for syncing new nodes", "path", genesisPath)
 
