@@ -91,17 +91,14 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	err = applyAllocsToState(db, genesis, cfg)
-	if err != nil {
-		return nil, err
-	}
+	applyAllocsToState(db, genesis, cfg)
 
 	// Initialize the distribution schedule contract
 	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
 	// This is fine, as the token uses solc 0.5.x and therefore compatible bytecode
 	err = setupDistributionSchedule(db, cfg)
 	if err != nil {
-		return nil, err
+		log.Warn("Error setting up distribution schedule", "error", err)
 	}
 
 	migrationBlock := new(big.Int).Add(header.Number, common.Big1)
@@ -228,7 +225,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
+func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) {
 	log.Info("Starting to migrate OP contracts into state DB")
 
 	accountCounter := 0
@@ -270,7 +267,6 @@ func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params
 		log.Info("Moved account", "address", k)
 	}
 	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
-	return nil
 }
 
 // setupDistributionSchedule sets up the distribution schedule contract with the correct balance
