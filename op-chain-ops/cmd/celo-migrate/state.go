@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -27,6 +28,10 @@ import (
 )
 
 var (
+	Big10 = uint256.NewInt(10)
+	Big9  = uint256.NewInt(9)
+	Big18 = uint256.NewInt(18)
+
 	OutFilePerm = os.FileMode(0o440)
 
 	alfajoresChainId uint64 = 44787
@@ -98,6 +103,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	// This is fine, as the token uses solc 0.5.x and therefore compatible bytecode
 	err = setupDistributionSchedule(db, cfg)
 	if err != nil {
+		// An error here shouldn't stop the migration, just log it
 		log.Warn("Error setting up distribution schedule", "error", err)
 	}
 
@@ -276,19 +282,16 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 
 	celoDistributionScheduleAddress, exists := distributionScheduleAddressMap[config.ChainID.Uint64()]
 	if !exists {
-		log.Error("DistributionSchedule address not configured for this chain, skipping migration step", "chainID", config.ChainID)
-		return fmt.Errorf("distributionSchedule address not configured")
+		return errors.New("DistributionSchedule address not configured for this chain, skipping migration step")
 	}
 
 	if !db.Exist(celoDistributionScheduleAddress) {
-		log.Error("DistributionSchedule account does not exist, skipping migration step", "address", celoDistributionScheduleAddress)
-		return fmt.Errorf("distributionSchedule account does not exist")
+		return errors.New("DistributionSchedule account does not exist, skipping migration step")
 	}
 
 	tokenAddress, exists := celoTokenAddressMap[config.ChainID.Uint64()]
 	if !exists {
-		log.Error("CeloToken address not configured for this chain, skipping migration step", "chainID", config.ChainID)
-		return fmt.Errorf("celoToken address not configured")
+		return errors.New("celo token address not configured for this chain, skipping migration step")
 	}
 
 	backend := contracts.CeloBackend{
@@ -297,12 +300,8 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 	}
 
 	// Get total supply of celo token
-	big10 := uint256.NewInt(10)
-	big9 := uint256.NewInt(9)
-	big18 := uint256.NewInt(18)
-
-	billion := new(uint256.Int).Exp(big10, big9)
-	ethInWei := new(uint256.Int).Exp(big10, big18)
+	billion := new(uint256.Int).Exp(Big10, Big9)
+	ethInWei := new(uint256.Int).Exp(Big10, Big18)
 
 	ceiling := new(uint256.Int).Mul(billion, ethInWei)
 
