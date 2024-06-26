@@ -97,6 +97,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	if header.BaseFee != nil {
 		baseFee = header.BaseFee
 	}
+	gasLimit := header.GasLimit
+	if gasLimit == 0 {
+		gasLimit = 30e6
+	}
 	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
 		ParentHash:      header.Hash(),
@@ -108,7 +112,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		Bloom:           types.Bloom{},
 		Difficulty:      new(big.Int).Set(common.Big0),
 		Number:          migrationBlock,
-		GasLimit:        header.GasLimit,
+		GasLimit:        gasLimit,
 		GasUsed:         0,
 		Time:            header.Time + 5,
 		Extra:           []byte("CeL2 migration"),
