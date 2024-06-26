@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"runtime/debug"
 
+	"github.com/ethereum-optimism/optimism/op-chain-ops/foundry"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
@@ -325,7 +326,7 @@ func runStateMigration(opts stateMigrationOptions) error {
 	log.Info("Using L1 Start Block", "number", l1StartBlock.Number(), "hash", l1StartBlock.Hash().Hex())
 
 	// Build the L2 genesis block
-	l2Allocs, err := genesis.LoadForgeAllocs(opts.l2AllocsPath)
+	l2Allocs, err := foundry.LoadForgeAllocs(opts.l2AllocsPath)
 	if err != nil {
 		return err
 	}
