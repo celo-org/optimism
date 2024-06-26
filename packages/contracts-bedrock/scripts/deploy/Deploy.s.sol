@@ -1597,15 +1597,6 @@ contract Deploy is Deployer {
 
         save("CustomGasToken", address(customGasToken));
         console.log("CustomGasToken deployed at %s", address(customGasToken));
-
-        // Override the `CustomGasToken` contract to the deployed implementation. This is necessary
-        // to check the `CustomGasToken` implementation alongside dependent contracts, which
-        // are always proxies.
-        Types.ContractSet memory contracts = _proxiesUnstrict();
-        contracts.CustomGasToken = address(customGasToken);
-        //TODO:
-        // ChainAssertions.checkOptimismPortal({ _contracts: contracts, _cfg: cfg, _isProxy: false });
-
         addr_ = address(customGasToken);
     }
 
@@ -1622,12 +1613,6 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
         });
 
-        CeloTokenL1 customGasToken = CeloTokenL1(customGasTokenProxyAddress);
-        //TODO:
-        // string memory version = customGasTokenAddress.version();
-        // console.log("CustomGasToken version: %s", version);
-
-        //TODO:
-        // ChainAssertions.checkOptimismMintableERC20Factory({ _contracts: _proxies(), _isProxy: true });
+        ChainAssertions.checkCeloTokenL1({ _contracts:_proxies(), _isProxy: false });
     }
 }
