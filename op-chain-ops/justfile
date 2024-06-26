@@ -12,7 +12,7 @@ _LDFLAGSSTRING := "'" + trim(
 # Build ecotone-scalar binary
 ecotone-scalar: (go_build "./bin/ecotone-scalar" "./cmd/ecotone-scalar" "-ldflags" _LDFLAGSSTRING)
 
-# Build receipt-reference-builder binary  
+# Build receipt-reference-builder binary
 receipt-reference-builder: (go_build "./bin/receipt-reference-builder" "./cmd/receipt-reference-builder" "-ldflags" _LDFLAGSSTRING)
 
 # Run tests
@@ -34,3 +34,20 @@ fuzz:
         "FuzzAliasing" \
         "FuzzVersionedNonce" \
     | parallel -j {{PARALLEL_JOBS}} {{just_executable()}} fuzz_task {}
+
+abis := '../packages/contracts-bedrock/snapshots/abi'
+
+bindings-celo-migrate:
+  #!/usr/bin/env bash
+  set -euxo pipefail
+
+  build_abi() {
+    local lowercase=$(echo "$2" | awk '{print tolower($0)}')
+    abigen \
+      --abi "{{abis}}/$1.json" \
+      --pkg bindings \
+      --out "cmd/celo-migrate/bindings/$lowercase.go" \
+      --type $2
+  }
+
+  build_abi GoldToken CeloToken
