@@ -58,7 +58,8 @@ import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 import { ForgeArtifacts } from "scripts/libraries/ForgeArtifacts.sol";
 import { Process } from "scripts/libraries/Process.sol";
 
-import {CeloTokenL1} from 'src/celo/CeloTokenL1.sol';
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -1280,8 +1281,11 @@ contract Deploy is Deployer {
 
         
         address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
         if (cfg.useCustomGasToken()) {
-          customGasTokenAddress = cfg.customGasTokenAddress();
+            customGasTokenAddress = cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            initialBalance = token.balanceOf(optimismPortalProxy);
         }
 
         _upgradeAndCallViaSafe({
@@ -1293,9 +1297,7 @@ contract Deploy is Deployer {
                     L2OutputOracle(l2OutputOracleProxy),
                     SystemConfig(systemConfigProxy),
                     SuperchainConfig(superchainConfigProxy),
-                    //TODO: use same source of truth as in
-                    // setupCustomGasToken()
-                    1000000000000 * 1e18
+                    initialBalance
                 )
             )
         });
