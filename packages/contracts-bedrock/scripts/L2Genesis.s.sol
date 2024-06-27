@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { Script } from "forge-std/Script.sol";
+import { stdJson } from "forge-std/StdJson.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { Deployer } from "scripts/deploy/Deployer.sol";
 
@@ -103,9 +104,43 @@ contract L2Genesis is Deployer {
     /// @notice The address of the deployer account.
     address internal deployer;
 
+    // celo - create and write predeploy map
+    mapping(string => address) public deployedContractNamesToAddresses;
+    string internal _celoL2Outfile;
+
+    function celoL2Outfile() internal view returns (string memory _env) {
+        _env = vm.envOr(
+            "L2_OUTFILE",
+            string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), "-l2-deploy.json")
+        );
+    }
+
+    function celoSave(string memory _name, address _impl, address _proxy) public {
+        if (deployedContractNamesToAddresses[_name] == address(0)) {
+            deployedContractNamesToAddresses[_name] = _impl;
+
+            _celoWrite(_name, _impl);
+        }
+
+        if (_proxy != address(0)) {
+            string memory _proxyName = string.concat(_name, "Proxy");
+            deployedContractNamesToAddresses[_proxyName] = _proxy;
+
+            _celoWrite(_proxyName, _proxy);
+        }
+    }
+
+    function _celoWrite(string memory _name, address _deployed) internal {
+        console.log("Writing l2 deploy %s: %s", _name, _deployed);
+
+        vm.writeJson({ json: stdJson.serialize("celo_l2_deploys", _name, _deployed), path: _celoL2Outfile });
+    }
+
     /// @notice Sets up the script and ensures the deployer account is used to make calls.
     function setUp() public override {
         deployer = makeAddr("deployer");
+        _celoL2Outfile = celoL2Outfile();
+
         super.setUp();
     }
 
@@ -230,7 +265,10 @@ contract L2Genesis is Deployer {
             if (Predeploys.isSupportedPredeploy(addr, cfg.useInterop())) {
                 address implementation = Predeploys.predeployToCodeNamespace(addr);
                 console.log("Setting proxy %s implementation: %s", addr, implementation);
+                string memory name = Predeploys.getName(addr);
                 EIP1967Helper.setImplementation(addr, implementation);
+
+                celoSave(name, implementation, addr);
             }
         }
     }
@@ -400,6 +438,7 @@ contract L2Genesis is Deployer {
     ///         in the constructor is set manually.
     function setWETH() public {
         console.log("Setting %s implementation at: %s", "WETH", Predeploys.WETH);
+        celoSave("WETH", Predeploys.WETH, address(0));
         vm.etch(Predeploys.WETH, vm.getDeployedCode("WETH.sol:WETH"));
     }
 
@@ -457,6 +496,7 @@ contract L2Genesis is Deployer {
         GovernanceToken token = new GovernanceToken();
         console.log("Setting %s implementation at: %s", "GovernanceToken", Predeploys.GOVERNANCE_TOKEN);
         vm.etch(Predeploys.GOVERNANCE_TOKEN, address(token).code);
+        celoSave("GovernanceToken", Predeploys.GOVERNANCE_TOKEN, address(0));
 
         bytes32 _nameSlot = hex"0000000000000000000000000000000000000000000000000000000000000003";
         bytes32 _symbolSlot = hex"0000000000000000000000000000000000000000000000000000000000000004";
@@ -576,6 +616,7 @@ contract L2Genesis is Deployer {
     function _setPreinstallCode(address _addr) internal {
         string memory cname = Preinstalls.getName(_addr);
         console.log("Setting %s preinstall code at: %s", cname, _addr);
+        celoSave(cname, _addr, address(0));
         vm.etch(_addr, Preinstalls.getDeployedCode(_addr, cfg.l2ChainID()));
         // during testing in a shared L1/L2 account namespace some preinstalls may already have been inserted and used.
         if (vm.getNonce(_addr) == 0) {
