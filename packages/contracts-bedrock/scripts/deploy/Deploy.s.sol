@@ -60,7 +60,7 @@ import { Process } from "scripts/libraries/Process.sol";
 
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { Multicall3 } from '@multicall/Multicall3.sol';
+import { Multicall3 } from "@multicall/Multicall3.sol";
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -403,7 +403,7 @@ contract Deploy is Deployer {
         deployMips();
         deployAnchorStateRegistry();
 
-        // Multicall3 
+        // Multicall3
         deployMulticall3();
     }
 
@@ -1283,13 +1283,12 @@ contract Deploy is Deployer {
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
 
-
         address customGasTokenAddress = Constants.ETHER;
         uint256 initialBalance = 0;
         if (cfg.useCustomGasToken()) {
-          customGasTokenAddress = cfg.customGasTokenAddress();
-          IERC20 token = IERC20(customGasTokenAddress);
-          initialBalance = token.balanceOf(optimismPortalProxy);
+            customGasTokenAddress = cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            initialBalance = token.balanceOf(optimismPortalProxy);
         }
 
         _upgradeAndCallViaSafe({
@@ -1641,10 +1640,10 @@ contract Deploy is Deployer {
     }
 
     function setupCustomGasToken() internal {
-        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress()==address(0)) {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress() == address(0)) {
             deployERC1967Proxy("CustomGasTokenProxy");
 
-            console.log('Setting up Custom gas token');
+            console.log("Setting up Custom gas token");
             deployCustomGasToken();
             initializeCustomGasToken();
 
@@ -1653,7 +1652,7 @@ contract Deploy is Deployer {
         }
     }
 
-    function deployCustomGasToken() public broadcast  returns (address addr_) {
+    function deployCustomGasToken() public broadcast returns (address addr_) {
         console.log("Deploying CustomGasToken implementation");
 
         CeloTokenL1 customGasToken = new CeloTokenL1{ salt: _implSalt() }();
@@ -1668,7 +1667,7 @@ contract Deploy is Deployer {
         console.log("Upgrading and initializing CustomGasToken proxy");
         address customGasTokenProxyAddress = mustGetAddress("CustomGasTokenProxy");
         address customGasTokenAddress = mustGetAddress("CustomGasToken");
-        address portalProxyAddress = mustGetAddress('OptimismPortalProxy');
+        address portalProxyAddress = mustGetAddress("OptimismPortalProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(customGasTokenProxyAddress),
@@ -1676,16 +1675,16 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
         });
 
-        ChainAssertions.checkCeloTokenL1({ _contracts:_proxies(), _isProxy: false });
+        ChainAssertions.checkCeloTokenL1({ _contracts: _proxies(), _isProxy: false });
     }
 
     function deployMulticall3() internal onlyDevnet returns (address addr_) {
         // Necessary to be deployed on the L! for viems withdraw logic
         // Only necessary on local devnet, since on the common public testnets
         // the multicall3 is already deployed.
-        console.log('Deploying up Multicall3 contact');
+        console.log("Deploying up Multicall3 contact");
         Multicall3 mc3 = new Multicall3();
         addr_ = address(mc3);
-        save('Multicall3', addr_);
-      }
+        save("Multicall3", addr_);
+    }
 }
