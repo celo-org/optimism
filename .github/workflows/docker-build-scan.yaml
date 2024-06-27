@@ -30,6 +30,7 @@ jobs:
       contains(needs.detect-files-changed.outputs.files-changed, 'go.sum') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/cmd/celo-migrate') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/Dockerfile') ||
+      contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-scan.yaml') ||
       github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
@@ -65,6 +66,7 @@ jobs:
       contains(needs.detect-files-changed.outputs.files-changed, 'op-batcher/') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-proposer/') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-service/') ||
+      contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-scan.yaml') ||
       github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
