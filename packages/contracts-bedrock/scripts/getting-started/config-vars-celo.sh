@@ -133,3 +133,5 @@ EOL
 
 # Write the config file
 echo "$config" > deploy-config/$DEPLOYMENT_CONTEXT.json
+
+echo "Wrote config file to deploy-config/$DEPLOYMENT_CONTEXT.json
