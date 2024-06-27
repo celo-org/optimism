@@ -4,6 +4,10 @@ on:
     branches:
       - 'master'
       - 'celo*'
+  push:
+    branches:
+      - 'master'
+      - 'celo*'
   workflow_dispatch:
 
 jobs:
@@ -24,7 +28,8 @@ jobs:
     needs: detect-files-changed
     if: |
       contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/cmd/celo-migrate') ||
-      contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/Dockerfile')
+      contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/Dockerfile') ||
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
@@ -58,7 +63,8 @@ jobs:
       contains(needs.detect-files-changed.outputs.files-changed, 'op-node/') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-batcher/') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-proposer/') ||
-      contains(needs.detect-files-changed.outputs.files-changed, 'op-service/')
+      contains(needs.detect-files-changed.outputs.files-changed, 'op-service/') ||
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
