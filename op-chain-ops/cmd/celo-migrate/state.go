@@ -54,7 +54,7 @@ var (
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDB(dbPath)
@@ -123,6 +123,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		baseFee = header.BaseFee
 	}
 
+	if migrationBlockTime == 0 {
+		migrationBlockTime = uint64(time.Now().Unix())
+	}
+
 	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
 		ParentHash:       header.Hash(),
@@ -136,7 +140,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		Number:           migrationBlock,
 		GasLimit:         header.GasLimit,
 		GasUsed:          0,
-		Time:             uint64(time.Now().Unix()),
+		Time:             migrationBlockTime,
 		Extra:            []byte("CeL2 migration"),
 		MixDigest:        common.Hash{},
 		Nonce:            types.BlockNonce{},
