@@ -50,7 +50,7 @@ var (
 	}
 	migrationBlockTimeFlag = &cli.Uint64Flag{
 		Name:  "migration-block-time",
-		Usage: "Specifies a timestamp to use for the migration block. If not provided, the current time will be used.",
+		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
 	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
