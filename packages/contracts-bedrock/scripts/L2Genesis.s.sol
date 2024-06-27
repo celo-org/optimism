@@ -3,6 +3,7 @@ pragma solidity 0.8.15;
 
 // Testing
 import { console2 as console } from "forge-std/console2.sol";
+import { stdJson } from "forge-std/StdJson.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 
 // Scripts
@@ -121,6 +122,43 @@ contract L2Genesis is Script {
         0x9DCCe783B6464611f38631e6C851bf441907c710 // 29
     ];
 
+    /// @notice The address of the deployer account.
+    // celo - create and write predeploy map
+    mapping(string => address) public deployedContractNamesToAddresses;
+    string internal _celoL2Outfile;
+
+    function celoL2Outfile() internal view returns (string memory _env) {
+        _env = vm.envOr(
+            "L2_OUTFILE",
+            string.concat(vm.projectRoot(), "/deployments/", vm.toString(block.chainid), "-l2-deploy.json")
+        );
+    }
+
+    function celoSave(string memory _name, address _impl, address _proxy) public {
+        if (deployedContractNamesToAddresses[_name] == address(0)) {
+            deployedContractNamesToAddresses[_name] = _impl;
+
+            _celoWrite(_name, _impl);
+        }
+
+        if (_proxy != address(0)) {
+            string memory _proxyName = string.concat(_name, "Proxy");
+            deployedContractNamesToAddresses[_proxyName] = _proxy;
+
+            _celoWrite(_proxyName, _proxy);
+        }
+    }
+
+    function _celoWrite(string memory _name, address _deployed) internal {
+        console.log("Writing l2 deploy %s: %s", _name, _deployed);
+
+        vm.writeJson({ json: stdJson.serialize("celo_l2_deploys", _name, _deployed), path: _celoL2Outfile });
+    }
+    /// @notice Sets up the script and ensures the deployer account is used to make calls.
+    /// @notice The alloc object is sorted numerically by address.
+    ///         Sets the precompiles, proxies, and the implementation accounts to be `vm.dumpState`
+    ///         to generate a L2 genesis alloc.
+
     /// @notice Alias for `runWithStateDump` so that no `--sig` needs to be specified.
     function run(Input memory _input) public {
         address deployer = makeAddr("deployer");
@@ -218,7 +256,11 @@ contract L2Genesis is Script {
 
             if (Predeploys.isSupportedPredeploy(addr, _input.fork, _input.deployCrossL2Inbox)) {
                 address implementation = Predeploys.predeployToCodeNamespace(addr);
+                console.log("Setting proxy %s implementation: %s", addr, implementation);
+                string memory name = Predeploys.getName(addr);
                 EIP1967Helper.setImplementation(addr, implementation);
+
+                celoSave(name, implementation, addr);
             }
         }
     }
@@ -387,6 +429,8 @@ contract L2Genesis is Script {
     ///         This contract is NOT proxied and the state that is set
     ///         in the constructor is set manually.
     function setWETH() internal {
+        console.log("Setting %s implementation at: %s", "WETH", Predeploys.WETH);
+        celoSave("WETH", Predeploys.WETH, address(0));
         vm.etch(Predeploys.WETH, vm.getDeployedCode("WETH.sol:WETH"));
     }
 
@@ -482,6 +526,7 @@ contract L2Genesis is Script {
             })
         );
         vm.etch(Predeploys.GOVERNANCE_TOKEN, address(token).code);
+        celoSave("GovernanceToken", Predeploys.GOVERNANCE_TOKEN, address(0));
 
         bytes32 _nameSlot = hex"0000000000000000000000000000000000000000000000000000000000000003";
         bytes32 _symbolSlot = hex"0000000000000000000000000000000000000000000000000000000000000004";
