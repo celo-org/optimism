@@ -49,6 +49,10 @@ var (
 		Usage:    "Path to write the rollup config JSON file, to be provided to op-node with the 'rollup.config' flag",
 		Required: true,
 	}
+	migrationBlockTimeFlag = &cli.Uint64Flag{
+		Name:  "migration-block-time",
+		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
+	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
 		Usage:    "Path to the old Celo chaindata dir, can be found at '<datadir>/celo/chaindata'",
@@ -104,6 +108,7 @@ var (
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
+		migrationBlockTimeFlag,
 	}
 	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
 	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
@@ -127,6 +132,7 @@ type stateMigrationOptions struct {
 	l2AllocsPath        string
 	outfileRollupConfig string
 	newDBPath           string
+	migrationBlockTime  uint64
 }
 
 func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
@@ -150,6 +156,7 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l1RPC:               ctx.String(l1RPCFlag.Name),
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
+		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
 	}
 }
 
@@ -337,7 +344,7 @@ func runStateMigration(opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath, opts.migrationBlockTime)
 	if err != nil {
 		return err
 	}
