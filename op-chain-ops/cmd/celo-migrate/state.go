@@ -8,12 +8,9 @@ import (
 	"math/big"
 	"os"
 
-	"github.com/ethereum-optimism/optimism/op-chain-ops/cmd/celo-migrate/bindings"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts"
 	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -294,11 +291,10 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 	if !exists {
 		return errors.New("celo token address not configured for this chain, skipping migration step")
 	}
+	log.Info("Read contract addresses", "tokenAddress", tokenAddress, "distributionScheduleAddress", celoDistributionScheduleAddress)
 
-	backend := contracts.CeloBackend{
-		ChainConfig: config,
-		State:       db,
-	}
+	// totalSupply is stored in the third slot
+	totalSupply := db.GetState(tokenAddress, common.HexToHash("0x02")).Big()
 
 	// Get total supply of celo token
 	billion := new(uint256.Int).Exp(Big10, Big9)
@@ -306,19 +302,7 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 
 	ceiling := new(uint256.Int).Mul(billion, ethInWei)
 
-	token, err := bindings.NewCeloTokenCaller(tokenAddress, &backend)
-	if err != nil {
-		return err
-	}
-	totalSupply, err := token.TotalSupply(&bind.CallOpts{})
-	if err != nil {
-		return err
-	}
-	supplyU256, overflow := uint256.FromBig(totalSupply)
-	if overflow {
-		return fmt.Errorf("supply %s is too large", totalSupply)
-	}
-
+	supplyU256 := uint256.MustFromBig(totalSupply)
 	if supplyU256.Cmp(ceiling) > 0 {
 		return fmt.Errorf("supply %s is greater than ceiling %s", totalSupply, ceiling)
 	}
@@ -328,6 +312,6 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 	balance = new(uint256.Int).Add(balance, db.GetBalance(celoDistributionScheduleAddress))
 	db.SetBalance(celoDistributionScheduleAddress, balance)
 
-	log.Info("Set up CeloDistributionSchedule balance", "address", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
+	log.Info("Set up CeloDistributionSchedule balance", "distributionScheduleAddress", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
 	return nil
 }
