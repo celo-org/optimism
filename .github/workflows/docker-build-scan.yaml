@@ -29,6 +29,7 @@ jobs:
       GIT_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     needs: detect-files-changed
     if: |
+      contains(needs.detect-files-changed.outputs.files-changed, 'go.sum') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/cmd/celo-migrate') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/Dockerfile') ||
       contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-scan.yaml') ||
