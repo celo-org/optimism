@@ -76,7 +76,7 @@ jobs:
     env:
       GIT_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       GIT_DATE: ${{ github.event.head_commit.timestamp }}
-      IMAGE_TAGS: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/celo')) && 'latest,' || '') }}${{ github.sha }}
+      IMAGE_TAGS: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/celo')) && 'latest,' || '') }}${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       REGISTRY: us-west1-docker.pkg.dev
       REPOSITORY: blockchaintestsglobaltestnet/dev-images
     steps:
