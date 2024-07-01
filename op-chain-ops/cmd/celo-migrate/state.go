@@ -125,6 +125,9 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// If gas limit was zero at the transition point use a default of 30M.
+	// Note that in op-geth we use gasLimit==0 to indicate a pre-gingerbread
+	// block and adjust encoding appropriately, so we must make sure that
+	// gasLimit is non-zero, bacause L2 blocks are all post gingerbread.
 	gasLimit := header.GasLimit
 	if gasLimit == 0 {
 		gasLimit = 30e6
