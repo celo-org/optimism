@@ -3,7 +3,7 @@ pragma solidity ^0.8.15;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-abstract contract FeeCurrency is ERC20 {
+abstract contract AbstractFeeCurrency is ERC20 {
     modifier onlyVm() {
         require(msg.sender == address(0), "Only VM can call");
         _;
