@@ -49,6 +49,10 @@ var (
 		Usage:    "Path to write the rollup config JSON file, to be provided to op-node with the 'rollup.config' flag",
 		Required: true,
 	}
+	migrationBlockTimeFlag = &cli.Uint64Flag{
+		Name:  "migration-block-time",
+		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
+	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
 		Usage:    "Path to the old Celo chaindata dir, can be found at '<datadir>/celo/chaindata'",
@@ -78,10 +82,6 @@ var (
 		Name:  "clear-all",
 		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
 	}
-	keepNonAncientsFlag = &cli.BoolFlag{
-		Name:  "keep-non-ancients",
-		Usage: "CAUTION: Not recommended for production. Use to keep all data in the new db as is, including any partially migrated non-ancient blocks and state data. If non-ancient blocks are partially migrated, the script will attempt to resume the migration.",
-	}
 	onlyAncientsFlag = &cli.BoolFlag{
 		Name:  "only-ancients",
 		Usage: "Use to only migrate ancient blocks. Ignored when running full migration",
@@ -95,7 +95,6 @@ var (
 		bufferSizeFlag,
 		memoryLimitFlag,
 		clearAllFlag,
-		keepNonAncientsFlag,
 	}
 	stateMigrationFlags = []cli.Flag{
 		newDBPathFlag,
@@ -104,20 +103,20 @@ var (
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
+		migrationBlockTimeFlag,
 	}
 	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
 	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
 )
 
 type blockMigrationOptions struct {
-	oldDBPath       string
-	newDBPath       string
-	batchSize       uint64
-	bufferSize      uint64
-	memoryLimit     int64
-	clearAll        bool
-	keepNonAncients bool
-	onlyAncients    bool
+	oldDBPath    string
+	newDBPath    string
+	batchSize    uint64
+	bufferSize   uint64
+	memoryLimit  int64
+	clearAll     bool
+	onlyAncients bool
 }
 
 type stateMigrationOptions struct {
@@ -127,18 +126,18 @@ type stateMigrationOptions struct {
 	l2AllocsPath        string
 	outfileRollupConfig string
 	newDBPath           string
+	migrationBlockTime  uint64
 }
 
 func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 	return blockMigrationOptions{
-		oldDBPath:       ctx.String(oldDBPathFlag.Name),
-		newDBPath:       ctx.String(newDBPathFlag.Name),
-		batchSize:       ctx.Uint64(batchSizeFlag.Name),
-		bufferSize:      ctx.Uint64(bufferSizeFlag.Name),
-		memoryLimit:     ctx.Int64(memoryLimitFlag.Name),
-		clearAll:        ctx.Bool(clearAllFlag.Name),
-		keepNonAncients: ctx.Bool(keepNonAncientsFlag.Name),
-		onlyAncients:    ctx.Bool(onlyAncientsFlag.Name),
+		oldDBPath:    ctx.String(oldDBPathFlag.Name),
+		newDBPath:    ctx.String(newDBPathFlag.Name),
+		batchSize:    ctx.Uint64(batchSizeFlag.Name),
+		bufferSize:   ctx.Uint64(bufferSizeFlag.Name),
+		memoryLimit:  ctx.Int64(memoryLimitFlag.Name),
+		clearAll:     ctx.Bool(clearAllFlag.Name),
+		onlyAncients: ctx.Bool(onlyAncientsFlag.Name),
 	}
 }
 
@@ -150,6 +149,7 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l1RPC:               ctx.String(l1RPCFlag.Name),
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
+		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
 	}
 }
 
@@ -225,7 +225,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes
 
-	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "keepNonAncients", opts.keepNonAncients, "onlyAncients", opts.onlyAncients)
+	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "onlyAncients", opts.onlyAncients)
 
 	var err error
 
@@ -237,7 +237,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 		if err = os.RemoveAll(opts.newDBPath); err != nil {
 			return fmt.Errorf("failed to remove new database: %w", err)
 		}
-	} else if !opts.keepNonAncients {
+	} else {
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
 			return fmt.Errorf("failed to reset non-ancient database: %w", err)
 		}
@@ -251,7 +251,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 
 	var numNonAncients uint64
 	if !opts.onlyAncients {
-		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNewAfter-1, opts.batchSize); err != nil {
+		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNewAfter, opts.batchSize); err != nil {
 			return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 		}
 	} else {
@@ -337,7 +337,7 @@ func runStateMigration(opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath, opts.migrationBlockTime)
 	if err != nil {
 		return err
 	}

@@ -4,6 +4,10 @@ on:
     branches:
       - 'master'
       - 'celo*'
+  push:
+    branches:
+      - 'master'
+      - 'celo*'
   workflow_dispatch:
 
 jobs:
@@ -21,10 +25,15 @@ jobs:
 
   build-cel2-migration-tool:
     runs-on: ubuntu-latest
+    env:
+      GIT_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
     needs: detect-files-changed
     if: |
+      contains(needs.detect-files-changed.outputs.files-changed, 'go.sum') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/cmd/celo-migrate') ||
-      contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/Dockerfile')
+      contains(needs.detect-files-changed.outputs.files-changed, 'op-chain-ops/Dockerfile') ||
+      contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-scan.yaml') ||
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
@@ -42,7 +51,7 @@ jobs:
         with:
           platforms: linux/amd64
           registry: us-west1-docker.pkg.dev/devopsre/dev-images/cel2-migration-tool
-          tags: ${{ github.sha }}
+          tags: ${{ env.GIT_COMMIT }}
           context: ./
           dockerfile: ./op-chain-ops/Dockerfile
           push: true
@@ -58,15 +67,17 @@ jobs:
       contains(needs.detect-files-changed.outputs.files-changed, 'op-node/') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-batcher/') ||
       contains(needs.detect-files-changed.outputs.files-changed, 'op-proposer/') ||
-      contains(needs.detect-files-changed.outputs.files-changed, 'op-service/')
+      contains(needs.detect-files-changed.outputs.files-changed, 'op-service/') ||
+      contains(needs.detect-files-changed.outputs.files-changed, '.github/workflows/docker-build-scan.yaml') ||
+      github.event_name == 'workflow_dispatch'
     permissions:
       contents: read
       id-token: write
       security-events: write
     env:
-      GIT_COMMIT: ${{ github.sha }}
+      GIT_COMMIT: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       GIT_DATE: ${{ github.event.head_commit.timestamp }}
-      IMAGE_TAGS: ${{ github.sha }},latest
+      IMAGE_TAGS: ${{ (github.event_name == 'push' && (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/celo')) && 'latest,' || '') }}${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
       REGISTRY: us-west1-docker.pkg.dev
       REPOSITORY: blockchaintestsglobaltestnet/dev-images
     steps:

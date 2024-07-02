@@ -7,13 +7,11 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"time"
 
-	"github.com/ethereum-optimism/optimism/op-chain-ops/cmd/celo-migrate/bindings"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts"
 	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -53,7 +51,7 @@ var (
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDB(dbPath)
@@ -122,6 +120,18 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		baseFee = header.BaseFee
 	}
 
+	if migrationBlockTime == 0 {
+		migrationBlockTime = uint64(time.Now().Unix())
+	}
+
+	// If gas limit was zero at the transition point use a default of 30M.
+	// Note that in op-geth we use gasLimit==0 to indicate a pre-gingerbread
+	// block and adjust encoding appropriately, so we must make sure that
+	// gasLimit is non-zero, bacause L2 blocks are all post gingerbread.
+	gasLimit := header.GasLimit
+	if gasLimit == 0 {
+		gasLimit = 30e6
+	}
 	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
 		ParentHash:       header.Hash(),
@@ -133,9 +143,9 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		Bloom:            types.Bloom{},
 		Difficulty:       new(big.Int).Set(common.Big0),
 		Number:           migrationBlock,
-		GasLimit:         header.GasLimit,
+		GasLimit:         gasLimit,
 		GasUsed:          0,
-		Time:             header.Time + 5,
+		Time:             migrationBlockTime,
 		Extra:            []byte("CeL2 migration"),
 		MixDigest:        common.Hash{},
 		Nonce:            types.BlockNonce{},
@@ -294,11 +304,10 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 	if !exists {
 		return errors.New("celo token address not configured for this chain, skipping migration step")
 	}
+	log.Info("Read contract addresses", "tokenAddress", tokenAddress, "distributionScheduleAddress", celoDistributionScheduleAddress)
 
-	backend := contracts.CeloBackend{
-		ChainConfig: config,
-		State:       db,
-	}
+	// totalSupply is stored in the third slot
+	totalSupply := db.GetState(tokenAddress, common.HexToHash("0x02")).Big()
 
 	// Get total supply of celo token
 	billion := new(uint256.Int).Exp(Big10, Big9)
@@ -306,19 +315,7 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 
 	ceiling := new(uint256.Int).Mul(billion, ethInWei)
 
-	token, err := bindings.NewCeloTokenCaller(tokenAddress, &backend)
-	if err != nil {
-		return err
-	}
-	totalSupply, err := token.TotalSupply(&bind.CallOpts{})
-	if err != nil {
-		return err
-	}
-	supplyU256, overflow := uint256.FromBig(totalSupply)
-	if overflow {
-		return fmt.Errorf("supply %s is too large", totalSupply)
-	}
-
+	supplyU256 := uint256.MustFromBig(totalSupply)
 	if supplyU256.Cmp(ceiling) > 0 {
 		return fmt.Errorf("supply %s is greater than ceiling %s", totalSupply, ceiling)
 	}
@@ -328,6 +325,6 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 	balance = new(uint256.Int).Add(balance, db.GetBalance(celoDistributionScheduleAddress))
 	db.SetBalance(celoDistributionScheduleAddress, balance)
 
-	log.Info("Set up CeloDistributionSchedule balance", "address", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
+	log.Info("Set up CeloDistributionSchedule balance", "distributionScheduleAddress", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
 	return nil
 }
