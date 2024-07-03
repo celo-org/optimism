@@ -66,7 +66,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize, bufferSize uint64
 		return numAncientsNewBefore, numAncientsNewBefore, nil
 	}
 
-	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNewBefore, "endBlock", numAncientsOld, "count", numAncientsOld-numAncientsNewBefore, "step", batchSize)
+	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNewBefore, "endBlock", numAncientsOld-1, "count", numAncientsOld-numAncientsNewBefore, "step", batchSize)
 
 	g, ctx := errgroup.WithContext(context.Background())
 	readChan := make(chan RLPBlockRange, bufferSize)
