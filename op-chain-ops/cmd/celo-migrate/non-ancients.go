@@ -89,7 +89,7 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize ui
 		}
 	}
 
-	if numAncients > 0 {
+	if lastAncient > 0 {
 		toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, lastAncient)
 		log.Info("Removing frozen blocks", "process", "non-ancients", "count", len(toBeRemoved))
 		batch := newDB.NewBatch()
