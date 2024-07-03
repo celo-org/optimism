@@ -184,6 +184,12 @@ jobs:
           name: Copy Plasma allocs to .devnet-plasma
           command: cp -r .devnet/ .devnet-plasma-generic/
       - run:
+          name: Generate Celo allocs
+          command: DEVNET_CELO="true"  make devnet-allocs
+      - run:
+          name: Copy Celo allocs to .devnet-celo
+          command: cp -r .devnet/ .devnet-celo/
+      - run:
           name: Generate default allocs
           command: make devnet-allocs
       - persist_to_workspace:
@@ -200,6 +206,12 @@ jobs:
             - ".devnet/allocs-l2-ecotone.json"
             - ".devnet/allocs-l2-fjord.json"
             - ".devnet/addresses.json"
+            - ".devnet-celo/addresses.json"
+            - ".devnet-celo/allocs-l1.json"
+            - ".devnet-celo/allocs-l2-delta.json"
+            - ".devnet-celo/allocs-l2-ecotone.json"
+            - ".devnet-celo/allocs-l2-fjord.json"
+            - ".devnet-celo/addresses.json"
             - ".devnet-l2oo/allocs-l1.json"
             - ".devnet-l2oo/addresses.json"
             - ".devnet-l2oo/allocs-l2-delta.json"
