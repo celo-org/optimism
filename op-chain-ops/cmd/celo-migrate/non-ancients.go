@@ -51,8 +51,9 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize ui
 	// get the last block number
 	hash := rawdb.ReadHeadHeaderHash(newDB)
 	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
+	lastAncient := numAncients - 1
 
-	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-numAncients, "lastAncientBlock", numAncients)
+	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
 
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
@@ -88,8 +89,8 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize ui
 		}
 	}
 
-	if numAncients > 0 {
-		toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, numAncients)
+	if lastAncient > 0 {
+		toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, lastAncient)
 		log.Info("Removing frozen blocks", "process", "non-ancients", "count", len(toBeRemoved))
 		batch := newDB.NewBatch()
 		for _, numberHash := range toBeRemoved {
