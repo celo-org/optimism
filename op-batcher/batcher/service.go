@@ -215,9 +215,9 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 		return fmt.Errorf("unknown data availability type: %v", cfg.DataAvailabilityType)
 	}
 
-	if bs.UsePlasma && cc.MaxFrameSize > plasma.MaxInputSize {
-		return fmt.Errorf("max frame size %d exceeds plasma max input size %d", cc.MaxFrameSize, plasma.MaxInputSize)
-	}
+	// if bs.UsePlasma && cc.MaxFrameSize > plasma.MaxInputSize {
+	// 	return fmt.Errorf("max frame size %d exceeds plasma max input size %d", cc.MaxFrameSize, plasma.MaxInputSize)
+	// }
 
 	cc.InitCompressorConfig(cfg.ApproxComprRatio, cfg.Compressor, cfg.CompressionAlgo)
 
