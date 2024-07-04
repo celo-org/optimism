@@ -11,7 +11,8 @@ import (
 // Frames cannot be larger than 1 MB.
 // Data transactions that carry frames are generally not larger than 128 KB due to L1 network conditions,
 // but we leave space to grow larger anyway (gas limit allows for more data).
-const MaxFrameLen = 1_000_000
+// const MaxFrameLen = 1_000_000
+const MaxFrameLen = 2_000_000
 
 // Data Format
 //
