@@ -129,7 +129,7 @@ config=$(cat << EOL
   "daResolveWindow": 1,
 
   "useCustomGasToken": $USE_CUSTOM_GAS_TOKEN,
-  "customGasTokenAddress": $CUSTOM_GAS_TOKEN_ADDRESS
+  "customGasTokenAddress": "$CUSTOM_GAS_TOKEN_ADDRESS"
 }
 EOL
 )
