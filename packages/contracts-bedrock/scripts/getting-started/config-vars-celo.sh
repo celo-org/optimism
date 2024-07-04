@@ -125,10 +125,8 @@ config=$(cat << EOL
 
   "usePlasma": $USE_PLASMA,
   "daCommitmentType": "GenericCommitment",
-  "daChallengeWindow": 3600,
-  "daResolveWindow": 3600,
-  "daBondSize": 1000000,
-  "daResolverRefundPercentage": 0,
+  "daChallengeWindow": 1,
+  "daResolveWindow": 1,
 
   "useCustomGasToken": $USE_CUSTOM_GAS_TOKEN,
   "customGasTokenAddress": $CUSTOM_GAS_TOKEN_ADDRESS
