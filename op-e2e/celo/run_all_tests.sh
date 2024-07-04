@@ -8,7 +8,7 @@ TEST_GLOB=$1
 ## Start geth
 cd "$SCRIPT_DIR/../.." || exit 1
 trap 'cd "$SCRIPT_DIR/../.." && make devnet-down' EXIT # kill bg job at exit
-DEVNET_CELO=true make devnet-up
+DEVNET_L2OO=true DEVNET_CELO=true make devnet-up
 
 # Wait for geth to be ready
 for _ in {1..10}; do
