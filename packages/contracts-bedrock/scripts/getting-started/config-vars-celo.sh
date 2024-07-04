@@ -26,6 +26,8 @@ reqenv "L2_BLOCK_TIME"
 reqenv "FUNDS_DEV_ACCOUNTS"
 reqenv "USE_PLASMA"
 reqenv "DEPLOY_CELO_CONTRACTS"
+reqenv "USE_CUSTOM_GAS_TOKEN"
+reqenv "CUSTOM_GAS_TOKEN_ADDRESS"
 
 # Get the finalized block timestamp and hash
 block=$(cast block finalized --rpc-url "$L1_RPC_URL")
@@ -126,7 +128,10 @@ config=$(cat << EOL
   "daChallengeWindow": 3600,
   "daResolveWindow": 3600,
   "daBondSize": 1000000,
-  "daResolverRefundPercentage": 0
+  "daResolverRefundPercentage": 0,
+
+  "useCustomGasToken": $USE_CUSTOM_GAS_TOKEN,
+  "customGasTokenAddress": "$CUSTOM_GAS_TOKEN_ADDRESS"
 }
 EOL
 )

@@ -73,3 +73,11 @@ export FUNDS_DEV_ACCOUNTS=false
 export USE_PLASMA=false
 # Set to false if migrating state from a Celo L1. True for new testnets
 export DEPLOY_CELO_CONTRACTS=false
+
+export USE_CUSTOM_GAS_TOKEN=true
+# Set to "0x0000000000000000000000000000000000000000" when the contract
+# should get deployed (via create2) on L1 as part of the deploy script.
+# Set to the deployed contract address when already deployed on L1
+# This only works when USE_CUSTOM_GAS_TOKEN=true
+export CUSTOM_GAS_TOKEN_ADDRESS=0x0000000000000000000000000000000000000000
+
