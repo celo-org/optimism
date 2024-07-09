@@ -103,4 +103,4 @@ EOL
 )
 
 # Write the config file
-echo "$config" > deploy-config/$DEPLOYMENT_CONTEXT.json
+echo "$config" > deploy-config/"$DEPLOYMENT_CONTEXT".json
