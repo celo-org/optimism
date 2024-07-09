@@ -1,4 +1,5 @@
 #!/bin/bash
+#shellcheck disable=SC1091
 set -eo pipefail
 
 SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
@@ -50,7 +51,7 @@ then
 	echo All tests succeeded!
 else
 	tput setaf 1 || true
-	echo $failures/$tests failed.
+	echo "$failures"/"$tests" failed.
 fi
 tput sgr0 || true
-exit $failures
+exit "$failures"
