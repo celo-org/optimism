@@ -51,7 +51,7 @@ then
 	echo All tests succeeded!
 else
 	tput setaf 1 || true
-	echo "$failures"/"$tests" failed.
+	echo "$failures/$tests" failed.
 fi
 tput sgr0 || true
 exit "$failures"
