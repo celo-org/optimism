@@ -123,7 +123,7 @@ contract L2Genesis is Deployer {
             _celoWrite(_name, _impl);
         }
 
-        if ( _proxy != address(0)) {
+        if (_proxy != address(0)) {
             string memory _proxyName = string.concat(_name, "Proxy");
             deployedContractNamesToAddresses[_proxyName] = _proxy;
 
