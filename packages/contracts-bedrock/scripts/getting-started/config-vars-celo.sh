@@ -31,7 +31,7 @@ reqenv "DEPLOY_CELO_CONTRACTS"
 block=$(cast block finalized --rpc-url "$L1_RPC_URL")
 timestamp=$(echo "$block" | awk '/timestamp/ { print $2 }')
 blockhash=$(echo "$block" | awk '/hash/ { print $2 }')
-batchInboxAddressSuffix=$(printf "%0$(expr 38 - ${#L2_CHAIN_ID})d" 0)$L2_CHAIN_ID
+batchInboxAddressSuffix=$(printf "%0$((38 - ${#L2_CHAIN_ID}))d" 0)$L2_CHAIN_ID
 batchInboxAddress=0xff$batchInboxAddressSuffix
 
 # Generate the config file
@@ -132,6 +132,6 @@ EOL
 )
 
 # Write the config file
-echo "$config" > deploy-config/$DEPLOYMENT_CONTEXT.json
 
+echo "$config" > deploy-config/"$DEPLOYMENT_CONTEXT".json
 echo "Created file deploy-config/$DEPLOYMENT_CONTEXT.json successfully."
