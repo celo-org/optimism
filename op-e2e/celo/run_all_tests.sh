@@ -4,25 +4,29 @@ set -eo pipefail
 
 SCRIPT_DIR=$(readlink -f "$(dirname "$0")")
 TEST_GLOB=$1
+spawn_devnet=${SPAWN_DEVNET:-true}
 
-## Start geth
-cd "$SCRIPT_DIR/../.." || exit 1
-trap 'cd "$SCRIPT_DIR/../.." && make devnet-down' EXIT # kill bg job at exit
-DEVNET_L2OO=true DEVNET_CELO=true make devnet-up
+if [[ $spawn_devnet != false ]]; then
+  ## Start geth
+  cd "$SCRIPT_DIR/../.." || exit 1
+  trap 'cd "$SCRIPT_DIR/../.." && make devnet-down' EXIT # kill bg job at exit
+  DEVNET_L2OO=true DEVNET_CELO=true make devnet-up
+fi
+
+cd "$SCRIPT_DIR" || exit 1
+source "$SCRIPT_DIR/shared.sh"
 
 # Wait for geth to be ready
 for _ in {1..10}; do
   if cast block &>/dev/null; then
+    echo geth ready
     break
   fi
   sleep 0.2
 done
 
-cd "$SCRIPT_DIR" || exit 1
-source "$SCRIPT_DIR/shared.sh"
-
 ## Run tests
-echo Geth ready, start tests
+echo Start tests
 failures=0
 tests=0
 for f in test_*"$TEST_GLOB"*; do
@@ -45,8 +49,8 @@ if [[ $failures -eq 0 ]]; then
   tput setaf 2 || true
   echo All tests succeeded!
 else
-	tput setaf 1 || true
-	echo "$failures/$tests" failed.
+  tput setaf 1 || true
+  echo "$failures/$tests" failed.
 fi
 tput sgr0 || true
 exit "$failures"
