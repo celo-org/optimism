@@ -1049,6 +1049,9 @@ jobs:
           condition:
               equal: ['celo', <<parameters.variant>>]
           steps:
+            - restore_cache:
+                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+            # install dependencies
             - run:
                 working_directory:  op-e2e/celo
                 name: install dependencies
