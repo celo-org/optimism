@@ -946,6 +946,16 @@ jobs:
                 command: echo 'export DEVNET_ALTDA=true' >> $BASH_ENV
       - when:
           condition:
+            equal: ['celo', <<parameters.variant>>]
+          steps:
+            - run:
+                name: Set DEVNET_CELO = true
+                command: echo 'export DEVNET_CELO=true' >> $BASH_ENV
+            - run:
+                name: Set DEVNET_L2OO = true
+                command: echo 'export DEVNET_L2OO=true' >> $BASH_ENV
+      - when:
+          condition:
             equal: ['altda-generic', <<parameters.variant>>]
           steps:
             - run:
@@ -1027,12 +1037,32 @@ jobs:
             PYTHONPATH=./bedrock-devnet python3 ./bedrock-devnet/main.py --monorepo-dir=.
             echo "Waiting for 10 seconds to give the devnet time to settle in..."
             sleep 10
-      - run:
-          name: Test the stack
-          command: make devnet-test
-      - run:
-          name: Run Celo e2e tests
-          command: op-e2e/celo/run_all_tests.sh
+      - when:
+          condition:
+            not:
+              equal: ['celo', <<parameters.variant>>]
+          steps:
+            - run:
+                name: Test the stack
+                command: make devnet-test
+      - when:
+          condition:
+              equal: ['celo', <<parameters.variant>>]
+          steps:
+            - run:
+                working_directory:  op-e2e/celo
+                name: install dependencies
+                command: npm install
+            # save any changes to the cache
+            - save_cache:
+                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+                paths:
+                  - op-e2e/celo/node_modules
+            - run:
+                working_directory:  op-e2e/celo
+                name: Run Celo e2e tests
+                command: |
+                  SPAWN_DEVNET=false ./run_all_tests.sh
       - run:
           name: Dump op-node logs
           command: |
@@ -1469,3 +1499,82 @@ workflows:
           dir: .
           ignore-dirs:
             ./packages/contracts-bedrock/lib
+  merged:
+    when:
+      and:
+        - or:
+            # Trigger after merged into celoXX branch
+            - matches: { pattern: '^celo\d+$', value: << pipeline.git.branch >> }
+            # Trigger on manual triggers if explicitly requested
+            - equal: [true, << pipeline.parameters.main_dispatch >>]
+        - not:
+            equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
+    jobs:
+      - pnpm-monorepo:
+          name: pnpm-monorepo
+      - go-mod-download
+      - docker-build:
+          name: op-node-docker-build
+          docker_name: op-node
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-batcher-docker-build
+          docker_name: op-batcher
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-program-docker-build
+          docker_name: op-program
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-program is not part of the devnet, we don't save it.
+      - docker-build:
+          name: op-proposer-docker-build
+          docker_name: op-proposer
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-challenger-docker-build
+          docker_name: op-challenger
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-dispute-mon-docker-build
+          docker_name: op-dispute-mon
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-conductor-docker-build
+          docker_name: op-conductor
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-conductor is not part of the devnet, we don't save it.
+      - docker-build:
+          name: op-heartbeat-docker-build
+          docker_name: op-heartbeat
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-heartbeat is not part of the devnet, we don't save it.
+      - docker-build:
+          name: da-server-docker-build
+          docker_name: da-server
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-supervisor-docker-build
+          docker_name: op-supervisor
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-supervisor is not (yet) part of the devnet, we don't save it
+      - cannon-prestate:
+          requires:
+            - go-mod-download
+      - devnet:
+          matrix:
+            parameters:
+              variant: ["celo",]
+          requires:
+            - pnpm-monorepo
+            - op-batcher-docker-build
+            - op-proposer-docker-build
+            - op-node-docker-build
+            - op-challenger-docker-build
+            - da-server-docker-build
+            - cannon-prestate
