@@ -185,7 +185,7 @@ jobs:
           command: cp -r .devnet/ .devnet-plasma-generic/
       - run:
           name: Generate Celo allocs
-          command: DEVNET_CELO="true"  make devnet-allocs
+          command: DEVNET_L2OO="true" DEVNET_CELO="true"  make devnet-allocs
       - run:
           name: Copy Celo allocs to .devnet-celo
           command: cp -r .devnet/ .devnet-celo/
