@@ -3,6 +3,10 @@ import { makeChainConfigs } from '../src/chain.js'
 import { privateKeyToAccount } from 'viem/accounts'
 import { readFileSync } from 'fs'
 
+// Default Anvil dev account that has a pre-allocation on the op-devnet:
+// "test test test test test test test test test test test junk" mnemonic account,
+// on path "m/44'/60'/0'/0/6".
+// Address: 0x976EA74026E726554dB657fA54763abd0C3a0aa9.
 const privKey =
   '0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e'
 
