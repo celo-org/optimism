@@ -68,7 +68,7 @@ commands:
         default: ""
     steps:
       - run:
-          command: "true"  # No notifications setup up for celo-org fork
+          command: "true" # No notifications setup up for celo-org fork
 
 jobs:
   cannon-go-lint-and-test:
@@ -273,7 +273,7 @@ jobs:
     machine:
       image: <<pipeline.parameters.base_image>>
       resource_class: "<<parameters.resource_class>>"
-      docker_layer_caching: true  # we rely on this for faster builds, and actively warm it up for builds with common stages
+      docker_layer_caching: true # we rely on this for faster builds, and actively warm it up for builds with common stages
     steps:
       - checkout
       - attach_workspace:
@@ -366,9 +366,8 @@ jobs:
                   docker save -o /tmp/docker_images/<<parameters.docker_name>>.tar $IMAGE_NAME
             - persist_to_workspace:
                 root: /tmp/docker_images
-                paths:  # only write the one file, to avoid concurrent workspace-file additions
+                paths: # only write the one file, to avoid concurrent workspace-file additions
                   - "<<parameters.docker_name>>.tar"
-
 
   contracts-bedrock-coverage:
     docker:
@@ -467,7 +466,7 @@ jobs:
             FOUNDRY_PROFILE: ci
           working_directory: packages/contracts-bedrock
       - run:
-        # Semver lock must come second because one of the later steps may modify the cache & force a contracts rebuild.
+          # Semver lock must come second because one of the later steps may modify the cache & force a contracts rebuild.
           name: semver lock
           command: |
             pnpm semver-lock
@@ -726,8 +725,8 @@ jobs:
             - "/root/.cache/go-build"
       # TODO(CLI-148): Fix codecov
       #- run:
-          #name: upload coverage
-          #command: codecov --verbose --clean --flags bedrock-go-tests
+      #name: upload coverage
+      #command: codecov --verbose --clean --flags bedrock-go-tests
       - store_test_results:
           path: /tmp/test-results
       - store_artifacts:
@@ -738,7 +737,7 @@ jobs:
     parameters:
       variant:
         type: string
-        default: ''
+        default: ""
       module:
         description: Go Module Name
         type: string
@@ -758,8 +757,8 @@ jobs:
         type: string
         default: ""
     environment:
-      DEVNET_L2OO: 'false'
-      OP_E2E_USE_L2OO: 'false'
+      DEVNET_L2OO: "false"
+      OP_E2E_USE_L2OO: "false"
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
     resource_class: xlarge
@@ -768,7 +767,7 @@ jobs:
       - checkout
       - when:
           condition:
-            equal: ['-l2oo', <<parameters.variant>>]
+            equal: ["-l2oo", <<parameters.variant>>]
           steps:
             - run:
                 name: Set DEVNET_L2OO = true
@@ -778,7 +777,7 @@ jobs:
                 command: echo 'export OP_E2E_USE_L2OO=true' >> $BASH_ENV
       - when:
           condition:
-            equal: ['-plasma', <<parameters.variant>>]
+            equal: ["-plasma", <<parameters.variant>>]
           steps:
             - run:
                 name: Set OP_E2E_USE_PLASMA = true
@@ -878,7 +877,7 @@ jobs:
           when: always
       - when:
           condition:
-            equal: [ true, <<parameters.build>> ]
+            equal: [true, <<parameters.build>>]
           steps:
             - run:
                 name: Build
@@ -966,7 +965,6 @@ jobs:
       - notify-failures-on-develop:
           mentions: "@proofs-squad"
 
-
   devnet-allocs:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
@@ -1003,22 +1001,22 @@ jobs:
         type: string
     environment:
       DOCKER_BUILDKIT: 1
-      DEVNET_NO_BUILD: 'true'
+      DEVNET_NO_BUILD: "true"
       # Default value; Can be overridden.
-      DEVNET_L2OO: 'false'
-      DEVNET_PLASMA: 'false'
+      DEVNET_L2OO: "false"
+      DEVNET_PLASMA: "false"
     steps:
       - checkout
       - when:
           condition:
-            equal: ['plasma', <<parameters.variant>>]
+            equal: ["plasma", <<parameters.variant>>]
           steps:
             - run:
                 name: Set DEVNET_PLASMA = true
                 command: echo 'export DEVNET_PLASMA=true' >> $BASH_ENV
       - when:
           condition:
-            equal: ['celo', <<parameters.variant>>]
+            equal: ["celo", <<parameters.variant>>]
           steps:
             - run:
                 name: Set DEVNET_CELO = true
@@ -1028,7 +1026,7 @@ jobs:
                 command: echo 'export DEVNET_L2OO=true' >> $BASH_ENV
       - when:
           condition:
-            equal: ['plasma-generic', <<parameters.variant>>]
+            equal: ["plasma-generic", <<parameters.variant>>]
           steps:
             - run:
                 name: Set DEVNET_PLASMA = true
@@ -1086,7 +1084,7 @@ jobs:
       - when:
           condition:
             not:
-              equal: ['default', <<parameters.variant>>]
+              equal: ["default", <<parameters.variant>>]
           steps:
             - run:
                 name: Use non-default devnet allocs
@@ -1119,26 +1117,29 @@ jobs:
       - when:
           condition:
             not:
-              equal: ['celo', <<parameters.variant>>]
+              equal: ["celo", <<parameters.variant>>]
           steps:
             - run:
                 name: Test the stack
                 command: make devnet-test
       - when:
           condition:
-              equal: ['celo', <<parameters.variant>>]
+            equal: ["celo", <<parameters.variant>>]
           steps:
+            - restore_cache:
+                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+            # install dependencies
             - run:
-                working_directory:  op-e2e/celo
+                working_directory: op-e2e/celo
                 name: install dependencies
                 command: npm install
             # save any changes to the cache
             - save_cache:
                 key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
-                paths: 
-                  - op-e2e/celo/node_modules   
+                paths:
+                  - op-e2e/celo/node_modules
             - run:
-                working_directory:  op-e2e/celo
+                working_directory: op-e2e/celo
                 name: Run Celo e2e tests
                 command: |
                   SPAWN_DEVNET=false ./run_all_tests.sh
@@ -1217,7 +1218,7 @@ jobs:
       - checkout
       - unless:
           condition:
-            equal: [ "develop", << pipeline.git.branch >> ]
+            equal: ["develop", << pipeline.git.branch >>]
           steps:
             - run:
                 # Scan changed files in PRs, block on new issues only (existing issues ignored)
@@ -1311,10 +1312,10 @@ jobs:
           working_directory: op-service/sources
       # TODO(CLI-148): Fix codecov
       #- run:
-          #name: upload coverage
-          #command: codecov --verbose --clean --flags bedrock-rethdb-go-tests
+      #name: upload coverage
+      #command: codecov --verbose --clean --flags bedrock-rethdb-go-tests
 
-  bedrock-go-tests:  # just a helper, that depends on all the actual test jobs
+  bedrock-go-tests: # just a helper, that depends on all the actual test jobs
     docker:
       # Use a smaller base image to avoid pulling the huge ci-builder
       # image which is not needed for this job and sometimes misses
@@ -1399,11 +1400,11 @@ workflows:
       and:
         - or:
             # Trigger on new commits
-          - equal: [ webhook, << pipeline.trigger_source >> ]
-            # Trigger on manual triggers if explicitly requested
-          - equal: [ true, << pipeline.parameters.main_dispatch >> ]
+            - equal: [webhook, << pipeline.trigger_source >>]
+              # Trigger on manual triggers if explicitly requested
+            - equal: [true, << pipeline.parameters.main_dispatch >>]
         - not:
-            equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
+            equal: [scheduled_pipeline, << pipeline.trigger_source >>]
     jobs:
       - pnpm-monorepo:
           name: pnpm-monorepo
@@ -1468,7 +1469,7 @@ workflows:
       - go-test:
           name: op-heartbeat-tests
           module: op-heartbeat
-          requires: [ "go-mod-download" ]
+          requires: ["go-mod-download"]
       - go-test:
           name: op-batcher-tests
           module: op-batcher
@@ -1579,8 +1580,7 @@ workflows:
           name: shell-check
           # We don't need the `exclude` key as the orb detects the `.shellcheckrc`
           dir: .
-          ignore-dirs:
-            ./packages/contracts-bedrock/lib
+          ignore-dirs: ./packages/contracts-bedrock/lib
   merged:
     when:
       and:
@@ -1590,7 +1590,7 @@ workflows:
             # Trigger on manual triggers if explicitly requested
             - equal: [true, << pipeline.parameters.main_dispatch >>]
         - not:
-            equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
+            equal: [scheduled_pipeline, << pipeline.trigger_source >>]
     jobs:
       - pnpm-monorepo:
           name: pnpm-monorepo
@@ -1651,7 +1651,7 @@ workflows:
       - devnet:
           matrix:
             parameters:
-              variant: ["celo",]
+              variant: ["celo"]
           requires:
             - pnpm-monorepo
             - op-batcher-docker-build
