@@ -3,5 +3,4 @@
 set -eo pipefail
 
 source shared.sh
-npm install
 npm test
