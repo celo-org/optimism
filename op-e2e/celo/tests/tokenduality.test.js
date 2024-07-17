@@ -2,7 +2,7 @@ import { createAmountFromString } from 'reverse-mirage'
 import { setup } from './setup.js'
 
 const minute = 60 * 1000
-var config = {}
+let config = {}
 
 beforeAll(async () => {
   config = await setup()

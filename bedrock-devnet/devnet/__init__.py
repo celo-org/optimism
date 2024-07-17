@@ -142,7 +142,7 @@ def init_devnet_l1_deploy_config(paths, update_timestamp=False):
         deploy_config['useFaultProofs'] = False
         deploy_config['useCustomGasToken'] = True
         deploy_config['deployCeloContracts'] = True
-        #  Usage of the zero address in combination of the useCustomGasToken == True
+        # Usage of the zero address in combination of the useCustomGasToken == True
         # will deploy a new contract
         deploy_config['customGasTokenAddress'] = "0x0000000000000000000000000000000000000000"
     write_json(paths.devnet_config_path, deploy_config)

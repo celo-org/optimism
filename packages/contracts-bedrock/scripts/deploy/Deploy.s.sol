@@ -1624,7 +1624,7 @@ contract Deploy is Deployer {
     }
 
     function deployMulticall3() internal onlyDevnet returns (address addr_) {
-        // Necessary to be deployed on the L! for viems withdraw logic
+        // Necessary to be deployed on the L1 for viems withdraw logic
         // Only necessary on local devnet, since on the common public testnets
         // the multicall3 is already deployed.
         console.log("Deploying up Multicall3 contact");
