@@ -451,9 +451,11 @@ func (d *DeployConfig) Check() error {
 		}
 	}
 	if d.UseCustomGasToken {
-		if d.CustomGasTokenAddress == (common.Address{}) {
-			return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
-		}
+		// NOTE: we are using the address(0) as an instruction to deploy the L1 token,
+		// so this deploy-config validation has to be disabled
+		// if d.CustomGasTokenAddress == (common.Address{}) {
+		// 	return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
+		// }
 		log.Info("Using custom gas token", "address", d.CustomGasTokenAddress)
 	}
 	// checkFork checks that fork A is before or at the same time as fork B

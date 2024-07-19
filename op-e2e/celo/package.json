@@ -1,0 +1,22 @@
+{
+  "name": "testsuite",
+  "version": "1.0.0",
+  "description": "",
+  "type": "module",
+  "main": "dist/test.js",
+  "scripts": {
+    "test": "jest tests --detectOpenHandles"
+  },
+  "author": "Celo Labs Inc.",
+  "license": "ISC",
+  "dependencies": {
+    "reverse-mirage": "^1.1.0",
+    "viem": "^2.13.1"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.7",
+    "@babel/preset-env": "^7.24.7",
+    "babel-jest": "^29.7.0",
+    "jest": "^29.7.0"
+  }
+}
