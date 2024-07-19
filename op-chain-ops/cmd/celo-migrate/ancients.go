@@ -22,7 +22,7 @@ type RLPBlockRange struct {
 	tds      [][]byte
 }
 
-func migrateAncientsDb(oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
+func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
 	oldFreezer, err := rawdb.NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open old freezer: %w", err)
@@ -52,7 +52,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize, bufferSize uint64
 
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNewBefore, "endBlock", numAncientsOld-1, "count", numAncientsOld-numAncientsNewBefore, "step", batchSize)
 
-	g, ctx := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
 	readChan := make(chan RLPBlockRange, bufferSize)
 	transformChan := make(chan RLPBlockRange, bufferSize)
 

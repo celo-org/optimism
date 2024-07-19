@@ -72,6 +72,14 @@ This should output the allocs file to `./testdata/l2-allocs-alfajores.json`. If 
 ##### Run script with test configuration
 
 ```bash
+go run ./cmd/celo-migrate pre-migration \
+--old-db ./data/alfajores_old \
+--new-db ./data/alfajores_new
+```
+
+Running the pre-migration script should take ~5 minutes. This script copies and transforms ancient blocks and, in parallel, copies over all other chaindata without transforming it. This can be re-run mutliple times leading up to the full migration, and should only migrate updates to the old db between re-runs.
+
+```bash
 go run ./cmd/celo-migrate full \
 --deploy-config ./cmd/celo-migrate/testdata/deploy-config-holesky-alfajores.json \
 --l1-deployments ./cmd/celo-migrate/testdata/deployment-l1-holesky.json \
@@ -82,11 +90,9 @@ go run ./cmd/celo-migrate full \
 --new-db ./data/alfajores_new
 ```
 
-The first time you run the script it should take ~5 minutes. The first part of the script will migrate ancient blocks, and will take the majority of the time.
+Running the full migration script re-runs the pre-migration script once to migrate any new changes to the old db that have occurred since the last pre-migration. It then performs in-place transformations on the non-ancient blocks and performs the state migration as well.
 
-During the ancients migration you can play around with stopping and re-running the script, which should always resume where it left off. If you run the script subsequent times after ancient migrations have been run, the script should skip ancient migrations and proceed to migrating non-ancient blocks quickly.
-
-Note that partial migration progress beyond the ancient blocks (i.e. non-frozen blocks and state changes) will not be preserved between runs by default.
+Once the full migration command has been run on a new db, re-running the migration script will require passing the `--clear-non-ancients` flag in order to reset all the non-ancient and state transformations that are made during a full migration.
 
 #### Running for Cel2 migration
 
@@ -104,7 +110,7 @@ forge script scripts/L2Genesis.s.sol:L2Genesis \
 
 ##### Dress rehearsal / pre-migration
 
-To minimize downtime caused by the migration, node operators can prepare their Cel2 databases by running this script a day ahead of the actual migration. This will pre-populate the new database with most of the ancient blocks needed for the final migration, and will also serve as a dress rehearsal for the rest of the migration.
+To minimize downtime caused by the migration, node operators can prepare their Cel2 databases by running the pre-migration command a day ahead of the actual migration. This will pre-populate the new database with most of the ancient blocks needed for the final migration and copy over other chaindata without transforming it. This process will also serve as a dress rehearsal for the rest of the migration.
 
 NOTE: The pre-migration should be run using a chaindata snapshot, rather than a db that is being used by a node. To avoid network downtime, we recommend that node operators do not stop any nodes in order to perform the pre-migration.
 

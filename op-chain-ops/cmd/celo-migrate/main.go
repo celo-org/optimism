@@ -21,6 +21,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli/v2"
 	"golang.org/x/exp/slog"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -82,19 +83,19 @@ var (
 		Name:  "clear-all",
 		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
 	}
-	onlyAncientsFlag = &cli.BoolFlag{
-		Name:  "only-ancients",
-		Usage: "Use to only migrate ancient blocks. Ignored when running full migration",
+	clearNonAncientsFlag = &cli.BoolFlag{
+		Name:  "clear-non-ancients",
+		Usage: "Use this to reset all data except ancients. This flag should be used if a full migration has already been performed on the new db.",
 	}
 
 	blockMigrationFlags = []cli.Flag{
-		onlyAncientsFlag,
 		oldDBPathFlag,
 		newDBPathFlag,
 		batchSizeFlag,
 		bufferSizeFlag,
 		memoryLimitFlag,
 		clearAllFlag,
+		clearNonAncientsFlag,
 	}
 	stateMigrationFlags = []cli.Flag{
 		newDBPathFlag,
@@ -105,18 +106,18 @@ var (
 		outfileRollupConfigFlag,
 		migrationBlockTimeFlag,
 	}
-	// Ignore onlyAncients flag and duplicate newDBPathFlag for full migration
-	fullMigrationFlags = append(blockMigrationFlags[1:], stateMigrationFlags[1:]...)
+	// Ignore duplicate newDBPathFlag for full migration
+	fullMigrationFlags = append(blockMigrationFlags, stateMigrationFlags[1:]...)
 )
 
 type blockMigrationOptions struct {
-	oldDBPath    string
-	newDBPath    string
-	batchSize    uint64
-	bufferSize   uint64
-	memoryLimit  int64
-	clearAll     bool
-	onlyAncients bool
+	oldDBPath        string
+	newDBPath        string
+	batchSize        uint64
+	bufferSize       uint64
+	memoryLimit      int64
+	clearAll         bool
+	clearNonAncients bool
 }
 
 type stateMigrationOptions struct {
@@ -131,13 +132,13 @@ type stateMigrationOptions struct {
 
 func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 	return blockMigrationOptions{
-		oldDBPath:    ctx.String(oldDBPathFlag.Name),
-		newDBPath:    ctx.String(newDBPathFlag.Name),
-		batchSize:    ctx.Uint64(batchSizeFlag.Name),
-		bufferSize:   ctx.Uint64(bufferSizeFlag.Name),
-		memoryLimit:  ctx.Int64(memoryLimitFlag.Name),
-		clearAll:     ctx.Bool(clearAllFlag.Name),
-		onlyAncients: ctx.Bool(onlyAncientsFlag.Name),
+		oldDBPath:        ctx.String(oldDBPathFlag.Name),
+		newDBPath:        ctx.String(newDBPathFlag.Name),
+		batchSize:        ctx.Uint64(batchSizeFlag.Name),
+		bufferSize:       ctx.Uint64(bufferSizeFlag.Name),
+		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
+		clearAll:         ctx.Bool(clearAllFlag.Name),
+		clearNonAncients: ctx.Bool(clearNonAncientsFlag.Name),
 	}
 }
 
@@ -192,11 +193,21 @@ func main() {
 					if err := runBlockMigration(parseBlockMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run block migration: %w", err)
 					}
-
 					if err := runStateMigration(parseStateMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run state migration: %w", err)
 					}
-
+					return nil
+				},
+			},
+			{
+				Name:    "pre-migration",
+				Aliases: []string{"pre", "p"},
+				Usage:   "Perform a  pre-migration of ancient blocks and copy over all other data without transforming it. This should be run a day before the full migration command is run to minimize downtime.",
+				Flags:   blockMigrationFlags,
+				Action: func(ctx *cli.Context) error {
+					if _, _, err := runPreMigration(parseBlockMigrationOptions(ctx)); err != nil {
+						return fmt.Errorf("failed to run pre-migration: %w", err)
+					}
 					return nil
 				},
 			},
@@ -216,46 +227,67 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func runBlockMigration(opts blockMigrationOptions) error {
-
+func runPreMigration(opts blockMigrationOptions) (uint64, uint64, error) {
 	// Check that `rsync` command is available. We use this to copy the db excluding ancients, which we will copy separately
 	if _, err := exec.LookPath("rsync"); err != nil {
-		return fmt.Errorf("please install `rsync` to run block migration")
+		return 0, 0, fmt.Errorf("please install `rsync` to run block migration")
 	}
 
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes
 
-	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "onlyAncients", opts.onlyAncients)
+	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "clearNonAncients", opts.clearNonAncients)
 
 	var err error
 
 	if err = createNewDbIfNotExists(opts.newDBPath); err != nil {
-		return fmt.Errorf("failed to create new database: %w", err)
+		return 0, 0, fmt.Errorf("failed to create new database: %w", err)
 	}
 
 	if opts.clearAll {
 		if err = os.RemoveAll(opts.newDBPath); err != nil {
-			return fmt.Errorf("failed to remove new database: %w", err)
+			return 0, 0, fmt.Errorf("failed to remove new database: %w", err)
 		}
-	} else {
+	} else if opts.clearNonAncients {
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
-			return fmt.Errorf("failed to reset non-ancient database: %w", err)
+			return 0, 0, fmt.Errorf("failed to reset non-ancient database: %w", err)
 		}
 	}
 
 	var numAncientsNewBefore uint64
 	var numAncientsNewAfter uint64
-	if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
-		return fmt.Errorf("failed to migrate ancients database: %w", err)
+
+	g, ctx := errgroup.WithContext(context.Background())
+	g.Go(func() error {
+		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
+			return fmt.Errorf("failed to migrate ancients database: %w", err)
+		}
+		return nil
+	})
+	g.Go(func() error {
+		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
+	})
+
+	if err = g.Wait(); err != nil {
+		return numAncientsNewBefore, numAncientsNewAfter, fmt.Errorf("failed to migrate blocks: %w", err)
+	}
+
+	log.Info("Pre-Migration Finished", "numAncientsNewBefore", numAncientsNewBefore, "numAncientsNewAfter", numAncientsNewAfter)
+
+	return numAncientsNewBefore, numAncientsNewAfter, nil
+}
+
+func runBlockMigration(opts blockMigrationOptions) error {
+
+	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize)
+
+	numAncientsNewBefore, numAncientsNewAfter, err := runPreMigration(opts)
+	if err != nil {
+		return fmt.Errorf("failed to run pre-migration: %w", err)
 	}
 
 	var numNonAncients uint64
-	if !opts.onlyAncients {
-		if numNonAncients, err = migrateNonAncientsDb(opts.oldDBPath, opts.newDBPath, numAncientsNewAfter, opts.batchSize); err != nil {
-			return fmt.Errorf("failed to migrate non-ancients database: %w", err)
-		}
-	} else {
-		log.Info("Skipping non-ancients migration")
+	if numNonAncients, err = migrateNonAncientsDb(opts.newDBPath, numAncientsNewAfter, opts.batchSize); err != nil {
+		return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 	}
 
 	log.Info("Block Migration Completed", "migratedAncients", numAncientsNewAfter-numAncientsNewBefore, "migratedNonAncients", numNonAncients)

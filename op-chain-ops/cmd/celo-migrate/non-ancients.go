@@ -10,8 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize uint64) (uint64, error) {
-	// First copy files from old database to new database
+func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 	log.Info("Copy files from old database (excluding ancients)", "process", "non-ancients")
 
 	// Get rsync help output
@@ -21,26 +20,29 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize ui
 	// Convert output to string
 	outputStr := string(output)
 
-	// TODO(Alec) have rsync run as part of pre-migration (but not the transformation or state)
-	// can use --update and --delete to keep things synced between dbs
-
 	// Check for supported options
 	var cmd *exec.Cmd
 	// Prefer --info=progress2 over --progress
 	if strings.Contains(outputStr, "--info") {
-		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", "--update", "--delete", oldDbPath+"/", newDbPath)
 	} else if strings.Contains(outputStr, "--progress") {
-		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", "--update", "--delete", oldDbPath+"/", newDbPath)
 	} else {
-		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", "--update", "--delete", oldDbPath+"/", newDbPath)
 	}
+
+	// The '--update' and '--delete' flags together instruct rsync to only copy over new data if this command is re-run
+
 	log.Info("Running rsync command", "command", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return 0, fmt.Errorf("failed to copy old database to new database: %w", err)
+		return fmt.Errorf("failed to copy old database to new database: %w", err)
 	}
+	return nil
+}
 
+func migrateNonAncientsDb(newDbPath string, numAncients, batchSize uint64) (uint64, error) {
 	// Open the new database without access to AncientsDb
 	newDB, err := rawdb.NewLevelDBDatabase(newDbPath, DBCache, DBHandles, "", false)
 	if err != nil {
