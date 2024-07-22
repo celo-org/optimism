@@ -32,7 +32,6 @@ import { GoldToken } from "src/celo/GoldToken.sol";
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { CeloRegistry } from "src/celo/CeloRegistry.sol";
 import { FeeHandler } from "src/celo/FeeHandler.sol";
-import { FeeCurrencyWhitelist } from "src/celo/FeeCurrencyWhitelist.sol";
 import { MentoFeeHandlerSeller } from "src/celo/MentoFeeHandlerSeller.sol";
 import { UniswapFeeHandlerSeller } from "src/celo/UniswapFeeHandlerSeller.sol";
 import { SortedOracles } from "src/celo/stability/SortedOracles.sol";
@@ -665,7 +664,6 @@ contract L2Genesis is Deployer {
         setCeloRegistry();
         setCeloGoldToken();
         setCeloFeeHandler();
-        setCeloFeeCurrencyWhitelist();
         setCeloMentoFeeHandlerSeller();
         setCeloUniswapFeeHandlerSeller();
         // setCeloSortedOracles();
@@ -719,17 +717,6 @@ contract L2Genesis is Deployer {
         FeeHandler kontract = new FeeHandler({ test: false });
 
         address precompile = CeloPredeploys.FEE_HANDLER;
-        string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
-
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
-    }
-
-    function setCeloFeeCurrencyWhitelist() internal {
-        FeeCurrencyWhitelist kontract = new FeeCurrencyWhitelist({ test: false });
-
-        address precompile = CeloPredeploys.FEE_CURRENCY_WHITELIST;
         string memory cname = CeloPredeploys.getName(precompile);
         console.log("Deploying %s implementation at: %s", cname, address(kontract));
 

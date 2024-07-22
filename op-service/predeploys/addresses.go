@@ -45,7 +45,6 @@ const (
 	CeloRegistry                      = "0x000000000000000000000000000000000000ce10"
 	GoldToken                         = "0x471ece3750da237f93b8e339c536989b8978a438"
 	FeeHandler                        = "0xcd437749e43a154c07f3553504c68fbfd56b8778"
-	FeeCurrencyWhitelist              = "0xbb024e9cdcb2f9e34d893630d19611b8a5381b3c"
 	MentoFeeHandlerSeller             = "0x4efa274b7e33476c961065000d58ee09f7921a74"
 	UniswapFeeHandlerSeller           = "0xd3aee28548dbb65df03981f0dc0713bfcbd10a97"
 	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
@@ -96,7 +95,6 @@ var (
 	CeloRegistryAddr                      = common.HexToAddress(CeloRegistry)
 	GoldTokenAddr                         = common.HexToAddress(GoldToken)
 	FeeHandlerAddr                        = common.HexToAddress(FeeHandler)
-	FeeCurrencyWhitelistAddr              = common.HexToAddress(FeeCurrencyWhitelist)
 	MentoFeeHandlerSellerAddr             = common.HexToAddress(MentoFeeHandlerSeller)
 	UniswapFeeHandlerSellerAddr           = common.HexToAddress(UniswapFeeHandlerSeller)
 	SortedOraclesAddr                     = common.HexToAddress(SortedOracles)
@@ -191,7 +189,6 @@ func init() {
 	CeloPredeploys["CeloRegistry"] = &Predeploy{Address: CeloRegistryAddr}
 	CeloPredeploys["GoldToken"] = &Predeploy{Address: GoldTokenAddr}
 	CeloPredeploys["FeeHandler"] = &Predeploy{Address: FeeHandlerAddr}
-	CeloPredeploys["FeeCurrencyWhitelist"] = &Predeploy{Address: FeeCurrencyWhitelistAddr}
 	CeloPredeploys["MentoFeeHandlerSeller"] = &Predeploy{Address: MentoFeeHandlerSellerAddr}
 	CeloPredeploys["UniswapFeeHandlerSeller"] = &Predeploy{Address: UniswapFeeHandlerSellerAddr}
 	CeloPredeploys["SortedOracles"] = &Predeploy{Address: SortedOraclesAddr}
