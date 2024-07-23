@@ -88,7 +88,7 @@ var (
 		Usage: "Use this to reset all data except ancients. This flag should be used if a full migration has already been performed on the new db.",
 	}
 
-	blockMigrationFlags = []cli.Flag{
+	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
 		newDBPathFlag,
 		batchSizeFlag,
@@ -97,8 +97,7 @@ var (
 		clearAllFlag,
 		clearNonAncientsFlag,
 	}
-	stateMigrationFlags = []cli.Flag{
-		newDBPathFlag,
+	stateMigrationFlags = []cli.Flag{ // TODO(Alec) keep this?
 		deployConfigFlag,
 		l1DeploymentsFlag,
 		l1RPCFlag,
@@ -106,11 +105,10 @@ var (
 		outfileRollupConfigFlag,
 		migrationBlockTimeFlag,
 	}
-	// Ignore duplicate newDBPathFlag for full migration
-	fullMigrationFlags = append(blockMigrationFlags, stateMigrationFlags[1:]...)
+	fullMigrationFlags = append(preMigrationFlags, stateMigrationFlags...)
 )
 
-type blockMigrationOptions struct {
+type preMigrationOptions struct {
 	oldDBPath        string
 	newDBPath        string
 	batchSize        uint64
@@ -120,18 +118,18 @@ type blockMigrationOptions struct {
 	clearNonAncients bool
 }
 
-type stateMigrationOptions struct {
+type fullMigrationOptions struct {
+	preMigrationOptions
 	deployConfig        string
 	l1Deployments       string
 	l1RPC               string
 	l2AllocsPath        string
 	outfileRollupConfig string
-	newDBPath           string
 	migrationBlockTime  uint64
 }
 
-func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
-	return blockMigrationOptions{
+func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
+	return preMigrationOptions{
 		oldDBPath:        ctx.String(oldDBPathFlag.Name),
 		newDBPath:        ctx.String(newDBPathFlag.Name),
 		batchSize:        ctx.Uint64(batchSizeFlag.Name),
@@ -142,9 +140,9 @@ func parseBlockMigrationOptions(ctx *cli.Context) blockMigrationOptions {
 	}
 }
 
-func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
-	return stateMigrationOptions{
-		newDBPath:           ctx.String(newDBPathFlag.Name),
+func parseFullMigrationOptions(ctx *cli.Context) fullMigrationOptions {
+	return fullMigrationOptions{
+		preMigrationOptions: parsePreMigrationOptions(ctx),
 		deployConfig:        ctx.Path(deployConfigFlag.Name),
 		l1Deployments:       ctx.Path(l1DeploymentsFlag.Name),
 		l1RPC:               ctx.String(l1RPCFlag.Name),
@@ -167,46 +165,25 @@ func main() {
 		Usage: "Migrate Celo block and state data to a CeL2 DB",
 		Commands: []*cli.Command{
 			{
-				Name:    "blocks",
-				Aliases: []string{"b"},
-				Usage:   "Migrate Celo block data to a CeL2 DB",
-				Flags:   blockMigrationFlags,
+				Name:    "pre-migration",
+				Aliases: []string{"pre", "p"},
+				Usage:   "Perform a  pre-migration of ancient blocks and copy over all other data without transforming it. This should be run a day before the full migration command is run to minimize downtime.",
+				Flags:   preMigrationFlags,
 				Action: func(ctx *cli.Context) error {
-					return runBlockMigration(parseBlockMigrationOptions(ctx))
-				},
-			},
-			{
-				Name:    "state",
-				Aliases: []string{"s"},
-				Usage:   "Migrate Celo state data to a CeL2 DB. Makes necessary state changes and generates a rollup config file.",
-				Flags:   stateMigrationFlags,
-				Action: func(ctx *cli.Context) error {
-					return runStateMigration(parseStateMigrationOptions(ctx))
-				},
-			},
-			{
-				Name:    "full",
-				Aliases: []string{"f", "all", "a"},
-				Usage:   "Perform a full migration of both block and state data to a CeL2 DB",
-				Flags:   fullMigrationFlags,
-				Action: func(ctx *cli.Context) error {
-					if err := runBlockMigration(parseBlockMigrationOptions(ctx)); err != nil {
-						return fmt.Errorf("failed to run block migration: %w", err)
-					}
-					if err := runStateMigration(parseStateMigrationOptions(ctx)); err != nil {
-						return fmt.Errorf("failed to run state migration: %w", err)
+					if _, _, err := runPreMigration(parsePreMigrationOptions(ctx)); err != nil {
+						return fmt.Errorf("failed to run pre-migration: %w", err)
 					}
 					return nil
 				},
 			},
 			{
-				Name:    "pre-migration",
-				Aliases: []string{"pre", "p"},
-				Usage:   "Perform a  pre-migration of ancient blocks and copy over all other data without transforming it. This should be run a day before the full migration command is run to minimize downtime.",
-				Flags:   blockMigrationFlags,
+				Name:    "full-migration",
+				Aliases: []string{"full", "f", "all", "a"},
+				Usage:   "Perform a full migration of both block and state data to a CeL2 DB",
+				Flags:   fullMigrationFlags,
 				Action: func(ctx *cli.Context) error {
-					if _, _, err := runPreMigration(parseBlockMigrationOptions(ctx)); err != nil {
-						return fmt.Errorf("failed to run pre-migration: %w", err)
+					if err := runFullMigration(parseFullMigrationOptions(ctx)); err != nil {
+						return fmt.Errorf("failed to run full migration: %w", err)
 					}
 					return nil
 				},
@@ -227,7 +204,17 @@ func main() {
 	log.Info("Finished migration successfully!")
 }
 
-func runPreMigration(opts blockMigrationOptions) (uint64, uint64, error) {
+func runFullMigration(opts fullMigrationOptions) error {
+	if err := runBlockMigration(opts.preMigrationOptions); err != nil {
+		return fmt.Errorf("failed to run block migration: %w", err)
+	}
+	if err := runStateMigration(opts); err != nil {
+		return fmt.Errorf("failed to run state migration: %w", err)
+	}
+	return nil
+}
+
+func runPreMigration(opts preMigrationOptions) (uint64, uint64, error) {
 	// Check that `rsync` command is available. We use this to copy the db excluding ancients, which we will copy separately
 	if _, err := exec.LookPath("rsync"); err != nil {
 		return 0, 0, fmt.Errorf("please install `rsync` to run block migration")
@@ -276,7 +263,7 @@ func runPreMigration(opts blockMigrationOptions) (uint64, uint64, error) {
 	return numAncientsNewBefore, numAncientsNewAfter, nil
 }
 
-func runBlockMigration(opts blockMigrationOptions) error {
+func runBlockMigration(opts preMigrationOptions) error {
 
 	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize)
 
@@ -295,7 +282,7 @@ func runBlockMigration(opts blockMigrationOptions) error {
 	return nil
 }
 
-func runStateMigration(opts stateMigrationOptions) error {
+func runStateMigration(opts fullMigrationOptions) error {
 	log.Info("State Migration Started", "newDBPath", opts.newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
 
 	// Read deployment configuration
