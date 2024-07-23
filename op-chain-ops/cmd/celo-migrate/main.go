@@ -8,11 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"runtime/debug"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/foundry"
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -87,6 +89,10 @@ var (
 		Name:  "clear-non-ancients",
 		Usage: "Use this to reset all data except ancients. This flag should be used if a full migration has already been performed on the new db.",
 	}
+	measureTimeFlag = &cli.BoolFlag{
+		Name:  "measure-time",
+		Usage: "Use this to log how long each section of the script takes to run",
+	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -96,16 +102,17 @@ var (
 		memoryLimitFlag,
 		clearAllFlag,
 		clearNonAncientsFlag,
+		measureTimeFlag,
 	}
-	stateMigrationFlags = []cli.Flag{ // TODO(Alec) keep this?
+	fullMigrationFlags = append(
+		preMigrationFlags,
 		deployConfigFlag,
 		l1DeploymentsFlag,
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
 		migrationBlockTimeFlag,
-	}
-	fullMigrationFlags = append(preMigrationFlags, stateMigrationFlags...)
+	)
 )
 
 type preMigrationOptions struct {
@@ -116,16 +123,21 @@ type preMigrationOptions struct {
 	memoryLimit      int64
 	clearAll         bool
 	clearNonAncients bool
+	measureTime      bool
 }
 
-type fullMigrationOptions struct {
-	preMigrationOptions
+type stateMigrationOptions struct {
 	deployConfig        string
 	l1Deployments       string
 	l1RPC               string
 	l2AllocsPath        string
 	outfileRollupConfig string
 	migrationBlockTime  uint64
+}
+
+type fullMigrationOptions struct {
+	preMigrationOptions
+	stateMigrationOptions
 }
 
 func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
@@ -137,18 +149,25 @@ func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
 		clearAll:         ctx.Bool(clearAllFlag.Name),
 		clearNonAncients: ctx.Bool(clearNonAncientsFlag.Name),
+		measureTime:      ctx.Bool(measureTimeFlag.Name),
 	}
 }
 
-func parseFullMigrationOptions(ctx *cli.Context) fullMigrationOptions {
-	return fullMigrationOptions{
-		preMigrationOptions: parsePreMigrationOptions(ctx),
+func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
+	return stateMigrationOptions{
 		deployConfig:        ctx.Path(deployConfigFlag.Name),
 		l1Deployments:       ctx.Path(l1DeploymentsFlag.Name),
 		l1RPC:               ctx.String(l1RPCFlag.Name),
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
 		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
+	}
+}
+
+func parseFullMigrationOptions(ctx *cli.Context) fullMigrationOptions {
+	return fullMigrationOptions{
+		preMigrationOptions:   parsePreMigrationOptions(ctx),
+		stateMigrationOptions: parseStateMigrationOptions(ctx),
 	}
 }
 
@@ -165,20 +184,20 @@ func main() {
 		Usage: "Migrate Celo block and state data to a CeL2 DB",
 		Commands: []*cli.Command{
 			{
-				Name:    "pre-migration",
-				Aliases: []string{"pre", "p"},
+				Name:    "pre",
+				Aliases: []string{"pre-migration", "p"},
 				Usage:   "Perform a  pre-migration of ancient blocks and copy over all other data without transforming it. This should be run a day before the full migration command is run to minimize downtime.",
 				Flags:   preMigrationFlags,
 				Action: func(ctx *cli.Context) error {
-					if _, _, err := runPreMigration(parsePreMigrationOptions(ctx)); err != nil {
+					if _, err := runPreMigration(parsePreMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run pre-migration: %w", err)
 					}
 					return nil
 				},
 			},
 			{
-				Name:    "full-migration",
-				Aliases: []string{"full", "f", "all", "a"},
+				Name:    "final",
+				Aliases: []string{"full", "f"},
 				Usage:   "Perform a full migration of both block and state data to a CeL2 DB",
 				Flags:   fullMigrationFlags,
 				Action: func(ctx *cli.Context) error {
@@ -205,38 +224,58 @@ func main() {
 }
 
 func runFullMigration(opts fullMigrationOptions) error {
-	if err := runBlockMigration(opts.preMigrationOptions); err != nil {
-		return fmt.Errorf("failed to run block migration: %w", err)
+	if opts.measureTime {
+		defer timer("full migration")()
 	}
-	if err := runStateMigration(opts); err != nil {
+
+	log.Info("Full Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath)
+
+	var err error
+
+	var numAncients uint64
+	if numAncients, err = runPreMigration(opts.preMigrationOptions); err != nil {
+		return fmt.Errorf("failed to run pre-migration: %w", err)
+	}
+	// TODO(Alec) can these be parallelized?
+	if err = runNonAncientMigration(opts.newDBPath, opts.measureTime, opts.batchSize, numAncients); err != nil {
+		return fmt.Errorf("failed to run non-ancient migration: %w", err)
+	}
+	if err := runStateMigration(opts.newDBPath, opts.measureTime, opts.stateMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run state migration: %w", err)
 	}
+
+	log.Info("Full Migration Finished", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath)
+
 	return nil
 }
 
-func runPreMigration(opts preMigrationOptions) (uint64, uint64, error) {
+func runPreMigration(opts preMigrationOptions) (uint64, error) {
+	if opts.measureTime {
+		defer timer("pre-migration")()
+	}
+
+	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "clearNonAncients", opts.clearNonAncients)
+
 	// Check that `rsync` command is available. We use this to copy the db excluding ancients, which we will copy separately
 	if _, err := exec.LookPath("rsync"); err != nil {
-		return 0, 0, fmt.Errorf("please install `rsync` to run block migration")
+		return 0, fmt.Errorf("please install `rsync` to run block migration")
 	}
 
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes
 
-	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "clearNonAncients", opts.clearNonAncients)
-
 	var err error
 
 	if err = createNewDbIfNotExists(opts.newDBPath); err != nil {
-		return 0, 0, fmt.Errorf("failed to create new database: %w", err)
+		return 0, fmt.Errorf("failed to create new database: %w", err)
 	}
 
-	if opts.clearAll {
+	if opts.clearAll { // TODO(Alec) remove clearAll
 		if err = os.RemoveAll(opts.newDBPath); err != nil {
-			return 0, 0, fmt.Errorf("failed to remove new database: %w", err)
+			return 0, fmt.Errorf("failed to remove new database: %w", err)
 		}
 	} else if opts.clearNonAncients {
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
-			return 0, 0, fmt.Errorf("failed to reset non-ancient database: %w", err)
+			return 0, fmt.Errorf("failed to reset non-ancient database: %w", err)
 		}
 	}
 
@@ -255,35 +294,49 @@ func runPreMigration(opts preMigrationOptions) (uint64, uint64, error) {
 	})
 
 	if err = g.Wait(); err != nil {
-		return numAncientsNewBefore, numAncientsNewAfter, fmt.Errorf("failed to migrate blocks: %w", err)
+		return numAncientsNewAfter, fmt.Errorf("failed to migrate blocks: %w", err)
 	}
 
-	log.Info("Pre-Migration Finished", "numAncientsNewBefore", numAncientsNewBefore, "numAncientsNewAfter", numAncientsNewAfter)
+	log.Info("Pre-Migration Finished", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "migratedAncients", numAncientsNewAfter-numAncientsNewBefore)
 
-	return numAncientsNewBefore, numAncientsNewAfter, nil
+	return numAncientsNewAfter, nil
 }
 
-func runBlockMigration(opts preMigrationOptions) error {
-
-	log.Info("Block Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize)
-
-	numAncientsNewBefore, numAncientsNewAfter, err := runPreMigration(opts)
-	if err != nil {
-		return fmt.Errorf("failed to run pre-migration: %w", err)
+func runNonAncientMigration(newDBPath string, measureTime bool, batchSize, numAncients uint64) error {
+	if measureTime {
+		defer timer("non-ancient migration")()
 	}
 
+	// Open the new database without access to AncientsDb
+	newDB, err := rawdb.NewLevelDBDatabase(newDBPath, DBCache, DBHandles, "", false)
+	if err != nil {
+		return fmt.Errorf("failed to open new database: %w", err)
+	}
+	defer newDB.Close()
+
+	// get the last block number
+	hash := rawdb.ReadHeadHeaderHash(newDB)
+	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
+	lastAncient := numAncients - 1
+
+	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
+
 	var numNonAncients uint64
-	if numNonAncients, err = migrateNonAncientsDb(opts.newDBPath, numAncientsNewAfter, opts.batchSize); err != nil {
+	if numNonAncients, err = migrateNonAncientsDb(newDB, lastBlock, numAncients, batchSize); err != nil {
 		return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 	}
 
-	log.Info("Block Migration Completed", "migratedAncients", numAncientsNewAfter-numAncientsNewBefore, "migratedNonAncients", numNonAncients)
+	log.Info("Non-Ancient Block Migration Completed", "process", "non-ancients", "migratedNonAncients", numNonAncients)
 
 	return nil
 }
 
-func runStateMigration(opts fullMigrationOptions) error {
-	log.Info("State Migration Started", "newDBPath", opts.newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
+func runStateMigration(newDBPath string, measureTime bool, opts stateMigrationOptions) error {
+	if measureTime {
+		defer timer("state migration")()
+	}
+
+	log.Info("State Migration Started", "newDBPath", newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
 
 	// Read deployment configuration
 	config, err := genesis.NewDeployConfig(opts.deployConfig)
@@ -356,7 +409,7 @@ func runStateMigration(opts fullMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, opts.newDBPath, opts.migrationBlockTime)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, newDBPath, opts.migrationBlockTime)
 	if err != nil {
 		return err
 	}
@@ -378,4 +431,11 @@ func runStateMigration(opts fullMigrationOptions) error {
 	log.Info("State Migration Completed")
 
 	return nil
+}
+
+func timer(name string) func() {
+	start := time.Now()
+	return func() {
+		fmt.Printf("%s took %v\n", name, time.Since(start))
+	}
 }

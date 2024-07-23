@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -42,21 +43,7 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 	return nil
 }
 
-func migrateNonAncientsDb(newDbPath string, numAncients, batchSize uint64) (uint64, error) {
-	// Open the new database without access to AncientsDb
-	newDB, err := rawdb.NewLevelDBDatabase(newDbPath, DBCache, DBHandles, "", false)
-	if err != nil {
-		return 0, fmt.Errorf("failed to open new database: %w", err)
-	}
-	defer newDB.Close()
-
-	// get the last block number
-	hash := rawdb.ReadHeadHeaderHash(newDB)
-	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
-	lastAncient := numAncients - 1
-
-	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
-
+func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSize uint64) (uint64, error) {
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
 
@@ -91,6 +78,7 @@ func migrateNonAncientsDb(newDbPath string, numAncients, batchSize uint64) (uint
 		}
 	}
 
+	var lastAncient = numAncients - 1
 	if lastAncient > 0 {
 		toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, lastAncient)
 		log.Info("Removing frozen blocks", "process", "non-ancients", "count", len(toBeRemoved))
@@ -105,7 +93,5 @@ func migrateNonAncientsDb(newDbPath string, numAncients, batchSize uint64) (uint
 		log.Info("Removed frozen blocks, still in leveldb", "process", "non-ancients", "removedBlocks", len(toBeRemoved))
 	}
 	migratedCount := lastBlock - numAncients + 1
-	log.Info("Non-Ancient Block Migration Ended", "process", "non-ancients", "migratedBlocks", migratedCount)
-
 	return migratedCount, nil
 }
