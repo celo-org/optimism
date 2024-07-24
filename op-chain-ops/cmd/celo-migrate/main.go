@@ -236,6 +236,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 	if numAncients, err = runPreMigration(opts.preMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run pre-migration: %w", err)
 	}
+
 	// TODO(Alec) can these be parallelized?
 	if err = runNonAncientMigration(opts.newDBPath, opts.measureTime, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
@@ -265,18 +266,14 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 
 	var err error
 
-	if err = createNewDbIfNotExists(opts.newDBPath); err != nil {
-		return 0, fmt.Errorf("failed to create new database: %w", err)
-	}
-
 	if opts.clearAll { // TODO(Alec) remove clearAll
 		if err = os.RemoveAll(opts.newDBPath); err != nil {
 			return 0, fmt.Errorf("failed to remove new database: %w", err)
 		}
-	} else if opts.clearNonAncients {
-		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
-			return 0, fmt.Errorf("failed to reset non-ancient database: %w", err)
-		}
+	}
+
+	if err = createNewDbPathIfNotExists(opts.newDBPath); err != nil {
+		return 0, fmt.Errorf("failed to create new db path: %w", err)
 	}
 
 	var numAncientsNewBefore uint64
@@ -284,13 +281,13 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
+		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize, opts.measureTime); err != nil {
 			return fmt.Errorf("failed to migrate ancients database: %w", err)
 		}
 		return nil
 	})
 	g.Go(func() error {
-		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
+		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath, opts.measureTime)
 	})
 
 	if err = g.Wait(); err != nil {
@@ -307,12 +304,17 @@ func runNonAncientMigration(newDBPath string, measureTime bool, batchSize, numAn
 		defer timer("non-ancient migration")()
 	}
 
-	// Open the new database without access to AncientsDb
-	newDB, err := rawdb.NewLevelDBDatabase(newDBPath, DBCache, DBHandles, "", false)
+	newDB, err := openDBWithoutFreezer(newDBPath, false)
 	if err != nil {
 		return fmt.Errorf("failed to open new database: %w", err)
 	}
 	defer newDB.Close()
+
+	// The non-ancient block migration makes transformations to the database that would be corrupted by subsequent migrations.
+	// We need to mark that a full migration has been attempted so that we can reset the database if the script is run again.
+	if err = writeFullMigrationMarker(newDB); err != nil {
+		return fmt.Errorf("failed to write full migration attempt marker: %w", err)
+	}
 
 	// get the last block number
 	hash := rawdb.ReadHeadHeaderHash(newDB)
@@ -436,6 +438,6 @@ func runStateMigration(newDBPath string, measureTime bool, opts stateMigrationOp
 func timer(name string) func() {
 	start := time.Now()
 	return func() {
-		fmt.Printf("%s took %v\n", name, time.Since(start))
+		log.Info("TIMER", "process", name, "duration", time.Since(start))
 	}
 }

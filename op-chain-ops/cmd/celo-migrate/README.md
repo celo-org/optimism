@@ -67,6 +67,8 @@ forge script ./scripts/L2Genesis.s.sol:L2Genesis \
 --sig 'runWithStateDump()'
 ```
 
+// TODO(Alec) update README
+
 This should output the allocs file to `./testdata/l2-allocs-alfajores.json`. If you encounter difficulties with this and want to just continue testing the script, you can alternatively find the allocs file [here](https://gist.github.com/jcortejoso/7f90ba9b67c669791014661ccb6de81a).
 
 ##### Run script with test configuration

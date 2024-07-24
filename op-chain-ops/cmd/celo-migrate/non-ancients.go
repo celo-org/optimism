@@ -11,8 +11,16 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func copyDbExceptAncients(oldDbPath, newDbPath string) error {
-	log.Info("Copy files from old database (excluding ancients)", "process", "non-ancients")
+func copyDbExceptAncients(oldDbPath, newDbPath string, measureTime bool) error {
+	if measureTime {
+		defer timer("copyDbExceptAncients")()
+	}
+
+	if err := resetDbIfNeeded(newDbPath, measureTime); err != nil {
+		return fmt.Errorf("failure in resetDbIfNeeded: %w", err)
+	}
+
+	log.Info("Copying files from old database (excluding ancients)", "process", "non-ancients")
 
 	// Get rsync help output
 	cmdHelp := exec.Command("rsync", "--help")
