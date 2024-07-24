@@ -94,7 +94,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	applyAllocsToState(db, genesis, cfg)
+	err = applyAllocsToState(db, genesis, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
+	}
 
 	// Initialize the distribution schedule contract
 	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
@@ -242,7 +245,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) {
+func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
 	log.Info("Starting to migrate OP contracts into state DB")
 
 	accountCounter := 0
@@ -264,9 +267,11 @@ func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params
 						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k)
 					} else {
 						log.Warn("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+						return fmt.Errorf("account already exists with different code and is not whitelisted: %s", k.Hex())
 					}
 				} else {
 					log.Warn("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+					return fmt.Errorf("account already exists with different code and no whitelist exists: %s", k.Hex())
 				}
 
 				overwriteCounter++
@@ -284,6 +289,7 @@ func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params
 		log.Info("Moved account", "address", k)
 	}
 	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+	return nil
 }
 
 // setupDistributionSchedule sets up the distribution schedule contract with the correct balance
