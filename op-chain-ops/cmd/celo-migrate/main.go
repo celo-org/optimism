@@ -81,10 +81,6 @@ var (
 		Usage: "Memory limit in MiB, should be set lower than the available amount of memory in your system to prevent out of memory errors",
 		Value: 7500,
 	}
-	clearAllFlag = &cli.BoolFlag{
-		Name:  "clear-all",
-		Usage: "Use this to start with a fresh new db, deleting all data including ancients. CAUTION: Re-migrating ancients takes time.",
-	}
 	clearNonAncientsFlag = &cli.BoolFlag{
 		Name:  "clear-non-ancients",
 		Usage: "Use this to reset all data except ancients. This flag should be used if a full migration has already been performed on the new db.",
@@ -100,7 +96,6 @@ var (
 		batchSizeFlag,
 		bufferSizeFlag,
 		memoryLimitFlag,
-		clearAllFlag,
 		clearNonAncientsFlag,
 		measureTimeFlag,
 	}
@@ -121,7 +116,6 @@ type preMigrationOptions struct {
 	batchSize        uint64
 	bufferSize       uint64
 	memoryLimit      int64
-	clearAll         bool
 	clearNonAncients bool
 	measureTime      bool
 }
@@ -147,7 +141,6 @@ func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 		batchSize:        ctx.Uint64(batchSizeFlag.Name),
 		bufferSize:       ctx.Uint64(bufferSizeFlag.Name),
 		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
-		clearAll:         ctx.Bool(clearAllFlag.Name),
 		clearNonAncients: ctx.Bool(clearNonAncientsFlag.Name),
 		measureTime:      ctx.Bool(measureTimeFlag.Name),
 	}
@@ -255,7 +248,7 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 		defer timer("pre-migration")()
 	}
 
-	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearAll", opts.clearAll, "clearNonAncients", opts.clearNonAncients)
+	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearNonAncients", opts.clearNonAncients)
 
 	// Check that `rsync` command is available. We use this to copy the db excluding ancients, which we will copy separately
 	if _, err := exec.LookPath("rsync"); err != nil {
@@ -265,12 +258,6 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes
 
 	var err error
-
-	if opts.clearAll { // TODO(Alec) remove clearAll
-		if err = os.RemoveAll(opts.newDBPath); err != nil {
-			return 0, fmt.Errorf("failed to remove new database: %w", err)
-		}
-	}
 
 	if err = createNewDbPathIfNotExists(opts.newDBPath); err != nil {
 		return 0, fmt.Errorf("failed to create new db path: %w", err)

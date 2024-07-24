@@ -38,27 +38,6 @@ func headerKey(number uint64, hash common.Hash) []byte {
 	return append(append(headerPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }
 
-// openDB opens the chaindata database at the given path. Note this path is below the datadir
-func openDB(chaindataPath string, readOnly bool) (ethdb.Database, error) {
-	if _, err := os.Stat(chaindataPath); errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-
-	ldb, err := rawdb.Open(rawdb.OpenOptions{
-		Type:              "leveldb",
-		Directory:         chaindataPath,
-		AncientsDirectory: filepath.Join(chaindataPath, "ancient"),
-		Namespace:         "",
-		Cache:             DBCache,
-		Handles:           DBHandles,
-		ReadOnly:          readOnly,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ldb, nil
-}
-
 // Opens a database without access to AncientsDb
 func openDBWithoutFreezer(chaindataPath string, readOnly bool) (ethdb.Database, error) {
 	if _, err := os.Stat(chaindataPath); errors.Is(err, os.ErrNotExist) {
@@ -93,7 +72,6 @@ func writeFullMigrationMarker(db ethdb.KeyValueWriter) error {
 // checkForPrevFullMigration checks if a previous full migration has already been attempted on the database
 func checkForPrevFullMigration(newDBPath string, measureTime bool) (bool, error) {
 	if measureTime {
-		// TODO(Alec) this function is taking ~31s on alfajores
 		defer timer("checkForPrevFullMigration")()
 	}
 
