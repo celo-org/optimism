@@ -274,6 +274,7 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 		return nil
 	})
 	g.Go(func() error {
+		// By doing this once during the premigration, we get a speedup when we run it again in a full migration.
 		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath, opts.measureTime)
 	})
 

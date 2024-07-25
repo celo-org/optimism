@@ -33,14 +33,24 @@ func copyDbExceptAncients(oldDbPath, newDbPath string, measureTime bool) error {
 	var cmd *exec.Cmd
 	// Prefer --info=progress2 over --progress
 	if strings.Contains(outputStr, "--info") {
-		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", "--update", "--delete", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", "--delete", oldDbPath+"/", newDbPath)
 	} else if strings.Contains(outputStr, "--progress") {
-		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", "--update", "--delete", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", "--delete", oldDbPath+"/", newDbPath)
 	} else {
-		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", "--update", "--delete", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", "--delete", oldDbPath+"/", newDbPath)
 	}
 
-	// The '--update' and '--delete' flags together instruct rsync to only copy over new data if this command is re-run
+	// rsync copies any file with a different timestamp or size.
+	//
+	// '--exclude=ancient' excludes the ancient directory from the copy
+	//
+	// '--delete' Tells rsync to delete extraneous files from the receiving side (ones that aren’t on the sending side)
+	//
+	// '-a' archive mode; equals -rlptgoD. It is a quick way of saying you want recursion and want to preserve almost everything, including timestamps, ownerships, permissions, etc.
+	// Timestamps are important here because they are used to determine which files are newer and should be copied over.
+	//
+	// '--whole-file' This is the default when both the source and destination are specified as local paths, which they are here (oldDbPath and newDbPath).
+	// This option disables rsync’s delta-transfer algorithm, which causes all transferred files to be sent whole. The delta-transfer algorithm is normally used when the destination is a remote system.
 
 	log.Info("Running rsync command", "command", cmd.String())
 	cmd.Stdout = os.Stdout
