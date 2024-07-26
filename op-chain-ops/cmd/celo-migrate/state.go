@@ -253,34 +253,45 @@ func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params
 	for k, v := range genesis.Alloc {
 		accountCounter++
 
-		balance := uint256.MustFromBig(v.Balance)
+		// Check that the balance of the account to written is zero,
+		// as we must not create new CELo tokens
+		if v.Balance.Cmp(big.NewInt(0)) != 0 {
+			log.Error("Account balance is not zero, would change token supply", "address", k.Hex())
+			return fmt.Errorf("account balance is not zero, would change token supply: %s", k.Hex())
+		}
 
+		nonce := v.Nonce
 		if db.Exist(k) {
-			// If the account already has balance, add it to the balance of the new account
-			balance = balance.Add(balance, db.GetBalance(k))
+			// Check if it's an EOA, if so bail out
+			if db.GetCodeSize(k) == 0 && db.GetNonce(k) > 0 {
+				return fmt.Errorf("account already exists with nonce > 0: %s", k.Hex())
+			}
 
 			currentCode := db.GetCode(k)
 			equalCode := bytes.Equal(currentCode, v.Code)
 			if currentCode != nil && !equalCode {
 				if whitelist, exists := accountOverwriteWhitelist[config.ChainID.Uint64()]; exists {
 					if _, ok := whitelist[k]; ok {
-						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k)
+						// keep the existing nonce
+						nonce = db.GetNonce(k)
+						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k, "nonce", db.GetNonce(k))
 					} else {
-						log.Warn("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+						log.Error("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
 						return fmt.Errorf("account already exists with different code and is not whitelisted: %s", k.Hex())
 					}
 				} else {
-					log.Warn("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+					log.Error("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
 					return fmt.Errorf("account already exists with different code and no whitelist exists: %s", k.Hex())
 				}
 
 				overwriteCounter++
 			}
 		}
+
+		// This carries over any existing balance
 		db.CreateAccount(k)
 
-		db.SetNonce(k, v.Nonce)
-		db.SetBalance(k, balance)
+		db.SetNonce(k, nonce)
 		db.SetCode(k, v.Code)
 		for key, value := range v.Storage {
 			db.SetState(k, key, value)
