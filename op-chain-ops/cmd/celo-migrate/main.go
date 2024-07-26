@@ -156,8 +156,6 @@ func main() {
 	handler := log.NewTerminalHandlerWithLevel(os.Stderr, slog.LevelDebug, color)
 	oplog.SetGlobalLogHandler(handler)
 
-	log.Info("Beginning Cel2 Migration")
-
 	app := &cli.App{
 		Name:  "celo-migrate",
 		Usage: "Migrate Celo block and state data to a CeL2 DB",
@@ -170,6 +168,7 @@ func main() {
 					if _, err := runPreMigration(parsePreMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run pre-migration: %w", err)
 					}
+					log.Info("Finished pre migration successfully!")
 					return nil
 				},
 			},
@@ -181,6 +180,7 @@ func main() {
 					if err := runFullMigration(parseFullMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run full migration: %w", err)
 					}
+					log.Info("Finished full migration successfully!")
 					return nil
 				},
 			},
@@ -197,7 +197,6 @@ func main() {
 	if err := app.Run(os.Args); err != nil {
 		log.Crit("error in migration", "err", err)
 	}
-	log.Info("Finished migration successfully!")
 }
 
 func runFullMigration(opts fullMigrationOptions) error {
