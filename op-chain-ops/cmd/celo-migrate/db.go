@@ -70,10 +70,8 @@ func writeFullMigrationMarker(db ethdb.KeyValueWriter) error {
 }
 
 // checkForPrevFullMigration checks if a previous full migration has already been attempted on the database
-func checkForPrevFullMigration(newDBPath string, measureTime bool) (bool, error) {
-	if measureTime {
-		defer timer("checkForPrevFullMigration")()
-	}
+func checkForPrevFullMigration(newDBPath string) (bool, error) {
+	defer timer("checkForPrevFullMigration")()
 
 	newDB, err := openDBWithoutFreezer(newDBPath, true)
 	if err != nil {
@@ -95,14 +93,12 @@ func checkForPrevFullMigration(newDBPath string, measureTime bool) (bool, error)
 	return len(marker) > 0, nil
 }
 
-func resetDbIfNeeded(newDbPath string, measureTime bool) error {
-	if measureTime {
-		defer timer("resetDbIfNeeded")()
-	}
+func resetDbIfNeeded(newDbPath string) error {
+	defer timer("resetDbIfNeeded")()
 
 	var err error
 	var prevFullMigration bool
-	if prevFullMigration, err = checkForPrevFullMigration(newDbPath, measureTime); err != nil {
+	if prevFullMigration, err = checkForPrevFullMigration(newDbPath); err != nil {
 		return fmt.Errorf("failed to check if a full migration has previously been run on the new db: %w", err)
 	}
 	if prevFullMigration {

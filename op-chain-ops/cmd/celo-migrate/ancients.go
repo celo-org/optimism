@@ -22,10 +22,8 @@ type RLPBlockRange struct {
 	tds      [][]byte
 }
 
-func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64, measureTime bool) (uint64, uint64, error) {
-	if measureTime {
-		defer timer("ancients")()
-	}
+func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
+	defer timer("ancients")()
 
 	oldFreezer, err := rawdb.NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
 	if err != nil {

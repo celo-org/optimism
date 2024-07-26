@@ -11,12 +11,10 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func copyDbExceptAncients(oldDbPath, newDbPath string, measureTime bool) error {
-	if measureTime {
-		defer timer("copyDbExceptAncients")()
-	}
+func copyDbExceptAncients(oldDbPath, newDbPath string) error {
+	defer timer("copyDbExceptAncients")()
 
-	if err := resetDbIfNeeded(newDbPath, measureTime); err != nil {
+	if err := resetDbIfNeeded(newDbPath); err != nil {
 		return fmt.Errorf("failure in resetDbIfNeeded: %w", err)
 	}
 

@@ -81,10 +81,6 @@ var (
 		Usage: "Memory limit in MiB, should be set lower than the available amount of memory in your system to prevent out of memory errors",
 		Value: 7500,
 	}
-	measureTimeFlag = &cli.BoolFlag{
-		Name:  "measure-time",
-		Usage: "Use this to log how long each section of the script takes to run",
-	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -92,7 +88,6 @@ var (
 		batchSizeFlag,
 		bufferSizeFlag,
 		memoryLimitFlag,
-		measureTimeFlag,
 	}
 	fullMigrationFlags = append(
 		preMigrationFlags,
@@ -111,7 +106,6 @@ type preMigrationOptions struct {
 	batchSize   uint64
 	bufferSize  uint64
 	memoryLimit int64
-	measureTime bool
 }
 
 type stateMigrationOptions struct {
@@ -135,7 +129,6 @@ func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 		batchSize:   ctx.Uint64(batchSizeFlag.Name),
 		bufferSize:  ctx.Uint64(bufferSizeFlag.Name),
 		memoryLimit: ctx.Int64(memoryLimitFlag.Name),
-		measureTime: ctx.Bool(measureTimeFlag.Name),
 	}
 }
 
@@ -208,9 +201,7 @@ func main() {
 }
 
 func runFullMigration(opts fullMigrationOptions) error {
-	if opts.measureTime {
-		defer timer("full migration")()
-	}
+	defer timer("full migration")()
 
 	log.Info("Full Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath)
 
@@ -222,10 +213,10 @@ func runFullMigration(opts fullMigrationOptions) error {
 	}
 
 	// TODO(Alec) can these be parallelized?
-	if err = runNonAncientMigration(opts.newDBPath, opts.measureTime, opts.batchSize, numAncients); err != nil {
+	if err = runNonAncientMigration(opts.newDBPath, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
-	if err := runStateMigration(opts.newDBPath, opts.measureTime, opts.stateMigrationOptions); err != nil {
+	if err := runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run state migration: %w", err)
 	}
 
@@ -235,9 +226,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 }
 
 func runPreMigration(opts preMigrationOptions) (uint64, error) {
-	if opts.measureTime {
-		defer timer("pre-migration")()
-	}
+	defer timer("pre-migration")()
 
 	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit)
 
@@ -259,14 +248,14 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 
 	g, ctx := errgroup.WithContext(context.Background())
 	g.Go(func() error {
-		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize, opts.measureTime); err != nil {
+		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
 			return fmt.Errorf("failed to migrate ancients database: %w", err)
 		}
 		return nil
 	})
 	g.Go(func() error {
 		// By doing this once during the premigration, we get a speedup when we run it again in a full migration.
-		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath, opts.measureTime)
+		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
 	})
 
 	if err = g.Wait(); err != nil {
@@ -278,10 +267,8 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 	return numAncientsNewAfter, nil
 }
 
-func runNonAncientMigration(newDBPath string, measureTime bool, batchSize, numAncients uint64) error {
-	if measureTime {
-		defer timer("non-ancient migration")()
-	}
+func runNonAncientMigration(newDBPath string, batchSize, numAncients uint64) error {
+	defer timer("non-ancient migration")()
 
 	newDB, err := openDBWithoutFreezer(newDBPath, false)
 	if err != nil {
@@ -312,10 +299,8 @@ func runNonAncientMigration(newDBPath string, measureTime bool, batchSize, numAn
 	return nil
 }
 
-func runStateMigration(newDBPath string, measureTime bool, opts stateMigrationOptions) error {
-	if measureTime {
-		defer timer("state migration")()
-	}
+func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
+	defer timer("state migration")()
 
 	log.Info("State Migration Started", "newDBPath", newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
 
