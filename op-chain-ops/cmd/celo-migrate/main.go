@@ -177,10 +177,9 @@ func main() {
 		Usage: "Migrate Celo block and state data to a CeL2 DB",
 		Commands: []*cli.Command{
 			{
-				Name:    "pre",
-				Aliases: []string{"pre-migration", "p"},
-				Usage:   "Perform a  pre-migration of ancient blocks and copy over all other data without transforming it. This should be run a day before the full migration command is run to minimize downtime.",
-				Flags:   preMigrationFlags,
+				Name:  "pre",
+				Usage: "Perform a  pre-migration of ancient blocks and copy over all other data without transforming it. This should be run a day before the full migration command is run to minimize downtime.",
+				Flags: preMigrationFlags,
 				Action: func(ctx *cli.Context) error {
 					if _, err := runPreMigration(parsePreMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run pre-migration: %w", err)
@@ -189,10 +188,9 @@ func main() {
 				},
 			},
 			{
-				Name:    "final",
-				Aliases: []string{"full", "f"},
-				Usage:   "Perform a full migration of both block and state data to a CeL2 DB",
-				Flags:   fullMigrationFlags,
+				Name:  "full",
+				Usage: "Perform a full migration of both block and state data to a CeL2 DB",
+				Flags: fullMigrationFlags,
 				Action: func(ctx *cli.Context) error {
 					if err := runFullMigration(parseFullMigrationOptions(ctx)); err != nil {
 						return fmt.Errorf("failed to run full migration: %w", err)
