@@ -81,10 +81,6 @@ var (
 		Usage: "Memory limit in MiB, should be set lower than the available amount of memory in your system to prevent out of memory errors",
 		Value: 7500,
 	}
-	clearNonAncientsFlag = &cli.BoolFlag{
-		Name:  "clear-non-ancients",
-		Usage: "Use this to reset all data except ancients. This flag should be used if a full migration has already been performed on the new db.",
-	}
 	measureTimeFlag = &cli.BoolFlag{
 		Name:  "measure-time",
 		Usage: "Use this to log how long each section of the script takes to run",
@@ -96,7 +92,6 @@ var (
 		batchSizeFlag,
 		bufferSizeFlag,
 		memoryLimitFlag,
-		clearNonAncientsFlag,
 		measureTimeFlag,
 	}
 	fullMigrationFlags = append(
@@ -111,13 +106,12 @@ var (
 )
 
 type preMigrationOptions struct {
-	oldDBPath        string
-	newDBPath        string
-	batchSize        uint64
-	bufferSize       uint64
-	memoryLimit      int64
-	clearNonAncients bool
-	measureTime      bool
+	oldDBPath   string
+	newDBPath   string
+	batchSize   uint64
+	bufferSize  uint64
+	memoryLimit int64
+	measureTime bool
 }
 
 type stateMigrationOptions struct {
@@ -136,13 +130,12 @@ type fullMigrationOptions struct {
 
 func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 	return preMigrationOptions{
-		oldDBPath:        ctx.String(oldDBPathFlag.Name),
-		newDBPath:        ctx.String(newDBPathFlag.Name),
-		batchSize:        ctx.Uint64(batchSizeFlag.Name),
-		bufferSize:       ctx.Uint64(bufferSizeFlag.Name),
-		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
-		clearNonAncients: ctx.Bool(clearNonAncientsFlag.Name),
-		measureTime:      ctx.Bool(measureTimeFlag.Name),
+		oldDBPath:   ctx.String(oldDBPathFlag.Name),
+		newDBPath:   ctx.String(newDBPathFlag.Name),
+		batchSize:   ctx.Uint64(batchSizeFlag.Name),
+		bufferSize:  ctx.Uint64(bufferSizeFlag.Name),
+		memoryLimit: ctx.Int64(memoryLimitFlag.Name),
+		measureTime: ctx.Bool(measureTimeFlag.Name),
 	}
 }
 
@@ -246,7 +239,7 @@ func runPreMigration(opts preMigrationOptions) (uint64, error) {
 		defer timer("pre-migration")()
 	}
 
-	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit, "clearNonAncients", opts.clearNonAncients)
+	log.Info("Pre-Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "batchSize", opts.batchSize, "memoryLimit", opts.memoryLimit)
 
 	// Check that `rsync` command is available. We use this to copy the db excluding ancients, which we will copy separately
 	if _, err := exec.LookPath("rsync"); err != nil {
