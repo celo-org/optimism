@@ -14,10 +14,6 @@ import (
 func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 	defer timer("copyDbExceptAncients")()
 
-	if err := resetDbIfNeeded(newDbPath); err != nil {
-		return fmt.Errorf("failure in resetDbIfNeeded: %w", err)
-	}
-
 	log.Info("Copying files from old database (excluding ancients)", "process", "non-ancients")
 
 	// Get rsync help output

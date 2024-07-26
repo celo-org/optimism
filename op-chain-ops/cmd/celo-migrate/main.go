@@ -275,12 +275,6 @@ func runNonAncientMigration(newDBPath string, batchSize, numAncients uint64) err
 	}
 	defer newDB.Close()
 
-	// The non-ancient block migration makes transformations to the database that would be corrupted by subsequent migrations.
-	// We need to mark that a full migration has been attempted so that we can reset the database if the script is run again.
-	if err = writeFullMigrationMarker(newDB); err != nil {
-		return fmt.Errorf("failed to write full migration attempt marker: %w", err)
-	}
-
 	// get the last block number
 	hash := rawdb.ReadHeadHeaderHash(newDB)
 	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
