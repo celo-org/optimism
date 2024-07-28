@@ -56,6 +56,8 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 }
 
 func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSize uint64) (uint64, error) {
+	defer timer("migrateNonAncientsDb")()
+
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
 
@@ -90,20 +92,6 @@ func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSiz
 		}
 	}
 
-	var lastAncient = numAncients - 1
-	if lastAncient > 0 {
-		toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, lastAncient)
-		log.Info("Removing frozen blocks", "process", "non-ancients", "count", len(toBeRemoved))
-		batch := newDB.NewBatch()
-		for _, numberHash := range toBeRemoved {
-			rawdb.DeleteBlockWithoutNumber(batch, numberHash.Hash, numberHash.Number)
-			rawdb.DeleteCanonicalHash(batch, numberHash.Number)
-		}
-		if err := batch.Write(); err != nil {
-			return 0, fmt.Errorf("failed to delete frozen blocks: %w", err)
-		}
-		log.Info("Removed frozen blocks, still in leveldb", "process", "non-ancients", "removedBlocks", len(toBeRemoved))
-	}
 	migratedCount := lastBlock - numAncients + 1
 	return migratedCount, nil
 }

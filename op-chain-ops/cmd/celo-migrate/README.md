@@ -1,5 +1,7 @@
 # Celo L2 Migration Script
 
+// TODO(Alec) update README
+
 ## Overview
 
 This script has two main sections. The first migrates Celo blocks to a format compatible with `op-geth`, and the second performs necessary state changes such as deploying L2 smart contracts.
@@ -66,8 +68,6 @@ STATE_DUMP_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/l2-allocs-alfajores
 forge script ./scripts/L2Genesis.s.sol:L2Genesis \
 --sig 'runWithStateDump()'
 ```
-
-// TODO(Alec) update README
 
 This should output the allocs file to `./testdata/l2-allocs-alfajores.json`. If you encounter difficulties with this and want to just continue testing the script, you can alternatively find the allocs file [here](https://gist.github.com/jcortejoso/7f90ba9b67c669791014661ccb6de81a).
 

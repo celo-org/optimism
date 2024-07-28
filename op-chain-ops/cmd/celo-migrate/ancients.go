@@ -196,3 +196,20 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 	}
 	return nil
 }
+
+func getExtraAncientNumHashes(dbPath string) ([]*rawdb.NumberHash, error) {
+	defer timer("getExtraAncientNumHashes")()
+
+	db, err := openDB(dbPath, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	numAncients, err := db.Ancients()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get number of ancients in database: %w", err)
+	}
+
+	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), nil
+}
