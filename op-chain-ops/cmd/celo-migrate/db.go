@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Constants for the database
@@ -34,46 +35,66 @@ func headerKey(number uint64, hash common.Hash) []byte {
 	return append(append(headerPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }
 
-// openDB opens the chaindata database at the given path. Note this path is below the datadir
-func openDB(chaindataPath string) (ethdb.Database, error) {
+// Opens a database with access to AncientsDb
+func openDB(chaindataPath string, readOnly bool) (ethdb.Database, error) {
 	if _, err := os.Stat(chaindataPath); errors.Is(err, os.ErrNotExist) {
 		return nil, err
 	}
 
-	ldb, err := rawdb.Open(rawdb.OpenOptions{
+	db, err := rawdb.Open(rawdb.OpenOptions{
 		Type:              "leveldb",
 		Directory:         chaindataPath,
 		AncientsDirectory: filepath.Join(chaindataPath, "ancient"),
 		Namespace:         "",
 		Cache:             DBCache,
 		Handles:           DBHandles,
-		ReadOnly:          false,
+		ReadOnly:          readOnly,
 	})
 	if err != nil {
 		return nil, err
 	}
-	return ldb, nil
+
+	return db, nil
 }
 
-func createNewDbIfNotExists(newDBPath string) error {
+// Opens a database without access to AncientsDb
+func openDBWithoutFreezer(chaindataPath string, readOnly bool) (ethdb.Database, error) {
+	if _, err := os.Stat(chaindataPath); errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+
+	newDB, err := rawdb.NewLevelDBDatabase(chaindataPath, DBCache, DBHandles, "", readOnly)
+	if err != nil {
+		return nil, err
+	}
+
+	return newDB, nil
+}
+
+func createNewDbPathIfNotExists(newDBPath string) error {
 	if err := os.MkdirAll(newDBPath, 0755); err != nil {
 		return fmt.Errorf("failed to create new database directory: %w", err)
 	}
 	return nil
 }
 
-func cleanupNonAncientDb(dir string) error {
-	files, err := os.ReadDir(dir)
-	if err != nil {
-		return fmt.Errorf("failed to read directory: %w", err)
+func removeBlocks(ldb ethdb.Database, numberHashes []*rawdb.NumberHash) error {
+	defer timer("removeBlocks")()
+
+	if len(numberHashes) == 0 {
+		return nil
 	}
-	for _, file := range files {
-		if file.Name() != "ancient" {
-			err := os.RemoveAll(filepath.Join(dir, file.Name()))
-			if err != nil {
-				return fmt.Errorf("failed to remove file: %w", err)
-			}
-		}
+
+	batch := ldb.NewBatch()
+
+	for _, numberHash := range numberHashes {
+		log.Debug("Removing block", "block", numberHash.Number)
+		rawdb.DeleteBlockWithoutNumber(batch, numberHash.Hash, numberHash.Number)
+		rawdb.DeleteCanonicalHash(batch, numberHash.Number)
 	}
+	if err := batch.Write(); err != nil {
+		log.Error("Failed to write batch", "error", err)
+	}
+
 	return nil
 }
