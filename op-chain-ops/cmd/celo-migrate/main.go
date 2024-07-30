@@ -206,14 +206,13 @@ func runFullMigration(opts fullMigrationOptions) error {
 
 	var err error
 	var numAncients uint64
-	var extraAncientNumHashes []*rawdb.NumberHash
+	var strayAncientBlocks []*rawdb.NumberHash
 
-	if extraAncientNumHashes, numAncients, err = runPreMigration(opts.preMigrationOptions); err != nil {
+	if strayAncientBlocks, numAncients, err = runPreMigration(opts.preMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run pre-migration: %w", err)
 	}
 
-	// TODO(Alec) can these be parallelized?
-	if err = runNonAncientMigration(opts.newDBPath, extraAncientNumHashes, opts.batchSize, numAncients); err != nil {
+	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
 	if err := runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
@@ -245,7 +244,7 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 
 	var numAncientsNewBefore uint64
 	var numAncientsNewAfter uint64
-	var extraAncientNumHashes []*rawdb.NumberHash
+	var strayAncientBlocks []*rawdb.NumberHash
 	g, ctx := errgroup.WithContext(context.Background())
 	g.Go(func() error {
 		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
@@ -258,8 +257,8 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
 	})
 	g.Go(func() error {
-		if extraAncientNumHashes, err = getExtraAncientNumHashes(opts.oldDBPath); err != nil {
-			return fmt.Errorf("failed to get extra ancient num hashes: %w", err)
+		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath); err != nil {
+			return fmt.Errorf("failed to get stray ancient blocks: %w", err)
 		}
 		return nil
 	})
@@ -268,12 +267,12 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return nil, 0, fmt.Errorf("failed to migrate blocks: %w", err)
 	}
 
-	log.Info("Pre-Migration Finished", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "migratedAncients", numAncientsNewAfter-numAncientsNewBefore, "numExtraAncients", len(extraAncientNumHashes))
+	log.Info("Pre-Migration Finished", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath, "migratedAncients", numAncientsNewAfter-numAncientsNewBefore, "strayAncientBlocks", len(strayAncientBlocks))
 
-	return extraAncientNumHashes, numAncientsNewAfter, nil
+	return strayAncientBlocks, numAncientsNewAfter, nil
 }
 
-func runNonAncientMigration(newDBPath string, extraAncientNumHashes []*rawdb.NumberHash, batchSize, numAncients uint64) error {
+func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients uint64) error {
 	defer timer("non-ancient migration")()
 
 	newDB, err := openDBWithoutFreezer(newDBPath, false)
@@ -294,11 +293,11 @@ func runNonAncientMigration(newDBPath string, extraAncientNumHashes []*rawdb.Num
 		return fmt.Errorf("failed to migrate non-ancients database: %w", err)
 	}
 
-	err = removeBlocks(newDB, extraAncientNumHashes)
+	err = removeBlocks(newDB, strayAncientBlocks)
 	if err != nil {
-		return fmt.Errorf("failed to remove extra ancients: %w", err)
+		return fmt.Errorf("failed to remove stray ancient blocks: %w", err)
 	}
-	log.Info("Removed extra ancient blocks still in leveldb", "process", "non-ancients", "removedBlocks", len(extraAncientNumHashes))
+	log.Info("Removed stray ancient blocks still in leveldb", "process", "non-ancients", "removedBlocks", len(strayAncientBlocks))
 
 	log.Info("Non-Ancient Block Migration Completed", "process", "non-ancients", "migratedNonAncients", numNonAncients)
 

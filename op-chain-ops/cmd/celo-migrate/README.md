@@ -12,7 +12,7 @@ The `pre migration` step is still run during a `full migration` but it will be m
 
 ### Full migration
 
-During the `full migration` we re-run the `pre migration` step to capture any updates since the last `pre migration` and then apply in-place changes to non-ancient blocks and state. While this is happening, the script also checks for any ancient blocks that have remained in leveldb despite being frozen and removes them from the new db. Non-ancient blocks are then transformed to ensure compatibility with the L2 codebase.
+During the `full migration` we re-run the `pre migration` step to capture any updates since the last `pre migration` and then apply in-place changes to non-ancient blocks and state. While this is happening, the script also checks for any stray ancient blocks that have remained in leveldb despite being frozen and removes them from the new db. Non-ancient blocks are then transformed to ensure compatibility with the L2 codebase.
 
 Finally after all blocks have been migrated, the script performs a series of modifications to the state db. First, it deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary. Finally, these changes are committed to the state db to produce a new state root and create the first Celo L2 block.
 

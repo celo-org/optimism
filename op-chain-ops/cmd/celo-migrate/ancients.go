@@ -197,8 +197,9 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 	return nil
 }
 
-func getExtraAncientNumHashes(dbPath string) ([]*rawdb.NumberHash, error) {
-	defer timer("getExtraAncientNumHashes")()
+// getStrayAncientBlocks returns a list of ancient block numbers / hashes that somehow were not removed from leveldb
+func getStrayAncientBlocks(dbPath string) ([]*rawdb.NumberHash, error) {
+	defer timer("getStrayAncientBlocks")()
 
 	db, err := openDB(dbPath, true)
 	if err != nil {
