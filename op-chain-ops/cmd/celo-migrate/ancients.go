@@ -22,7 +22,9 @@ type RLPBlockRange struct {
 	tds      [][]byte
 }
 
-func migrateAncientsDb(oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
+func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
+	defer timer("ancients")()
+
 	oldFreezer, err := rawdb.NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open old freezer: %w", err)
@@ -52,7 +54,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize, bufferSize uint64
 
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNewBefore, "endBlock", numAncientsOld-1, "count", numAncientsOld-numAncientsNewBefore, "step", batchSize)
 
-	g, ctx := errgroup.WithContext(context.Background())
+	g, ctx := errgroup.WithContext(ctx)
 	readChan := make(chan RLPBlockRange, bufferSize)
 	transformChan := make(chan RLPBlockRange, bufferSize)
 
@@ -60,7 +62,7 @@ func migrateAncientsDb(oldDBPath, newDBPath string, batchSize, bufferSize uint64
 		return readAncientBlocks(ctx, oldFreezer, numAncientsNewBefore, numAncientsOld, batchSize, readChan)
 	})
 	g.Go(func() error { return transformBlocks(ctx, readChan, transformChan) })
-	g.Go(func() error { return writeAncientBlocks(ctx, newFreezer, transformChan) })
+	g.Go(func() error { return writeAncientBlocks(ctx, newFreezer, transformChan, numAncientsOld) })
 
 	if err = g.Wait(); err != nil {
 		return 0, 0, fmt.Errorf("failed to migrate ancients: %w", err)
@@ -157,7 +159,7 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 	return nil
 }
 
-func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan RLPBlockRange) error {
+func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan RLPBlockRange, totalAncientBlocks uint64) error {
 	// Write blocks from the in channel to the newDb
 	for blockRange := range in {
 		select {
@@ -188,8 +190,27 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 			if err != nil {
 				return fmt.Errorf("failed to write block range: %w", err)
 			}
-			log.Info("Wrote ancient blocks", "start", blockRange.start, "end", blockRange.start+uint64(len(blockRange.hashes)-1), "count", len(blockRange.hashes))
+			blockRangeEnd := blockRange.start + uint64(len(blockRange.hashes)) - 1
+			log.Info("Wrote ancient blocks", "start", blockRange.start, "end", blockRangeEnd, "count", len(blockRange.hashes), "remaining", totalAncientBlocks-blockRangeEnd)
 		}
 	}
 	return nil
+}
+
+// getStrayAncientBlocks returns a list of ancient block numbers / hashes that somehow were not removed from leveldb
+func getStrayAncientBlocks(dbPath string) ([]*rawdb.NumberHash, error) {
+	defer timer("getStrayAncientBlocks")()
+
+	db, err := openDB(dbPath, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database: %w", err)
+	}
+	defer db.Close()
+
+	numAncients, err := db.Ancients()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get number of ancients in database: %w", err)
+	}
+
+	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), nil
 }
