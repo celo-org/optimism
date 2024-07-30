@@ -275,10 +275,8 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.Cha
 			} else { // account has code
 				equalCode := bytes.Equal(db.GetCode(k), v.Code)
 				if equalCode {
-					log.Info("Account already exists with same code, skipping...", "address", k.Hex())
-					// No need to overwrite the account, keep existing state and nonce
-					skipCounter++
-					continue
+					log.Info("Account already exists with same code", "address", k.Hex())
+					return fmt.Errorf("account already exists with same code, unclear what state/nonce to use: %s", k.Hex())
 				} else { // differing code
 					if _, ok := whitelist[k]; ok {
 						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k, "nonce", db.GetNonce(k))
