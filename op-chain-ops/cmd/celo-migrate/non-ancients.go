@@ -7,12 +7,14 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize uint64) (uint64, error) {
-	// First copy files from old database to new database
-	log.Info("Copy files from old database (excluding ancients)", "process", "non-ancients")
+func copyDbExceptAncients(oldDbPath, newDbPath string) error {
+	defer timer("copyDbExceptAncients")()
+
+	log.Info("Copying files from old database (excluding ancients)", "process", "non-ancients")
 
 	// Get rsync help output
 	cmdHelp := exec.Command("rsync", "--help")
@@ -21,39 +23,40 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize ui
 	// Convert output to string
 	outputStr := string(output)
 
-	// TODO(Alec) have rsync run as part of pre-migration (but not the transformation or state)
-	// can use --update and --delete to keep things synced between dbs
-
 	// Check for supported options
 	var cmd *exec.Cmd
 	// Prefer --info=progress2 over --progress
 	if strings.Contains(outputStr, "--info") {
-		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--info=progress2", "--exclude=ancient", "--delete", oldDbPath+"/", newDbPath)
 	} else if strings.Contains(outputStr, "--progress") {
-		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--progress", "--exclude=ancient", "--delete", oldDbPath+"/", newDbPath)
 	} else {
-		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", oldDbPath+"/", newDbPath)
+		cmd = exec.Command("rsync", "-v", "-a", "--exclude=ancient", "--delete", oldDbPath+"/", newDbPath)
 	}
+
+	// rsync copies any file with a different timestamp or size.
+	//
+	// '--exclude=ancient' excludes the ancient directory from the copy
+	//
+	// '--delete' Tells rsync to delete extraneous files from the receiving side (ones that aren’t on the sending side)
+	//
+	// '-a' archive mode; equals -rlptgoD. It is a quick way of saying you want recursion and want to preserve almost everything, including timestamps, ownerships, permissions, etc.
+	// Timestamps are important here because they are used to determine which files are newer and should be copied over.
+	//
+	// '--whole-file' This is the default when both the source and destination are specified as local paths, which they are here (oldDbPath and newDbPath).
+	// This option disables rsync’s delta-transfer algorithm, which causes all transferred files to be sent whole. The delta-transfer algorithm is normally used when the destination is a remote system.
+
 	log.Info("Running rsync command", "command", cmd.String())
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		return 0, fmt.Errorf("failed to copy old database to new database: %w", err)
+		return fmt.Errorf("failed to copy old database to new database: %w", err)
 	}
+	return nil
+}
 
-	// Open the new database without access to AncientsDb
-	newDB, err := rawdb.NewLevelDBDatabase(newDbPath, DBCache, DBHandles, "", false)
-	if err != nil {
-		return 0, fmt.Errorf("failed to open new database: %w", err)
-	}
-	defer newDB.Close()
-
-	// get the last block number
-	hash := rawdb.ReadHeadHeaderHash(newDB)
-	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
-	lastAncient := numAncients - 1
-
-	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
+func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSize uint64) (uint64, error) {
+	defer timer("migrateNonAncientsDb")()
 
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
@@ -89,21 +92,6 @@ func migrateNonAncientsDb(oldDbPath, newDbPath string, numAncients, batchSize ui
 		}
 	}
 
-	if lastAncient > 0 {
-		toBeRemoved := rawdb.ReadAllHashesInRange(newDB, 1, lastAncient)
-		log.Info("Removing frozen blocks", "process", "non-ancients", "count", len(toBeRemoved))
-		batch := newDB.NewBatch()
-		for _, numberHash := range toBeRemoved {
-			rawdb.DeleteBlockWithoutNumber(batch, numberHash.Hash, numberHash.Number)
-			rawdb.DeleteCanonicalHash(batch, numberHash.Number)
-		}
-		if err := batch.Write(); err != nil {
-			return 0, fmt.Errorf("failed to delete frozen blocks: %w", err)
-		}
-		log.Info("Removed frozen blocks, still in leveldb", "process", "non-ancients", "removedBlocks", len(toBeRemoved))
-	}
 	migratedCount := lastBlock - numAncients + 1
-	log.Info("Non-Ancient Block Migration Ended", "process", "non-ancients", "migratedBlocks", migratedCount)
-
 	return migratedCount, nil
 }
