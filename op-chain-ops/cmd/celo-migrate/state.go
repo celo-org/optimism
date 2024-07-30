@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -245,62 +246,72 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
+func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
 	log.Info("Starting to migrate OP contracts into state DB")
 
-	accountCounter := 0
+	copyCounter := 0
+	skipCounter := 0
 	overwriteCounter := 0
-	for k, v := range genesis.Alloc {
-		accountCounter++
+	whitelist := accountOverwriteWhitelist[config.ChainID.Uint64()]
 
+	for k, v := range genesis.Alloc {
 		// Check that the balance of the account to written is zero,
 		// as we must not create new CELo tokens
 		if v.Balance.Cmp(big.NewInt(0)) != 0 {
-			log.Error("Account balance is not zero, would change token supply", "address", k.Hex())
-			return fmt.Errorf("account balance is not zero, would change token supply: %s", k.Hex())
+			log.Error("Account balance is not zero, would change celo supply", "address", k.Hex())
+			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
 		}
 
-		nonce := v.Nonce
 		if db.Exist(k) {
-			// Check if it's an EOA, if so bail out
-			if db.GetCodeSize(k) == 0 && db.GetNonce(k) > 0 {
-				return fmt.Errorf("account already exists with nonce > 0: %s", k.Hex())
-			}
-
-			currentCode := db.GetCode(k)
-			equalCode := bytes.Equal(currentCode, v.Code)
-			if currentCode != nil && !equalCode {
-				if whitelist, exists := accountOverwriteWhitelist[config.ChainID.Uint64()]; exists {
+			if db.GetCodeSize(k) == 0 {
+				// Check if it's an EOA, if so bail out
+				if db.GetNonce(k) > 0 {
+					log.Error("Account already exists with nonce > 0", "address", k.Hex())
+					return fmt.Errorf("account already exists with nonce > 0: %s", k.Hex())
+				} else {
+					copyAlloc(db, k, v, v.Nonce)
+					copyCounter++
+				}
+			} else { // account has code
+				equalCode := bytes.Equal(db.GetCode(k), v.Code)
+				if equalCode {
+					log.Info("Account already exists with same code, skipping...", "address", k.Hex())
+					// No need to overwrite the account, keep existing state and nonce
+					skipCounter++
+					continue
+				} else { // differing code
 					if _, ok := whitelist[k]; ok {
-						// keep the existing nonce
-						nonce = db.GetNonce(k)
 						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k, "nonce", db.GetNonce(k))
+
+						// keep the existing nonce
+						copyAlloc(db, k, v, db.GetNonce(k))
+						overwriteCounter++
 					} else {
-						log.Error("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
+						log.Error("Account already exists with different code and is not whitelisted", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
 						return fmt.Errorf("account already exists with different code and is not whitelisted: %s", k.Hex())
 					}
-				} else {
-					log.Error("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
-					return fmt.Errorf("account already exists with different code and no whitelist exists: %s", k.Hex())
 				}
-
-				overwriteCounter++
 			}
+		} else { // account does not exist
+			copyAlloc(db, k, v, v.Nonce)
+			copyCounter++
 		}
-
-		// This carries over any existing balance
-		db.CreateAccount(k)
-
-		db.SetNonce(k, nonce)
-		db.SetCode(k, v.Code)
-		for key, value := range v.Storage {
-			db.SetState(k, key, value)
-		}
-
-		log.Info("Moved account", "address", k)
 	}
-	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+
+	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(genesis.Alloc), "copiedAccounts", copyCounter, "skippedAccounts", skipCounter, "overwrittenAccounts", overwriteCounter)
 	return nil
+}
+
+func copyAlloc(db vm.StateDB, addr common.Address, v types.Account, nonce uint64) {
+	// This carries over any existing balance
+	db.CreateAccount(addr)
+
+	db.SetNonce(addr, nonce)
+	db.SetCode(addr, v.Code)
+	for key, value := range v.Storage {
+		db.SetState(addr, key, value)
+	}
+	log.Info("Copied account", "address", addr.Hex())
 }
 
 // setupDistributionSchedule sets up the distribution schedule contract with the correct balance
