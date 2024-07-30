@@ -16,6 +16,7 @@ import (
 type L1Blocks interface {
 	derive.L1BlockRefByHashFetcher
 	derive.L1BlockRefByNumberFetcher
+	L1BlockRefByLabel(context.Context, eth.BlockLabel) (eth.L1BlockRef, error)
 }
 
 type L1OriginSelector struct {
@@ -53,6 +54,21 @@ func (los *L1OriginSelector) FindL1Origin(ctx context.Context, l2Head eth.L2Bloc
 	pastSeqDrift := l2Head.Time+los.cfg.BlockTime > currentOrigin.Time+msd
 	if pastSeqDrift {
 		log.Warn("Next L2 block time is past the sequencer drift + current origin time")
+	}
+
+	// When on Celo, the origin is only updated when newer finialized block is available
+	if los.cfg.IsCelo() {
+		// Get the latest finalized L1 block.
+		latestFinalized, err := los.l1.L1BlockRefByLabel(ctx, eth.Finalized)
+		if err != nil {
+			log.Warn("Failed to get latest finalized L1 block", "err", err)
+		}
+
+		// If the latest finalized block is less than or equal to the current origin, the origin should not be updated.
+		if latestFinalized.Number <= currentOrigin.Number {
+			log.Info("No new finalized block. Falling back to current origin")
+			return currentOrigin, nil
+		}
 	}
 
 	// Attempt to find the next L1 origin block, where the next origin is the immediate child of

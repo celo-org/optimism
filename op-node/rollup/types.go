@@ -522,6 +522,10 @@ func (c *Config) PlasmaEnabled() bool {
 	return c.PlasmaConfig != nil
 }
 
+func (c *Config) IsCelo() bool {
+	return c.Cel2Time != nil
+}
+
 // SyncLookback computes the number of blocks to walk back in order to find the correct L1 origin.
 // In alt-da mode longest possible window is challenge + resolve windows.
 func (c *Config) SyncLookback() uint64 {
