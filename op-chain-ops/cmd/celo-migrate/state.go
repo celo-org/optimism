@@ -55,7 +55,7 @@ var (
 func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
-	ldb, err := openDB(dbPath)
+	ldb, err := openDBWithoutFreezer(dbPath, false)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open DB: %w", err)
 	}
