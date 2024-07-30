@@ -203,7 +203,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	cfg.RegolithTime = new(uint64) // what are those? do we need those?
 	cfg.Optimism = &params.OptimismConfig{
 		EIP1559Denominator:       config.EIP1559Denominator,
-		EIP1559DenominatorCanyon: config.EIP1559DenominatorCanyon,
+		EIP1559DenominatorCanyon: &config.EIP1559DenominatorCanyon,
 		EIP1559Elasticity:        config.EIP1559Elasticity,
 	}
 	cfg.CanyonTime = &cel2Header.Time
