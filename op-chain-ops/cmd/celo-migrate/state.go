@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -250,7 +249,6 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.Cha
 	log.Info("Starting to migrate OP contracts into state DB")
 
 	copyCounter := 0
-	skipCounter := 0
 	overwriteCounter := 0
 	whitelist := accountOverwriteWhitelist[config.ChainID.Uint64()]
 
@@ -263,53 +261,29 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.Cha
 		}
 
 		if db.Exist(k) {
-			if db.GetCodeSize(k) == 0 {
-				// Check if it's an EOA, if so bail out
-				if db.GetNonce(k) > 0 {
-					log.Error("Account already exists with nonce > 0", "address", k.Hex())
-					return fmt.Errorf("account already exists with nonce > 0: %s", k.Hex())
-				} else {
-					copyAlloc(db, k, v, v.Nonce)
-					copyCounter++
-				}
-			} else { // account has code
-				equalCode := bytes.Equal(db.GetCode(k), v.Code)
-				if equalCode {
-					log.Info("Account already exists with same code", "address", k.Hex())
-					return fmt.Errorf("account already exists with same code, unclear what state/nonce to use: %s", k.Hex())
-				} else { // differing code
-					if _, ok := whitelist[k]; ok {
-						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k, "nonce", db.GetNonce(k))
+			_, whitelisted := whitelist[k]
 
-						// keep the existing nonce
-						copyAlloc(db, k, v, db.GetNonce(k))
-						overwriteCounter++
-					} else {
-						log.Error("Account already exists with different code and is not whitelisted", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
-						return fmt.Errorf("account already exists with different code and is not whitelisted: %s", k.Hex())
-					}
-				}
+			// If the account is not whitelisted and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
+			if !whitelisted && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
+				return fmt.Errorf("account exists and is not whitelisted, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
 			}
-		} else { // account does not exist
-			copyAlloc(db, k, v, v.Nonce)
-			copyCounter++
+			overwriteCounter++
 		}
+
+		// This carries over any existing balance
+		db.CreateAccount(k)
+
+		db.SetNonce(k, v.Nonce)
+		db.SetCode(k, v.Code)
+		for key, value := range v.Storage {
+			db.SetState(k, key, value)
+		}
+		copyCounter++
+		log.Info("Copied account", "address", k.Hex())
 	}
 
-	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(genesis.Alloc), "copiedAccounts", copyCounter, "skippedAccounts", skipCounter, "overwrittenAccounts", overwriteCounter)
+	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(genesis.Alloc), "copiedAccounts", copyCounter, "overwrittenAccounts", overwriteCounter)
 	return nil
-}
-
-func copyAlloc(db vm.StateDB, addr common.Address, v types.Account, nonce uint64) {
-	// This carries over any existing balance
-	db.CreateAccount(addr)
-
-	db.SetNonce(addr, nonce)
-	db.SetCode(addr, v.Code)
-	for key, value := range v.Storage {
-		db.SetState(addr, key, value)
-	}
-	log.Info("Copied account", "address", addr.Hex())
 }
 
 // setupDistributionSchedule sets up the distribution schedule contract with the correct balance
