@@ -260,15 +260,29 @@ contract Deploy is Deployer {
         }
     }
 
-    /// @notice Transfer ownership of a Proxy to the ProxyAdmin contract
+    /// @notice Transfer admin of a Proxy to the ProxyAdmin contract
     ///         This is expected to be used in conjusting with deployERC1967ProxyWithOwner after setup actions
     ///         have been performed on the proxy.
-    /// @param _name The name of the proxy to transfer ownership of.
+    /// @param _name The name of the proxy to transfer admin of.
     function transferProxyToProxyAdmin(string memory _name) public broadcast {
         Proxy proxy = Proxy(mustGetAddress(_name));
         address proxyAdmin = mustGetAddress("ProxyAdmin");
         proxy.changeAdmin(proxyAdmin);
-        console.log("Proxy %s ownership transferred to ProxyAdmin at: %s", _name, proxyAdmin);
+        console.log("Proxy %s admin role transferred to ProxyAdmin at: %s", _name, proxyAdmin);
+    }
+
+    /// @notice Transfer ownership of a Proxy to the SystemOwnerSafe contract
+    /// @param _name The name of the proxy to transfer ownership of.
+    function transferProxyToSystemOwner(string memory _name) public broadcast {
+        address proxyAddress = mustGetAddress(_name);
+        Proxy proxy = Proxy(proxyAddress);
+        address safe = mustGetAddress("SystemOwnerSafe");
+        address owner = proxy.owner();
+
+        if (owner != safe) {
+            proxy.transferOwnership(safe);
+            console.log("Proxy ownership of %s at %s transferred to SystemOwnerSafe at: %s", _name, proxyAddress, safe);
+        }
     }
 
     ////////////////////////////////////////////////////////////////
@@ -307,6 +321,8 @@ contract Deploy is Deployer {
             }
         }
         setupOpChain();
+        setOwnershipToSystemOwner();
+
         console.log("set up op chain!");
     }
 
@@ -335,6 +351,7 @@ contract Deploy is Deployer {
 
         // Deploy the ProtocolVersionsProxy
         deployERC1967Proxy("ProtocolVersionsProxy");
+        transferProxyToProxyAdmin("ProtocolVersionsProxy");
         deployProtocolVersions();
         initializeProtocolVersions();
     }
@@ -360,6 +377,12 @@ contract Deploy is Deployer {
 
         transferDisputeGameFactoryOwnership();
         transferDelayedWETHOwnership();
+    }
+
+    /// @notice Transfer ownership of proxy contracts to system owner
+    function setOwnershipToSystemOwner() public {
+        transferProxyToSystemOwner("SystemConfigProxy");
+        transferProxyToSystemOwner("ProtocolVersionsProxy");
     }
 
     /// @notice Deploy all of the proxies
