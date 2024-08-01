@@ -20,4 +20,8 @@ type Config struct {
 	// SequencerMaxSafeLag is the maximum number of L2 blocks for restricting the distance between L2 safe and unsafe.
 	// Disabled if 0.
 	SequencerMaxSafeLag uint64 `json:"sequencer_max_safe_lag"`
+
+	// SequencerUseFinalized is true when the sequencer should use only finalized L1 blocks as origin.
+	// If this is set to true, the value of `SequencerConfDepth` is ignored.
+	SequencerUseFinalized bool `json:"sequencer_use_finalized"`
 }

@@ -176,8 +176,13 @@ func NewDriver(
 
 	l1 = NewMeteredL1Fetcher(l1, metrics)
 	l1State := NewL1State(log, metrics)
-	sequencerConfDepth := NewConfDepth(driverCfg.SequencerConfDepth, l1State.L1Head, l1)
-	findL1Origin := NewL1OriginSelector(log, cfg, sequencerConfDepth)
+	var l1Fetcher L1Blocks
+	if driverCfg.SequencerUseFinalized {
+		l1Fetcher = NewFinalized(l1State.L1Finalized, l1)
+	} else {
+		l1Fetcher = NewConfDepth(driverCfg.SequencerConfDepth, l1State.L1Head, l1)
+	}
+	findL1Origin := NewL1OriginSelector(log, cfg, l1Fetcher)
 	verifConfDepth := NewConfDepth(driverCfg.VerifierConfDepth, l1State.L1Head, l1)
 	ec := engine.NewEngineController(l2, log, metrics, cfg, syncCfg.SyncMode, synchronousEvents)
 	engineResetDeriver := engine.NewEngineResetDeriver(driverCtx, log, cfg, l1, l2, syncCfg, synchronousEvents)
