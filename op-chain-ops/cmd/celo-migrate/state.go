@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -35,11 +35,15 @@ var (
 	alfajoresChainId uint64 = 44787
 	mainnetChainId   uint64 = 42220
 
-	accountOverwriteWhitelist = map[uint64]map[common.Address]struct{}{
+	// Whitelist of accounts that are allowed to be overwritten
+	// If the value for an account is set to true, the nonce and storage will be overwritten
+	// This must be checked for each account, as this might create issues with contracts
+	// calling `CREATE` or `CREATE2`
+	accountOverwriteWhitelist = map[uint64]map[common.Address]bool{
 		// Add any addresses that should be allowed to overwrite existing accounts here.
 		alfajoresChainId: {
 			// Create2Deployer
-			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): {},
+			// common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): false,
 		},
 	}
 	distributionScheduleAddressMap = map[uint64]common.Address{
@@ -94,7 +98,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	applyAllocsToState(db, genesis, cfg)
+	err = applyAllocsToState(db, genesis, cfg)
+	if err != nil {
+		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
+	}
 
 	// Initialize the distribution schedule contract
 	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
@@ -242,48 +249,49 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) {
+func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
 	log.Info("Starting to migrate OP contracts into state DB")
 
-	accountCounter := 0
+	copyCounter := 0
 	overwriteCounter := 0
+	whitelist := accountOverwriteWhitelist[config.ChainID.Uint64()]
+
 	for k, v := range genesis.Alloc {
-		accountCounter++
+		// Check that the balance of the account to written is zero,
+		// as we must not create new CELo tokens
+		if v.Balance.Cmp(big.NewInt(0)) != 0 {
+			log.Error("Account balance is not zero, would change celo supply", "address", k.Hex())
+			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
+		}
 
-		balance := uint256.MustFromBig(v.Balance)
-
+		overwriteNonceAndState := true
 		if db.Exist(k) {
-			// If the account already has balance, add it to the balance of the new account
-			balance = balance.Add(balance, db.GetBalance(k))
+			var whitelisted bool
+			overwriteNonceAndState, whitelisted = whitelist[k]
 
-			currentCode := db.GetCode(k)
-			equalCode := bytes.Equal(currentCode, v.Code)
-			if currentCode != nil && !equalCode {
-				if whitelist, exists := accountOverwriteWhitelist[config.ChainID.Uint64()]; exists {
-					if _, ok := whitelist[k]; ok {
-						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k)
-					} else {
-						log.Warn("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
-					}
-				} else {
-					log.Warn("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
-				}
+			// If the account is not whitelisted and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
+			if !whitelisted && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
+				return fmt.Errorf("account exists and is not whitelisted, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
+			}
+			overwriteCounter++
+		}
 
-				overwriteCounter++
+		// This carries over any existing balance
+		db.CreateAccount(k)
+		db.SetCode(k, v.Code)
+
+		if overwriteNonceAndState {
+			db.SetNonce(k, v.Nonce)
+			for key, value := range v.Storage {
+				db.SetState(k, key, value)
 			}
 		}
-		db.CreateAccount(k)
-
-		db.SetNonce(k, v.Nonce)
-		db.SetBalance(k, balance)
-		db.SetCode(k, v.Code)
-		for key, value := range v.Storage {
-			db.SetState(k, key, value)
-		}
-
-		log.Info("Moved account", "address", k)
+		copyCounter++
+		log.Info("Copied account", "address", k.Hex())
 	}
-	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+
+	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(genesis.Alloc), "copiedAccounts", copyCounter, "overwrittenAccounts", overwriteCounter)
+	return nil
 }
 
 // setupDistributionSchedule sets up the distribution schedule contract with the correct balance
