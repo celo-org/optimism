@@ -35,11 +35,15 @@ var (
 	alfajoresChainId uint64 = 44787
 	mainnetChainId   uint64 = 42220
 
-	accountOverwriteWhitelist = map[uint64]map[common.Address]struct{}{
+	// Whitelist of accounts that are allowed to be overwritten
+	// If the value for an account is set to true, the nonce and storage will be overwritten
+	// This must be checked for each account, as this might create issues with contracts
+	// calling `CREATE` or `CREATE2`
+	accountOverwriteWhitelist = map[uint64]map[common.Address]bool{
 		// Add any addresses that should be allowed to overwrite existing accounts here.
 		alfajoresChainId: {
 			// Create2Deployer
-			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): {},
+			// common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): false,
 		},
 	}
 	distributionScheduleAddressMap = map[uint64]common.Address{
@@ -260,8 +264,10 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.Cha
 			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
 		}
 
+		overwriteNonceAndState := true
 		if db.Exist(k) {
-			_, whitelisted := whitelist[k]
+			var whitelisted bool
+			overwriteNonceAndState, whitelisted = whitelist[k]
 
 			// If the account is not whitelisted and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
 			if !whitelisted && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
@@ -272,11 +278,13 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.Cha
 
 		// This carries over any existing balance
 		db.CreateAccount(k)
-
-		db.SetNonce(k, v.Nonce)
 		db.SetCode(k, v.Code)
-		for key, value := range v.Storage {
-			db.SetState(k, key, value)
+
+		if overwriteNonceAndState {
+			db.SetNonce(k, v.Nonce)
+			for key, value := range v.Storage {
+				db.SetState(k, key, value)
+			}
 		}
 		copyCounter++
 		log.Info("Copied account", "address", k.Hex())
