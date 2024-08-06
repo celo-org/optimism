@@ -361,23 +361,6 @@ contract Deploy is Deployer {
 
         transferDisputeGameFactoryOwnership();
         transferDelayedWETHOwnership();
-
-        setOwnershipToSystemOwner("SystemConfigProxy");
-        setOwnershipToSystemOwner("ProtocolVersionsProxy");
-    }
-
-    /// @notice Transfer ownership of proxy contracts to system owner
-    function setOwnershipToSystemOwner(string memory _contract) public broadcast {
-        OwnableUpgradeable ccontract = OwnableUpgradeable(mustGetAddress(_contract));
-        address owner = ccontract.owner();
-
-        address safe = mustGetAddress("SystemOwnerSafe");
-        if (owner != safe) {
-            console.log("Contract owner: %s", address(owner));
-            console.log("Caller : %s", msg.sender);
-            ccontract.transferOwnership(safe);
-            console.log("%s ownership transferred to Safe at: %s ", _contract, safe);
-        }
     }
 
     /// @notice Deploy all of the proxies
@@ -1076,6 +1059,7 @@ contract Deploy is Deployer {
         console.log("Upgrading and initializing SystemConfig proxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address systemConfig = mustGetAddress("SystemConfig");
+        address safe = mustGetAddress("SystemOwnerSafe");
 
         bytes32 batcherHash = bytes32(uint256(uint160(cfg.batchSenderAddress())));
 
@@ -1090,7 +1074,7 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(
                 SystemConfig.initialize,
                 (
-                    cfg.finalSystemOwner(),
+                    safe,
                     cfg.basefeeScalar(),
                     cfg.blobbasefeeScalar(),
                     batcherHash,
@@ -1365,7 +1349,7 @@ contract Deploy is Deployer {
         address protocolVersionsProxy = mustGetAddress("ProtocolVersionsProxy");
         address protocolVersions = mustGetAddress("ProtocolVersions");
 
-        address finalSystemOwner = cfg.finalSystemOwner();
+        address safe = mustGetAddress("SystemOwnerSafe");
         uint256 requiredProtocolVersion = cfg.requiredProtocolVersion();
         uint256 recommendedProtocolVersion = cfg.recommendedProtocolVersion();
 
@@ -1375,7 +1359,7 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(
                 ProtocolVersions.initialize,
                 (
-                    finalSystemOwner,
+                    safe,
                     ProtocolVersion.wrap(requiredProtocolVersion),
                     ProtocolVersion.wrap(recommendedProtocolVersion)
                 )

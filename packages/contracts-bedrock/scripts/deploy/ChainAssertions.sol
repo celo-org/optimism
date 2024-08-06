@@ -72,7 +72,6 @@ library ChainAssertions {
         ResourceMetering.ResourceConfig memory resourceConfig = config.resourceConfig();
 
         if (_isProxy) {
-            require(config.owner() == _cfg.finalSystemOwner());
             require(config.basefeeScalar() == _cfg.basefeeScalar());
             require(config.blobbasefeeScalar() == _cfg.blobbasefeeScalar());
             require(config.batcherHash() == bytes32(uint256(uint160(_cfg.batchSenderAddress()))));
@@ -404,7 +403,6 @@ library ChainAssertions {
         assertSlotValueIsOne({ _contractAddress: address(versions), _slot: 0, _offset: 0 });
 
         if (_isProxy) {
-            require(versions.owner() == _cfg.finalSystemOwner());
             require(ProtocolVersion.unwrap(versions.required()) == _cfg.requiredProtocolVersion());
             require(ProtocolVersion.unwrap(versions.recommended()) == _cfg.recommendedProtocolVersion());
         } else {
