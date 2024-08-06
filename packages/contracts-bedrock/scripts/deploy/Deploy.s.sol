@@ -60,6 +60,7 @@ import { Process } from "scripts/libraries/Process.sol";
 
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Multicall3 } from "@multicall/Multicall3.sol";
 
 /// @title Deploy
@@ -271,20 +272,6 @@ contract Deploy is Deployer {
         console.log("Proxy %s admin role transferred to ProxyAdmin at: %s", _name, proxyAdmin);
     }
 
-    /// @notice Transfer ownership of a Proxy to the SystemOwnerSafe contract
-    /// @param _name The name of the proxy to transfer ownership of.
-    function transferProxyToSystemOwner(string memory _name) public broadcast {
-        address proxyAddress = mustGetAddress(_name);
-        Proxy proxy = Proxy(proxyAddress);
-        address safe = mustGetAddress("SystemOwnerSafe");
-        address owner = proxy.owner();
-
-        if (owner != safe) {
-            proxy.transferOwnership(safe);
-            console.log("Proxy ownership of %s at %s transferred to SystemOwnerSafe at: %s", _name, proxyAddress, safe);
-        }
-    }
-
     ////////////////////////////////////////////////////////////////
     //                    SetUp and Run                           //
     ////////////////////////////////////////////////////////////////
@@ -321,7 +308,6 @@ contract Deploy is Deployer {
             }
         }
         setupOpChain();
-        setOwnershipToSystemOwner();
 
         console.log("set up op chain!");
     }
@@ -351,7 +337,6 @@ contract Deploy is Deployer {
 
         // Deploy the ProtocolVersionsProxy
         deployERC1967Proxy("ProtocolVersionsProxy");
-        transferProxyToProxyAdmin("ProtocolVersionsProxy");
         deployProtocolVersions();
         initializeProtocolVersions();
     }
@@ -377,12 +362,21 @@ contract Deploy is Deployer {
 
         transferDisputeGameFactoryOwnership();
         transferDelayedWETHOwnership();
+
+        setOwnershipToSystemOwner("SystemConfigProxy");
+        setOwnershipToSystemOwner("ProtocolVersionsProxy");
     }
 
     /// @notice Transfer ownership of proxy contracts to system owner
-    function setOwnershipToSystemOwner() public {
-        transferProxyToSystemOwner("SystemConfigProxy");
-        transferProxyToSystemOwner("ProtocolVersionsProxy");
+    function setOwnershipToSystemOwner(string memory _contract) public broadcast {
+        OwnableUpgradeable ccontract = OwnableUpgradeable(mustGetAddress(_contract));
+        address owner = ccontract.owner();
+
+        address safe = mustGetAddress("SystemOwnerSafe");
+        if (owner != safe) {
+            ccontract.transferOwnership(safe);
+            console.log("%s ownership transferred to Safe at: %s", _contract, safe);
+        }
     }
 
     /// @notice Deploy all of the proxies
