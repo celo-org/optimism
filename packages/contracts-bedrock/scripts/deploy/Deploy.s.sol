@@ -1358,11 +1358,7 @@ contract Deploy is Deployer {
             _implementation: protocolVersions,
             _innerCallData: abi.encodeCall(
                 ProtocolVersions.initialize,
-                (
-                    safe,
-                    ProtocolVersion.wrap(requiredProtocolVersion),
-                    ProtocolVersion.wrap(recommendedProtocolVersion)
-                )
+                (safe, ProtocolVersion.wrap(requiredProtocolVersion), ProtocolVersion.wrap(recommendedProtocolVersion))
             )
         });
 
