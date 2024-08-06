@@ -374,7 +374,7 @@ contract Deploy is Deployer {
         address safe = mustGetAddress("SystemOwnerSafe");
         if (owner != safe) {
             ccontract.transferOwnership(safe);
-            console.log("%s ownership transferred to Safe at: %s", _contract, safe);
+            console.log("%s ownership transferred to Safe at: %s ", _contract, safe);
         }
     }
 
