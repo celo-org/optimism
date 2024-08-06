@@ -308,7 +308,6 @@ contract Deploy is Deployer {
             }
         }
         setupOpChain();
-
         console.log("set up op chain!");
     }
 
