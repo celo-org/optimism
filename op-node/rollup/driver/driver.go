@@ -176,14 +176,16 @@ func NewDriver(
 
 	l1 = NewMeteredL1Fetcher(l1, metrics)
 	l1State := NewL1State(log, metrics)
-	var l1Fetcher L1Blocks
+	var l1Blocks L1Blocks
+	var l1Fetcher derive.L1Fetcher
 	if driverCfg.SequencerUseFinalized {
+		l1Blocks = NewFinalized(l1State.L1Finalized, l1)
 		l1Fetcher = NewFinalized(l1State.L1Finalized, l1)
 	} else {
-		l1Fetcher = NewConfDepth(driverCfg.SequencerConfDepth, l1State.L1Head, l1)
+		l1Blocks = NewConfDepth(driverCfg.SequencerConfDepth, l1State.L1Head, l1)
+		l1Fetcher = NewConfDepth(driverCfg.VerifierConfDepth, l1State.L1Head, l1)
 	}
-	findL1Origin := NewL1OriginSelector(log, cfg, l1Fetcher)
-	verifConfDepth := NewConfDepth(driverCfg.VerifierConfDepth, l1State.L1Head, l1)
+	findL1Origin := NewL1OriginSelector(log, cfg, l1Blocks)
 	ec := engine.NewEngineController(l2, log, metrics, cfg, syncCfg.SyncMode, synchronousEvents)
 	engineResetDeriver := engine.NewEngineResetDeriver(driverCtx, log, cfg, l1, l2, syncCfg, synchronousEvents)
 	clSync := clsync.NewCLSync(log, cfg, metrics, synchronousEvents)
@@ -196,7 +198,7 @@ func NewDriver(
 	}
 
 	attributesHandler := attributes.NewAttributesHandler(log, cfg, driverCtx, l2, synchronousEvents)
-	derivationPipeline := derive.NewDerivationPipeline(log, cfg, verifConfDepth, l1Blobs, plasma, l2, metrics)
+	derivationPipeline := derive.NewDerivationPipeline(log, cfg, l1Fetcher, l1Blobs, plasma, l2, metrics)
 	pipelineDeriver := derive.NewPipelineDeriver(driverCtx, derivationPipeline, synchronousEvents)
 	attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, l2)
 	meteredEngine := NewMeteredEngine(cfg, ec, metrics, log) // Only use the metered engine in the sequencer b/c it records sequencing metrics.
