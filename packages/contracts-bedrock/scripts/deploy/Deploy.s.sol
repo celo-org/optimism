@@ -1354,7 +1354,7 @@ contract Deploy is Deployer {
 
         address protocolVersionsOwner = cfg.finalSystemOwner();
         if (cfg.safeAsOwner()) {
-            systemConfigOwner = mustGetAddress("SystemOwnerSafe");
+            protocolVersionsOwner = mustGetAddress("SystemOwnerSafe");
         }
         uint256 requiredProtocolVersion = cfg.requiredProtocolVersion();
         uint256 recommendedProtocolVersion = cfg.recommendedProtocolVersion();
