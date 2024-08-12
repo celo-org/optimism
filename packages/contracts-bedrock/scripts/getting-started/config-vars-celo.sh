@@ -97,6 +97,7 @@ cat << EOL > tmp_config.json
   "gasPriceOracleScalar": 1000000,
 
   "deployCeloContracts": $DEPLOY_CELO_CONTRACTS,
+  "safeAsOwner": $SAFE_AS_OWNER,
 
   "enableGovernance": $ENABLE_GOVERNANCE,
   "governanceTokenSymbol": "OP",

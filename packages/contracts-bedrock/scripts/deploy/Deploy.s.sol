@@ -1059,13 +1059,16 @@ contract Deploy is Deployer {
         console.log("Upgrading and initializing SystemConfig proxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address systemConfig = mustGetAddress("SystemConfig");
-        address safe = mustGetAddress("SystemOwnerSafe");
 
         bytes32 batcherHash = bytes32(uint256(uint160(cfg.batchSenderAddress())));
 
         address customGasTokenAddress = Constants.ETHER;
         if (cfg.useCustomGasToken()) {
             customGasTokenAddress = cfg.customGasTokenAddress();
+        }
+        address systemConfigOwner = cfg.finalSystemOwner();
+        if (cfg.safeAsOwner()) {
+            systemConfigOwner = mustGetAddress("SystemOwnerSafe");
         }
 
         _upgradeAndCallViaSafe({
@@ -1074,7 +1077,7 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(
                 SystemConfig.initialize,
                 (
-                    safe,
+                    systemConfigOwner,
                     cfg.basefeeScalar(),
                     cfg.blobbasefeeScalar(),
                     batcherHash,
@@ -1349,7 +1352,10 @@ contract Deploy is Deployer {
         address protocolVersionsProxy = mustGetAddress("ProtocolVersionsProxy");
         address protocolVersions = mustGetAddress("ProtocolVersions");
 
-        address safe = mustGetAddress("SystemOwnerSafe");
+        address protocolVersionsOwner = cfg.finalSystemOwner();
+        if (cfg.safeAsOwner()) {
+            systemConfigOwner = mustGetAddress("SystemOwnerSafe");
+        }
         uint256 requiredProtocolVersion = cfg.requiredProtocolVersion();
         uint256 recommendedProtocolVersion = cfg.recommendedProtocolVersion();
 
@@ -1358,7 +1364,11 @@ contract Deploy is Deployer {
             _implementation: protocolVersions,
             _innerCallData: abi.encodeCall(
                 ProtocolVersions.initialize,
-                (safe, ProtocolVersion.wrap(requiredProtocolVersion), ProtocolVersion.wrap(recommendedProtocolVersion))
+                (
+                    protocolVersionsOwner,
+                    ProtocolVersion.wrap(requiredProtocolVersion),
+                    ProtocolVersion.wrap(recommendedProtocolVersion)
+                )
             )
         });
 
