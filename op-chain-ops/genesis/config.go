@@ -828,6 +828,9 @@ type DeployConfig struct {
 
 	// DeployCeloContracts indicates whether to deploy Celo contracts.
 	DeployCeloContracts bool `json:"deployCeloContracts"`
+
+	// SafeAsOwner indicates whether specific proxy contracts should be owned by the Safe contract.
+	SafeAsOwner bool `json:"safeAsOwner"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy

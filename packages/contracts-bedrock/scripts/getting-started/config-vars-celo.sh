@@ -43,6 +43,7 @@ reqenv "USE_ALTDA"
 reqenv "DEPLOY_CELO_CONTRACTS"
 reqenv "USE_CUSTOM_GAS_TOKEN"
 reqenv "CUSTOM_GAS_TOKEN_ADDRESS"
+reqenv "SAFE_AS_OWNER"
 
 # Get the finalized block timestamp and hash
 block=$(cast block finalized --rpc-url "$L1_RPC_URL")
@@ -165,7 +166,8 @@ cat << EOL >> tmp_config.json
   "daResolveWindow": 1,
 
   "useCustomGasToken": $USE_CUSTOM_GAS_TOKEN,
-  "customGasTokenAddress": "$CUSTOM_GAS_TOKEN_ADDRESS"
+  "customGasTokenAddress": "$CUSTOM_GAS_TOKEN_ADDRESS",
+  "safeAsOwner": $SAFE_AS_OWNER
 }
 EOL
 
