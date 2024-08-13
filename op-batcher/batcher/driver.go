@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"golang.org/x/sync/errgroup"
 )
 
 var ErrBatcherNotRunning = errors.New("batcher is not running")
@@ -373,13 +374,22 @@ func (l *BatchSubmitter) waitNodeSync() error {
 // publishStateToL1 queues up all pending TxData to be published to the L1, returning when there is
 // no more data to queue for publishing or if there was an error queing the data.
 func (l *BatchSubmitter) publishStateToL1(queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID]) {
+	errGroup, ctx := errgroup.WithContext(l.killCtx)
 	for {
 		// if the txmgr is closed, we stop the transaction sending
 		if l.Txmgr.IsClosed() {
 			l.Log.Info("Txmgr is closed, aborting state publishing")
 			return
 		}
-		err := l.publishTxToL1(l.killCtx, queue, receiptsCh)
+		// if one of the l.sendTransaction calls failed, we stop writing to DA
+		select {
+		case <-ctx.Done():
+			err := errGroup.Wait()
+			l.Log.Warn("BatchSubmitter.sendTransaction failed: %w", "err", err)
+			return
+		default:
+		}
+		err := l.publishTxToL1(ctx, queue, receiptsCh, errGroup)
 		if err != nil {
 			if err != io.EOF {
 				l.Log.Error("Error publishing tx to l1", "err", err)
@@ -429,7 +439,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 }
 
 // publishTxToL1 submits a single state tx to the L1
-func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID]) error {
+func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID], errGroup *errgroup.Group) error {
 	// send all available transactions
 	l1tip, err := l.l1Tip(ctx)
 	if err != nil {
@@ -449,9 +459,9 @@ func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[t
 		return err
 	}
 
-	if err = l.sendTransaction(ctx, txdata, queue, receiptsCh); err != nil {
-		return fmt.Errorf("BatchSubmitter.sendTransaction failed: %w", err)
-	}
+	errGroup.Go(func() error {
+		return l.sendTransaction(ctx, txdata, queue, receiptsCh)
+	})
 	return nil
 }
 
