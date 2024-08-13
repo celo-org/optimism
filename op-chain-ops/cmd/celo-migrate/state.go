@@ -21,7 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/triedb"
 
 	"github.com/holiman/uint256"
 )
@@ -89,8 +88,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	log.Info("Read chain config from database", "config", cfg)
 
 	// Set up the backing store.
-	// TODO(pl): Do we need the preimages setting here?
-	underlyingDB := state.NewDatabaseWithConfig(ldb, &triedb.Config{Preimages: true})
+	underlyingDB := state.NewDatabase(ldb)
 
 	// Open up the state database.
 	db, err := state.New(header.Root, underlyingDB, nil)
@@ -220,7 +218,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	cfg.Cel2Time = &cel2Header.Time
 
 	// Write the chain config to disk.
-	// TODO(pl): Why do we need to write this with the genesis hash, not `cel2Block.Hash()`?`
 	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
 	marhslledConfig, err := json.Marshal(cfg)
 	if err != nil {
