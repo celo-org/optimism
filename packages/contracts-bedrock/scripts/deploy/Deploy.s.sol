@@ -60,7 +60,6 @@ import { Process } from "scripts/libraries/Process.sol";
 
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import { Multicall3 } from "@multicall/Multicall3.sol";
 
 /// @title Deploy
