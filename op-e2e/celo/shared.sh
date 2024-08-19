@@ -1,8 +1,8 @@
 #!/bin/bash
 #shellcheck disable=SC2034  # unused vars make sense in a shared file
 
-export ETH_RPC_URL=http://127.0.0.1:9545
-export ETH_RPC_URL_L1=http://127.0.0.1:8545
+export ETH_RPC_URL=http://localhost:9545
+export ETH_RPC_URL_L1=http://localhost:8545
 
 export ACC_PRIVKEY=ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ACC_ADDR=$(cast wallet address $ACC_PRIVKEY)

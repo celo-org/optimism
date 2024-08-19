@@ -2,6 +2,7 @@ import { chainConfig } from 'viem/op-stack'
 import { defineChain } from 'viem'
 
 export function makeChainConfigs(l1ChainID, l2ChainID, contractAddresses) {
+  console.log(process.env)
   return {
     l2: defineChain({
       formatters: {
@@ -19,7 +20,7 @@ export function makeChainConfigs(l1ChainID, l2ChainID, contractAddresses) {
       },
       rpcUrls: {
         default: {
-          http: ['http://localhost:9545'],
+          http: [process.env.ETH_RPC_URL],
         },
       },
       contracts: {
@@ -52,7 +53,7 @@ export function makeChainConfigs(l1ChainID, l2ChainID, contractAddresses) {
       },
       rpcUrls: {
         default: {
-          http: ['http://localhost:8545'],
+          http: [process.env.ETH_RPC_URL_L1],
         },
       },
       contracts: {
