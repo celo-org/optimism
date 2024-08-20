@@ -221,21 +221,32 @@ func (n *OpNode) initRuntimeConfig(ctx context.Context, cfg *Config) error {
 			return eth.L1BlockRef{}, err
 		}
 
-		// Apply confirmation-distance
-		blNum := l1Head.Number
-		if blNum >= confDepth {
-			blNum -= confDepth
-		}
-		fetchCtx, fetchCancel = context.WithTimeout(ctx, time.Second*10)
-		confirmed, err := n.l1Source.L1BlockRefByNumber(fetchCtx, blNum)
-		fetchCancel()
-		if err != nil {
-			n.log.Error("failed to fetch confirmed L1 block for runtime config loading", "err", err, "number", blNum)
-			return eth.L1BlockRef{}, err
+		var safeBlock eth.L1BlockRef
+		if cfg.Driver.SequencerUseFinalized {
+			fetchCtx, fetchCancel = context.WithTimeout(ctx, time.Second*10)
+			safeBlock, err = n.l1Source.L1BlockRefByLabel(fetchCtx, eth.Finalized)
+			fetchCancel()
+			if err != nil {
+				n.log.Error("failed to fetch finalized L1 block for runtime config loading", "err", err)
+				return eth.L1BlockRef{}, err
+			}
+		} else {
+			// Apply confirmation-distance
+			blNum := l1Head.Number
+			if blNum >= confDepth {
+				blNum -= confDepth
+			}
+			fetchCtx, fetchCancel = context.WithTimeout(ctx, time.Second*10)
+			safeBlock, err = n.l1Source.L1BlockRefByNumber(fetchCtx, blNum)
+			fetchCancel()
+			if err != nil {
+				n.log.Error("failed to fetch confirmed L1 block for runtime config loading", "err", err, "number", blNum)
+				return eth.L1BlockRef{}, err
+			}
 		}
 
 		fetchCtx, fetchCancel = context.WithTimeout(ctx, time.Second*10)
-		err = n.runCfg.Load(fetchCtx, confirmed)
+		err = n.runCfg.Load(fetchCtx, safeBlock)
 		fetchCancel()
 		if err != nil {
 			n.log.Error("failed to fetch runtime config data", "err", err)
