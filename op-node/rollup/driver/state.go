@@ -229,6 +229,36 @@ func (s *Driver) eventLoop() {
 			s.log.Error("unexpected error from event-draining", "err", err)
 		}
 
+		if s.driverConfig.SequencerEnabled && !s.driverConfig.SequencerStopped &&
+			s.l1State.L1Head() != (eth.L1BlockRef{}) && s.l1State.L1Finalized() != (eth.L1BlockRef{}) &&
+			s.Derivation.DerivationReady() {
+
+			// If the L1 does fall behind the limit with finalizing blocks, delay creating new blocks
+			// until the finalized lag is below SequencerMaxFinalizedLag.
+			numBlocksSinceFinalization := s.l1State.L1Head().Number - s.l1State.L1Finalized().Number
+			if numBlocksSinceFinalization > s.driverConfig.SequencerMaxFinalizedLag {
+				if sequencerCh != nil {
+					s.log.Warn(
+						"Delay creating new block since finalized lag exceeds limit",
+						"finalized_l1", s.l1State.L1Finalized(),
+						"l1_head", s.l1State.L1Head(),
+						"unsafe_l2", s.Engine.UnsafeL2Head(),
+						"safe_l2", s.Engine.SafeL2Head(),
+					)
+					sequencerCh = nil
+				}
+				// respCh := make(chan hashAndError)
+				// s.stopSequencer <- respCh
+				// resp := <-respCh
+				// if resp.err != nil {
+				// 	log.Error("Failed to stop sequencer", "err", resp.err)
+				// } else {
+				// 	log.Info("Sequencer has been stopped", "hash", resp.hash)
+				// }
+				// } else {
+				// 	s.startSequencer
+			}
+		}
 		// If we are sequencing, and the L1 state is ready, update the trigger for the next sequencer action.
 		// This may adjust at any time based on fork-choice changes or previous errors.
 		// And avoid sequencing if the derivation pipeline indicates the engine is not ready.

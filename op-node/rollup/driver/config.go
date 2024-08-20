@@ -24,4 +24,6 @@ type Config struct {
 	// SequencerUseFinalized is true when the sequencer should use only finalized L1 blocks as origin.
 	// If this is set to true, the value of `SequencerConfDepth` is ignored.
 	SequencerUseFinalized bool `json:"sequencer_use_finalized"`
+
+	SequencerMaxFinalizedLag uint64 `json:"sequencer_max_finalized_lag"`
 }
