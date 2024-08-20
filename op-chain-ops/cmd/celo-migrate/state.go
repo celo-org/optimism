@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/addresses"
@@ -81,7 +82,7 @@ var (
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath, genesisPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDBWithoutFreezer(dbPath, false)
@@ -197,6 +198,12 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	// Create the Cel2 transition block from the header. Note that there are no transactions,
 	// uncle blocks, or receipts in the Cel2 transition block.
 	cel2Block := types.NewBlock(cel2Header, nil, nil, trie.NewStackTrie(nil))
+
+	// Create genesis block for new chains to sync
+	syncGenesis := AlfajoresGenesisBlockFromConfig(cfg)
+
+	jsonutil.WriteJSON(genesisPath, syncGenesis, OutFilePerm)
+	log.Info("Wrote genesis file for syncing new nodes", "path", genesisPath)
 
 	// We did it!
 	log.Info(

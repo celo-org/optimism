@@ -55,6 +55,11 @@ var (
 		Usage:    "Path to write the rollup config JSON file, to be provided to op-node with the 'rollup.config' flag",
 		Required: true,
 	}
+	outfileGenesisFlag = &cli.PathFlag{
+		Name:     "outfile.genesis",
+		Usage:    "Path to write the genesis JSON file, to be used to sync new nodes",
+		Required: true,
+	}
 	migrationBlockTimeFlag = &cli.Uint64Flag{
 		Name:  "migration-block-time",
 		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
@@ -99,6 +104,7 @@ var (
 		l1RPCFlag,
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
+		outfileGenesisFlag,
 		migrationBlockTimeFlag,
 	)
 )
@@ -117,6 +123,7 @@ type stateMigrationOptions struct {
 	l1RPC               string
 	l2AllocsPath        string
 	outfileRollupConfig string
+	outfileGenesis      string
 	migrationBlockTime  uint64
 }
 
@@ -142,6 +149,7 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l1RPC:               ctx.String(l1RPCFlag.Name),
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
+		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
 		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
 	}
 }
@@ -383,7 +391,7 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, newDBPath, opts.migrationBlockTime, l1StartBlock)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, l1StartBlock)
 	if err != nil {
 		return err
 	}
