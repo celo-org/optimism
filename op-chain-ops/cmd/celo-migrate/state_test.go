@@ -159,6 +159,10 @@ func TestApplyAllocsToState(t *testing.T) {
 				Balance: big.NewInt(defaultBalance),
 				Nonce:   5,
 			},
+			common.HexToAddress("d"): {
+				Balance: big.NewInt(defaultBalance),
+				Code:    bytes.Repeat([]byte{0x01}, 10),
+			},
 		},
 	}
 
@@ -179,6 +183,14 @@ func TestApplyAllocsToState(t *testing.T) {
 			},
 			balanceInAccount: false,
 			wantErr:          false,
+		},
+		{
+			name: "Copy account with non-zero balance fails",
+			addr: common.HexToAddress("a"),
+			account: types.Account{
+				Balance: big.NewInt(1),
+			},
+			wantErr: true,
 		},
 		{
 			name: "Write to account with only balance should overwrite and keep balance",
@@ -208,25 +220,41 @@ func TestApplyAllocsToState(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "Write account with allowlist overwrites",
+			addr: common.HexToAddress("d"),
+			account: types.Account{
+				Code:  contractCode,
+				Nonce: 5,
+			},
+			allowlist:        map[common.Address]bool{common.HexToAddress("d"): true},
+			balanceInAccount: true,
+			wantErr:          false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := applyAllocsToState(&db, &core.Genesis{Alloc: types.GenesisAlloc{tt.addr: tt.account}}, tt.allowlist); (err != nil) != tt.wantErr {
 				t.Errorf("applyAllocsToState() error = %v, wantErr %v", err, tt.wantErr)
+			}
 
-				account, exists := db.accounts[tt.addr]
-				if !exists {
-					t.Errorf("account does not exists as expected: %v", tt.addr.Hex())
-				}
+			// Don't check account state if an error was thrown
+			if tt.wantErr {
+				return
+			}
 
-				assert.Equal(t, tt.account.Nonce, account.Nonce)
-				assert.Equal(t, tt.account.Code, account.Code)
+			account, exists := db.accounts[tt.addr]
+			if !exists {
+				t.Errorf("account does not exists as expected: %v", tt.addr.Hex())
+			}
 
-				if tt.balanceInAccount {
-					assert.Equal(t, big.NewInt(defaultBalance), account.Balance)
-				} else {
-					assert.Equal(t, big.NewInt(0), account.Balance)
-				}
+			assert.Equal(t, tt.account.Nonce, account.Nonce)
+			assert.Equal(t, tt.account.Code, account.Code)
+
+			if tt.balanceInAccount {
+				assert.Equal(t, big.NewInt(defaultBalance), account.Balance)
+			} else {
+				assert.Equal(t, big.NewInt(0), account.Balance)
 			}
 		})
 	}
