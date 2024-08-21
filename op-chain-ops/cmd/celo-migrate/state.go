@@ -255,34 +255,41 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.Cha
 
 	for k, v := range genesis.Alloc {
 		// Check that the balance of the account to written is zero,
-		// as we must not create new CELo tokens
-		if v.Balance.Cmp(big.NewInt(0)) != 0 {
+		// as we must not create new CELO tokens
+		if v.Balance != nil && v.Balance.Cmp(big.NewInt(0)) != 0 {
 			log.Error("Account balance is not zero, would change celo supply", "address", k.Hex())
 			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
 		}
 
-		overwriteNonceAndState := true
+		overwrite := true
 		if db.Exist(k) {
 			var whitelisted bool
-			overwriteNonceAndState, whitelisted = whitelist[k]
+			overwrite, whitelisted = whitelist[k]
 
 			// If the account is not whitelisted and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
 			if !whitelisted && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
 				return fmt.Errorf("account exists and is not whitelisted, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
 			}
+
+			// This means that the account just has balance, in that case we wan to copy over the account
+			if db.GetCodeSize(k) == 0 && db.GetNonce(k) == 0 {
+				overwrite = true
+			}
+
 			overwriteCounter++
 		}
 
 		// This carries over any existing balance
 		db.CreateAccount(k)
-		db.SetCode(k, v.Code)
 
-		if overwriteNonceAndState {
+		if overwrite {
+			db.SetCode(k, v.Code)
 			db.SetNonce(k, v.Nonce)
 			for key, value := range v.Storage {
 				db.SetState(k, key, value)
 			}
 		}
+
 		copyCounter++
 		log.Info("Copied account", "address", k.Hex())
 	}
