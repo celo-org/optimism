@@ -162,14 +162,11 @@ func TestApplyAllocsToState(t *testing.T) {
 		},
 	}
 
-	config := &params.ChainConfig{
-		ChainID: big.NewInt(1),
-	}
-
 	tests := []struct {
 		name             string
 		addr             common.Address
 		account          types.Account
+		allowlist        map[common.Address]bool
 		balanceInAccount bool
 		wantErr          bool
 	}{
@@ -214,7 +211,7 @@ func TestApplyAllocsToState(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := applyAllocsToState(&db, &core.Genesis{Alloc: types.GenesisAlloc{tt.addr: tt.account}}, config); (err != nil) != tt.wantErr {
+			if err := applyAllocsToState(&db, &core.Genesis{Alloc: types.GenesisAlloc{tt.addr: tt.account}}, tt.allowlist); (err != nil) != tt.wantErr {
 				t.Errorf("applyAllocsToState() error = %v, wantErr %v", err, tt.wantErr)
 
 				account, exists := db.accounts[tt.addr]

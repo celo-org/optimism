@@ -34,11 +34,11 @@ var (
 	alfajoresChainId uint64 = 44787
 	mainnetChainId   uint64 = 42220
 
-	// Whitelist of accounts that are allowed to be overwritten
+	// Allowlist of accounts that are allowed to be overwritten
 	// If the value for an account is set to true, the nonce and storage will be overwritten
 	// This must be checked for each account, as this might create issues with contracts
 	// calling `CREATE` or `CREATE2`
-	accountOverwriteWhitelist = map[uint64]map[common.Address]bool{
+	accountOverwriteAllowlist = map[uint64]map[common.Address]bool{
 		// Add any addresses that should be allowed to overwrite existing accounts here.
 		alfajoresChainId: {
 			// Create2Deployer
@@ -96,7 +96,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	err = applyAllocsToState(db, genesis, cfg)
+	err = applyAllocsToState(db, genesis, accountOverwriteAllowlist[cfg.ChainID.Uint64()])
 	if err != nil {
 		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
 	}
@@ -246,29 +246,27 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, config *params.ChainConfig) error {
+func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[common.Address]bool) error {
 	log.Info("Starting to migrate OP contracts into state DB")
 
 	copyCounter := 0
 	overwriteCounter := 0
-	whitelist := accountOverwriteWhitelist[config.ChainID.Uint64()]
 
 	for k, v := range genesis.Alloc {
 		// Check that the balance of the account to written is zero,
 		// as we must not create new CELO tokens
 		if v.Balance != nil && v.Balance.Cmp(big.NewInt(0)) != 0 {
-			log.Error("Account balance is not zero, would change celo supply", "address", k.Hex())
 			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
 		}
 
 		overwrite := true
 		if db.Exist(k) {
-			var whitelisted bool
-			overwrite, whitelisted = whitelist[k]
+			var allowed bool
+			overwrite, allowed = allowlist[k]
 
-			// If the account is not whitelisted and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
-			if !whitelisted && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
-				return fmt.Errorf("account exists and is not whitelisted, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
+			// If the account is not allowed and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
+			if !allowed && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
+				return fmt.Errorf("account exists and is not allowed, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
 			}
 
 			// This means that the account just has balance, in that case we wan to copy over the account
