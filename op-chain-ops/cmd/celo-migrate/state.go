@@ -273,14 +273,14 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[comm
 			if db.GetCodeSize(k) == 0 && db.GetNonce(k) == 0 {
 				overwrite = true
 			}
-
-			overwriteCounter++
 		}
 
 		// This carries over any existing balance
 		db.CreateAccount(k)
 
 		if overwrite {
+			overwriteCounter++
+
 			db.SetCode(k, v.Code)
 			db.SetNonce(k, v.Nonce)
 			for key, value := range v.Storage {
