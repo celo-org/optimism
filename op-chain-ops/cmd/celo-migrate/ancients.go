@@ -41,7 +41,7 @@ func NewChainFreezer(datadir string, namespace string, readonly bool) (*rawdb.Fr
 func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
 	defer timer("ancients")()
 
-	oldFreezer, err := NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
+	oldFreezer, err := NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", true) // TODO(Alec) make sure we don't need this to be read/write (we thought it needed to be in order for it to make .meta files but it's causing locking error)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open old freezer: %w", err)
 	}
