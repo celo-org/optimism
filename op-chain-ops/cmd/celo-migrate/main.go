@@ -261,18 +261,16 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		if numAncientsNewBefore, numAncientsNewAfter, err = migrateAncientsDb(ctx, opts.oldDBPath, opts.newDBPath, opts.batchSize, opts.bufferSize); err != nil {
 			return fmt.Errorf("failed to migrate ancients database: %w", err)
 		}
+		// Scanning for stray ancient blocks is slow, so we do it as soon as we can after the lock on oldDB is released by migrateAncientsDb
+		// Doing this in parallel with copyDbExceptAncients still saves time if ancients have already been pre-migrated
+		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath); err != nil {
+			return fmt.Errorf("failed to get stray ancient blocks: %w", err)
+		}
 		return nil
 	})
 	g.Go(func() error {
 		// By doing this once during the premigration, we get a speedup when we run it again in a full migration.
 		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
-	})
-	g.Go(func() error {
-		// TODO(Alec) getting an error here, need to investigate
-		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath); err != nil {
-			return fmt.Errorf("failed to get stray ancient blocks: %w", err)
-		}
-		return nil
 	})
 
 	if err = g.Wait(); err != nil {
