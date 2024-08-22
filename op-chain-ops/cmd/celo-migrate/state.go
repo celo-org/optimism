@@ -309,6 +309,11 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 
 			// If the account is not allowed and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
 			if !allowed && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
+				// TODO(Alec) remove
+				// TEMP: For testing, you can comment out these lines until we have a way to produce alloc files that don't
+				// include accounts that already exist.
+				// log.Warn("Account exists and is not allowed, skipping account", "address", k.Hex())
+				// continue
 				return fmt.Errorf("account exists and is not allowed, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
 			}
 
@@ -399,10 +404,15 @@ func writeGenesis(config *params.ChainConfig, db ethdb.Database, genesisOutPath 
 		return err
 	}
 	genesisHeader := rawdb.ReadHeader(db, genesisHash, 0)
-	syncGenesis := BuildGenesis(config, legacyGenesisAlloc, genesisHeader.Extra, genesisHeader.Time)
+	syncGenesis, err := BuildGenesis(config, legacyGenesisAlloc, genesisHeader.Extra, genesisHeader.Time)
+	if err != nil {
+		return err
+	}
 
 	// Convert to JSON and write file to --outfile.genesis path.
-	jsonutil.WriteJSON(genesisOutPath, syncGenesis, OutFilePerm)
+	if err := jsonutil.WriteJSON(genesisOutPath, syncGenesis, OutFilePerm); err != nil {
+		return fmt.Errorf("failed to write genesis JSON to file: %w", err)
+	}
 	log.Info("Wrote genesis file for syncing new nodes", "path", genesisOutPath)
 
 	// Legacy Celo did not store the genesis state spec (alloc) in the database.

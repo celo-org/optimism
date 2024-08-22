@@ -635,13 +635,15 @@ func GetCeloL1GenesisAlloc(config *params.ChainConfig) ([]byte, error) {
 }
 
 // BuildGenesis creates a genesis block from the given parameters.
-func BuildGenesis(config *params.ChainConfig, allocs, extraData []byte, timestamp uint64) *core.Genesis {
+func BuildGenesis(config *params.ChainConfig, allocs, extraData []byte, timestamp uint64) (*core.Genesis, error) {
 	genesisAlloc := &types.GenesisAlloc{}
-	genesisAlloc.UnmarshalJSON(allocs)
+	if err := genesisAlloc.UnmarshalJSON(allocs); err != nil {
+		return nil, err
+	}
 	return &core.Genesis{
 		Config:    config,
 		Timestamp: timestamp,
 		ExtraData: extraData,
 		Alloc:     *genesisAlloc,
-	}
+	}, nil
 }
