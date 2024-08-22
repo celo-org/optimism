@@ -13,12 +13,12 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/contracts/addresses"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -26,15 +26,18 @@ import (
 	"github.com/holiman/uint256"
 )
 
+const (
+	MainnetNetworkID   = uint64(42220)
+	BaklavaNetworkID   = uint64(62320)
+	AlfajoresNetworkID = uint64(44787)
+
+	OutFilePerm = os.FileMode(0o440)
+)
+
 var (
 	Big10 = uint256.NewInt(10)
 	Big9  = uint256.NewInt(9)
 	Big18 = uint256.NewInt(18)
-
-	OutFilePerm = os.FileMode(0o440)
-
-	alfajoresChainId uint64 = 44787
-	mainnetChainId   uint64 = 42220
 
 	// Allowlist of accounts that are allowed to be overwritten
 	// If the value for an account is set to true, the nonce and storage will be overwritten
@@ -42,7 +45,7 @@ var (
 	// calling `CREATE` or `CREATE2`
 	accountOverwriteAllowlist = map[uint64]map[common.Address]bool{
 		// Add any addresses that should be allowed to overwrite existing accounts here.
-		alfajoresChainId: {
+		AlfajoresNetworkID: {
 			// Create2Deployer
 			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): false,
 
@@ -74,15 +77,15 @@ var (
 		},
 	}
 	distributionScheduleAddressMap = map[uint64]common.Address{
-		alfajoresChainId: common.HexToAddress("0x78af211ad79bce6bf636640ce8c2c2b29e02365a"),
+		AlfajoresNetworkID: common.HexToAddress("0x78af211ad79bce6bf636640ce8c2c2b29e02365a"),
 	}
 	celoTokenAddressMap = map[uint64]common.Address{
-		alfajoresChainId: addresses.CeloTokenAlfajoresAddress,
-		mainnetChainId:   addresses.CeloTokenAddress,
+		AlfajoresNetworkID: addresses.CeloTokenAlfajoresAddress,
+		MainnetNetworkID:   addresses.CeloTokenAddress,
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath, genesisPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.GenesisAlloc, dbPath, genesisOutPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDBWithoutFreezer(dbPath, false)
@@ -124,7 +127,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	err = applyAllocsToState(db, genesis, accountOverwriteAllowlist[cfg.ChainID.Uint64()])
+	err = applyAllocsToState(db, l2Allocs, accountOverwriteAllowlist[cfg.ChainID.Uint64()])
 	if err != nil {
 		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
 	}
@@ -199,11 +202,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	// uncle blocks, or receipts in the Cel2 transition block.
 	cel2Block := types.NewBlock(cel2Header, nil, nil, trie.NewStackTrie(nil))
 
-	// Create genesis block for new chains to sync
-	syncGenesis := AlfajoresGenesisBlockFromConfig(cfg)
-
-	jsonutil.WriteJSON(genesisPath, syncGenesis, OutFilePerm)
-	log.Info("Wrote genesis file for syncing new nodes", "path", genesisPath)
+	// TODO(Alec) Should we write the genesis here or down below?
 
 	// We did it!
 	log.Info(
@@ -218,7 +217,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 		return nil, err
 	}
 
-	// Next we write the Cel2 genesis block to the database.
+	// Next we write the Cel2 migration block to the database.
 	rawdb.WriteTd(ldb, cel2Block.Hash(), cel2Block.NumberU64(), cel2Block.Difficulty())
 	rawdb.WriteBlock(ldb, cel2Block)
 	rawdb.WriteReceipts(ldb, cel2Block.Hash(), cel2Block.NumberU64(), nil)
@@ -264,6 +263,11 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 	log.Info("Wrote updated chain config", "config", string(marshalledConfig))
 
+	// Write genesis JSON to outfile and store genesis state spec in the database.
+	if err = writeGenesis(cfg, ldb, genesisOutPath, genesisHash); err != nil {
+		return nil, err
+	}
+
 	// We're done!
 	log.Info(
 		"Wrote CeL2 migration block",
@@ -286,13 +290,13 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[common.Address]bool) error {
+func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[common.Address]bool) error {
 	log.Info("Starting to migrate OP contracts into state DB")
 
 	copyCounter := 0
 	overwriteCounter := 0
 
-	for k, v := range genesis.Alloc {
+	for k, v := range allocs {
 		// Check that the balance of the account to written is zero,
 		// as we must not create new CELO tokens
 		if v.Balance != nil && v.Balance.Cmp(big.NewInt(0)) != 0 {
@@ -338,7 +342,7 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[comm
 		log.Info("Copied account", "address", k.Hex())
 	}
 
-	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(genesis.Alloc), "copiedAccounts", copyCounter, "overwrittenAccounts", overwriteCounter)
+	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(allocs), "copiedAccounts", copyCounter, "overwrittenAccounts", overwriteCounter)
 	return nil
 }
 
@@ -382,5 +386,31 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 	db.SetBalance(celoDistributionScheduleAddress, balance, tracing.BalanceChangeUnspecified)
 
 	log.Info("Set up CeloDistributionSchedule balance", "distributionScheduleAddress", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
+	return nil
+}
+
+// writeGenesis writes the genesis json to --outfile.genesis and stores the genesis state spec (alloc) in the database.
+// Note that this is different than the cel2Block / migration block. Rather, this is the migrated genesis block of Celo from before the L2 transition.
+// Nodes will need the genesis json file in order to snap sync on the L2 chain.
+func writeGenesis(config *params.ChainConfig, db ethdb.Database, genesisOutPath string, genesisHash common.Hash) error {
+	// Derive the genesis object using hardcoded legacy alloc and the transformed extra data stored in the new db.
+	legacyGenesisAlloc, err := GetCeloL1GenesisAlloc(config)
+	if err != nil {
+		return err
+	}
+	genesisHeader := rawdb.ReadHeader(db, genesisHash, 0)
+	syncGenesis := BuildGenesis(config, legacyGenesisAlloc, genesisHeader.Extra, genesisHeader.Time)
+
+	// Convert to JSON and write file to --outfile.genesis path.
+	jsonutil.WriteJSON(genesisOutPath, syncGenesis, OutFilePerm)
+	log.Info("Wrote genesis file for syncing new nodes", "path", genesisOutPath)
+
+	// Legacy Celo did not store the genesis state spec (alloc) in the database.
+	// Write it now for forward compatibility.
+	rawdb.WriteGenesisStateSpec(db, genesisHash, legacyGenesisAlloc)
+	log.Info("Wrote genesis state spec (alloc) to database")
+
+	// TODO(Alec) Should we store the l2Allocs in the database as well?
+
 	return nil
 }

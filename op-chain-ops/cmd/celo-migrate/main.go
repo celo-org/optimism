@@ -268,6 +268,7 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
 	})
 	g.Go(func() error {
+		// TODO(Alec) getting an error here, need to investigate
 		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath); err != nil {
 			return fmt.Errorf("failed to get stray ancient blocks: %w", err)
 		}
@@ -391,7 +392,7 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, l1StartBlock)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis.Alloc, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, l1StartBlock)
 	if err != nil {
 		return err
 	}
