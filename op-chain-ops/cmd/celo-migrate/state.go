@@ -309,11 +309,6 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 
 			// If the account is not allowed and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
 			if !allowed && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
-				// TODO(Alec) remove
-				// TEMP: For testing, you can comment out these lines until we have a way to produce alloc files that don't
-				// include accounts that already exist.
-				// log.Warn("Account exists and is not allowed, skipping account", "address", k.Hex())
-				// continue
 				return fmt.Errorf("account exists and is not allowed, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
 			}
 
