@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,10 +16,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/triedb"
 
 	"github.com/holiman/uint256"
 )
@@ -35,11 +34,41 @@ var (
 	alfajoresChainId uint64 = 44787
 	mainnetChainId   uint64 = 42220
 
-	accountOverwriteWhitelist = map[uint64]map[common.Address]struct{}{
+	// Allowlist of accounts that are allowed to be overwritten
+	// If the value for an account is set to true, the nonce and storage will be overwritten
+	// This must be checked for each account, as this might create issues with contracts
+	// calling `CREATE` or `CREATE2`
+	accountOverwriteAllowlist = map[uint64]map[common.Address]bool{
 		// Add any addresses that should be allowed to overwrite existing accounts here.
 		alfajoresChainId: {
 			// Create2Deployer
-			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): {},
+			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): false,
+
+			// Same code as in allocs file
+			// EntryPoint_v070
+			common.HexToAddress("0x0000000071727De22E5E9d8BAf0edAc6f37da032"): false,
+			// Permit2
+			common.HexToAddress("0x000000000022D473030F116dDEE9F6B43aC78BA3"): false,
+			// EntryPoint_v060
+			common.HexToAddress("0x5FF137D4b0FDCD49DcA30c7CF57E578a026d2789"): false,
+			// DeterministicDeploymentProxy
+			common.HexToAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C"): false,
+			// SafeL2_v130
+			common.HexToAddress("0xfb1bffC9d739B8D520DaF37dF666da4C687191EA"): false,
+			// MultiSend_v130
+			common.HexToAddress("0x998739BFdAAdde7C933B942a68053933098f9EDa"): false,
+			// SenderCreator_v070
+			common.HexToAddress("0xEFC2c1444eBCC4Db75e7613d20C6a62fF67A167C"): false,
+			// SenderCreator_v060
+			common.HexToAddress("0x7fc98430eAEdbb6070B35B39D798725049088348"): false,
+			// MultiCall3
+			common.HexToAddress("0xcA11bde05977b3631167028862bE2a173976CA11"): false,
+			// Safe_v130
+			common.HexToAddress("0x69f4D1788e39c87893C980c06EdF4b7f686e2938"): false,
+			// MultiSendCallOnly_v130
+			common.HexToAddress("0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B"): false,
+			// SafeSingletonFactory
+			common.HexToAddress("0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7"): false,
 		},
 	}
 	distributionScheduleAddressMap = map[uint64]common.Address{
@@ -54,7 +83,7 @@ var (
 func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
-	ldb, err := openDB(dbPath)
+	ldb, err := openDBWithoutFreezer(dbPath, false)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open DB: %w", err)
 	}
@@ -84,8 +113,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	log.Info("Read chain config from database", "config", cfg)
 
 	// Set up the backing store.
-	// TODO(pl): Do we need the preimages setting here?
-	underlyingDB := state.NewDatabaseWithConfig(ldb, &triedb.Config{Preimages: true})
+	underlyingDB := state.NewDatabase(ldb)
 
 	// Open up the state database.
 	db, err := state.New(header.Root, underlyingDB, nil)
@@ -94,7 +122,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 
 	// Apply the changes to the state DB.
-	applyAllocsToState(db, genesis, cfg)
+	err = applyAllocsToState(db, genesis, accountOverwriteAllowlist[cfg.ChainID.Uint64()])
+	if err != nil {
+		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
+	}
 
 	// Initialize the distribution schedule contract
 	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
@@ -212,7 +243,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	cfg.Cel2Time = &cel2Header.Time
 
 	// Write the chain config to disk.
-	// TODO(pl): Why do we need to write this with the genesis hash, not `cel2Block.Hash()`?`
 	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
 	marhslledConfig, err := json.Marshal(cfg)
 	if err != nil {
@@ -242,48 +272,54 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 // If an account already exists, it adds the balance of the new account to the existing balance.
 // If the code of an existing account is different from the code in the genesis block, it logs a warning.
 // This changes the state root, so `Commit` needs to be called after this function.
-func applyAllocsToState(db *state.StateDB, genesis *core.Genesis, config *params.ChainConfig) {
+func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[common.Address]bool) error {
 	log.Info("Starting to migrate OP contracts into state DB")
 
-	accountCounter := 0
+	copyCounter := 0
 	overwriteCounter := 0
+
 	for k, v := range genesis.Alloc {
-		accountCounter++
+		// Check that the balance of the account to written is zero,
+		// as we must not create new CELO tokens
+		if v.Balance != nil && v.Balance.Cmp(big.NewInt(0)) != 0 {
+			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
+		}
 
-		balance := uint256.MustFromBig(v.Balance)
-
+		overwrite := true
 		if db.Exist(k) {
-			// If the account already has balance, add it to the balance of the new account
-			balance = balance.Add(balance, db.GetBalance(k))
+			var allowed bool
+			overwrite, allowed = allowlist[k]
 
-			currentCode := db.GetCode(k)
-			equalCode := bytes.Equal(currentCode, v.Code)
-			if currentCode != nil && !equalCode {
-				if whitelist, exists := accountOverwriteWhitelist[config.ChainID.Uint64()]; exists {
-					if _, ok := whitelist[k]; ok {
-						log.Info("Account already exists with different code and is whitelisted, overwriting...", "address", k)
-					} else {
-						log.Warn("Account already exists with different code and is not whitelisted, overwriting...", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
-					}
-				} else {
-					log.Warn("Account already exists with different code and no whitelist exists", "address", k, "oldCode", db.GetCode(k), "newCode", v.Code)
-				}
+			// If the account is not allowed and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
+			if !allowed && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
+				return fmt.Errorf("account exists and is not allowed, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
+			}
 
-				overwriteCounter++
+			// This means that the account just has balance, in that case we wan to copy over the account
+			if db.GetCodeSize(k) == 0 && db.GetNonce(k) == 0 {
+				overwrite = true
 			}
 		}
+
+		// This carries over any existing balance
 		db.CreateAccount(k)
 
-		db.SetNonce(k, v.Nonce)
-		db.SetBalance(k, balance)
-		db.SetCode(k, v.Code)
-		for key, value := range v.Storage {
-			db.SetState(k, key, value)
+		if overwrite {
+			overwriteCounter++
+
+			db.SetCode(k, v.Code)
+			db.SetNonce(k, v.Nonce)
+			for key, value := range v.Storage {
+				db.SetState(k, key, value)
+			}
 		}
 
-		log.Info("Moved account", "address", k)
+		copyCounter++
+		log.Info("Copied account", "address", k.Hex())
 	}
-	log.Info("Migrated OP contracts into state DB", "copiedAccounts", accountCounter, "overwrittenAccounts", overwriteCounter)
+
+	log.Info("Migrated OP contracts into state DB", "totalAllocs", len(genesis.Alloc), "copiedAccounts", copyCounter, "overwrittenAccounts", overwriteCounter)
+	return nil
 }
 
 // setupDistributionSchedule sets up the distribution schedule contract with the correct balance

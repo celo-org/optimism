@@ -2,47 +2,61 @@
 
 ## Overview
 
-This script has two main sections. The first migrates Celo blocks to a format compatible with `op-geth`, and the second performs necessary state changes such as deploying L2 smart contracts.
+This script migrates a Celo L1 database (old datadir) into a new database compatible with Celo L2 (new datadir). It consists of 3 main processes that respectively migrate ancient blocks, non-ancient blocks and state. Migrated data is copied into a new datadir, leaving the old datadir unchanged.
 
-### Block migration
+To minimize migration downtime, the script is designed to run in two stages:
+1. The `pre migration` stage can be run ahead of the `full migration` and will process as much of the migration as possible up to that point.
+2. The `full migration` can then be run to finish migrating new blocks that were created after the `pre migration` and apply necessary state changes on top of the migration block.
 
-The block migration itself has two parts: It first migrates the ancient / frozen blocks, which is all blocks before the last 90000. Because the ancients db is append-only, it copies these blocks into a new database after making the necessary transformations. The script then copies the rest of the chaindata directory (excluding `/ancients`) using the system level `rsync` command. All non-ancient blocks are then transformed in-place in the new db, leaving the old db unchanged.
+### Pre migration
 
-### State migration
+The `pre migration` consists of two parts that are run in parallel: 
+- Copy and transform the ancient / frozen blocks (i.e. all blocks before the last 90000).
+- Copy over the rest of the database using `rsync`.
 
-After all blocks have been migrated, the script performs a series of modifications to the state db. This is also done in-place in the `--new-db` directory. First, the state migration deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary. Finally, the state migration will commit the state changes to produce a new state root and create the first Cel2 block.
+The ancients db is migrated sequentially because it is append-only, while the rest of the database is copied and then transformed in-place. We use `rsync` because it has flags for ignoring the ancients directory, skipping any already copied files and deleting any extra files in the new db, ensuring that we can run the script multiple times and only copy over actual updates.
+
+The `pre migration` step is still run during a `full migration` but it will be much quicker as only newly frozen blocks and recent file changes need to be migrated.
+
+### Full migration
+
+During the `full migration`, we re-run the `pre migration` step to capture any updates since the last `pre migration` and then apply in-place changes to non-ancient blocks and state. While this is happening, the script also checks for any stray ancient blocks that have remained in leveldb despite being frozen and removes them from the new db. Non-ancient blocks are then transformed to ensure compatibility with the L2 codebase.
+
+Finally after all blocks have been migrated, the script performs a series of modifications to the state db:
+1. First, it deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary.
+2. Finally, these changes are committed to the state db to produce a new state root and create the first Celo L2 block.
 
 ### Notes
 
-Once the state changes are complete the migration is finished. The longest running section of the script is the ancients migration, and it can be resumed / skipped if interupted part way. The rest of the script cannot be resumed and will restart from the last migrated ancient block if interupted or re-run.
+> [!TIP]
+> See `--help` for how to run each portion of the script individually, along with other configuration options.
+
+The longest running section of the script is the ancients migration, followed by the `rsync` command. By running these together in a `pre migration` we greatly reduce how long they will take during the `full migration`. Changes made to non-ancient blocks and state during a `full migration` are erased by the next `rsync` command.
 
 The script outputs a `rollup-config.json` file that is passed to the sequencer in order to start the L2 network.
 
-See `--help` for how to run each portion of the script individually, along with other configuration options.
-
 ### Running the script
 
-First, build the script by running
+> [!NOTE]
+> You will need `rsync` to run this script if it's not already installed.
+
+From the `op-chain-ops` directory, first build the script by running:
 
 ```bash
 make celo-migrate
 ```
 
-from the `op-chain-ops` directory.
-
-You can then run the script as follows.
+You can then run the script as follows:
 
 ```bash
 go run ./cmd/celo-migrate --help
 ```
 
-NOTE: You will need `rsync` to run this script if it's not already installed
-
 #### Running with local test setup (Alfajores / Holesky)
 
-To test the script locally, we can migrate an alfajores database and use Holesky as our L1. The input files needed for this can be found in `./testdata`. The necessary smart contracts have already been deployed on Holesky.
+To test the script locally, we can migrate an Alfajores database and use Holesky as our L1. The input files needed for this can be found in `./testdata`. The necessary smart contracts have already been deployed on Holesky.
 
-##### Pull down the latest alfajores database snapshot
+##### Pull down the latest Alfajores database snapshot
 
 ```bash
 gcloud alpha storage cp gs://celo-chain-backup/alfajores/chaindata-latest.tar.zst alfajores.tar.zst
@@ -57,7 +71,7 @@ mv chaindata ./data/alfajores_old
 
 ##### Generate test allocs file
 
-The state migration takes in a allocs file that specifies the l2 state changes to be made during the migration. This file can be generated from the deploy config and l1 contract addresses by running the following from the `contracts-bedrock` directory.
+The state migration takes in an allocs file that specifies the l2 state changes to be made during the migration. This file can be generated from the deploy config and l1 contract addresses by running the following from the `contracts-bedrock` directory.
 
 ```bash
 CONTRACT_ADDRESSES_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deployment-l1-holesky.json \
@@ -72,6 +86,14 @@ This should output the allocs file to `./testdata/l2-allocs-alfajores.json`. If 
 ##### Run script with test configuration
 
 ```bash
+go run ./cmd/celo-migrate pre \
+--old-db ./data/alfajores_old \
+--new-db ./data/alfajores_new
+```
+
+Running the pre-migration script should take ~5 minutes. This script copies and transforms ancient blocks and, in parallel, copies over all other chaindata without transforming it. This can be re-run mutliple times leading up to the full migration, and should only migrate updates to the old db between re-runs.
+
+```bash
 go run ./cmd/celo-migrate full \
 --deploy-config ./cmd/celo-migrate/testdata/deploy-config-holesky-alfajores.json \
 --l1-deployments ./cmd/celo-migrate/testdata/deployment-l1-holesky.json \
@@ -82,11 +104,7 @@ go run ./cmd/celo-migrate full \
 --new-db ./data/alfajores_new
 ```
 
-The first time you run the script it should take ~5 minutes. The first part of the script will migrate ancient blocks, and will take the majority of the time.
-
-During the ancients migration you can play around with stopping and re-running the script, which should always resume where it left off. If you run the script subsequent times after ancient migrations have been run, the script should skip ancient migrations and proceed to migrating non-ancient blocks quickly.
-
-Note that partial migration progress beyond the ancient blocks (i.e. non-frozen blocks and state changes) will not be preserved between runs by default.
+Running the full migration script re-runs the pre-migration script once to migrate any new changes to the old db that have occurred since the last pre-migration. It then performs in-place transformations on the non-ancient blocks and performs the state migration as well.
 
 #### Running for Cel2 migration
 
@@ -102,16 +120,17 @@ forge script scripts/L2Genesis.s.sol:L2Genesis \
 --sig 'runWithStateDump()'
 ```
 
-##### Dress rehearsal / pre-migration
+##### Dry-run / pre-migration
 
-To minimize downtime caused by the migration, node operators can prepare their Cel2 databases by running this script a day ahead of the actual migration. This will pre-populate the new database with most of the ancient blocks needed for the final migration, and will also serve as a dress rehearsal for the rest of the migration.
+To minimize downtime caused by the migration, node operators can prepare their Cel2 databases by running the pre-migration command a day ahead of the actual migration. This will pre-populate the new database with most of the ancient blocks needed for the final migration and copy over other chaindata without transforming it.
 
-NOTE: The pre-migration should be run using a chaindata snapshot, rather than a db that is being used by a node. To avoid network downtime, we recommend that node operators do not stop any nodes in order to perform the pre-migration.
+If node operators would like to practice a `full migration` they can do so and reset their databases to the correct state by running another `pre migration` afterward.
 
-Node operators should inspect their migration logs after the dress rehearsal to ensure the migration completed succesfully and direct any questions to the Celo developer community on Discord before the actual migration.
+> [!IMPORTANT]
+> The pre-migration should be run using a chaindata snapshot, rather than a db that is being used by a node. To avoid network downtime, we recommend that node operators do not stop any nodes in order to perform the pre-migration.
+
+Node operators should inspect their migration logs after the dry-run to ensure the migration completed succesfully and direct any questions to the Celo developer community on Discord before the actual migration.
 
 ##### Final migration
 
-On the day of the actual cel2 migration, this script can be re-run using the same parameters as for the dress rehearsal but with the latest Celo Mainnet database snapshot as `--old-db`. The script will only need to migrate any ancient blocks frozen after the dress rehearsal, all non-frozen blocks, and state.
-
-Unlike the pre-migration, the final migration can be run directly on the db used by the Celo node rather than a snapshot.
+On the day of the actual Cel2 migration, the `full migration` script can be run using the datadir of a Celo L1 node that has halted on the migration block. Far in advance of the migration, a version of `celo-blockchain` will be distributed where a flag can specify a block to halt on. When the Celo community aligns on a migration block, node operators will start / restart their nodes with this flag specifying the migration block. Their nodes will halt when this block is reached, at which point they will be able to run `full migration` and begin syncing with the Celo L2 network.

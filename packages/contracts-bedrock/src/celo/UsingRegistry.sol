@@ -5,7 +5,6 @@ import "../../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "../../lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 
 import "./interfaces/IAccounts.sol";
-import "./interfaces/IFeeCurrencyWhitelist.sol";
 import "./interfaces/IFreezer.sol";
 import "./interfaces/ICeloRegistry.sol";
 
@@ -33,7 +32,6 @@ contract UsingRegistry is Ownable {
     bytes32 constant DOUBLE_SIGNING_SLASHER_REGISTRY_ID = keccak256(abi.encodePacked("DoubleSigningSlasher"));
     bytes32 constant ELECTION_REGISTRY_ID = keccak256(abi.encodePacked("Election"));
     bytes32 constant EXCHANGE_REGISTRY_ID = keccak256(abi.encodePacked("Exchange"));
-    bytes32 constant FEE_CURRENCY_WHITELIST_REGISTRY_ID = keccak256(abi.encodePacked("FeeCurrencyWhitelist"));
     bytes32 constant FREEZER_REGISTRY_ID = keccak256(abi.encodePacked("Freezer"));
     bytes32 constant GOLD_TOKEN_REGISTRY_ID = keccak256(abi.encodePacked("GoldToken"));
     bytes32 constant GOVERNANCE_REGISTRY_ID = keccak256(abi.encodePacked("Governance"));
@@ -82,10 +80,6 @@ contract UsingRegistry is Ownable {
 
     function getExchange() internal view returns (IExchange) {
         return IExchange(registry.getAddressForOrDie(EXCHANGE_REGISTRY_ID));
-    }
-
-    function getFeeCurrencyWhitelistRegistry() internal view returns (IFeeCurrencyWhitelist) {
-        return IFeeCurrencyWhitelist(registry.getAddressForOrDie(FEE_CURRENCY_WHITELIST_REGISTRY_ID));
     }
 
     function getFreezer() internal view returns (IFreezer) {
