@@ -269,6 +269,8 @@ func (l *BatchSubmitter) loop() {
 	receiptsCh := make(chan txmgr.TxReceipt[txID])
 	queue := txmgr.NewQueue[txID](l.killCtx, l.Txmgr, l.Config.MaxPendingTransactions)
 	var daWaitGroup sync.WaitGroup
+	maxDaWorkers := 10
+	daSemaphore := make(chan struct{}, maxDaWorkers)
 
 	// start the receipt/result processing loop
 	receiptLoopDone := make(chan struct{})
@@ -290,7 +292,7 @@ func (l *BatchSubmitter) loop() {
 	defer ticker.Stop()
 
 	publishAndWait := func() {
-		l.publishStateToL1(queue, receiptsCh, &daWaitGroup)
+		l.publishStateToL1(queue, receiptsCh, &daWaitGroup, daSemaphore)
 		if !l.Txmgr.IsClosed() {
 			l.Log.Info("Wait for pure DA writes, not L1 txs")
 			daWaitGroup.Wait()
@@ -319,7 +321,7 @@ func (l *BatchSubmitter) loop() {
 				l.clearState(l.shutdownCtx)
 				continue
 			}
-			l.publishStateToL1(queue, receiptsCh, &daWaitGroup)
+			l.publishStateToL1(queue, receiptsCh, &daWaitGroup, daSemaphore)
 		case <-l.shutdownCtx.Done():
 			if l.Txmgr.IsClosed() {
 				l.Log.Info("Txmgr is closed, remaining channel data won't be sent")
@@ -376,14 +378,14 @@ func (l *BatchSubmitter) waitNodeSync() error {
 
 // publishStateToL1 queues up all pending TxData to be published to the L1, returning when there is
 // no more data to queue for publishing or if there was an error queing the data.
-func (l *BatchSubmitter) publishStateToL1(queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID], daWaitGroup *sync.WaitGroup) {
+func (l *BatchSubmitter) publishStateToL1(queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID], daWaitGroup *sync.WaitGroup, daSempahore chan struct{}) {
 	for {
 		// if the txmgr is closed, we stop the transaction sending
 		if l.Txmgr.IsClosed() {
 			l.Log.Info("Txmgr is closed, aborting state publishing")
 			return
 		}
-		err := l.publishTxToL1(l.killCtx, queue, receiptsCh, daWaitGroup)
+		err := l.publishTxToL1(l.killCtx, queue, receiptsCh, daWaitGroup, daSempahore)
 		if err != nil {
 			if err != io.EOF {
 				l.Log.Error("Error publishing tx to l1", "err", err)
@@ -433,7 +435,22 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 }
 
 // publishTxToL1 submits a single state tx to the L1
-func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID], waitGroup *sync.WaitGroup) error {
+func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[txID], receiptsCh chan txmgr.TxReceipt[txID], waitGroup *sync.WaitGroup, daSempahore chan struct{}) error {
+	// Acquire semaphore or return immediately if it is at capacity
+	select {
+	case daSempahore <- struct{}{}:
+	default:
+		return io.EOF // Data might be available, but we can't send any now
+	}
+
+	// If we exit before a goroutine is created, we have to release the semaphore
+	goroutineCreated := false
+	defer func() {
+		if !goroutineCreated {
+			<-daSempahore
+		}
+	}()
+
 	// send all available transactions
 	l1tip, err := l.l1Tip(ctx)
 	if err != nil {
@@ -456,6 +473,8 @@ func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[t
 	waitGroup.Add(1)
 	go func() {
 		defer waitGroup.Done()
+		defer func() { <-daSempahore }()
+		goroutineCreated = true
 		err := l.sendTransaction(ctx, txdata, queue, receiptsCh)
 		if err != nil {
 			l.Log.Warn("BatchSubmitter.sendTransaction failed: %w", "err", err)
