@@ -9,12 +9,13 @@ import (
 )
 
 var (
-	EnabledFlagName         = altDAFlags("enabled")
-	DaServerAddressFlagName = altDAFlags("da-server")
-	VerifyOnReadFlagName    = altDAFlags("verify-on-read")
-	DaServiceFlagName       = altDAFlags("da-service")
-	PutTimeoutFlagName      = altDAFlags("put-timeout")
-	GetTimeoutFlagName      = altDAFlags("get-timeout")
+	EnabledFlagName               = altDAFlags("enabled")
+	DaServerAddressFlagName       = altDAFlags("da-server")
+	VerifyOnReadFlagName          = altDAFlags("verify-on-read")
+	DaServiceFlagName             = altDAFlags("da-service")
+	PutTimeoutFlagName            = altDAFlags("put-timeout")
+	GetTimeoutFlagName            = altDAFlags("get-timeout")
+	MaxConcurrentRequestsFlagName = altDAFlags("max-concurrent-da-requests")
 )
 
 // altDAFlags returns the flag names for altDA
@@ -67,16 +68,23 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			Value:   time.Duration(0),
 			EnvVars: altDAEnvs(envPrefix, "GET_TIMEOUT"),
 		},
+		&cli.Uint64Flag{
+			Name:    MaxConcurrentRequestsFlagName,
+			Usage:   "Maximum number of concurrent requests to the DA server",
+			Value:   1,
+			EnvVars: altDAEnvs(envPrefix, "MAX_CONCURRENT_DA_REQUESTS"),
+		},
 	}
 }
 
 type CLIConfig struct {
-	Enabled      bool
-	DAServerURL  string
-	VerifyOnRead bool
-	GenericDA    bool
-	PutTimeout   time.Duration
-	GetTimeout   time.Duration
+	Enabled               bool
+	DAServerURL           string
+	VerifyOnRead          bool
+	GenericDA             bool
+	PutTimeout            time.Duration
+	GetTimeout            time.Duration
+	MaxConcurrentRequests uint64
 }
 
 func (c CLIConfig) Check() error {
@@ -97,11 +105,12 @@ func (c CLIConfig) NewDAClient() *DAClient {
 
 func ReadCLIConfig(c *cli.Context) CLIConfig {
 	return CLIConfig{
-		Enabled:      c.Bool(EnabledFlagName),
-		DAServerURL:  c.String(DaServerAddressFlagName),
-		VerifyOnRead: c.Bool(VerifyOnReadFlagName),
-		GenericDA:    c.Bool(DaServiceFlagName),
-		PutTimeout:   c.Duration(PutTimeoutFlagName),
-		GetTimeout:   c.Duration(GetTimeoutFlagName),
+		Enabled:               c.Bool(EnabledFlagName),
+		DAServerURL:           c.String(DaServerAddressFlagName),
+		VerifyOnRead:          c.Bool(VerifyOnReadFlagName),
+		GenericDA:             c.Bool(DaServiceFlagName),
+		PutTimeout:            c.Duration(PutTimeoutFlagName),
+		GetTimeout:            c.Duration(GetTimeoutFlagName),
+		MaxConcurrentRequests: c.Uint64(MaxConcurrentRequestsFlagName),
 	}
 }
