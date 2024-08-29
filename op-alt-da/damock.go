@@ -104,6 +104,9 @@ func (d *AltDADisabled) AdvanceL1Origin(ctx context.Context, l1 L1Fetcher, block
 	return ErrNotEnabled
 }
 
+// FakeDAServer is a fake DA server for e2e tests.
+// It is a small wrapper around DAServer that allows for setting request latencies,
+// to mimic a DA service with slow responses (eg. eigenDA with 10 min batching interval).
 type FakeDAServer struct {
 	*DAServer
 	putRequestLatency time.Duration
