@@ -558,13 +558,17 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 	var err error
 
 	// if Alt DA is enabled we post the txdata to the DA Provider and replace it with the commitment.
-	if !txdata.asBlob && l.Config.UseAltDA {
-		// sanity check
+	if l.Config.UseAltDA {
+		// sanity checks
 		if nf := len(txdata.frames); nf != 1 {
 			l.Log.Crit("Unexpected number of frames in calldata tx", "num_frames", nf)
 		}
+		if txdata.asBlob {
+			l.Log.Crit("Unexpected blob txdata with AltDA enabled")
+		}
+
 		// when posting txdata to an external DA Provider, we use a goroutine to avoid blocking the main loop
-		// since it may take a while to post the txdata to the DA Provider.
+		// since it may take a while for the request to return.
 		daWaitGroup.Add(1)
 		go func() {
 			defer daWaitGroup.Done()
@@ -572,11 +576,11 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 			if err != nil {
 				l.Log.Error("Failed to post input to Alt DA", "error", err)
 				// requeue frame if we fail to post to the DA Provider so it can be retried
+				// note: this assumes that the da server caches requests, otherwise it might lead to resubmissions of the blobs
 				l.recordFailedTx(txdata.ID(), err)
 				return
 			}
 			l.Log.Info("Set altda input", "commitment", comm, "tx", txdata.ID())
-			// signal altda commitment tx with TxDataVersion1
 			candidate := l.calldataTxCandidate(comm.TxData())
 			l.queueTx(txdata, false, candidate, queue, receiptsCh)
 		}()
