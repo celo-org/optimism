@@ -301,7 +301,11 @@ func (l *BatchSubmitter) loop() {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef])
 	queue := txmgr.NewQueue[txRef](l.killCtx, l.Txmgr, l.Config.MaxPendingTransactions)
 	daGroup := &errgroup.Group{}
-	daGroup.SetLimit(int(l.Config.MaxConcurrentDARequests))
+	// errgroup with limit of 0 means no goroutine is able to run concurrently,
+	// so we only set the limit if it is greater than 0.
+	if l.Config.MaxConcurrentDARequests > 0 {
+		daGroup.SetLimit(int(l.Config.MaxConcurrentDARequests))
+	}
 
 	// start the receipt/result processing loop
 	receiptLoopDone := make(chan struct{})
