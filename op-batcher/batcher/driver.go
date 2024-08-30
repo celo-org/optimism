@@ -344,7 +344,7 @@ func (l *BatchSubmitter) loop() {
 		l.publishStateToL1(queue, receiptsCh, daGroup)
 		if !l.Txmgr.IsClosed() {
 			l.Log.Info("Wait for pure DA writes, not L1 txs")
-			daGroup.Wait()
+			_ = daGroup.Wait()
 			l.Log.Info("Wait for L1 writes (blobs or DA commitments)")
 			queue.Wait()
 		} else {
