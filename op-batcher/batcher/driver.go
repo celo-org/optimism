@@ -494,13 +494,6 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 
 // publishTxToL1 submits a single state tx to the L1
 func (l *BatchSubmitter) publishTxToL1(ctx context.Context, queue *txmgr.Queue[txRef], receiptsCh chan txmgr.TxReceipt[txRef], daGroup *errgroup.Group) error {
-	// We use TryGo with an empty function similar to semaphore.TryAcquire()
-	// if we can't acquire a slot we return io.EOF to stop processing the current batch
-	// because we don't want to pull data out of the state if we won't be able to send it
-	if l.Config.UseAltDA && !daGroup.TryGo(func() error { return nil }) {
-		return io.EOF
-	}
-
 	// send all available transactions
 	l1tip, err := l.l1Tip(ctx)
 	if err != nil {
@@ -583,7 +576,7 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 		// when posting txdata to an external DA Provider, we use a goroutine to avoid blocking the main loop
 		// since it may take a while for the request to return.
 		// the number of concurrent goroutines is limited by the semaphore check (daGroup.TryAcquire(1)) in publishTxToL1
-		daGroup.Go(func() error {
+		goroutineSpawned := daGroup.TryGo(func() error {
 			comm, err := l.AltDA.SetInput(ctx, txdata.CallData())
 			if err != nil {
 				l.Log.Error("Failed to post input to Alt DA", "error", err)
@@ -597,6 +590,12 @@ func (l *BatchSubmitter) sendTransaction(ctx context.Context, txdata txData, que
 			l.queueTx(txdata, false, candidate, queue, receiptsCh)
 			return nil
 		})
+		if !goroutineSpawned {
+			// We couldn't start the goroutine because the errgroup.Group limit
+			// is already reached. Since we can't send the txdata, we have to
+			// return it for later processing.
+			l.recordFailedTx(txdata.ID(), fmt.Errorf("could not start da writing goroutine: %w", err))
+		}
 		// we return nil to allow publishStateToL1 to keep processing the next txdata
 		return nil
 	}
