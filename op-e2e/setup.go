@@ -171,13 +171,13 @@ func DefaultSystemConfig(t testing.TB) SystemConfig {
 			"proposer":  testlog.Logger(t, log.LevelInfo).New("role", "proposer"),
 			"da-server": testlog.Logger(t, log.LevelInfo).New("role", "da-server"),
 		},
-		GethOptions:            map[string][]geth.GethOption{},
-		P2PTopology:            nil, // no P2P connectivity by default
-		NonFinalizedProposals:  false,
-		ExternalL2Shim:         config.ExternalL2Shim,
-		DataAvailabilityType:   batcherFlags.CalldataType,
-		MaxPendingTransactions: 1,
-		BatcherTargetNumFrames: 1,
+		GethOptions:                   map[string][]geth.GethOption{},
+		P2PTopology:                   nil, // no P2P connectivity by default
+		NonFinalizedProposals:         false,
+		ExternalL2Shim:                config.ExternalL2Shim,
+		DataAvailabilityType:          batcherFlags.CalldataType,
+		BatcherMaxPendingTransactions: 1,
+		BatcherTargetNumFrames:        1,
 	}
 }
 
@@ -300,12 +300,16 @@ type SystemConfig struct {
 	// If >0, limits the number of blocks per span batch
 	BatcherMaxBlocksPerSpanBatch int
 
+	// BatcherMaxPendingTransactions determines how many transactions the batcher will try to send
+	// concurrently. 0 means unlimited.
+	BatcherMaxPendingTransactions uint64
+
+	// BatcherMaxConcurrentDARequest determines how many DAserver requests the batcher is allowed to
+	// make concurrently. 0 means unlimited.
+	BatcherMaxConcurrentDARequest uint64
+
 	// SupportL1TimeTravel determines if the L1 node supports quickly skipping forward in time
 	SupportL1TimeTravel bool
-
-	// MaxPendingTransactions determines how many transactions the batcher will try to send
-	// concurrently. 0 means unlimited.
-	MaxPendingTransactions uint64
 }
 
 type System struct {
@@ -842,17 +846,18 @@ func (cfg SystemConfig) Start(t *testing.T, _opts ...SystemConfigOption) (*Syste
 		sys.FakeAltDAServer = fakeAltDAServer
 
 		batcherAltDACLIConfig = altda.CLIConfig{
-			Enabled:      cfg.DeployConfig.UseAltDA,
-			DAServerURL:  fakeAltDAServer.HttpEndpoint(),
-			VerifyOnRead: true,
-			GenericDA:    true,
+			Enabled:               cfg.DeployConfig.UseAltDA,
+			DAServerURL:           fakeAltDAServer.HttpEndpoint(),
+			VerifyOnRead:          true,
+			GenericDA:             true,
+			MaxConcurrentRequests: cfg.BatcherMaxConcurrentDARequest,
 		}
 	}
 	batcherCLIConfig := &bss.CLIConfig{
 		L1EthRpc:                 sys.EthInstances[RoleL1].UserRPC().RPC(),
 		L2EthRpc:                 sys.EthInstances[RoleSeq].UserRPC().RPC(),
 		RollupRpc:                sys.RollupNodes[RoleSeq].UserRPC().RPC(),
-		MaxPendingTransactions:   cfg.MaxPendingTransactions,
+		MaxPendingTransactions:   cfg.BatcherMaxPendingTransactions,
 		MaxChannelDuration:       1,
 		MaxL1TxSize:              batcherMaxL1TxSizeBytes,
 		TestUseMaxTxSizeForBlobs: cfg.BatcherUseMaxTxSizeForBlobs,

@@ -1363,7 +1363,7 @@ func TestBatcherMultiTx(t *testing.T) {
 	InitParallel(t)
 
 	cfg := DefaultSystemConfig(t)
-	cfg.MaxPendingTransactions = 0 // no limit on parallel txs
+	cfg.BatcherMaxPendingTransactions = 0 // no limit on parallel txs
 	// ensures that batcher txs are as small as possible
 	cfg.BatcherMaxL1TxSizeBytes = derive.FrameV0OverHeadSize + 1 /*version bytes*/ + 1
 	cfg.DisableBatcher = true
@@ -1408,11 +1408,12 @@ func TestBatcherConcurrentAltDARequests(t *testing.T) {
 
 	cfg := DefaultSystemConfig(t)
 	cfg.DeployConfig.UseAltDA = true
-	cfg.MaxPendingTransactions = 0 // no limit on parallel txs
+	cfg.BatcherMaxPendingTransactions = 0 // no limit on parallel txs
 	// ensures that batcher txs are as small as possible
 	cfg.BatcherMaxL1TxSizeBytes = derive.FrameV0OverHeadSize + 1 /*version bytes*/ + 1
 	cfg.BatcherBatchType = 0
 	cfg.DataAvailabilityType = flags.CalldataType
+	cfg.BatcherMaxConcurrentDARequest = 0 // no limit
 
 	// disable batcher because we start it manually below
 	cfg.DisableBatcher = true
