@@ -1423,8 +1423,8 @@ func TestBatcherConcurrentAltDARequests(t *testing.T) {
 	// make every request take 5 seconds, such that only concurrent requests will be able to make progress fast enough
 	sys.FakeAltDAServer.SetPutRequestLatency(5 * time.Second)
 
-	l1Client := sys.clients["l1"]
-	l2Seq := sys.clients["sequencer"]
+	l1Client := sys.NodeClient("l1")
+	l2Seq := sys.NodeClient("sequencer")
 
 	// we wait for some L2 blocks to have been produced, just to make sure the sequencer is working properly
 	_, err = geth.WaitForBlock(big.NewInt(10), l2Seq, time.Duration(cfg.DeployConfig.L2BlockTime*15)*time.Second)
