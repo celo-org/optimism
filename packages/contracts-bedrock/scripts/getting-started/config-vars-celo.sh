@@ -39,7 +39,7 @@ reqenv "L2_CHAIN_ID"
 reqenv "L1_BLOCK_TIME"
 reqenv "L2_BLOCK_TIME"
 reqenv "FUNDS_DEV_ACCOUNTS"
-reqenv "USE_PLASMA"
+reqenv "USE_ALTDA"
 reqenv "DEPLOY_CELO_CONTRACTS"
 reqenv "USE_CUSTOM_GAS_TOKEN"
 reqenv "CUSTOM_GAS_TOKEN_ADDRESS"
@@ -158,7 +158,7 @@ cat << EOL >> tmp_config.json
   "disputeGameFinalityDelaySeconds": 302400,
   "respectedGameType": 0,
 
-  "usePlasma": $USE_PLASMA,
+  "useAltDA": $USE_ALTDA,
   "daCommitmentType": "GenericCommitment",
   "daChallengeWindow": 1,
   "daResolveWindow": 1,
