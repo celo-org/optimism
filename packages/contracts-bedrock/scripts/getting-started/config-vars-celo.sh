@@ -5,11 +5,26 @@
 # need to have the getting-started.json committed to the repo since it's an
 # invalid JSON file when not filled in, which is annoying.
 
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+CONTRACTS_BASE=$(dirname "$(dirname "$SCRIPT_DIR")")
 reqenv() {
     if [ -z "${!1}" ]; then
         echo "Error: environment variable '$1' is undefined"
         exit 1
     fi
+}
+
+append_with_default() {
+    json_key="$1"
+    env_var_name="$2"
+    default_value="$3"
+    var_value="${!env_var_name}"
+
+    if [ -z "$var_value" ] || [ "$var_value" == "None" ]; then
+        var_value="$default_value"
+    fi
+
+    echo "  \"$json_key\": \"$var_value\"," >> tmp_config.json
 }
 
 # Check required environment variables
@@ -36,9 +51,10 @@ blockhash=$(echo "$block" | awk '/hash/ { print $2 }')
 batchInboxAddressSuffix=$(printf "%0$((38 - ${#L2_CHAIN_ID}))d" 0)$L2_CHAIN_ID
 batchInboxAddress=0xff$batchInboxAddressSuffix
 
-# Generate the config file
-config=$(cat << EOL
-{
+# Start generating the config file in a temporary file
+
+cat << EOL > tmp_config.json
+ {
   "l1StartingBlockTag": "$blockhash",
 
   "l1ChainID": $L1_CHAIN_ID,
@@ -89,17 +105,36 @@ config=$(cat << EOL
 
   "l2GenesisBlockGasLimit": "0x1c9c380",
   "l2GenesisBlockBaseFeePerGas": "0x3b9aca00",
-  "l2GenesisRegolithTimeOffset": "0x0",
 
   "eip1559Denominator": 50,
   "eip1559DenominatorCanyon": 250,
   "eip1559Elasticity": 6,
+EOL
 
-  "l2GenesisFjordTimeOffset": "0x0",
-  "l2GenesisEcotoneTimeOffset": "0x0",
-  "l2GenesisDeltaTimeOffset": "0x0",
-  "l2GenesisCanyonTimeOffset": "0x0",
+# Append conditional environment variables with their corresponding default values
+# Activate granite fork
+if [ -n "${GRANITE_TIME_OFFSET}" ]; then
+    append_with_default "l2GenesisGraniteTimeOffset" "GRANITE_TIME_OFFSET" "0x0"
+fi
+# Activate holocene fork
+if [ -n "${HOLOCENE_TIME_OFFSET}" ]; then
+    append_with_default "l2GenesisHoloceneTimeOffset" "HOLOCENE_TIME_OFFSET" "0x0"
+fi
 
+# Activate the interop fork
+if [ -n "${INTEROP_TIME_OFFSET}" ]; then
+    append_with_default "l2GenesisInteropTimeOffset" "INTEROP_TIME_OFFSET" "0x0"
+fi
+
+# Already forked updates
+append_with_default "l2GenesisFjordTimeOffset" "FJORD_TIME_OFFSET" "0x0"
+append_with_default "l2GenesisRegolithTimeOffset" "REGOLITH_TIME_OFFSET" "0x0"
+append_with_default "l2GenesisEcotoneTimeOffset" "ECOTONE_TIME_OFFSET" "0x0"
+append_with_default "l2GenesisDeltaTimeOffset" "DELTA_TIME_OFFSET" "0x0"
+append_with_default "l2GenesisCanyonTimeOffset" "CANYON_TIME_OFFSET" "0x0"
+
+# Continue generating the config file
+cat << EOL >> tmp_config.json
   "systemConfigStartBlock": 0,
 
   "requiredProtocolVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
@@ -108,14 +143,14 @@ config=$(cat << EOL
   "faultGameAbsolutePrestate": "0x03c7ae758795765c6664a5d39bf63841c71ff191e9189522bad8ebff5d4eca98",
   "faultGameMaxDepth": 44,
   "faultGameClockExtension": 0,
-  "faultGameMaxClockDuration": 600,
+  "faultGameMaxClockDuration": 1200,
   "faultGameGenesisBlock": 0,
   "faultGameGenesisOutputRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "faultGameSplitDepth": 14,
-  "faultGameWithdrawalDelay": 604800,
+  "faultGameWithdrawalDelay": 600,
 
   "preimageOracleMinProposalSize": 1800000,
-  "preimageOracleChallengePeriod": 86400,
+  "preimageOracleChallengePeriod": 300,
 
   "fundDevAccounts": $FUNDS_DEV_ACCOUNTS,
   "useFaultProofs": false,
@@ -132,9 +167,8 @@ config=$(cat << EOL
   "customGasTokenAddress": "$CUSTOM_GAS_TOKEN_ADDRESS"
 }
 EOL
-)
 
-# Write the config file
-echo "$config" > "deploy-config/$DEPLOYMENT_CONTEXT.json"
+# Write the final config file
+mv tmp_config.json "$CONTRACTS_BASE/deploy-config/$DEPLOYMENT_CONTEXT.json"
 
-echo "Wrote config file to deploy-config/$DEPLOYMENT_CONTEXT.json"
+echo "Wrote config file to $CONTRACTS_BASE/deploy-config/$DEPLOYMENT_CONTEXT.json"
