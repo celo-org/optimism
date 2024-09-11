@@ -1264,9 +1264,9 @@ func testFees(t *testing.T, cfg SystemConfig) {
 		// in our case we already include that, so we subtract it, to do a 1:1 comparison
 		adjustedGPOFee = new(big.Int).Sub(gpoL1Fee, new(big.Int).Mul(artificialGPOOverhead, l1BaseFee))
 	}
-	require.Equal(t, l1Fee, adjustedGPOFee, "GPO reports L1 fee mismatch")
+	require.True(t, l1Fee.Cmp(adjustedGPOFee) == 0, "GPO reports L1 fee mismatch: Expected %v == %v", l1Fee, adjustedGPOFee)
 
-	require.Equal(t, receipt.L1Fee, l1Fee, "l1 fee in receipt is correct")
+	require.True(t, receipt.L1Fee.Cmp(l1Fee) == 0, "l1 fee in receipt is incorrect: Expected %v == %v", receipt.L1Fee, l1Fee)
 	if !sys.RollupConfig.IsEcotone(header.Time) { // FeeScalar receipt attribute is removed as of Ecotone
 		require.Equal(t,
 			new(big.Float).Mul(
