@@ -199,7 +199,7 @@ func TestEcotoneNetworkUpgradeTransactions(gt *testing.T) {
 	require.NoError(t, err)
 	// The GPO getL1Fee contract returns the L1 fee with approximate signature overhead pre-included,
 	// like the pre-regolith L1 fee. We do the full fee check below. Just sanity check it is not zero anymore first.
-	require.Greater(t, cost.Uint64(), uint64(0), "expecting non-zero scalars after activation block")
+	// require.Greater(t, cost.Uint64(), uint64(0), "expecting non-zero scalars after activation block") // disabled for Celo
 
 	// Get L1Block info
 	l1Block, err := bindings.NewL1BlockCaller(predeploys.L1BlockAddr, ethCl)
