@@ -594,7 +594,7 @@ func (l *BatchSubmitter) publishToAltDAAndL1(txdata txData, queue *txmgr.Queue[t
 		}
 		l.Log.Info("Set altda input", "commitment", comm, "tx", txdata.ID())
 		candidate := l.calldataTxCandidate(comm.TxData())
-		l.sendTx(txdata, false, candidate, queue, receiptsCh)
+		l.queueTx(txdata, false, candidate, queue, receiptsCh)
 		return nil
 	})
 	if !goroutineSpawned {
