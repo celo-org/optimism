@@ -286,10 +286,9 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[comm
 			return fmt.Errorf("account balance is not zero, would change celo supply: %s", k.Hex())
 		}
 
-		overwrite := true
 		if db.Exist(k) {
 			var allowed bool
-			overwrite, allowed = allowlist[k]
+			overwrite, allowed := allowlist[k]
 
 			// If the account is not allowed and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
 			if !allowed && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
@@ -300,19 +299,26 @@ func applyAllocsToState(db vm.StateDB, genesis *core.Genesis, allowlist map[comm
 			if db.GetCodeSize(k) == 0 && db.GetNonce(k) == 0 {
 				overwrite = true
 			}
+
+			if overwrite {
+				overwriteCounter++
+
+				db.SetCode(k, v.Code)
+				db.SetNonce(k, v.Nonce)
+				for key, value := range v.Storage {
+					db.SetState(k, key, value)
+				}
+				log.Info("Overwrote account", "address", k.Hex())
+			}
+			continue
 		}
 
-		// This carries over any existing balance
+		// Account does not exist, create it
 		db.CreateAccount(k)
-
-		if overwrite {
-			overwriteCounter++
-
-			db.SetCode(k, v.Code)
-			db.SetNonce(k, v.Nonce)
-			for key, value := range v.Storage {
-				db.SetState(k, key, value)
-			}
+		db.SetCode(k, v.Code)
+		db.SetNonce(k, v.Nonce)
+		for key, value := range v.Storage {
+			db.SetState(k, key, value)
 		}
 
 		copyCounter++
