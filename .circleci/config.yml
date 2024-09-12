@@ -1552,11 +1552,6 @@ workflows:
           docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
           # op-conductor is not part of the devnet, we don't save it.
       - docker-build:
-          name: op-heartbeat-docker-build
-          docker_name: op-heartbeat
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          # op-heartbeat is not part of the devnet, we don't save it.
-      - docker-build:
           name: da-server-docker-build
           docker_name: da-server
           docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
