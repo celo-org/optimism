@@ -83,10 +83,6 @@ def:
       description: ""
       globs:
         - "op-exporter/*"
-    - title: "op-heartbeat"
-      description: ""
-      globs:
-        - "op-heartbeat/*"
     - title: "op-node"
       description: ""
       globs:
