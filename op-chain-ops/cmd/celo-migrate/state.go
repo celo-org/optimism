@@ -202,8 +202,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	// uncle blocks, or receipts in the Cel2 transition block.
 	cel2Block := types.NewBlock(cel2Header, nil, nil, trie.NewStackTrie(nil))
 
-	// TODO(Alec) Should we write the genesis here or down below?
-
 	// We did it!
 	log.Info(
 		"Built Cel2 migration block",
@@ -399,13 +397,34 @@ func writeGenesis(config *params.ChainConfig, db ethdb.Database, genesisOutPath 
 		return err
 	}
 	genesisHeader := rawdb.ReadHeader(db, genesisHash, 0)
-	syncGenesis, err := BuildGenesis(config, legacyGenesisAlloc, genesisHeader.Extra, genesisHeader.Time)
+	genesis, err := BuildGenesis(config, legacyGenesisAlloc, genesisHeader.Extra, genesisHeader.Time)
 	if err != nil {
 		return err
 	}
 
-	// Convert to JSON and write file to --outfile.genesis path.
-	if err := jsonutil.WriteJSON(genesisOutPath, syncGenesis, OutFilePerm); err != nil {
+	// Convert genesis to JSON byte slice
+	genesisBytes, err := json.Marshal(genesis)
+	if err != nil {
+		return fmt.Errorf("failed to marshal genesis to JSON: %w", err)
+	}
+
+	// Unmarshal JSON byte slice to map
+	var genesisMap map[string]interface{}
+	if err := json.Unmarshal(genesisBytes, &genesisMap); err != nil {
+		return fmt.Errorf("failed to unmarshal genesis JSON to map: %w", err)
+	}
+
+	// Delete fields that are not in Celo Legacy Genesis, otherwise genesis hashes won't match when syncing
+	delete(genesisMap, "difficulty")
+	delete(genesisMap, "gasLimit")
+	delete(genesisMap, "excessBlobGas")
+	delete(genesisMap, "blobGasUsed")
+	delete(genesisMap, "baseFeePerGas")
+	delete(genesisMap, "mixHash")
+	delete(genesisMap, "nonce")
+
+	// Write the modified JSON to the file
+	if err := jsonutil.WriteJSON(genesisOutPath, genesisMap, OutFilePerm); err != nil {
 		return fmt.Errorf("failed to write genesis JSON to file: %w", err)
 	}
 	log.Info("Wrote genesis file for syncing new nodes", "path", genesisOutPath)
@@ -414,8 +433,6 @@ func writeGenesis(config *params.ChainConfig, db ethdb.Database, genesisOutPath 
 	// Write it now for forward compatibility.
 	rawdb.WriteGenesisStateSpec(db, genesisHash, legacyGenesisAlloc)
 	log.Info("Wrote genesis state spec (alloc) to database")
-
-	// TODO(Alec) Should we store the l2Allocs in the database as well?
 
 	return nil
 }
