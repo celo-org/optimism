@@ -98,7 +98,7 @@ func RunWithdrawalsTest(t *testing.T, sys CommonSystem) {
 	// Take fee into account
 	diff = new(big.Int).Sub(startBalanceBeforeWithdrawal, endBalanceAfterWithdrawal)
 	fees := calcGasFees(receipt.GasUsed, tx.GasTipCap(), tx.GasFeeCap(), header.BaseFee)
-	fees = fees.Add(fees, receipt.L1Fee)
+	// fees = fees.Add(fees, receipt.L1Fee)  // Skip L1 fees on Celo
 	diff = diff.Sub(diff, fees)
 	require.Equal(t, withdrawAmount, diff)
 
