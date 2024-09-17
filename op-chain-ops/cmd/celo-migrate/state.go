@@ -81,7 +81,7 @@ var (
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Genesis, dbPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDBWithoutFreezer(dbPath, false)
@@ -166,26 +166,31 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	}
 	// Create the header for the Cel2 transition block.
 	cel2Header := &types.Header{
-		ParentHash:       header.Hash(),
-		UncleHash:        types.EmptyUncleHash,
-		Coinbase:         predeploys.SequencerFeeVaultAddr,
-		Root:             newRoot,
-		TxHash:           types.EmptyTxsHash,
-		ReceiptHash:      types.EmptyReceiptsHash,
-		Bloom:            types.Bloom{},
-		Difficulty:       new(big.Int).Set(common.Big0),
-		Number:           migrationBlock,
-		GasLimit:         gasLimit,
-		GasUsed:          0,
-		Time:             migrationBlockTime,
-		Extra:            []byte("CeL2 migration"),
-		MixDigest:        common.Hash{},
-		Nonce:            types.BlockNonce{},
-		BaseFee:          baseFee,
-		WithdrawalsHash:  &types.EmptyWithdrawalsHash,
-		BlobGasUsed:      new(uint64),
-		ExcessBlobGas:    new(uint64),
-		ParentBeaconRoot: &common.Hash{},
+		ParentHash:  header.Hash(),
+		UncleHash:   types.EmptyUncleHash,
+		Coinbase:    predeploys.SequencerFeeVaultAddr,
+		Root:        newRoot,
+		TxHash:      types.EmptyTxsHash,
+		ReceiptHash: types.EmptyReceiptsHash,
+		Bloom:       types.Bloom{},
+		Difficulty:  new(big.Int).Set(common.Big0),
+		Number:      migrationBlock,
+		GasLimit:    gasLimit,
+		GasUsed:     0,
+		Time:        migrationBlockTime,
+		Extra:       []byte("Celo L2 migration"),
+		MixDigest:   common.Hash{},
+		Nonce:       types.BlockNonce{},
+		BaseFee:     baseFee,
+		// Added during Shanghai hardfork
+		// As there're no withdrawals in L2, we set it to the empty hash
+		WithdrawalsHash: &types.EmptyWithdrawalsHash,
+		// Blobs are disabled in L2
+		BlobGasUsed:   new(uint64),
+		ExcessBlobGas: new(uint64),
+		// This is set to the ParentBeaconRoot of the L1 origin (see `PreparePayloadAttributes`)
+		// Use the L1 start block's ParentBeaconRoot
+		ParentBeaconRoot: l1StartBlock.Header().ParentBeaconRoot,
 	}
 	log.Info("Build Cel2 migration header", "header", cel2Header)
 
@@ -234,14 +239,14 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 	cfg.CancunTime = &cel2Header.Time
 
 	// Set the Optimism options.
-	cfg.BedrockBlock = cel2Block.Number()
-	// Enable Regolith from the start of Bedrock
-	cfg.RegolithTime = new(uint64) // what are those? do we need those?
 	cfg.Optimism = &params.OptimismConfig{
 		EIP1559Denominator:       config.EIP1559Denominator,
 		EIP1559DenominatorCanyon: &config.EIP1559DenominatorCanyon,
 		EIP1559Elasticity:        config.EIP1559Elasticity,
 	}
+	// Set Optimism hardforks
+	cfg.BedrockBlock = cel2Block.Number()
+	cfg.RegolithTime = &cel2Header.Time
 	cfg.CanyonTime = &cel2Header.Time
 	cfg.EcotoneTime = &cel2Header.Time
 	cfg.FjordTime = &cel2Header.Time
@@ -249,11 +254,11 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, genesis *core.Gene
 
 	// Write the chain config to disk.
 	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
-	marhslledConfig, err := json.Marshal(cfg)
+	marshalledConfig, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal chain config to JSON: %w", err)
 	}
-	log.Info("Wrote updated chain config", "config", string(marhslledConfig))
+	log.Info("Wrote updated chain config", "config", string(marshalledConfig))
 
 	// We're done!
 	log.Info(

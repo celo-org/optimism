@@ -384,7 +384,7 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, newDBPath, opts.migrationBlockTime)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis, newDBPath, opts.migrationBlockTime, l1StartBlock)
 	if err != nil {
 		return err
 	}
