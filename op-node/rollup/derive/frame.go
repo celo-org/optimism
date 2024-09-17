@@ -8,10 +8,10 @@ import (
 	"io"
 )
 
-// Frames cannot be larger than 1 MB.
 // Data transactions that carry frames are generally not larger than 128 KB due to L1 network conditions,
 // but we leave space to grow larger anyway (gas limit allows for more data).
-const MaxFrameLen = 1_000_000
+// For AltDA, frames size can be larger. Setting to 16 MB as current blob limit for EigenDA.
+const MaxFrameLen = 16_000_000
 
 // Data Format
 //
@@ -85,7 +85,7 @@ func (f *Frame) UnmarshalBinary(r ByteReader) error {
 		return fmt.Errorf("reading frame_data_length: %w", eofAsUnexpectedMissing(err))
 	}
 
-	// Cap frame length to MaxFrameLen (currently 1MB)
+	// Cap frame length to MaxFrameLen
 	if frameLength > MaxFrameLen {
 		return fmt.Errorf("frame_data_length is too large: %d", frameLength)
 	}
