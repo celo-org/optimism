@@ -1,4 +1,4 @@
-FROM golang:1.21.1-alpine3.18 as builder
+FROM golang:1.21.1-alpine3.18 AS builder
 
 RUN apk --no-cache add make
 
@@ -11,7 +11,7 @@ RUN go mod download
 
 COPY ./op-service /app/op-service
 COPY ./op-node /app/op-node
-COPY ./op-plasma /app/op-plasma
+COPY ./op-alt-da /app/op-alt-da
 COPY ./op-chain-ops /app/op-chain-ops
 WORKDIR /app/op-chain-ops
 RUN make celo-migrate
