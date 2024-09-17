@@ -8,7 +8,6 @@ import (
 	"io"
 )
 
-// For EthDA, frames cannot be larger than 1 MB.
 // Data transactions that carry frames are generally not larger than 128 KB due to L1 network conditions,
 // but we leave space to grow larger anyway (gas limit allows for more data).
 // For AltDA, frames size can be larger. Setting to 16 MB as current blob limit for EigenDA.
