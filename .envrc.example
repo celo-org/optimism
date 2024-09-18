@@ -70,7 +70,7 @@ export PRIVATE_KEY=
 # CELO additional configuration
 export ENABLE_GOVERNANCE=false
 export FUNDS_DEV_ACCOUNTS=false
-export USE_PLASMA=false
+export USE_ALTDA=false
 # Set to false if migrating state from a Celo L1. True for new testnets
 export DEPLOY_CELO_CONTRACTS=false
 
