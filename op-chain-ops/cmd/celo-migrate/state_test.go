@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -117,7 +116,7 @@ func TestApplyAllocsToState(t *testing.T) {
 				}
 			}
 
-			if err := applyAllocsToState(sdb, &core.Genesis{Alloc: types.GenesisAlloc{address: tt.newAccount}}, tt.allowlist); (err != nil) != tt.wantErr {
+			if err := applyAllocsToState(sdb, types.GenesisAlloc{address: tt.newAccount}, tt.allowlist); (err != nil) != tt.wantErr {
 				t.Errorf("applyAllocsToState() error = %v, wantErr %v", err, tt.wantErr)
 			}
 

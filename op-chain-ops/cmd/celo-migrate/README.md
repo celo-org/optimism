@@ -10,7 +10,7 @@ To minimize migration downtime, the script is designed to run in two stages:
 
 ### Pre migration
 
-The `pre migration` consists of two parts that are run in parallel: 
+The `pre migration` consists of two parts that are run in parallel:
 - Copy and transform the ancient / frozen blocks (i.e. all blocks before the last 90000).
 - Copy over the rest of the database using `rsync`.
 
@@ -74,14 +74,14 @@ mv chaindata ./data/alfajores_old
 The state migration takes in an allocs file that specifies the l2 state changes to be made during the migration. This file can be generated from the deploy config and l1 contract addresses by running the following from the `contracts-bedrock` directory.
 
 ```bash
-CONTRACT_ADDRESSES_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deployment-l1-holesky.json \
-DEPLOY_CONFIG_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deploy-config-holesky-alfajores.json \
-STATE_DUMP_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/l2-allocs-alfajores.json \
+CONTRACT_ADDRESSES_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deployment-l1-dango.json \
+DEPLOY_CONFIG_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/deploy-config-dango.json \
+STATE_DUMP_PATH=../../op-chain-ops/cmd/celo-migrate/testdata/l2-allocs-dango.json \
 forge script ./scripts/L2Genesis.s.sol:L2Genesis \
 --sig 'runWithStateDump()'
 ```
 
-This should output the allocs file to `./testdata/l2-allocs-alfajores.json`. If you encounter difficulties with this and want to just continue testing the script, you can alternatively find the allocs file [here](https://gist.github.com/jcortejoso/7f90ba9b67c669791014661ccb6de81a).
+This should output the allocs file to `./testdata/l2-allocs-dango.json`. If you encounter difficulties with this and want to just continue testing the script, you can alternatively find the allocs file [here](https://storage.googleapis.com/cel2-rollup-files/alfajores-mvp/l2-allocs.json).
 
 ##### Run script with test configuration
 
@@ -95,11 +95,11 @@ Running the pre-migration script should take ~5 minutes. This script copies and 
 
 ```bash
 go run ./cmd/celo-migrate full \
---deploy-config ./cmd/celo-migrate/testdata/deploy-config-holesky-alfajores.json \
---l1-deployments ./cmd/celo-migrate/testdata/deployment-l1-holesky.json \
+--deploy-config ./cmd/celo-migrate/testdata/deploy-config-dango.json \
+--l1-deployments ./cmd/celo-migrate/testdata/deployment-l1-dango.json \
 --l1-rpc https://ethereum-holesky-rpc.publicnode.com  \
---l2-allocs ./cmd/celo-migrate/testdata/l2-allocs-alfajores.json \
---outfile.rollup-config ./cmd/celo-migrate/testdata/rollup-config.json \
+--l2-allocs ./cmd/celo-migrate/testdata/l2-allocs-dango.json \
+--outfile.rollup-config ./cmd/celo-migrate/testdata/rollup-config-dango.json \
 --old-db ./data/alfajores_old \
 --new-db ./data/alfajores_new
 ```
