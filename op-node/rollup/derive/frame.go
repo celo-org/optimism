@@ -85,7 +85,7 @@ func (f *Frame) UnmarshalBinary(r ByteReader) error {
 		return fmt.Errorf("reading frame_data_length: %w", eofAsUnexpectedMissing(err))
 	}
 
-	// Cap frame length to MaxFrameLen (currently 1MB)
+	// Cap frame length to MaxFrameLen
 	if frameLength > MaxFrameLen {
 		return fmt.Errorf("frame_data_length is too large: %d", frameLength)
 	}
