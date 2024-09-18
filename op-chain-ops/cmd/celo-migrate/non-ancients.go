@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -58,40 +59,57 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSize uint64) (uint64, error) {
 	defer timer("migrateNonAncientsDb")()
 
+	// The genesis block is also migrated in the ancient db migration as it is stored in both places.
+	// The genesis block is the only block that should remain stored in the non-ancient db even after it is frozen.
+	if numAncients > 0 {
+		log.Info("Migrating genesis block in non-ancient db", "process", "non-ancients")
+		if err := migrateNonAncientBlock(0, rawdb.ReadCanonicalHash(newDB, 0), newDB); err != nil {
+			return 0, err
+		}
+	}
+
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
 
 		log.Info("Processing Block Range", "process", "non-ancients", "from", i, "to(inclusve)", i+batchSize-1, "count", len(numbersHash))
 		for _, numberHash := range numbersHash {
-			// read header and body
-			header := rawdb.ReadHeaderRLP(newDB, numberHash.Hash, numberHash.Number)
-			body := rawdb.ReadBodyRLP(newDB, numberHash.Hash, numberHash.Number)
-
-			// transform header and body
-			newHeader, err := transformHeader(header)
-			if err != nil {
-				return 0, fmt.Errorf("failed to transform header: block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
-			}
-			newBody, err := transformBlockBody(body)
-			if err != nil {
-				return 0, fmt.Errorf("failed to transform body: block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
-			}
-
-			if yes, newHash := hasSameHash(newHeader, numberHash.Hash[:]); !yes {
-				log.Error("Hash mismatch", "block", numberHash.Number, "oldHash", numberHash.Hash, "newHash", newHash)
-				return 0, fmt.Errorf("hash mismatch at block %d - %x", numberHash.Number, numberHash.Hash)
-			}
-
-			// write header and body
-			batch := newDB.NewBatch()
-			rawdb.WriteBodyRLP(batch, numberHash.Hash, numberHash.Number, newBody)
-			_ = batch.Put(headerKey(numberHash.Number, numberHash.Hash), newHeader)
-			if err := batch.Write(); err != nil {
-				return 0, fmt.Errorf("failed to write header and body: block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
+			if err := migrateNonAncientBlock(numberHash.Number, numberHash.Hash, newDB); err != nil {
+				return 0, err
 			}
 		}
 	}
 
 	migratedCount := lastBlock - numAncients + 1
 	return migratedCount, nil
+}
+
+func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Database) error {
+	// read header and body
+	header := rawdb.ReadHeaderRLP(newDB, hash, number)
+	body := rawdb.ReadBodyRLP(newDB, hash, number)
+
+	// transform header and body
+	newHeader, err := transformHeader(header)
+	if err != nil {
+		return fmt.Errorf("failed to transform header: block %d - %x: %w", number, hash, err)
+	}
+	newBody, err := transformBlockBody(body)
+	if err != nil {
+		return fmt.Errorf("failed to transform body: block %d - %x: %w", number, hash, err)
+	}
+
+	if yes, newHash := hasSameHash(newHeader, hash[:]); !yes {
+		log.Error("Hash mismatch", "block", number, "oldHash", hash, "newHash", newHash)
+		return fmt.Errorf("hash mismatch at block %d - %x", number, hash)
+	}
+
+	// write header and body
+	batch := newDB.NewBatch()
+	rawdb.WriteBodyRLP(batch, hash, number, newBody)
+	_ = batch.Put(headerKey(number, hash), newHeader)
+	if err := batch.Write(); err != nil {
+		return fmt.Errorf("failed to write header and body: block %d - %x: %w", number, hash, err)
+	}
+
+	return nil
 }
