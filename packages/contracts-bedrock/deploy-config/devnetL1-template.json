@@ -72,6 +72,5 @@
   "daResolveWindow": 16,
   "daBondSize": 1000000,
   "daResolverRefundPercentage": 0,
-  "deployCeloContracts": true,
-  "eip1559BaseFeeFloor": 5000000000
+  "deployCeloContracts": true
 }
