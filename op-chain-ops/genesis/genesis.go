@@ -40,6 +40,11 @@ func NewL2Genesis(config *DeployConfig, block *types.Block) (*core.Genesis, erro
 		eip1559Elasticity = 10
 	}
 
+	eip1559BaseFeeFloor := config.EIP1559BaseFeeFloor
+	if eip1559BaseFeeFloor == 0 {
+		eip1559BaseFeeFloor = 5000000000 // 5 Gwei
+	}
+
 	optimismChainConfig := params.ChainConfig{
 		ChainID:                       new(big.Int).SetUint64(config.L2ChainID),
 		HomesteadBlock:                big.NewInt(0),
@@ -74,6 +79,9 @@ func NewL2Genesis(config *DeployConfig, block *types.Block) (*core.Genesis, erro
 			EIP1559Denominator:       eip1559Denom,
 			EIP1559Elasticity:        eip1559Elasticity,
 			EIP1559DenominatorCanyon: &eip1559DenomCanyon,
+		},
+		Celo: &params.CeloConfig{
+			EIP1559BaseFeeFloor: eip1559BaseFeeFloor,
 		},
 	}
 

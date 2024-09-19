@@ -93,5 +93,6 @@
   "daChallengeWindow": 0,
   "daResolveWindow": 0,
   "daResolverRefundPercentage": 0,
-  "deployCeloContracts": false
+  "deployCeloContracts": false,
+  "eip1559BaseFeeFloor": 5000000000
 }
