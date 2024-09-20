@@ -198,9 +198,13 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	}
 	log.Info("Build Cel2 migration header", "header", cel2Header)
 
+	// We need to set empty withdrawals in the body, otherwise types.NewBlock will nullify the withdrawals hash in the given header.
+	b := &types.Body{
+		Withdrawals: []*types.Withdrawal{},
+	}
 	// Create the Cel2 transition block from the header. Note that there are no transactions,
 	// uncle blocks, or receipts in the Cel2 transition block.
-	cel2Block := types.NewBlock(cel2Header, nil, nil, trie.NewStackTrie(nil))
+	cel2Block := types.NewBlock(cel2Header, b, nil, trie.NewStackTrie(nil))
 
 	// We did it!
 	log.Info(
