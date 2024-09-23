@@ -271,6 +271,7 @@ contract DeployConfig is Script {
         devFeatureBitmap = _devFeatureBitmap;
     }
     /// @notice Allow the `deployCeloContracts` config to be overridden.
+
     function setDeployCeloContracts(bool _deployCeloContracts) public {
         deployCeloContracts = _deployCeloContracts;
     }

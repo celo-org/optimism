@@ -40,6 +40,19 @@ func init() {
 	cli.VersionFlag.(*cli.BoolFlag).Category = MiscCategory
 }
 
+func init() {
+	DeprecatedFlags = append(DeprecatedFlags, deprecatedP2PFlags(EnvVarPrefix)...)
+	optionalFlags = append(optionalFlags, P2PFlags(EnvVarPrefix)...)
+	optionalFlags = append(optionalFlags, oplog.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
+	optionalFlags = append(optionalFlags, oppprof.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
+	optionalFlags = append(optionalFlags, opmetrics.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
+	optionalFlags = append(optionalFlags, oprpc.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory, rpcDefaults)...)
+	optionalFlags = append(optionalFlags, DeprecatedFlags...)
+	optionalFlags = append(optionalFlags, opflags.CLIFlags(EnvVarPrefix, RollupCategory)...)
+	optionalFlags = append(optionalFlags, altda.CLIFlags(EnvVarPrefix, AltDACategory)...)
+	Flags = append(requiredFlags, optionalFlags...)
+}
+
 func prefixEnvVars(names ...string) []string {
 	envs := make([]string, 0, len(names))
 	for _, name := range names {
@@ -309,6 +322,13 @@ var (
 		EnvVars:  prefixEnvVars("FINALITY_DELAY"),
 		Category: RollupCategory,
 	}
+	SequencerUseFinalizedL1Flag = &cli.BoolFlag{
+		Name:     "sequencer.use-finalized",
+		Usage:    "Enable use of only finalized L1 blocks as L1 origin. Overwrites the value of 'sequencer.l1-confs'.",
+		EnvVars:  prefixEnvVars("SEQUENCER_USE_FINALIZED"),
+		Value:    false,
+		Category: SequencerCategory,
+	}
 	L1EpochPollIntervalFlag = &cli.DurationFlag{
 		Name:     "l1.epoch-poll-interval",
 		Usage:    "Poll interval for retrieving new L1 epoch updates such as safe and finalized block changes. Disabled if 0 or negative.",
@@ -492,6 +512,7 @@ var optionalFlags = []cli.Flag{
 	L1RPCMaxConcurrency,
 	L1HTTPPollInterval,
 	L1CacheSize,
+	SequencerUseFinalizedL1Flag,
 	VerifierL1Confs,
 	SequencerEnabledFlag,
 	SequencerStoppedFlag,
@@ -540,19 +561,6 @@ var rpcDefaults = oprpc.CLIConfig{
 	ListenAddr:  "0.0.0.0", // TODO(#16487): Switch to 127.0.0.1
 	ListenPort:  9545,      // op-node defaults to a different port than ethereum EL (8545)
 	EnableAdmin: false,
-}
-
-func init() {
-	DeprecatedFlags = append(DeprecatedFlags, deprecatedP2PFlags(EnvVarPrefix)...)
-	optionalFlags = append(optionalFlags, P2PFlags(EnvVarPrefix)...)
-	optionalFlags = append(optionalFlags, oplog.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
-	optionalFlags = append(optionalFlags, oppprof.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
-	optionalFlags = append(optionalFlags, opmetrics.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
-	optionalFlags = append(optionalFlags, oprpc.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory, rpcDefaults)...)
-	optionalFlags = append(optionalFlags, DeprecatedFlags...)
-	optionalFlags = append(optionalFlags, opflags.CLIFlags(EnvVarPrefix, RollupCategory)...)
-	optionalFlags = append(optionalFlags, altda.CLIFlags(EnvVarPrefix, AltDACategory)...)
-	Flags = append(requiredFlags, optionalFlags...)
 }
 
 func CheckRequired(ctx cliiface.Context) error {

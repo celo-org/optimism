@@ -168,3 +168,8 @@ func (st *StatusTracker) OnCrossSafeUpdate(ctx context.Context, crossSafe eth.L2
 
 	st.UpdateSyncStatus()
 }
+
+// L1Finalized is a helper function to get the latest known finalized L1 block.
+func (st *StatusTracker) L1Finalized() eth.L1BlockRef {
+	return st.SyncStatus().FinalizedL1
+}
