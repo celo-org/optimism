@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/engine"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/finality"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/finalized"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sequencing"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/status"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
@@ -237,8 +238,13 @@ func NewDriver(
 	if driverCfg.SequencerEnabled {
 		asyncGossiper := async.NewAsyncGossiper(driverCtx, network, log, metrics)
 		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, l2)
-		sequencerConfDepth := confdepth.NewConfDepth(driverCfg.SequencerConfDepth, statusTracker.L1Head, l1)
-		findL1Origin := sequencing.NewL1OriginSelector(driverCtx, log, cfg, sequencerConfDepth)
+		var seqL1Blocks sequencing.L1Blocks
+		if driverCfg.SequencerUseFinalized {
+			seqL1Blocks = finalized.NewFinalized(statusTracker.L1Finalized, l1)
+		} else {
+			seqL1Blocks = confdepth.NewConfDepth(driverCfg.SequencerConfDepth, statusTracker.L1Head, l1)
+		}
+		findL1Origin := sequencing.NewL1OriginSelector(driverCtx, log, cfg, seqL1Blocks)
 		sys.Register("origin-selector", findL1Origin, opts)
 		sequencer = sequencing.NewSequencer(driverCtx, log, cfg, attrBuilder, findL1Origin,
 			sequencerStateListener, sequencerConductor, asyncGossiper, metrics)
