@@ -36,6 +36,10 @@ type Config struct {
 	// If this is <= 0 it is automatically adjusted to 50ms.
 	SequencerSealingDuration time.Duration `json:"sequencer_sealing_duration"`
 
+	// SequencerUseFinalized is true when sequencer should use only finalized L1 blocks as origin.
+	// If this is set to true, the value of `SequencerConfDepth` is ignored.
+	SequencerUseFinalized bool `json:"sequencer_use_finalized"`
+
 	// Finalizer contains runtime configuration for finality behavior.
 	Finalizer *finality.Config `json:"finalizer,omitempty"`
 }
