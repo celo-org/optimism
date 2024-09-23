@@ -82,9 +82,10 @@ func TestApplyAllocsToState(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Write account with allowlist overwrites",
+			name: "Write account with allowlist overwrite, keeps nonce",
 			existingAccount: &types.Account{
 				Balance: big.NewInt(defaultBalance),
+				Nonce:   4,
 				Code:    bytes.Repeat([]byte{0x01}, 10),
 			},
 			newAccount: types.Account{
@@ -128,8 +129,13 @@ func TestApplyAllocsToState(t *testing.T) {
 				t.Errorf("account does not exists as expected: %v", address.Hex())
 			}
 
-			assert.Equal(t, tt.newAccount.Nonce, sdb.GetNonce(address))
 			assert.Equal(t, tt.newAccount.Code, sdb.GetCode(address))
+
+			if tt.existingAccount != nil && tt.existingAccount.Nonce != 0 {
+				assert.Equal(t, tt.existingAccount.Nonce, sdb.GetNonce(address))
+			} else {
+				assert.Equal(t, tt.newAccount.Nonce, sdb.GetNonce(address))
+			}
 
 			if tt.existingAccount != nil {
 				assert.True(t, big.NewInt(defaultBalance).Cmp(sdb.GetBalance(address).ToBig()) == 0)
