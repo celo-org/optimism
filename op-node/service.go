@@ -204,12 +204,13 @@ func NewConfigPersistence(ctx cliiface.Context) config.ConfigPersistence {
 
 func NewDriverConfig(ctx cliiface.Context) *driver.Config {
 	cfg := &driver.Config{
-		VerifierConfDepth:   ctx.Uint64(flags.VerifierL1Confs.Name),
-		SequencerConfDepth:  ctx.Uint64(flags.SequencerL1Confs.Name),
-		SequencerEnabled:    ctx.Bool(flags.SequencerEnabledFlag.Name),
-		SequencerStopped:    ctx.Bool(flags.SequencerStoppedFlag.Name),
-		SequencerMaxSafeLag: ctx.Uint64(flags.SequencerMaxSafeLagFlag.Name),
-		RecoverMode:         ctx.Bool(flags.SequencerRecoverMode.Name),
+		VerifierConfDepth:     ctx.Uint64(flags.VerifierL1Confs.Name),
+		SequencerConfDepth:    ctx.Uint64(flags.SequencerL1Confs.Name),
+		SequencerEnabled:      ctx.Bool(flags.SequencerEnabledFlag.Name),
+		SequencerStopped:      ctx.Bool(flags.SequencerStoppedFlag.Name),
+		SequencerMaxSafeLag:   ctx.Uint64(flags.SequencerMaxSafeLagFlag.Name),
+		RecoverMode:           ctx.Bool(flags.SequencerRecoverMode.Name),
+		SequencerUseFinalized: ctx.Bool(flags.SequencerUseFinalizedL1Flag.Name),
 	}
 
 	// Populate finality config from flags. A finality config with null fields

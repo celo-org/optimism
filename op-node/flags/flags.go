@@ -283,6 +283,13 @@ var (
 		EnvVars:  prefixEnvVars("FINALITY_DELAY"),
 		Category: RollupCategory,
 	}
+	SequencerUseFinalizedL1Flag = &cli.BoolFlag{
+		Name:     "sequencer.use-finalized",
+		Usage:    "Enable use of only finalized L1 blocks as L1 origin. Overwrites the value of 'sequencer.l1-confs'.",
+		EnvVars:  prefixEnvVars("SEQUENCER_USE_FINALIZED"),
+		Value:    false,
+		Category: SequencerCategory,
+	}
 	L1EpochPollIntervalFlag = &cli.DurationFlag{
 		Name:     "l1.epoch-poll-interval",
 		Usage:    "Poll interval for retrieving new L1 epoch updates such as safe and finalized block changes. Disabled if 0 or negative.",
@@ -476,6 +483,7 @@ var optionalFlags = []cli.Flag{
 	L1RPCMaxConcurrency,
 	L1HTTPPollInterval,
 	L1CacheSize,
+	SequencerUseFinalizedL1Flag,
 	VerifierL1Confs,
 	SequencerEnabledFlag,
 	SequencerStoppedFlag,
