@@ -48,8 +48,8 @@ reqenv "CUSTOM_GAS_TOKEN_ADDRESS"
 block=$(cast block finalized --rpc-url "$L1_RPC_URL")
 timestamp=$(echo "$block" | awk '/timestamp/ { print $2 }')
 blockhash=$(echo "$block" | awk '/hash/ { print $2 }')
-batchInboxAddressSuffix=$(printf "%0$((38 - ${#L2_CHAIN_ID}))d" 0)$L2_CHAIN_ID
-batchInboxAddress=0xff$batchInboxAddressSuffix
+batchInboxAddressSuffix=$(printf "%0$((37 - ${#L2_CHAIN_ID}))d" 0)$L2_CHAIN_ID
+batchInboxAddress=0xfff$batchInboxAddressSuffix
 
 # Start generating the config file in a temporary file
 
