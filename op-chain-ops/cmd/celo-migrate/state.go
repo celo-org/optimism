@@ -47,7 +47,9 @@ var (
 		// Add any addresses that should be allowed to overwrite existing accounts here.
 		AlfajoresNetworkID: {
 			// Create2Deployer
-			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): false,
+			// OP uses a version without an owner who can pause the contract,
+			// so we overwrite the existing contract during migration
+			common.HexToAddress("0x13b0D85CcB8bf860b6b79AF3029fCA081AE9beF2"): true,
 
 			// Same code as in allocs file
 			// EntryPoint_v070
@@ -306,8 +308,8 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 		}
 
 		if db.Exist(k) {
-			var allowed bool
-			overwrite, allowed := allowlist[k]
+			writeNonceAndStorage := false
+			writeCode, allowed := allowlist[k]
 
 			// If the account is not allowed and has a non zero nonce or code size, bail out we will need to manually investigate how to handle this.
 			if !allowed && (db.GetCodeSize(k) > 0 || db.GetNonce(k) > 0) {
@@ -316,18 +318,22 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 
 			// This means that the account just has balance, in that case we wan to copy over the account
 			if db.GetCodeSize(k) == 0 && db.GetNonce(k) == 0 {
-				overwrite = true
+				writeCode = true
+				writeNonceAndStorage = true
 			}
 
-			if overwrite {
+			if writeCode {
 				overwriteCounter++
 
 				db.SetCode(k, v.Code)
-				db.SetNonce(k, v.Nonce)
-				for key, value := range v.Storage {
-					db.SetState(k, key, value)
+
+				if writeNonceAndStorage {
+					db.SetNonce(k, v.Nonce)
+					for key, value := range v.Storage {
+						db.SetState(k, key, value)
+					}
 				}
-				log.Info("Overwrote account", "address", k.Hex())
+				log.Info("Overwrote account", "address", k.Hex(), "writeNonceAndStorage", writeNonceAndStorage)
 			}
 			continue
 		}
