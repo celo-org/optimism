@@ -24,4 +24,8 @@ type Config struct {
 	// RecoverMode forces the sequencer to select the next L1 Origin exactly, and create an empty block,
 	// to be compatible with verifiers forcefully generating the same block while catching up the sequencing window timeout.
 	RecoverMode bool `json:"recover_mode"`
+
+	// SequencerUseFinalized is true when sequencer should use only finalized L1 blocks as origin.
+	// If this is set to true, the value of `SequencerConfDepth` is ignored.
+	SequencerUseFinalized bool `json:"sequencer_use_finalized"`
 }
