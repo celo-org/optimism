@@ -253,6 +253,12 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		EIP1559DenominatorCanyon: &config.EIP1559DenominatorCanyon,
 		EIP1559Elasticity:        config.EIP1559Elasticity,
 	}
+
+	// Set the Celo options.
+	cfg.Celo = &params.CeloConfig{
+		EIP1559BaseFeeFloor: config.EIP1559BaseFeeFloor,
+	}
+
 	// Set Optimism hardforks
 	cfg.BedrockBlock = cel2Block.Number()
 	cfg.RegolithTime = &cel2Header.Time
