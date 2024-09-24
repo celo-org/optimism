@@ -109,6 +109,7 @@ cat << EOL > tmp_config.json
   "eip1559Denominator": 50,
   "eip1559DenominatorCanyon": 250,
   "eip1559Elasticity": 6,
+  "eip1559BaseFeeFloor": 5000000000,
 EOL
 
 # Append conditional environment variables with their corresponding default values
