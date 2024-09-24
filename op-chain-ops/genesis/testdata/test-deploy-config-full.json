@@ -103,5 +103,6 @@
   "daResolverRefundPercentage": 0,
   "useRevenueShare": true,
   "chainFeesRecipient": "0x0000000000000000000000000000000000000444",
-  "deployCeloContracts": false
+  "deployCeloContracts": false,
+  "eip1559BaseFeeFloor": 5000000000
 }
