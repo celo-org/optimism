@@ -106,9 +106,10 @@ cat << EOL > tmp_config.json
   "l2GenesisBlockGasLimit": "0x1c9c380",
   "l2GenesisBlockBaseFeePerGas": "0x3b9aca00",
 
-  "eip1559Denominator": 50,
-  "eip1559DenominatorCanyon": 250,
-  "eip1559Elasticity": 6,
+  "eip1559Denominator": 400,
+  "eip1559DenominatorCanyon": 400,
+  "eip1559Elasticity": 5,
+  "eip1559BaseFeeFloor": 5000000000,
 EOL
 
 # Append conditional environment variables with their corresponding default values
