@@ -310,6 +310,8 @@ type EIP1559DeployConfig struct {
 	EIP1559Denominator uint64 `json:"eip1559Denominator"`
 	// EIP1559DenominatorCanyon is the denominator of EIP1559 base fee market when Canyon is active.
 	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+	// EIP1559BaseFeeFloor is the fixed floor for the EIP1559 base fee market.
+	EIP1559BaseFeeFloor uint64 `json:"eip1559BaseFeeFloor,omitempty"`
 }
 
 var _ ConfigChecker = (*EIP1559DeployConfig)(nil)
