@@ -1497,32 +1497,6 @@ workflows:
             - op-e2e-fault-proof-tests
             - op-e2e-action-tests
             - op-e2e-action-tests-altda
-      - check-generated-mocks-op-node
-      - check-generated-mocks-op-service
-      - cannon-go-lint-and-test:
-          requires:
-            - pnpm-monorepo
-      - cannon-build-test-vectors
-      - shellcheck/check:
-          name: shell-check
-          # We don't need the `exclude` key as the orb detects the `.shellcheckrc`
-          dir: .
-          ignore-dirs:
-            ./packages/contracts-bedrock/lib
-  merged:
-    when:
-      and:
-        - or:
-            # Trigger after merged into celoXX branch
-            - matches: { pattern: '^celo\d+$', value: << pipeline.git.branch >> }
-            # Trigger on manual triggers if explicitly requested
-            - equal: [true, << pipeline.parameters.main_dispatch >>]
-        - not:
-            equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
-    jobs:
-      - pnpm-monorepo:
-          name: pnpm-monorepo
-      - go-mod-download
       - docker-build:
           name: op-node-docker-build
           docker_name: op-node
@@ -1583,3 +1557,15 @@ workflows:
             - op-challenger-docker-build
             - da-server-docker-build
             - cannon-prestate
+      - check-generated-mocks-op-node
+      - check-generated-mocks-op-service
+      - cannon-go-lint-and-test:
+          requires:
+            - pnpm-monorepo
+      - cannon-build-test-vectors
+      - shellcheck/check:
+          name: shell-check
+          # We don't need the `exclude` key as the orb detects the `.shellcheckrc`
+          dir: .
+          ignore-dirs:
+            ./packages/contracts-bedrock/lib
