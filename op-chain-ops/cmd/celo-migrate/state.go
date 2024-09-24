@@ -77,6 +77,8 @@ var (
 			common.HexToAddress("0xA1dabEF33b3B82c7814B6D82A79e50F4AC44102B"): false,
 			// SafeSingletonFactory
 			common.HexToAddress("0x914d7Fec6aaC8cd542e72Bca78B30650d45643d7"): false,
+			// CreateX
+			common.HexToAddress("0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed"): false,
 		},
 	}
 	distributionScheduleAddressMap = map[uint64]common.Address{
