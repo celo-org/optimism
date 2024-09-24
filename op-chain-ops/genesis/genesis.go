@@ -77,6 +77,9 @@ func NewL2Genesis(config *DeployConfig, l1StartHeader *types.Header) (*core.Gene
 			EIP1559Elasticity:        eip1559Elasticity,
 			EIP1559DenominatorCanyon: &eip1559DenomCanyon,
 		},
+		Celo: &params.CeloConfig{
+			EIP1559BaseFeeFloor: config.EIP1559BaseFeeFloor,
+		},
 	}
 
 	gasLimit := config.L2GenesisBlockGasLimit
