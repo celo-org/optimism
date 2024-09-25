@@ -48,8 +48,8 @@ reqenv "CUSTOM_GAS_TOKEN_ADDRESS"
 block=$(cast block finalized --rpc-url "$L1_RPC_URL")
 timestamp=$(echo "$block" | awk '/timestamp/ { print $2 }')
 blockhash=$(echo "$block" | awk '/hash/ { print $2 }')
-batchInboxAddressSuffix=$(printf "%0$((38 - ${#L2_CHAIN_ID}))d" 0)$L2_CHAIN_ID
-batchInboxAddress=0xff$batchInboxAddressSuffix
+batchInboxAddressSuffix=$(printf "%0$((37 - ${#L2_CHAIN_ID}))d" 0)$L2_CHAIN_ID
+batchInboxAddress=0xfff$batchInboxAddressSuffix
 
 # Start generating the config file in a temporary file
 
@@ -106,9 +106,9 @@ cat << EOL > tmp_config.json
   "l2GenesisBlockGasLimit": "0x1c9c380",
   "l2GenesisBlockBaseFeePerGas": "0x3b9aca00",
 
-  "eip1559Denominator": 50,
-  "eip1559DenominatorCanyon": 250,
-  "eip1559Elasticity": 6,
+  "eip1559Denominator": 400,
+  "eip1559DenominatorCanyon": 400,
+  "eip1559Elasticity": 5,
   "eip1559BaseFeeFloor": 5000000000,
 EOL
 
