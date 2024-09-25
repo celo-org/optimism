@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -146,29 +147,62 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		log.Warn("Error setting up distribution schedule", "error", err)
 	}
 
-	migrationBlock := new(big.Int).Add(header.Number, common.Big1)
+	migrationBlockNumber := new(big.Int).Add(header.Number, common.Big1)
 
 	// We're done messing around with the database, so we can now commit the changes to the DB.
 	// Note that this doesn't actually write the changes to disk.
 	log.Info("Committing state DB")
-	newRoot, err := db.Commit(migrationBlock.Uint64(), true)
+	newRoot, err := db.Commit(migrationBlockNumber.Uint64(), true)
 	if err != nil {
 		return nil, err
-	}
-
-	baseFee := new(big.Int).SetUint64(params.InitialBaseFee)
-	if header.BaseFee != nil {
-		baseFee = header.BaseFee
 	}
 
 	if migrationBlockTime == 0 {
 		migrationBlockTime = uint64(time.Now().Unix())
 	}
 
+	// Set the standard options.
+	cfg.LondonBlock = migrationBlockNumber
+	cfg.BerlinBlock = migrationBlockNumber
+	cfg.ArrowGlacierBlock = migrationBlockNumber
+	cfg.GrayGlacierBlock = migrationBlockNumber
+	cfg.MergeNetsplitBlock = migrationBlockNumber
+	cfg.TerminalTotalDifficulty = big.NewInt(0)
+	cfg.TerminalTotalDifficultyPassed = true
+	cfg.ShanghaiTime = &migrationBlockTime
+	cfg.CancunTime = &migrationBlockTime
+
+	// Set the Optimism options.
+	cfg.Optimism = &params.OptimismConfig{
+		EIP1559Denominator:       config.EIP1559Denominator,
+		EIP1559DenominatorCanyon: &config.EIP1559DenominatorCanyon,
+		EIP1559Elasticity:        config.EIP1559Elasticity,
+	}
+
+	// Set the Celo options.
+	cfg.Celo = &params.CeloConfig{
+		EIP1559BaseFeeFloor: config.EIP1559BaseFeeFloor,
+	}
+
+	// Set Optimism hardforks
+	cfg.BedrockBlock = migrationBlockNumber
+	cfg.RegolithTime = &migrationBlockTime
+	cfg.CanyonTime = &migrationBlockTime
+	cfg.EcotoneTime = &migrationBlockTime
+	cfg.FjordTime = &migrationBlockTime
+	cfg.GraniteTime = &migrationBlockTime
+	cfg.Cel2Time = &migrationBlockTime
+
+	// Calculate the base fee for the migration block.
+	baseFee := new(big.Int).SetUint64(params.InitialBaseFee)
+	if header.BaseFee != nil {
+		baseFee = eip1559.CalcBaseFee(cfg, header, migrationBlockTime)
+	}
+
 	// If gas limit was zero at the transition point use a default of 30M.
 	// Note that in op-geth we use gasLimit==0 to indicate a pre-gingerbread
 	// block and adjust encoding appropriately, so we must make sure that
-	// gasLimit is non-zero, bacause L2 blocks are all post gingerbread.
+	// gasLimit is non-zero, because L2 blocks are all post gingerbread.
 	gasLimit := header.GasLimit
 	if gasLimit == 0 {
 		gasLimit = 30e6
@@ -183,7 +217,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		ReceiptHash: types.EmptyReceiptsHash,
 		Bloom:       types.Bloom{},
 		Difficulty:  new(big.Int).Set(common.Big0),
-		Number:      migrationBlock,
+		Number:      migrationBlockNumber,
 		GasLimit:    gasLimit,
 		GasUsed:     0,
 		Time:        migrationBlockTime,
@@ -235,38 +269,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 
 	// Mark the first CeL2 block as finalized
 	rawdb.WriteFinalizedBlockHash(ldb, cel2Block.Hash())
-
-	// Set the standard options.
-	cfg.LondonBlock = cel2Block.Number()
-	cfg.BerlinBlock = cel2Block.Number()
-	cfg.ArrowGlacierBlock = cel2Block.Number()
-	cfg.GrayGlacierBlock = cel2Block.Number()
-	cfg.MergeNetsplitBlock = cel2Block.Number()
-	cfg.TerminalTotalDifficulty = big.NewInt(0)
-	cfg.TerminalTotalDifficultyPassed = true
-	cfg.ShanghaiTime = &cel2Header.Time
-	cfg.CancunTime = &cel2Header.Time
-
-	// Set the Optimism options.
-	cfg.Optimism = &params.OptimismConfig{
-		EIP1559Denominator:       config.EIP1559Denominator,
-		EIP1559DenominatorCanyon: &config.EIP1559DenominatorCanyon,
-		EIP1559Elasticity:        config.EIP1559Elasticity,
-	}
-
-	// Set the Celo options.
-	cfg.Celo = &params.CeloConfig{
-		EIP1559BaseFeeFloor: config.EIP1559BaseFeeFloor,
-	}
-
-	// Set Optimism hardforks
-	cfg.BedrockBlock = cel2Block.Number()
-	cfg.RegolithTime = &cel2Header.Time
-	cfg.CanyonTime = &cel2Header.Time
-	cfg.EcotoneTime = &cel2Header.Time
-	cfg.FjordTime = &cel2Header.Time
-	cfg.GraniteTime = &cel2Header.Time
-	cfg.Cel2Time = &cel2Header.Time
 
 	// Write the chain config to disk.
 	rawdb.WriteChainConfig(ldb, genesisHash, cfg)
