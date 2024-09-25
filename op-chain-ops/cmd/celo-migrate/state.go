@@ -136,7 +136,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
 	}
 
-	// Initialize the distribution schedule contract
+	// Initialize the unreleased treasury contract
 	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
 	// This is fine, as the token uses solc 0.5.x and therefore compatible bytecode
 	err = setupUnreleasedTreasury(db, cfg)
