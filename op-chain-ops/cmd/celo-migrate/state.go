@@ -82,8 +82,8 @@ var (
 			common.HexToAddress("0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed"): false,
 		},
 	}
-	distributionScheduleAddressMap = map[uint64]common.Address{
-		AlfajoresNetworkID: common.HexToAddress("0x78af211ad79bce6bf636640ce8c2c2b29e02365a"),
+	unreleasedTreasuryAddressMap = map[uint64]common.Address{
+		AlfajoresNetworkID: common.HexToAddress("0x07bf0b2461A0cb608D5CF9a82ba97dAbA850F79F"),
 	}
 	celoTokenAddressMap = map[uint64]common.Address{
 		AlfajoresNetworkID: addresses.CeloTokenAlfajoresAddress,
@@ -138,13 +138,13 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		return nil, fmt.Errorf("cannot apply allocations to state: %w", err)
 	}
 
-	// Initialize the distribution schedule contract
+	// Initialize the unreleased treasury contract
 	// This uses the original config which won't enable recent hardforks (and things like the PUSH0 opcode)
 	// This is fine, as the token uses solc 0.5.x and therefore compatible bytecode
-	err = setupDistributionSchedule(db, cfg)
+	err = setupUnreleasedTreasury(db, cfg)
 	if err != nil {
 		// An error here shouldn't stop the migration, just log it
-		log.Warn("Error setting up distribution schedule", "error", err)
+		log.Warn("Error setting up unreleased treasury", "error", err)
 	}
 
 	migrationBlockNumber := new(big.Int).Add(header.Number, common.Big1)
@@ -365,25 +365,25 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 	return nil
 }
 
-// setupDistributionSchedule sets up the distribution schedule contract with the correct balance
+// setupUnreleasedTreasury sets up the unreleased treasury contract with the correct balance
 // The balance is set to the difference between the ceiling and the total supply of the token
-func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) error {
-	log.Info("Setting up CeloDistributionSchedule balance")
+func setupUnreleasedTreasury(db *state.StateDB, config *params.ChainConfig) error {
+	log.Info("Setting up CeloUnreleasedTreasury balance")
 
-	celoDistributionScheduleAddress, exists := distributionScheduleAddressMap[config.ChainID.Uint64()]
+	celoUnreleasedTreasuryAddress, exists := unreleasedTreasuryAddressMap[config.ChainID.Uint64()]
 	if !exists {
-		return errors.New("DistributionSchedule address not configured for this chain, skipping migration step")
+		return errors.New("CeloUnreleasedTreasury address not configured for this chain, skipping migration step")
 	}
 
-	if !db.Exist(celoDistributionScheduleAddress) {
-		return errors.New("DistributionSchedule account does not exist, skipping migration step")
+	if !db.Exist(celoUnreleasedTreasuryAddress) {
+		return errors.New("CeloUnreleasedTreasury account does not exist, skipping migration step")
 	}
 
 	tokenAddress, exists := celoTokenAddressMap[config.ChainID.Uint64()]
 	if !exists {
 		return errors.New("celo token address not configured for this chain, skipping migration step")
 	}
-	log.Info("Read contract addresses", "tokenAddress", tokenAddress, "distributionScheduleAddress", celoDistributionScheduleAddress)
+	log.Info("Read contract addresses", "tokenAddress", tokenAddress, "celoUnreleasedTreasuryAddress", celoUnreleasedTreasuryAddress)
 
 	// totalSupply is stored in the third slot
 	totalSupply := db.GetState(tokenAddress, common.HexToHash("0x02")).Big()
@@ -401,10 +401,10 @@ func setupDistributionSchedule(db *state.StateDB, config *params.ChainConfig) er
 
 	balance := new(uint256.Int).Sub(ceiling, supplyU256)
 	// Don't discard existing balance of the account
-	balance = new(uint256.Int).Add(balance, db.GetBalance(celoDistributionScheduleAddress))
-	db.SetBalance(celoDistributionScheduleAddress, balance, tracing.BalanceChangeUnspecified)
+	balance = new(uint256.Int).Add(balance, db.GetBalance(celoUnreleasedTreasuryAddress))
+	db.SetBalance(celoUnreleasedTreasuryAddress, balance, tracing.BalanceChangeUnspecified)
 
-	log.Info("Set up CeloDistributionSchedule balance", "distributionScheduleAddress", celoDistributionScheduleAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
+	log.Info("Set up CeloUnreleasedTreasury balance", "celoUnreleasedTreasuryAddress", celoUnreleasedTreasuryAddress, "balance", balance, "total_supply", supplyU256, "ceiling", ceiling)
 	return nil
 }
 
