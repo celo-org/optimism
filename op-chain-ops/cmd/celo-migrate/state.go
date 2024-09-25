@@ -142,7 +142,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	err = setupUnreleasedTreasury(db, cfg)
 	if err != nil {
 		// An error here shouldn't stop the migration, just log it
-		log.Warn("Error setting up distribution schedule", "error", err)
+		log.Warn("Error setting up unreleased treasury", "error", err)
 	}
 
 	migrationBlock := new(big.Int).Add(header.Number, common.Big1)
