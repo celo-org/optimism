@@ -27,6 +27,9 @@ const (
 // ChainSpec instead of reading the rollup configuration field directly.
 const maxSequencerDriftFjord = 1800
 
+// Celo uses the finalized L1 block as the L1 origin, therefore the max sequencer drift is increased
+const MaxSequencerDriftCelo = 30_000
+
 type ForkName string
 
 const (
@@ -105,6 +108,9 @@ func (s *ChainSpec) IsFeatMaxSequencerDriftConstant(t uint64) bool {
 // should always be queried via the ChainSpec.
 func (s *ChainSpec) MaxSequencerDrift(t uint64) uint64 {
 	if s.IsFeatMaxSequencerDriftConstant(t) {
+		if s.config.IsCel2(t) {
+			return MaxSequencerDriftCelo
+		}
 		return maxSequencerDriftFjord
 	}
 	return s.config.MaxSequencerDrift
