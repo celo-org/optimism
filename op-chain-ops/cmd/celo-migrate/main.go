@@ -60,6 +60,11 @@ var (
 		Usage:    "Path to write the genesis JSON file, to be used to sync new nodes",
 		Required: true,
 	}
+	migrationBlockNumberFlag = &cli.Uint64Flag{
+		Name:     "migration-block-number",
+		Usage:    "Specifies the migration block number. If the source db is not synced exactly to the block immediately before this number (i.e. migration-block-number - 1), the migration will fail.",
+		Required: true,
+	}
 	migrationBlockTimeFlag = &cli.Uint64Flag{
 		Name:  "migration-block-time",
 		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
@@ -106,6 +111,7 @@ var (
 		outfileRollupConfigFlag,
 		outfileGenesisFlag,
 		migrationBlockTimeFlag,
+		migrationBlockNumberFlag,
 	)
 )
 
@@ -118,13 +124,14 @@ type preMigrationOptions struct {
 }
 
 type stateMigrationOptions struct {
-	deployConfig        string
-	l1Deployments       string
-	l1RPC               string
-	l2AllocsPath        string
-	outfileRollupConfig string
-	outfileGenesis      string
-	migrationBlockTime  uint64
+	deployConfig         string
+	l1Deployments        string
+	l1RPC                string
+	l2AllocsPath         string
+	outfileRollupConfig  string
+	outfileGenesis       string
+	migrationBlockTime   uint64
+	migrationBlockNumber uint64
 }
 
 type fullMigrationOptions struct {
@@ -144,13 +151,14 @@ func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 
 func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 	return stateMigrationOptions{
-		deployConfig:        ctx.Path(deployConfigFlag.Name),
-		l1Deployments:       ctx.Path(l1DeploymentsFlag.Name),
-		l1RPC:               ctx.String(l1RPCFlag.Name),
-		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
-		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
-		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
-		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
+		deployConfig:         ctx.Path(deployConfigFlag.Name),
+		l1Deployments:        ctx.Path(l1DeploymentsFlag.Name),
+		l1RPC:                ctx.String(l1RPCFlag.Name),
+		l2AllocsPath:         ctx.Path(l2AllocsFlag.Name),
+		outfileRollupConfig:  ctx.Path(outfileRollupConfigFlag.Name),
+		outfileGenesis:       ctx.Path(outfileGenesisFlag.Name),
+		migrationBlockTime:   ctx.Uint64(migrationBlockTimeFlag.Name),
+		migrationBlockNumber: ctx.Uint64(migrationBlockNumberFlag.Name),
 	}
 }
 
@@ -223,7 +231,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 		return fmt.Errorf("failed to run pre-migration: %w", err)
 	}
 
-	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients); err != nil {
+	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients, opts.migrationBlockNumber); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
 	if err := runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
@@ -282,7 +290,7 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 	return strayAncientBlocks, numAncientsNewAfter, nil
 }
 
-func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients uint64) error {
+func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients, migrationBlockNumber uint64) error {
 	defer timer("non-ancient migration")()
 
 	newDB, err := openDBWithoutFreezer(newDBPath, false)
@@ -296,7 +304,11 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
 	lastAncient := numAncients - 1
 
-	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
+	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient, "migrationBlockNumber", migrationBlockNumber)
+
+	if lastBlock != migrationBlockNumber-1 {
+		return fmt.Errorf("new-db head block number not synced to the block immediately before the migration block number: %d != %d", lastBlock, migrationBlockNumber-1)
+	}
 
 	var numNonAncients uint64
 	if numNonAncients, err = migrateNonAncientsDb(newDB, lastBlock, numAncients, batchSize); err != nil {
@@ -390,7 +402,7 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis.Alloc, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, l1StartBlock)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis.Alloc, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, opts.migrationBlockNumber, l1StartBlock)
 	if err != nil {
 		return err
 	}
