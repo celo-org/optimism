@@ -124,19 +124,19 @@ type preMigrationOptions struct {
 }
 
 type stateMigrationOptions struct {
-	deployConfig         string
-	l1Deployments        string
-	l1RPC                string
-	l2AllocsPath         string
-	outfileRollupConfig  string
-	outfileGenesis       string
-	migrationBlockTime   uint64
-	migrationBlockNumber uint64
+	deployConfig        string
+	l1Deployments       string
+	l1RPC               string
+	l2AllocsPath        string
+	outfileRollupConfig string
+	outfileGenesis      string
+	migrationBlockTime  uint64
 }
 
 type fullMigrationOptions struct {
 	preMigrationOptions
 	stateMigrationOptions
+	migrationBlockNumber uint64
 }
 
 func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
@@ -151,14 +151,13 @@ func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 
 func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 	return stateMigrationOptions{
-		deployConfig:         ctx.Path(deployConfigFlag.Name),
-		l1Deployments:        ctx.Path(l1DeploymentsFlag.Name),
-		l1RPC:                ctx.String(l1RPCFlag.Name),
-		l2AllocsPath:         ctx.Path(l2AllocsFlag.Name),
-		outfileRollupConfig:  ctx.Path(outfileRollupConfigFlag.Name),
-		outfileGenesis:       ctx.Path(outfileGenesisFlag.Name),
-		migrationBlockTime:   ctx.Uint64(migrationBlockTimeFlag.Name),
-		migrationBlockNumber: ctx.Uint64(migrationBlockNumberFlag.Name),
+		deployConfig:        ctx.Path(deployConfigFlag.Name),
+		l1Deployments:       ctx.Path(l1DeploymentsFlag.Name),
+		l1RPC:               ctx.String(l1RPCFlag.Name),
+		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
+		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
+		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
+		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
 	}
 }
 
@@ -166,6 +165,7 @@ func parseFullMigrationOptions(ctx *cli.Context) fullMigrationOptions {
 	return fullMigrationOptions{
 		preMigrationOptions:   parsePreMigrationOptions(ctx),
 		stateMigrationOptions: parseStateMigrationOptions(ctx),
+		migrationBlockNumber:  ctx.Uint64(migrationBlockNumberFlag.Name),
 	}
 }
 
