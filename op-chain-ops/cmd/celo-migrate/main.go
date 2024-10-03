@@ -94,6 +94,11 @@ var (
 		Usage: "Memory limit in MiB, should be set lower than the available amount of memory in your system to prevent out of memory errors",
 		Value: 7500,
 	}
+	reset = &cli.BoolFlag{
+		Name:  "reset",
+		Usage: "Delete everything in the destination directory aside from /ancients. This is useful if you need to re-run the full migration but do not want to repeat the lengthy ancients migration. If you'd like to reset the entire destination directory, you can delete it manually.",
+		Value: false,
+	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -101,6 +106,7 @@ var (
 		batchSizeFlag,
 		bufferSizeFlag,
 		memoryLimitFlag,
+		reset,
 	}
 	fullMigrationFlags = append(
 		preMigrationFlags,
@@ -116,11 +122,12 @@ var (
 )
 
 type preMigrationOptions struct {
-	oldDBPath   string
-	newDBPath   string
-	batchSize   uint64
-	bufferSize  uint64
-	memoryLimit int64
+	oldDBPath        string
+	newDBPath        string
+	batchSize        uint64
+	bufferSize       uint64
+	memoryLimit      int64
+	resetNonAncients bool
 }
 
 type stateMigrationOptions struct {
@@ -141,11 +148,12 @@ type fullMigrationOptions struct {
 
 func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 	return preMigrationOptions{
-		oldDBPath:   ctx.String(oldDBPathFlag.Name),
-		newDBPath:   ctx.String(newDBPathFlag.Name),
-		batchSize:   ctx.Uint64(batchSizeFlag.Name),
-		bufferSize:  ctx.Uint64(bufferSizeFlag.Name),
-		memoryLimit: ctx.Int64(memoryLimitFlag.Name),
+		oldDBPath:        ctx.String(oldDBPathFlag.Name),
+		newDBPath:        ctx.String(newDBPathFlag.Name),
+		batchSize:        ctx.Uint64(batchSizeFlag.Name),
+		bufferSize:       ctx.Uint64(bufferSizeFlag.Name),
+		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
+		resetNonAncients: ctx.Bool(reset.Name),
 	}
 }
 
@@ -268,6 +276,12 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 
 	if err = createNewDbPathIfNotExists(opts.newDBPath); err != nil {
 		return nil, 0, fmt.Errorf("failed to create new db path: %w", err)
+	}
+
+	if opts.resetNonAncients {
+		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
+			return nil, 0, fmt.Errorf("failed to cleanup non-ancient db: %w", err)
+		}
 	}
 
 	var numAncientsNewBefore uint64
