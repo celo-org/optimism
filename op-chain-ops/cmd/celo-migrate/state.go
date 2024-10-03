@@ -155,12 +155,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		return nil, err
 	}
 
-	if migrationBlockTime == 0 {
-		// If the migration block time is not set, use the time of the last block incremented by one.
-		// This makes sure the migration is deterministic.
-		migrationBlockTime = header.Time + config.L2BlockTime
-	}
-
 	// Set the standard options.
 	cfg.LondonBlock = migrationBlockNumber
 	cfg.BerlinBlock = migrationBlockNumber
