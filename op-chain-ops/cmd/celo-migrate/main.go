@@ -223,7 +223,16 @@ func runFullMigration(opts fullMigrationOptions) error {
 
 	log.Info("Full Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath)
 
-	var err error
+	head, err := getHeadHeader(opts.oldDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to get head header: %w", err)
+	}
+	if head.Number.Uint64() != opts.migrationBlockNumber-1 {
+		return fmt.Errorf("old-db head block number not synced to the block immediately before the migration block number: %d != %d", head.Number.Uint64(), opts.migrationBlockNumber-1)
+	}
+
+	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
+
 	var numAncients uint64
 	var strayAncientBlocks []*rawdb.NumberHash
 
@@ -231,10 +240,10 @@ func runFullMigration(opts fullMigrationOptions) error {
 		return fmt.Errorf("failed to run pre-migration: %w", err)
 	}
 
-	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients, opts.migrationBlockNumber); err != nil {
+	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
-	if err := runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
+	if err = runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run state migration: %w", err)
 	}
 
@@ -290,7 +299,7 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 	return strayAncientBlocks, numAncientsNewAfter, nil
 }
 
-func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients, migrationBlockNumber uint64) error {
+func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients uint64) error {
 	defer timer("non-ancient migration")()
 
 	newDB, err := openDBWithoutFreezer(newDBPath, false)
@@ -304,11 +313,7 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 	lastBlock := *rawdb.ReadHeaderNumber(newDB, hash)
 	lastAncient := numAncients - 1
 
-	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient, "migrationBlockNumber", migrationBlockNumber)
-
-	if lastBlock != migrationBlockNumber-1 {
-		return fmt.Errorf("new-db head block number not synced to the block immediately before the migration block number: %d != %d", lastBlock, migrationBlockNumber-1)
-	}
+	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
 
 	var numNonAncients uint64
 	if numNonAncients, err = migrateNonAncientsDb(newDB, lastBlock, numAncients, batchSize); err != nil {
@@ -402,7 +407,7 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 
 	// Write changes to state to actual state database
-	cel2Header, err := applyStateMigrationChanges(config, l2Genesis.Alloc, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, opts.migrationBlockNumber, l1StartBlock)
+	cel2Header, err := applyStateMigrationChanges(config, l2Genesis.Alloc, newDBPath, opts.outfileGenesis, opts.migrationBlockTime, l1StartBlock)
 	if err != nil {
 		return err
 	}

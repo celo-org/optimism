@@ -90,7 +90,7 @@ var (
 	}
 )
 
-func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.GenesisAlloc, dbPath, genesisOutPath string, migrationBlockTime, migrationBlockNumber uint64, l1StartBlock *types.Block) (*types.Header, error) {
+func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.GenesisAlloc, dbPath, genesisOutPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
 	log.Info("Opening Celo database", "dbPath", dbPath)
 
 	ldb, err := openDBWithoutFreezer(dbPath, false)
@@ -109,10 +109,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		return nil, fmt.Errorf("cannot find header number for %s", hash)
 	}
 	log.Info("Reading chain tip num from database", "number", *num)
-
-	if *num != migrationBlockNumber-1 {
-		return nil, fmt.Errorf("new-db head block number not synced to the block immediately before the migration block number: %d != %d", *num, migrationBlockNumber-1)
-	}
 
 	// Grab the full header.
 	header := rawdb.ReadHeader(ldb, hash, *num)
@@ -150,10 +146,12 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		log.Warn("Error setting up unreleased treasury", "error", err)
 	}
 
+	migrationBlockNumber := new(big.Int).Add(header.Number, common.Big1)
+
 	// We're done messing around with the database, so we can now commit the changes to the DB.
 	// Note that this doesn't actually write the changes to disk.
 	log.Info("Committing state DB")
-	newRoot, err := db.Commit(migrationBlockNumber, true)
+	newRoot, err := db.Commit(migrationBlockNumber.Uint64(), true)
 	if err != nil {
 		return nil, err
 	}
@@ -162,14 +160,12 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		migrationBlockTime = uint64(time.Now().Unix())
 	}
 
-	migrationBlockNumberBigInt := new(big.Int).SetUint64(migrationBlockNumber)
-
 	// Set the standard options.
-	cfg.LondonBlock = migrationBlockNumberBigInt
-	cfg.BerlinBlock = migrationBlockNumberBigInt
-	cfg.ArrowGlacierBlock = migrationBlockNumberBigInt
-	cfg.GrayGlacierBlock = migrationBlockNumberBigInt
-	cfg.MergeNetsplitBlock = migrationBlockNumberBigInt
+	cfg.LondonBlock = migrationBlockNumber
+	cfg.BerlinBlock = migrationBlockNumber
+	cfg.ArrowGlacierBlock = migrationBlockNumber
+	cfg.GrayGlacierBlock = migrationBlockNumber
+	cfg.MergeNetsplitBlock = migrationBlockNumber
 	cfg.TerminalTotalDifficulty = big.NewInt(0)
 	cfg.TerminalTotalDifficultyPassed = true
 	cfg.ShanghaiTime = &migrationBlockTime
@@ -188,7 +184,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	}
 
 	// Set Optimism hardforks
-	cfg.BedrockBlock = migrationBlockNumberBigInt
+	cfg.BedrockBlock = migrationBlockNumber
 	cfg.RegolithTime = &migrationBlockTime
 	cfg.CanyonTime = &migrationBlockTime
 	cfg.EcotoneTime = &migrationBlockTime
@@ -220,7 +216,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		ReceiptHash: types.EmptyReceiptsHash,
 		Bloom:       types.Bloom{},
 		Difficulty:  new(big.Int).Set(common.Big0),
-		Number:      migrationBlockNumberBigInt,
+		Number:      migrationBlockNumber,
 		GasLimit:    gasLimit,
 		GasUsed:     0,
 		Time:        migrationBlockTime,
