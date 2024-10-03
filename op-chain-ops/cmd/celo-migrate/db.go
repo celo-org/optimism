@@ -9,6 +9,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -97,4 +98,18 @@ func removeBlocks(ldb ethdb.Database, numberHashes []*rawdb.NumberHash) error {
 	}
 
 	return nil
+}
+
+func getHeadHeader(dbpath string) (*types.Header, error) {
+	db, err := openDBWithoutFreezer(dbpath, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open database at %q err: %w", dbpath, err)
+	}
+	defer db.Close()
+
+	headHeader := rawdb.ReadHeadHeader(db)
+	if headHeader == nil {
+		return nil, fmt.Errorf("head header not in database at: %s", dbpath)
+	}
+	return headHeader, nil
 }
