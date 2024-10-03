@@ -60,6 +60,11 @@ var (
 		Usage:    "Path to write the genesis JSON file, to be used to sync new nodes",
 		Required: true,
 	}
+	migrationBlockNumberFlag = &cli.Uint64Flag{
+		Name:     "migration-block-number",
+		Usage:    "Specifies the migration block number. If the source db is not synced exactly to the block immediately before this number (i.e. migration-block-number - 1), the migration will fail.",
+		Required: true,
+	}
 	migrationBlockTimeFlag = &cli.Uint64Flag{
 		Name:  "migration-block-time",
 		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
@@ -89,6 +94,11 @@ var (
 		Usage: "Memory limit in MiB, should be set lower than the available amount of memory in your system to prevent out of memory errors",
 		Value: 7500,
 	}
+	reset = &cli.BoolFlag{
+		Name:  "reset",
+		Usage: "Delete everything in the destination directory aside from /ancients. This is useful if you need to re-run the full migration but do not want to repeat the lengthy ancients migration. If you'd like to reset the entire destination directory, you can delete it manually.",
+		Value: false,
+	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -96,6 +106,7 @@ var (
 		batchSizeFlag,
 		bufferSizeFlag,
 		memoryLimitFlag,
+		reset,
 	}
 	fullMigrationFlags = append(
 		preMigrationFlags,
@@ -106,15 +117,17 @@ var (
 		outfileRollupConfigFlag,
 		outfileGenesisFlag,
 		migrationBlockTimeFlag,
+		migrationBlockNumberFlag,
 	)
 )
 
 type preMigrationOptions struct {
-	oldDBPath   string
-	newDBPath   string
-	batchSize   uint64
-	bufferSize  uint64
-	memoryLimit int64
+	oldDBPath        string
+	newDBPath        string
+	batchSize        uint64
+	bufferSize       uint64
+	memoryLimit      int64
+	resetNonAncients bool
 }
 
 type stateMigrationOptions struct {
@@ -130,15 +143,17 @@ type stateMigrationOptions struct {
 type fullMigrationOptions struct {
 	preMigrationOptions
 	stateMigrationOptions
+	migrationBlockNumber uint64
 }
 
 func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 	return preMigrationOptions{
-		oldDBPath:   ctx.String(oldDBPathFlag.Name),
-		newDBPath:   ctx.String(newDBPathFlag.Name),
-		batchSize:   ctx.Uint64(batchSizeFlag.Name),
-		bufferSize:  ctx.Uint64(bufferSizeFlag.Name),
-		memoryLimit: ctx.Int64(memoryLimitFlag.Name),
+		oldDBPath:        ctx.String(oldDBPathFlag.Name),
+		newDBPath:        ctx.String(newDBPathFlag.Name),
+		batchSize:        ctx.Uint64(batchSizeFlag.Name),
+		bufferSize:       ctx.Uint64(bufferSizeFlag.Name),
+		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
+		resetNonAncients: ctx.Bool(reset.Name),
 	}
 }
 
@@ -158,6 +173,7 @@ func parseFullMigrationOptions(ctx *cli.Context) fullMigrationOptions {
 	return fullMigrationOptions{
 		preMigrationOptions:   parsePreMigrationOptions(ctx),
 		stateMigrationOptions: parseStateMigrationOptions(ctx),
+		migrationBlockNumber:  ctx.Uint64(migrationBlockNumberFlag.Name),
 	}
 }
 
@@ -215,7 +231,16 @@ func runFullMigration(opts fullMigrationOptions) error {
 
 	log.Info("Full Migration Started", "oldDBPath", opts.oldDBPath, "newDBPath", opts.newDBPath)
 
-	var err error
+	head, err := getHeadHeader(opts.oldDBPath)
+	if err != nil {
+		return fmt.Errorf("failed to get head header: %w", err)
+	}
+	if head.Number.Uint64() != opts.migrationBlockNumber-1 {
+		return fmt.Errorf("old-db head block number not synced to the block immediately before the migration block number: %d != %d", head.Number.Uint64(), opts.migrationBlockNumber-1)
+	}
+
+	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
+
 	var numAncients uint64
 	var strayAncientBlocks []*rawdb.NumberHash
 
@@ -226,7 +251,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
-	if err := runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
+	if err = runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run state migration: %w", err)
 	}
 
@@ -251,6 +276,12 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 
 	if err = createNewDbPathIfNotExists(opts.newDBPath); err != nil {
 		return nil, 0, fmt.Errorf("failed to create new db path: %w", err)
+	}
+
+	if opts.resetNonAncients {
+		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
+			return nil, 0, fmt.Errorf("failed to cleanup non-ancient db: %w", err)
+		}
 	}
 
 	var numAncientsNewBefore uint64
