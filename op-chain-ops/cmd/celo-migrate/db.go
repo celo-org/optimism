@@ -113,3 +113,21 @@ func getHeadHeader(dbpath string) (*types.Header, error) {
 	}
 	return headHeader, nil
 }
+
+func cleanupNonAncientDb(dir string) error {
+	log.Info("Cleaning up non-ancient data in new db")
+
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return fmt.Errorf("failed to read directory: %w", err)
+	}
+	for _, file := range files {
+		if file.Name() != "ancient" {
+			err := os.RemoveAll(filepath.Join(dir, file.Name()))
+			if err != nil {
+				return fmt.Errorf("failed to remove file: %w", err)
+			}
+		}
+	}
+	return nil
+}
