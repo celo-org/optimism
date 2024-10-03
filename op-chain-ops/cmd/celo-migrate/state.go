@@ -109,7 +109,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	if num == nil {
 		return nil, fmt.Errorf("cannot find header number for %s", hash)
 	}
-	log.Info("Reading chain tip num from database", "number", num)
+	log.Info("Reading chain tip num from database", "number", *num)
 
 	// Grab the full header.
 	header := rawdb.ReadHeader(ldb, hash, *num)
