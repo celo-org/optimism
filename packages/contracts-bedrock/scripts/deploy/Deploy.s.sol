@@ -1289,6 +1289,15 @@ contract Deploy is Deployer {
             customGasTokenAddress = cfg.customGasTokenAddress();
             IERC20 token = IERC20(customGasTokenAddress);
             initialBalance = token.balanceOf(optimismPortalProxy);
+
+            address strorageSetter = deployStorageSetter();
+            _upgradeAndCallViaSafe({
+                _proxy: payable(optimismPortalProxy),
+                _implementation: strorageSetter,
+                _innerCallData: abi.encodeCall(
+                    StorageSetter.setUint(61, initialBalance) // slot of _balance variable
+                )
+            });
         }
 
         _upgradeAndCallViaSafe({
@@ -1299,8 +1308,8 @@ contract Deploy is Deployer {
                 (
                     L2OutputOracle(l2OutputOracleProxy),
                     SystemConfig(systemConfigProxy),
-                    SuperchainConfig(superchainConfigProxy),
-                    initialBalance
+                    SuperchainConfig(superchainConfigProxy)
+                    // initialBalance
                 )
             )
         });
