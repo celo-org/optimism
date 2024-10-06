@@ -129,7 +129,7 @@ contract Initializer_Test is Bridge_Initializer {
         contracts.push(
             InitializeableContract({
                 target: deploy.mustGetAddress("OptimismPortal"),
-                initCalldata: abi.encodeCall(optimismPortal.initialize, (l2OutputOracle, systemConfig, superchainConfig, 0)),
+                initCalldata: abi.encodeCall(optimismPortal.initialize, (l2OutputOracle, systemConfig, superchainConfig)),
                 initializedSlotVal: deploy.loadInitializedSlot("OptimismPortal")
             })
         );
@@ -153,7 +153,7 @@ contract Initializer_Test is Bridge_Initializer {
         contracts.push(
             InitializeableContract({
                 target: address(optimismPortal),
-                initCalldata: abi.encodeCall(optimismPortal.initialize, (l2OutputOracle, systemConfig, superchainConfig, 0)),
+                initCalldata: abi.encodeCall(optimismPortal.initialize, (l2OutputOracle, systemConfig, superchainConfig)),
                 initializedSlotVal: deploy.loadInitializedSlot("OptimismPortalProxy")
             })
         );
