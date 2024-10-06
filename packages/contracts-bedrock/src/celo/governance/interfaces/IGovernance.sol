@@ -15,7 +15,9 @@ interface IGovernance {
     function isVoting(address) external view returns (bool);
     function getAmountOfGoldUsedForVoting(address account) external view returns (uint256);
 
-    function getProposal(uint256 proposalId)
+    function getProposal(
+        uint256 proposalId
+    )
         external
         view
         returns (address, uint256, uint256, uint256, string memory, uint256, bool);

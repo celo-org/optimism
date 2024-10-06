@@ -265,7 +265,9 @@ contract SortedOracles is ISortedOracles, IOracle, ICeloVersionedContract, Ownab
      * @return values Values of an unpacked list of elements from largest to smallest.
      * @return relations Relations of an unpacked list of elements from largest to smallest.
      */
-    function getTimestamps(address token)
+    function getTimestamps(
+        address token
+    )
         external
         view
         returns (address[] memory, uint256[] memory, SortedLinkedListWithMedian.MedianRelation[] memory)
@@ -293,7 +295,9 @@ contract SortedOracles is ISortedOracles, IOracle, ICeloVersionedContract, Ownab
      * @return values Values of an unpacked list of elements from largest to smallest.
      * @return relations Relations of an unpacked list of elements from largest to smallest.
      */
-    function getRates(address token)
+    function getRates(
+        address token
+    )
         external
         view
         returns (address[] memory, uint256[] memory, SortedLinkedListWithMedian.MedianRelation[] memory)

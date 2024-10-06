@@ -139,7 +139,9 @@ library AddressSortedLinkedListWithMedian {
      * @return Values corresponding to keys, which will be ordered largest to smallest.
      * @return Array of relations to median of corresponding list elements.
      */
-    function getElements(SortedLinkedListWithMedian.List storage list)
+    function getElements(
+        SortedLinkedListWithMedian.List storage list
+    )
         public
         view
         returns (address[] memory, uint256[] memory, SortedLinkedListWithMedian.MedianRelation[] memory)
