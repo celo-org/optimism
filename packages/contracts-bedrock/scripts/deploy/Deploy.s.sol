@@ -1297,7 +1297,8 @@ contract Deploy is Deployer {
                 _proxy: payable(optimismPortalProxy),
                 _implementation: strorageSetter,
                 _innerCallData: abi.encodeCall(
-                    StorageSetter.setUint, (bytes32(uint256(balanceStorageSlot)), initialBalance)
+                    StorageSetter.setUint,
+                    (bytes32(uint256(balanceStorageSlot)), initialBalance)
                 )
             });
         }

@@ -210,9 +210,7 @@ library SortedLinkedListWithMedian {
      * @return Values corresponding to keys, which will be ordered largest to smallest.
      * @return Array of relations to median of corresponding list elements.
      */
-    function getElements(
-        List storage list
-    )
+    function getElements(List storage list)
         internal
         view
         returns (bytes32[] memory, uint256[] memory, MedianRelation[] memory)

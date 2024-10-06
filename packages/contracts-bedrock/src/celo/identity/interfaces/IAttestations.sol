@@ -9,9 +9,7 @@ interface IAttestations {
     function getUnselectedRequest(bytes32, address) external view returns (uint32, uint32, address);
     function getAttestationIssuers(bytes32, address) external view returns (address[] memory);
     function getAttestationStats(bytes32, address) external view returns (uint32, uint32);
-    function batchGetAttestationStats(
-        bytes32[] calldata
-    )
+    function batchGetAttestationStats(bytes32[] calldata)
         external
         view
         returns (uint256[] memory, address[] memory, uint64[] memory, uint64[] memory);
