@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"time"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
@@ -154,10 +153,6 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	newRoot, err := db.Commit(migrationBlockNumber.Uint64(), true)
 	if err != nil {
 		return nil, err
-	}
-
-	if migrationBlockTime == 0 {
-		migrationBlockTime = uint64(time.Now().Unix())
 	}
 
 	// Set the standard options.
