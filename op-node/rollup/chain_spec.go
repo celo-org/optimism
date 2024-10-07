@@ -27,6 +27,12 @@ const (
 // ChainSpec instead of reading the rollup configuration field directly.
 const maxSequencerDriftFjord = 1800
 
+// Normal OP chains wait for five confirmations while Celo waits for finalization, which can take
+// up to 3 * 32 blocks. So we should allow for more drift to compensate.
+// 3 * 32 - 5 = 91 blocks
+// 91 * 12s block time = 1092
+const maxSequencerDriftCelo = maxSequencerDriftFjord + 1092
+
 type ForkName string
 
 const (
@@ -105,7 +111,11 @@ func (s *ChainSpec) IsFeatMaxSequencerDriftConstant(t uint64) bool {
 // should always be queried via the ChainSpec.
 func (s *ChainSpec) MaxSequencerDrift(t uint64) uint64 {
 	if s.IsFeatMaxSequencerDriftConstant(t) {
-		return maxSequencerDriftFjord
+		if s.config.IsCel2(t) {
+			return maxSequencerDriftCelo
+		} else {
+			return maxSequencerDriftFjord
+		}
 	}
 	return s.config.MaxSequencerDrift
 }
