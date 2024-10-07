@@ -67,8 +67,9 @@ var (
 		Required: true,
 	}
 	migrationBlockTimeFlag = &cli.Uint64Flag{
-		Name:  "migration-block-time",
-		Usage: "Specifies a unix timestamp to use for the migration block. If not provided, the current time will be used.",
+		Name:     "migration-block-time",
+		Usage:    "Specifies a unix timestamp to use for the migration block. This should be set to the same timestamp as was used for the sequencer migration. If performing the sequencer migration, this should set to a time in the future around when the migration script is expected to complete.",
+		Required: true,
 	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
