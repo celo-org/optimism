@@ -408,6 +408,10 @@ func (c *Config) IsInterop(timestamp uint64) bool {
 	return c.InteropTime != nil && timestamp >= *c.InteropTime
 }
 
+func (c *Config) IsCel2(timestamp uint64) bool {
+	return c.Cel2Time != nil && timestamp >= *c.Cel2Time
+}
+
 func (c *Config) IsRegolithActivationBlock(l2BlockTime uint64) bool {
 	return c.IsRegolith(l2BlockTime) &&
 		l2BlockTime >= c.BlockTime &&
