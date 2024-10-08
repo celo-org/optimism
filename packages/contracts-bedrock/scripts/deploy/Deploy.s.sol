@@ -413,13 +413,15 @@ contract Deploy is Deployer {
 
         setupCustomGasToken();
 
+        address storageSetter = deployStorageSetter();
+
         // Selectively initialize either the original OptimismPortal or the new OptimismPortal2. Since this will upgrade
         // the proxy, we cannot initialize both.
         if (cfg.useFaultProofs()) {
             console.log("Fault proofs enabled. Initializing the OptimismPortal proxy with the OptimismPortal2.");
             initializeOptimismPortal2();
         } else {
-            initializeOptimismPortal();
+            initializeOptimismPortal(storageSetter);
         }
 
         initializeSystemConfig();
@@ -432,6 +434,8 @@ contract Deploy is Deployer {
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
         initializeAnchorStateRegistry();
+
+        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 
     /// @notice Add AltDA setup to the OP chain
@@ -1275,7 +1279,7 @@ contract Deploy is Deployer {
     }
 
     /// @notice Initialize the OptimismPortal
-    function initializeOptimismPortal() public broadcast {
+    function initializeOptimismPortal(address strorageSetter) public broadcast {
         console.log("Upgrading and initializing OptimismPortal proxy");
         address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
         address optimismPortal = mustGetAddress("OptimismPortal");
@@ -1289,6 +1293,13 @@ contract Deploy is Deployer {
             customGasTokenAddress = cfg.customGasTokenAddress();
             IERC20 token = IERC20(customGasTokenAddress);
             initialBalance = token.balanceOf(optimismPortalProxy);
+
+            uint256 balanceStorageSlot = 61; // slot of _balance variable
+            _upgradeAndCallViaSafe({
+                _proxy: payable(optimismPortalProxy),
+                _implementation: strorageSetter,
+                _innerCallData: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+            });
         }
 
         _upgradeAndCallViaSafe({
@@ -1299,8 +1310,7 @@ contract Deploy is Deployer {
                 (
                     L2OutputOracle(l2OutputOracleProxy),
                     SystemConfig(systemConfigProxy),
-                    SuperchainConfig(superchainConfigProxy),
-                    initialBalance
+                    SuperchainConfig(superchainConfigProxy)
                 )
             )
         });

@@ -192,11 +192,6 @@
         "internalType": "contract SuperchainConfig",
         "name": "_superchainConfig",
         "type": "address"
-      },
-      {
-        "internalType": "uint256",
-        "name": "_initialBalance",
-        "type": "uint256"
       }
     ],
     "name": "initialize",
