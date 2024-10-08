@@ -351,8 +351,15 @@ library ChainAssertions {
     }
 
     /// @notice Asserts the OptimismPortal custom gas token is setup correctly
-    function checkCustomGasTokenOptimismPortal(Types.ContractSet memory _contracts, DeployConfig _cfg, bool _isProxy) internal view {
-         OptimismPortal portal = OptimismPortal(payable(_contracts.OptimismPortal));
+    function checkCustomGasTokenOptimismPortal(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy
+    )
+        internal
+        view
+    {
+        OptimismPortal portal = OptimismPortal(payable(_contracts.OptimismPortal));
 
         uint256 expectedInitialBalance = 0;
         if (_isProxy && _cfg.useCustomGasToken()) {

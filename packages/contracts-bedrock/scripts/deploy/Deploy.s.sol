@@ -435,7 +435,7 @@ contract Deploy is Deployer {
         initializePermissionedDelayedWETH();
         initializeAnchorStateRegistry();
 
-        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true});
+        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 
     /// @notice Add AltDA setup to the OP chain
@@ -1298,9 +1298,7 @@ contract Deploy is Deployer {
             _upgradeAndCallViaSafe({
                 _proxy: payable(optimismPortalProxy),
                 _implementation: strorageSetter,
-                _innerCallData: abi.encodeCall(
-                    StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance)
-                )
+                _innerCallData: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
             });
         }
 
