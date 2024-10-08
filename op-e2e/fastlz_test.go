@@ -113,7 +113,6 @@ func FuzzFjordCostFunction(f *testing.F) {
 
 	baseFeeScalar, err := gpoCaller.BaseFeeScalar(&bind.CallOpts{})
 	require.NoError(f, err)
-	require.Greater(f, baseFeeScalar, uint32(0))
 
 	blobBaseFeeScalar, err := gpoCaller.BlobBaseFeeScalar(&bind.CallOpts{})
 	require.NoError(f, err)
@@ -162,15 +161,17 @@ func FuzzFjordCostFunction(f *testing.F) {
 		l1FeeSolidity, err := gpoCaller.GetL1Fee(&bind.CallOpts{}, fuzzedData)
 		require.NoError(t, err)
 
-		// remove the adjustment
-		l1FeeSolidity.Mul(l1FeeSolidity, big.NewInt(1e12))
-		l1FeeSolidity.Div(l1FeeSolidity, feeScaled)
+		if feeScaled.Sign() != 0 {
+			// remove the adjustment
+			l1FeeSolidity.Mul(l1FeeSolidity, big.NewInt(1e12))
+			l1FeeSolidity.Div(l1FeeSolidity, feeScaled)
 
-		totalAdjustment := new(big.Int).Mul(big.NewInt(68), big.NewInt(836_500))
-		l1FeeSolidity.Sub(l1FeeSolidity, totalAdjustment)
+			totalAdjustment := new(big.Int).Mul(big.NewInt(68), big.NewInt(836_500))
+			l1FeeSolidity.Sub(l1FeeSolidity, totalAdjustment)
 
-		l1FeeSolidity.Mul(l1FeeSolidity, feeScaled)
-		l1FeeSolidity.Div(l1FeeSolidity, big.NewInt(1e12))
+			l1FeeSolidity.Mul(l1FeeSolidity, feeScaled)
+			l1FeeSolidity.Div(l1FeeSolidity, big.NewInt(1e12))
+		}
 
 		costData := types.NewRollupCostData(fuzzedData)
 
