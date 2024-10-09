@@ -1275,7 +1275,7 @@ func testFees(t *testing.T, cfg SystemConfig) {
 	} else if sys.RollupConfig.IsRegolith(header.Time) {
 		// if post-regolith, adjust the GPO fee by removing the overhead it adds because of signature data
 		artificialGPOOverhead := big.NewInt(68 * 16) // it adds 68 bytes to cover signature and RLP data
-		l1BaseFee := big.NewInt(7)                   // we assume the L1 basefee is the minimum, 7
+		l1BaseFee := big.NewInt(0)                   // we assume the L1 basefee is the minimum, 7
 		// in our case we already include that, so we subtract it, to do a 1:1 comparison
 		adjustedGPOFee = new(big.Int).Sub(gpoL1Fee, new(big.Int).Mul(artificialGPOOverhead, l1BaseFee))
 	}
