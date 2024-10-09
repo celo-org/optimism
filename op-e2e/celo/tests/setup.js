@@ -16,7 +16,7 @@ async function waitForNoError(func, timeout) {
     try {
       await func()
       return true
-    } catch (error) { }
+    } catch (error) {}
     await new Promise((r) => setTimeout(r, 1000))
   }
   return false
@@ -56,7 +56,7 @@ export async function setup() {
     waitReachable(config.client.l1.public, 10_000),
     waitReachable(config.client.l2.public, 10_000),
     waitForNextGame(config.client.l1.public, chainConfig.l2, 60_000),
-  ]);
+  ])
   if (success.every((v) => v == true)) {
     return config
   }
