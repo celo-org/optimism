@@ -46,6 +46,12 @@ export const withdraw = async function (args, config) {
     targetChain: config.client.l2.public.chain,
   })
 
+  // HACK: the waitToFinalize does not seem to calculate the wait time
+  // correctly..., lets hardcode a wait time for now to see if it can work.
+  // In theory viem is not waiting an additional DISPUTE_GAME_FINALITY_DELAY_SECONDS.
+  // The current default value for this is 6, but this was not enough in manual testing.
+  // TODO: fix this upstream in viem...
+  await new Promise((res) => setTimeout(res, 16 * 1000));
   const finalizeHash = await config.client.l1.wallet.finalizeWithdrawal({
     targetChain: config.client.l2.public.chain,
     withdrawal,
