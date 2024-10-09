@@ -279,7 +279,7 @@ func (cfg *Config) Check() error {
 		return ErrMissingBatcherAddr
 	}
 	if cfg.Genesis.SystemConfig.Scalar == (eth.Bytes32{}) {
-		return ErrMissingScalar
+		// return ErrMissingScalar
 	}
 	if cfg.Genesis.SystemConfig.GasLimit == 0 {
 		return ErrMissingGasLimit
