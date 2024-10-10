@@ -423,7 +423,7 @@ library ChainAssertions {
         }
         // This slot is the custom gas token _balance and this check ensures
         // that it stays unset for forwards compatibility with custom gas token.
-        // if we use the pre-locked storage modification, the comprison
+        // if we use the pre-locked storage modification, the comparison
         // against 0 doesn't hold anymore.
         // We do a check of the balance field downstream anyways, that's why we
         // can disable this check
