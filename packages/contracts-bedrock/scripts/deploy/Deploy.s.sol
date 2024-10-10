@@ -260,7 +260,7 @@ contract Deploy is Deployer {
         }
     }
 
-    /// @notice Transfer ownership of a Proxy to the ProxyAdmin contract
+    /// @notice Transfer admin role of a Proxy to the ProxyAdmin contract
     ///         This is expected to be used in conjusting with deployERC1967ProxyWithOwner after setup actions
     ///         have been performed on the proxy.
     /// @param _name The name of the proxy to transfer ownership of.
@@ -268,7 +268,7 @@ contract Deploy is Deployer {
         Proxy proxy = Proxy(mustGetAddress(_name));
         address proxyAdmin = mustGetAddress("ProxyAdmin");
         proxy.changeAdmin(proxyAdmin);
-        console.log("Proxy %s ownership transferred to ProxyAdmin at: %s", _name, proxyAdmin);
+        console.log("Proxy %s admin role transferred to ProxyAdmin at: %s", _name, proxyAdmin);
     }
 
     ////////////////////////////////////////////////////////////////
@@ -803,7 +803,7 @@ contract Deploy is Deployer {
         // are always proxies.
         Types.ContractSet memory contracts = _proxiesUnstrict();
         contracts.ProtocolVersions = address(versions);
-        ChainAssertions.checkProtocolVersions({ _contracts: contracts, _cfg: cfg, _isProxy: false });
+        ChainAssertions.checkProtocolVersions({ _contracts: contracts, _cfg: cfg, _isProxy: false, expectedOwner: address(0) });
 
         addr_ = address(versions);
     }
@@ -858,7 +858,7 @@ contract Deploy is Deployer {
         // are always proxies.
         Types.ContractSet memory contracts = _proxiesUnstrict();
         contracts.SystemConfig = addr_;
-        ChainAssertions.checkSystemConfig({ _contracts: contracts, _cfg: cfg, _isProxy: false });
+        ChainAssertions.checkSystemConfig({ _contracts: contracts, _cfg: cfg, _isProxy: false, expectedOwner: address(0) });
     }
 
     /// @notice Deploy the L1StandardBridge
@@ -1070,13 +1070,19 @@ contract Deploy is Deployer {
             customGasTokenAddress = cfg.customGasTokenAddress();
         }
 
+        address systemConfigOwner = cfg.finalSystemOwner();
+        if (cfg.safeAsOwner()) {
+            console.log("Setting SystemConfig owner to SystemOwnerSafe");
+            systemConfigOwner = mustGetAddress("SystemOwnerSafe");
+        }
+
         _upgradeAndCallViaSafe({
             _proxy: payable(systemConfigProxy),
             _implementation: systemConfig,
             _innerCallData: abi.encodeCall(
                 SystemConfig.initialize,
                 (
-                    cfg.finalSystemOwner(),
+                    systemConfigOwner,
                     cfg.basefeeScalar(),
                     cfg.blobbasefeeScalar(),
                     batcherHash,
@@ -1101,7 +1107,7 @@ contract Deploy is Deployer {
         string memory version = config.version();
         console.log("SystemConfig version: %s", version);
 
-        ChainAssertions.checkSystemConfig({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
+        ChainAssertions.checkSystemConfig({ _contracts: _proxies(), _cfg: cfg, _isProxy: true, expectedOwner: systemConfigOwner });
     }
 
     /// @notice Initialize the L1StandardBridge
@@ -1361,13 +1367,19 @@ contract Deploy is Deployer {
         uint256 requiredProtocolVersion = cfg.requiredProtocolVersion();
         uint256 recommendedProtocolVersion = cfg.recommendedProtocolVersion();
 
+        address protocolVersionsOwner = cfg.finalSystemOwner();
+        if (cfg.safeAsOwner()) {
+            console.log("Setting ProtocolVersions owner to SystemOwnerSafe");
+            protocolVersionsOwner = mustGetAddress("SystemOwnerSafe");
+        }
+
         _upgradeAndCallViaSafe({
             _proxy: payable(protocolVersionsProxy),
             _implementation: protocolVersions,
             _innerCallData: abi.encodeCall(
                 ProtocolVersions.initialize,
                 (
-                    finalSystemOwner,
+                    protocolVersionsOwner,
                     ProtocolVersion.wrap(requiredProtocolVersion),
                     ProtocolVersion.wrap(recommendedProtocolVersion)
                 )
@@ -1378,7 +1390,7 @@ contract Deploy is Deployer {
         string memory version = versions.version();
         console.log("ProtocolVersions version: %s", version);
 
-        ChainAssertions.checkProtocolVersions({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isProxy: true });
+        ChainAssertions.checkProtocolVersions({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isProxy: true, expectedOwner: protocolVersionsOwner });
     }
 
     /// @notice Transfer ownership of the DisputeGameFactory contract to the final system owner
@@ -1629,12 +1641,18 @@ contract Deploy is Deployer {
         uint256 daBondSize = cfg.daBondSize();
         uint256 daResolverRefundPercentage = cfg.daResolverRefundPercentage();
 
+        address dataAvailabilityChallengeOwner = cfg.finalSystemOwner();
+        if (cfg.safeAsOwner()) {
+            console.log("Setting DataAvailabilityChallenge owner to SystemOwnerSafe");
+            dataAvailabilityChallengeOwner = mustGetAddress("SystemOwnerSafe");
+        }
+
         _upgradeAndCallViaSafe({
             _proxy: payable(dataAvailabilityChallengeProxy),
             _implementation: dataAvailabilityChallenge,
             _innerCallData: abi.encodeCall(
                 DataAvailabilityChallenge.initialize,
-                (finalSystemOwner, daChallengeWindow, daResolveWindow, daBondSize, daResolverRefundPercentage)
+                (dataAvailabilityChallengeOwner, daChallengeWindow, daResolveWindow, daBondSize, daResolverRefundPercentage)
             )
         });
 
@@ -1642,7 +1660,7 @@ contract Deploy is Deployer {
         string memory version = dac.version();
         console.log("DataAvailabilityChallenge version: %s", version);
 
-        require(dac.owner() == finalSystemOwner);
+        require(dac.owner() == dataAvailabilityChallengeOwner);
         require(dac.challengeWindow() == daChallengeWindow);
         require(dac.resolveWindow() == daResolveWindow);
         require(dac.bondSize() == daBondSize);

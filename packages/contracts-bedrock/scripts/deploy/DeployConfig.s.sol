@@ -93,6 +93,7 @@ contract DeployConfig is Script {
     bool public useInterop;
 
     bool public deployCeloContracts;
+    bool public safeAsOwner;
 
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
@@ -181,6 +182,7 @@ contract DeployConfig is Script {
 
         // Celo specific config
         deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
+        safeAsOwner = _readOr(_json, "$.safeAsOwner", false);
     }
 
     function fork() public view returns (Fork fork_) {
