@@ -131,6 +131,8 @@ def init_devnet_l1_deploy_config(paths, update_timestamp=False):
     if DEVNET_CELO:
         deploy_config['useFaultProofs'] = True
         deploy_config['useCustomGasToken'] = True
+        deploy_config['gasPriceOracleBlobBaseFeeScalar'] = 0
+        deploy_config['gasPriceOracleBaseFeeScalar'] = 0
         deploy_config['deployCeloContracts'] = True
         # Usage of the zero address in combination of the useCustomGasToken == True
         # will deploy a new contract
