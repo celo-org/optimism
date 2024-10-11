@@ -147,4 +147,7 @@ interface IGnosisSafe {
     function signedMessages(bytes32) external view returns (uint256);
     function simulateAndRevert(address targetContract, bytes memory calldataPayload) external;
     function swapOwner(address prevOwner, address oldOwner, address newOwner) external;
+
+    receive() external payable;
+    fallback() external;
 }

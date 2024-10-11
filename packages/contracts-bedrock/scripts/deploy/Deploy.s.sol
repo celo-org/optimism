@@ -1373,7 +1373,6 @@ contract Deploy is Deployer {
         address protocolVersionsProxy = mustGetAddress("ProtocolVersionsProxy");
         address protocolVersions = mustGetAddress("ProtocolVersions");
 
-        address finalSystemOwner = cfg.finalSystemOwner();
         uint256 requiredProtocolVersion = cfg.requiredProtocolVersion();
         uint256 recommendedProtocolVersion = cfg.recommendedProtocolVersion();
 
@@ -1650,7 +1649,6 @@ contract Deploy is Deployer {
         address dataAvailabilityChallengeProxy = mustGetAddress("DataAvailabilityChallengeProxy");
         address dataAvailabilityChallenge = mustGetAddress("DataAvailabilityChallenge");
 
-        address finalSystemOwner = cfg.finalSystemOwner();
         uint256 daChallengeWindow = cfg.daChallengeWindow();
         uint256 daResolveWindow = cfg.daResolveWindow();
         uint256 daBondSize = cfg.daBondSize();
