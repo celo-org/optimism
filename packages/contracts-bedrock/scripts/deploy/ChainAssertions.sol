@@ -64,7 +64,15 @@ library ChainAssertions {
     }
 
     /// @notice Asserts that the SystemConfig is setup correctly
-    function checkSystemConfig(Types.ContractSet memory _contracts, DeployConfig _cfg, bool _isProxy, address expectedOwner) internal view {
+    function checkSystemConfig(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy,
+        address expectedOwner
+    )
+        internal
+        view
+    {
         console.log("Running chain assertions on the SystemConfig");
         SystemConfig config = SystemConfig(_contracts.SystemConfig);
 
