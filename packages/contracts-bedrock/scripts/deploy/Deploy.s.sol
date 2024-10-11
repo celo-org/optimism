@@ -803,7 +803,12 @@ contract Deploy is Deployer {
         // are always proxies.
         Types.ContractSet memory contracts = _proxiesUnstrict();
         contracts.ProtocolVersions = address(versions);
-        ChainAssertions.checkProtocolVersions({ _contracts: contracts, _cfg: cfg, _isProxy: false, expectedOwner: address(0) });
+        ChainAssertions.checkProtocolVersions({
+            _contracts: contracts,
+            _cfg: cfg,
+            _isProxy: false,
+            expectedOwner: address(0)
+        });
 
         addr_ = address(versions);
     }
