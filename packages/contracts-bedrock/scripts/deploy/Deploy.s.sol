@@ -858,7 +858,12 @@ contract Deploy is Deployer {
         // are always proxies.
         Types.ContractSet memory contracts = _proxiesUnstrict();
         contracts.SystemConfig = addr_;
-        ChainAssertions.checkSystemConfig({ _contracts: contracts, _cfg: cfg, _isProxy: false, expectedOwner: address(0) });
+        ChainAssertions.checkSystemConfig({
+            _contracts: contracts,
+            _cfg: cfg,
+            _isProxy: false,
+            expectedOwner: address(0)
+        });
     }
 
     /// @notice Deploy the L1StandardBridge
@@ -1107,7 +1112,12 @@ contract Deploy is Deployer {
         string memory version = config.version();
         console.log("SystemConfig version: %s", version);
 
-        ChainAssertions.checkSystemConfig({ _contracts: _proxies(), _cfg: cfg, _isProxy: true, expectedOwner: systemConfigOwner });
+        ChainAssertions.checkSystemConfig({
+            _contracts: _proxies(),
+            _cfg: cfg,
+            _isProxy: true,
+            expectedOwner: systemConfigOwner
+        });
     }
 
     /// @notice Initialize the L1StandardBridge
@@ -1390,7 +1400,12 @@ contract Deploy is Deployer {
         string memory version = versions.version();
         console.log("ProtocolVersions version: %s", version);
 
-        ChainAssertions.checkProtocolVersions({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isProxy: true, expectedOwner: protocolVersionsOwner });
+        ChainAssertions.checkProtocolVersions({
+            _contracts: _proxiesUnstrict(),
+            _cfg: cfg,
+            _isProxy: true,
+            expectedOwner: protocolVersionsOwner
+        });
     }
 
     /// @notice Transfer ownership of the DisputeGameFactory contract to the final system owner
