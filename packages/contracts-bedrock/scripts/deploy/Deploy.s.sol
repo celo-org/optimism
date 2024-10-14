@@ -310,6 +310,10 @@ contract Deploy is Deployer {
         }
 
         if (cfg.useCustomGasToken()) {
+            setupCustomGasToken();
+            save("StorageSetter", deployStorageSetter());
+            preInitializeOptimismPortalBalance();
+
             // Reset the systemconfig then reinitialize it with the custom gas token
             resetInitializedProxy("SystemConfig");
             initializeSystemConfig();
@@ -504,6 +508,31 @@ contract Deploy is Deployer {
         transferDisputeGameFactoryOwnership();
         transferDelayedWETHOwnership();
         transferPermissionedDelayedWETHOwnership();
+    }
+
+    function preInitializeOptimismPortalBalance() public broadcast {
+        address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
+        address storageSetter = mustGetAddress("StorageSetter");
+
+        // NOTE: the storage slot index should stay the same across versions
+        // (OptimismPortal, OptimismPortal2, ...)  since slot spacers are used
+        // for legacy storage variables.
+        // We also assert correctness in a downstream ChainAssertion,
+        // so changing slot numbers should get detected for coming versions.
+        uint256 balanceStorageSlot = 61; // slot of _balance variable
+
+        address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
+        customGasTokenAddress = cfg.customGasTokenAddress();
+        IERC20 token = IERC20(customGasTokenAddress);
+        initialBalance = token.balanceOf(optimismPortalProxy);
+
+        IProxyAdmin proxyAdmin = IProxyAdmin(payable(mustGetAddress("ProxyAdmin")));
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(optimismPortalProxy),
+            _implementation: storageSetter,
+            _data: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+        });
     }
 
     /// @notice Add AltDA setup to the OP chain
@@ -925,22 +954,6 @@ contract Deploy is Deployer {
         IOptimismPortal portal = IOptimismPortal(payable(optimismPortalProxy));
         string memory version = portal.version();
         console.log("OptimismPortal version: %s", version);
-
-        address customGasTokenAddress = Constants.ETHER;
-        uint256 initialBalance = 0;
-        if (cfg.useCustomGasToken()) {
-            customGasTokenAddress = cfg.customGasTokenAddress();
-            IERC20 token = IERC20(customGasTokenAddress);
-            initialBalance = token.balanceOf(optimismPortalProxy);
-
-            uint256 balanceStorageSlot = 61; // slot of _balance variable
-            // TODO: fix later
-            // proxyAdmin.upgradeAndCall({
-            //     _proxy: payable(optimismPortalProxy),
-            //     _implementation: storageSetter,
-            //     _data: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
-            // });
-        }
 
         ChainAssertions.checkOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
