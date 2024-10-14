@@ -365,6 +365,7 @@ contract Initializer_Test is CommonTest {
         excludes[7] = "src/L1/OPContractsManagerInterop.sol";
         // L2 contract initialization is tested in Predeploys.t.sol
         excludes[8] = "src/L2/*";
+        excludes[9] = "src/celo/*";
 
         // Get all contract names in the src directory, minus the excluded contracts.
         string[] memory contractNames = ForgeArtifacts.getContractNames("src/*", excludes);
