@@ -29,6 +29,11 @@ export function makeChainConfigs(l1ChainID, l2ChainID, contractAddresses) {
             address: contractAddresses.L2OutputOracleProxy,
           },
         },
+        disputeGameFactory: {
+          [l1ChainID]: {
+            address: contractAddresses.DisputeGameFactoryProxy,
+          },
+        },
         portal: {
           [l1ChainID]: {
             address: contractAddresses.OptimismPortalProxy,
