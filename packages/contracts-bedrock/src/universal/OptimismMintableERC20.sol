@@ -48,8 +48,8 @@ contract OptimismMintableERC20 is
     }
 
     /// @notice Semantic version.
-    /// @custom:semver 1.4.0-beta.1
-    string public constant version = "1.4.0-beta.1";
+    /// @custom:semver 1.4.0-beta.1-celo
+    string public constant version = "1.4.0-beta.1-celo";
 
     /// @notice Getter function for the permit2 address. It deterministically deployed
     ///         so it will always be at the same address. It is also included as a preinstall,
