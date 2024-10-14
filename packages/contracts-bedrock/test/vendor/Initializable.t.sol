@@ -412,6 +412,7 @@ contract Initializer_Test is CommonTest {
         excludes[7] = "src/L1/OPContractsManagerInterop.sol";
         // The L2OutputOracle is not always deployed (and is no longer being modified)
         excludes[8] = "src/L1/L2OutputOracle.sol";
+        excludes[9] = "src/celo/*";
 
         // Get all contract names in the src directory, minus the excluded contracts.
         string[] memory contractNames = ForgeArtifacts.getContractNames("src/*", excludes);
