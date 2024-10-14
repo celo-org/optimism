@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -155,7 +156,11 @@ func testFees(t *testing.T, cfg e2esys.SystemConfig) {
 
 	require.Equal(t, decimals.Uint64(), uint64(6), "wrong gpo decimals")
 
-	baseFeeRecipientStartBalance := balanceAt(predeploys.BaseFeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
+	baseFeeRecipient := predeploys.BaseFeeVaultAddr
+	if sys.RollupConfig.IsCel2(sys.L2GenesisCfg.Timestamp) {
+		baseFeeRecipient = addresses.MainnetAddresses.FeeHandler
+	}
+	baseFeeRecipientStartBalance := balanceAt(baseFeeRecipient, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	l1FeeRecipientStartBalance := balanceAt(predeploys.L1FeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	sequencerFeeVaultStartBalance := balanceAt(predeploys.SequencerFeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	operatorFeeVaultStartBalance := balanceAt(predeploys.OperatorFeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
@@ -193,7 +198,7 @@ func testFees(t *testing.T, cfg e2esys.SystemConfig) {
 
 	coinbaseEndBalance := balanceAt(header.Coinbase, header.Number)
 	endBalance := balanceAt(fromAddr, header.Number)
-	baseFeeRecipientEndBalance := balanceAt(predeploys.BaseFeeVaultAddr, header.Number)
+	baseFeeRecipientEndBalance := balanceAt(baseFeeRecipient, header.Number)
 
 	l1Header, err := l1.HeaderByNumber(context.Background(), nil)
 	require.Nil(t, err)
