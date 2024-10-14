@@ -407,13 +407,39 @@ contract Deploy is Deployer {
         deployMulticall3();
     }
 
+    function preInitializeOptimismPortalBalance() public broadcast {
+        address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
+        address storageSetter = mustGetAddress("StorageSetter");
+
+        // NOTE: the storage slot index should stay the same across versions
+        // (OptimismPortal, OptimismPortal2, ...)  since slot spacers are used
+        // for legacy storage variables.
+        // We also assert correctness in a downstream ChainAssertion,
+        // so changing slot numbers should get detected for coming versions.
+        uint256 balanceStorageSlot = 61; // slot of _balance variable
+
+        address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
+        customGasTokenAddress = cfg.customGasTokenAddress();
+        IERC20 token = IERC20(customGasTokenAddress);
+        initialBalance = token.balanceOf(optimismPortalProxy);
+
+        _upgradeAndCallViaSafe({
+            _proxy: payable(optimismPortalProxy),
+            _implementation: storageSetter,
+            _innerCallData: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+        });
+    }
+
     /// @notice Initialize all of the implementations
     function initializeImplementations() public {
         console.log("Initializing implementations");
 
-        setupCustomGasToken();
-
-        address storageSetter = deployStorageSetter();
+        if (cfg.useCustomGasToken()) {
+            setupCustomGasToken();
+            save("StorageSetter", deployStorageSetter());
+            preInitializeOptimismPortalBalance();
+        }
 
         // Selectively initialize either the original OptimismPortal or the new OptimismPortal2. Since this will upgrade
         // the proxy, we cannot initialize both.
@@ -421,7 +447,7 @@ contract Deploy is Deployer {
             console.log("Fault proofs enabled. Initializing the OptimismPortal proxy with the OptimismPortal2.");
             initializeOptimismPortal2();
         } else {
-            initializeOptimismPortal(storageSetter);
+            initializeOptimismPortal();
         }
 
         initializeSystemConfig();
@@ -1279,28 +1305,13 @@ contract Deploy is Deployer {
     }
 
     /// @notice Initialize the OptimismPortal
-    function initializeOptimismPortal(address strorageSetter) public broadcast {
+    function initializeOptimismPortal() public broadcast {
         console.log("Upgrading and initializing OptimismPortal proxy");
         address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
         address optimismPortal = mustGetAddress("OptimismPortal");
         address l2OutputOracleProxy = mustGetAddress("L2OutputOracleProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
         address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
-
-        address customGasTokenAddress = Constants.ETHER;
-        uint256 initialBalance = 0;
-        if (cfg.useCustomGasToken()) {
-            customGasTokenAddress = cfg.customGasTokenAddress();
-            IERC20 token = IERC20(customGasTokenAddress);
-            initialBalance = token.balanceOf(optimismPortalProxy);
-
-            uint256 balanceStorageSlot = 61; // slot of _balance variable
-            _upgradeAndCallViaSafe({
-                _proxy: payable(optimismPortalProxy),
-                _implementation: strorageSetter,
-                _innerCallData: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
-            });
-        }
 
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),
@@ -1437,7 +1448,7 @@ contract Deploy is Deployer {
             string[] memory commands = new string[](3);
             commands[0] = "bash";
             commands[1] = "-c";
-            commands[2] = string.concat("[[ -f ", filePath, " ]] && echo \"present\"");
+            commands[2] = string.concat("[[ -f ", filePath, ' ]] && echo "present"');
             if (Process.run(commands).length == 0) {
                 revert("Cannon prestate dump not found, generate it with `make cannon-prestate` in the monorepo root.");
             }

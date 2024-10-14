@@ -5,7 +5,8 @@
   "type": "module",
   "main": "dist/test.js",
   "scripts": {
-    "test": "jest tests --detectOpenHandles"
+    "test": "jest tests --detectOpenHandles",
+    "format": "npx prettier . --write"
   },
   "author": "Celo Labs Inc.",
   "license": "ISC",
@@ -17,6 +18,7 @@
     "@babel/core": "^7.24.7",
     "@babel/preset-env": "^7.24.7",
     "babel-jest": "^29.7.0",
-    "jest": "^29.7.0"
+    "jest": "^29.7.0",
+    "prettier": "3.3.3"
   }
 }
