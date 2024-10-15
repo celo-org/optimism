@@ -516,11 +516,11 @@ func (c *CheatCodesPrecompile) SerializeBytes_9884b232(objectKey string, valueKe
 
 // WriteJson implements https://book.getfoundry.sh/cheatcodes/write-json
 func (c *CheatCodesPrecompile) WriteJson_e23cd19f(data string, path string) error {
-	return vm.ErrExecutionReverted
+	return nil
 }
 
 func (c *CheatCodesPrecompile) WriteJson_35d6ad46(data string, path string, valueKey string) error {
-	return vm.ErrExecutionReverted
+	return nil
 }
 
 // WriteToml implements https://book.getfoundry.sh/cheatcodes/write-toml
