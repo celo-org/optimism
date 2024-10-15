@@ -36,6 +36,7 @@ library ChainAssertions {
 
     /// @notice Asserts the correctness of an L1 deployment. This function expects that all contracts
     ///         within the `prox` ContractSet are proxies that have been setup and initialized.
+    /// this whole method is not being used - changes only for compilation sake
     function postDeployAssertions(
         Types.ContractSet memory _prox,
         DeployConfig _cfg,
@@ -50,7 +51,7 @@ library ChainAssertions {
         ResourceMetering.ResourceConfig memory dflt = Constants.DEFAULT_RESOURCE_CONFIG();
         require(keccak256(abi.encode(rcfg)) == keccak256(abi.encode(dflt)));
 
-        checkSystemConfig({ _contracts: _prox, _cfg: _cfg, _isProxy: true });
+        checkSystemConfig({ _contracts: _prox, _cfg: _cfg, _isProxy: true, expectedOwner: address(0) });
         checkL1CrossDomainMessenger({ _contracts: _prox, _vm: _vm, _isProxy: true });
         checkL1StandardBridge({ _contracts: _prox, _isProxy: true });
         checkL2OutputOracle({
@@ -63,11 +64,19 @@ library ChainAssertions {
         checkL1ERC721Bridge({ _contracts: _prox, _isProxy: true });
         checkOptimismPortal({ _contracts: _prox, _cfg: _cfg, _isProxy: true });
         checkOptimismPortal2({ _contracts: _prox, _cfg: _cfg, _isProxy: true });
-        checkProtocolVersions({ _contracts: _prox, _cfg: _cfg, _isProxy: true });
+        checkProtocolVersions({ _contracts: _prox, _cfg: _cfg, _isProxy: true, expectedOwner: address(0) });
     }
 
     /// @notice Asserts that the SystemConfig is setup correctly
-    function checkSystemConfig(Types.ContractSet memory _contracts, DeployConfig _cfg, bool _isProxy) internal view {
+    function checkSystemConfig(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy,
+        address expectedOwner
+    )
+        internal
+        view
+    {
         console.log("Running chain assertions on the SystemConfig");
         SystemConfig config = SystemConfig(_contracts.SystemConfig);
 
@@ -77,7 +86,7 @@ library ChainAssertions {
         ResourceMetering.ResourceConfig memory resourceConfig = config.resourceConfig();
 
         if (_isProxy) {
-            require(config.owner() == _cfg.finalSystemOwner());
+            require(config.owner() == expectedOwner);
             require(config.basefeeScalar() == _cfg.basefeeScalar());
             require(config.blobbasefeeScalar() == _cfg.blobbasefeeScalar());
             require(config.batcherHash() == bytes32(uint256(uint160(_cfg.batchSenderAddress()))));
@@ -436,7 +445,8 @@ library ChainAssertions {
     function checkProtocolVersions(
         Types.ContractSet memory _contracts,
         DeployConfig _cfg,
-        bool _isProxy
+        bool _isProxy,
+        address expectedOwner
     )
         internal
         view
@@ -448,7 +458,7 @@ library ChainAssertions {
         assertSlotValueIsOne({ _contractAddress: address(versions), _slot: 0, _offset: 0 });
 
         if (_isProxy) {
-            require(versions.owner() == _cfg.finalSystemOwner());
+            require(versions.owner() == expectedOwner);
             require(ProtocolVersion.unwrap(versions.required()) == _cfg.requiredProtocolVersion());
             require(ProtocolVersion.unwrap(versions.recommended()) == _cfg.recommendedProtocolVersion());
         } else {

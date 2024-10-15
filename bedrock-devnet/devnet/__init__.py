@@ -30,6 +30,7 @@ DEVNET_L2OO = os.getenv('DEVNET_L2OO') == "true"
 DEVNET_ALTDA = os.getenv('DEVNET_ALTDA') == "true"
 GENERIC_ALTDA = os.getenv('GENERIC_ALTDA') == "true"
 DEVNET_CELO = os.getenv('DEVNET_CELO') == "true"
+SAFE_AS_OWNER = os.getenv('SAFE_AS_OWNER') == "true"
 
 class Bunch:
     def __init__(self, **kwds):
@@ -137,6 +138,8 @@ def init_devnet_l1_deploy_config(paths, update_timestamp=False):
         # Usage of the zero address in combination of the useCustomGasToken == True
         # will deploy a new contract
         deploy_config['customGasTokenAddress'] = "0x0000000000000000000000000000000000000000"
+    if SAFE_AS_OWNER:
+        deploy_config['safeAsOwner'] = True
     write_json(paths.devnet_config_path, deploy_config)
 
 def devnet_l1_allocs(paths):

@@ -71,7 +71,7 @@ interface IGnosisSafe {
         uint256 baseGas,
         uint256 gasPrice,
         address gasToken,
-        address refundReceiver,
+        address payable refundReceiver,
         bytes memory signatures
     )
         external
@@ -141,10 +141,13 @@ interface IGnosisSafe {
         address fallbackHandler,
         address paymentToken,
         uint256 payment,
-        address paymentReceiver
+        address payable paymentReceiver
     )
         external;
     function signedMessages(bytes32) external view returns (uint256);
     function simulateAndRevert(address targetContract, bytes memory calldataPayload) external;
     function swapOwner(address prevOwner, address oldOwner, address newOwner) external;
+
+    receive() external payable;
+    fallback() external;
 }
