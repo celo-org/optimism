@@ -1058,9 +1058,6 @@ func (sga *stateGetterAdapter) GetState(addr common.Address, key common.Hash) co
 
 // TestFees checks that L1/L2 fees are handled.
 func TestFees(t *testing.T) {
-
-	t.Skipf("Skipping fee tests until they support Celo's zero L1 fees.")
-
 	t.Run("pre-regolith", func(t *testing.T) {
 		InitParallel(t)
 		cfg := RegolithSystemConfig(t, nil)
@@ -1094,6 +1091,20 @@ func TestFees(t *testing.T) {
 		cfg.DeployConfig.L2GenesisFjordTimeOffset = new(hexutil.Uint64)
 		testFees(t, cfg)
 	})
+}
+
+func requireBigIntEqual(t *testing.T, expected, actual *big.Int, args ...interface{}) {
+	t.Helper()
+	require.NotNilf(t, expected, "Expected value must not be nil in big.Int comparison")
+	require.NotNilf(t, actual, "Actual value must not be nil in big.Int comparison")
+	if len(args) > 0 {
+		msg := args[0].(string)
+		args[0] = fmt.Sprintf("%s: want %v, have %v", msg, expected, actual)
+	} else {
+		args = make([]interface{}, 1)
+		args[0] = fmt.Sprintf("want %v, have %v", expected, actual)
+	}
+	require.True(t, expected.Cmp(actual) == 0, args...)
 }
 
 func testFees(t *testing.T, cfg SystemConfig) {
@@ -1222,13 +1233,13 @@ func testFees(t *testing.T, cfg SystemConfig) {
 
 	// Tally L2 Fee
 	l2Fee := gasTip.Mul(gasTip, new(big.Int).SetUint64(receipt.GasUsed))
-	require.Equal(t, sequencerFeeVaultDiff, coinbaseDiff, "coinbase is always sequencer fee vault")
-	require.Equal(t, l2Fee, coinbaseDiff, "l2 fee mismatch")
-	require.Equal(t, l2Fee, sequencerFeeVaultDiff)
+	requireBigIntEqual(t, sequencerFeeVaultDiff, coinbaseDiff, "coinbase is always sequencer fee vault")
+	requireBigIntEqual(t, l2Fee, coinbaseDiff, "l2 fee mismatch")
+	requireBigIntEqual(t, l2Fee, sequencerFeeVaultDiff)
 
 	// Tally BaseFee
 	baseFee := new(big.Int).Mul(header.BaseFee, new(big.Int).SetUint64(receipt.GasUsed))
-	require.Equal(t, baseFee, baseFeeRecipientDiff, "base fee mismatch")
+	requireBigIntEqual(t, baseFee, baseFeeRecipientDiff, "base fee mismatch")
 
 	// Tally L1 Fee
 	tx, _, err := l2Seq.TransactionByHash(context.Background(), receipt.TxHash)
@@ -1237,7 +1248,7 @@ func testFees(t *testing.T, cfg SystemConfig) {
 	require.Nil(t, err)
 
 	l1Fee := l1CostFn(tx.RollupCostData(), header.Time)
-	require.Equalf(t, l1Fee, l1FeeRecipientDiff, "L1 fee mismatch: start balance %v, end balance %v", l1FeeRecipientStartBalance, l1FeeRecipientEndBalance)
+	requireBigIntEqual(t, l1Fee, l1FeeRecipientDiff, "L1 fee mismatch: start balance %v, end balance %v", l1FeeRecipientStartBalance, l1FeeRecipientEndBalance)
 
 	gpoEcotone, err := gpoContract.IsEcotone(nil)
 	require.NoError(t, err)
@@ -1264,13 +1275,13 @@ func testFees(t *testing.T, cfg SystemConfig) {
 	} else if sys.RollupConfig.IsRegolith(header.Time) {
 		// if post-regolith, adjust the GPO fee by removing the overhead it adds because of signature data
 		artificialGPOOverhead := big.NewInt(68 * 16) // it adds 68 bytes to cover signature and RLP data
-		l1BaseFee := big.NewInt(7)                   // we assume the L1 basefee is the minimum, 7
+		l1BaseFee := big.NewInt(0)                   // we assume the L1 basefee is the minimum, 7
 		// in our case we already include that, so we subtract it, to do a 1:1 comparison
 		adjustedGPOFee = new(big.Int).Sub(gpoL1Fee, new(big.Int).Mul(artificialGPOOverhead, l1BaseFee))
 	}
-	require.Equal(t, l1Fee, adjustedGPOFee, "GPO reports L1 fee mismatch")
+	requireBigIntEqual(t, l1Fee, adjustedGPOFee, "GPO reports L1 fee mismatch")
 
-	require.Equal(t, receipt.L1Fee, l1Fee, "l1 fee in receipt is correct")
+	requireBigIntEqual(t, receipt.L1Fee, l1Fee, "l1 fee in receipt is correct")
 	if !sys.RollupConfig.IsEcotone(header.Time) { // FeeScalar receipt attribute is removed as of Ecotone
 		require.Equal(t,
 			new(big.Float).Mul(
@@ -1285,7 +1296,7 @@ func testFees(t *testing.T, cfg SystemConfig) {
 	totalFee := new(big.Int).Add(baseFeeRecipientDiff, l1FeeRecipientDiff)
 	balanceDiff := new(big.Int).Sub(startBalance, endBalance)
 	balanceDiff.Sub(balanceDiff, transferAmount)
-	require.Equal(t, balanceDiff, totalFee, "balances should add up")
+	requireBigIntEqual(t, balanceDiff, totalFee, "balances should add up")
 }
 
 func StopStartBatcher(t *testing.T, cfgMod func(*SystemConfig)) {

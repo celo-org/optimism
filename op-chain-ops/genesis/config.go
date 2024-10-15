@@ -250,6 +250,9 @@ func (d *GasPriceOracleDeployConfig) Check(log log.Logger) error {
 // FeeScalar returns the raw serialized fee scalar. Uses pre-Ecotone if legacy config is present,
 // otherwise uses the post-Ecotone scalar serialization.
 func (d *GasPriceOracleDeployConfig) FeeScalar() [32]byte {
+	if d.GasPriceOracleScalar == 0 && d.GasPriceOracleBlobBaseFeeScalar == 0 && d.GasPriceOracleBaseFeeScalar == 0 {
+		return [32]byte{}
+	}
 	if d.GasPriceOracleScalar != 0 {
 		return common.BigToHash(big.NewInt(int64(d.GasPriceOracleScalar)))
 	}
