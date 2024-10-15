@@ -1,0 +1,9 @@
+{
+  "name": "@celo-test/runner",
+  "version": "0.1.0",
+  "exports": "./main.ts",
+  "imports": {
+    "@std/path": "jsr:@std/path@^1.0.8",
+    "viem": "npm:viem@^2.22.16"
+  }
+}

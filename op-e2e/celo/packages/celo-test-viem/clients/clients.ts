@@ -1,0 +1,175 @@
+import { createPublicClient, createWalletClient, http } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { publicActionsERC20, walletActionsERC20 } from "./erc20.ts";
+import type {
+  Account,
+  Address,
+  Chain,
+  HDAccount,
+  Hex,
+  HttpTransport,
+  PublicClient as ViemPublicClient,
+  TransactionReceipt,
+  WalletClient as ViemWalletClient,
+} from "viem";
+import type {
+  PublicClient,
+  PublicClients,
+  WalletClients,
+} from "./clients.d.ts";
+import type { Chains } from "../chains.ts";
+import {
+  publicActionsL1,
+  publicActionsL2,
+  walletActionsL1,
+  walletActionsL2,
+} from "viem/op-stack";
+import { mnemonicToAccount } from "viem/accounts";
+export type { PublicClient };
+
+export function createPublicClients(chains: Chains): PublicClients {
+  return {
+    l1: createPublicClient({
+      chain: chains.l1,
+      transport: http(),
+    })
+      .extend(publicActionsL1())
+      .extend(publicActionsERC20()),
+    l2: createPublicClient({
+      chain: chains.l2,
+      transport: http(),
+    })
+      .extend(publicActionsL2())
+      .extend(publicActionsERC20()),
+  };
+}
+
+export function createWalletClients<
+  accountOrAddress extends Account | Address | undefined = undefined,
+>(
+  chains: Chains,
+  account: accountOrAddress,
+  accountL2: accountOrAddress | undefined,
+): WalletClients<accountOrAddress> {
+  return {
+    l1: createWalletClient({
+      account: account,
+      chain: chains.l1,
+      transport: http(),
+    })
+      .extend(walletActionsERC20())
+      .extend(walletActionsL1()),
+    l2: createWalletClient({
+      account: accountL2 ?? account,
+      chain: chains.l2,
+      transport: http(),
+    })
+      .extend(walletActionsERC20())
+      .extend(walletActionsL2()),
+  };
+}
+
+export class ClientAccountManager {
+  chains: Chains;
+  seedPhrase: string;
+  l1Iterator: Generator<Account>;
+  l2Iterator: Generator<Account>;
+  numAccounts: number;
+
+  constructor(chains: Chains, seedPhrase: string, numAccounts: number) {
+    this.seedPhrase = seedPhrase;
+    this.chains = chains;
+    this.numAccounts = numAccounts;
+    this.l1Iterator = this.iterFundedAccounts(this.chains.l1, this.numAccounts);
+    this.l2Iterator = this.iterFundedAccounts(this.chains.l2, this.numAccounts);
+  }
+
+  public(): PublicClients {
+    return createPublicClients(this.chains);
+  }
+  wallet(l1Account: Account, l2Account: Account): WalletClients<Account> {
+    return createWalletClients(this.chains, l1Account, l2Account);
+  }
+
+  private getFundedAccount(chain: Chain, index: number): HDAccount {
+    return mnemonicToAccount(this.seedPhrase, {
+      // changeIndex: chain.id, //NOTE: for now use same accounts on different chains
+      changeIndex: 0,
+      // maps to the last number in the path:
+      addressIndex: index,
+    });
+  }
+  async fundAccountsFrom(privkey: Hex): Promise<void> {
+    const leaderAccount = privateKeyToAccount(privkey);
+    const leader = createWalletClients(
+      this.chains,
+      leaderAccount,
+      leaderAccount,
+    );
+    const pub = this.public();
+    const res = await Promise.allSettled([
+      this._fundAccountsForChainFrom(
+        leader.l1 as ViemWalletClient<HttpTransport, Chain, Account>,
+        pub.l1 as ViemPublicClient<HttpTransport, Chain>,
+      ),
+      this._fundAccountsForChainFrom(
+        leader.l2 as ViemWalletClient<HttpTransport, Chain, Account>,
+        pub.l2 as ViemPublicClient<HttpTransport, Chain>,
+      ),
+    ]);
+    //TODO: flatten res and check for all success receipts
+  }
+  private async _fundAccountsForChainFrom(
+    leader: ViemWalletClient<HttpTransport, Chain, Account>,
+    publicClient: ViemPublicClient<HttpTransport, Chain>,
+  ): Promise<Array<TransactionReceipt>> {
+    const it = this.iterFundedAccounts(leader.chain, this.numAccounts);
+    const balance = await publicClient.getBalance({
+      address: leader.account.address,
+    });
+    //TODO: floor, and also factor in the sending cost (roughly, current gascost *21000 * numAccounts)
+    //HACK: for now overestimate the split accounts but then use the actual number
+    // this means that "1 times" a split account's balance is reserved for distribution tx cost
+    const sendBalance = (balance as bigint) / BigInt(this.numAccounts + 1);
+    if (sendBalance == BigInt(0)) {
+      throw Error("leader account insufficient funds");
+    }
+
+    const receipts: Array<Promise<TransactionReceipt>> = [];
+    for (const acc of it) {
+      const hash = await leader.sendTransaction({
+        value: sendBalance,
+        to: acc.address,
+      });
+      receipts.push(
+        publicClient.waitForTransactionReceipt({
+          hash: hash,
+        }),
+      );
+    }
+    return await Promise.all(receipts);
+  }
+
+  reset(newNumAccounts: number | null) {
+    this.numAccounts = newNumAccounts ?? this.numAccounts;
+    this.l1Iterator = this.iterFundedAccounts(this.chains.l1, this.numAccounts);
+    this.l2Iterator = this.iterFundedAccounts(this.chains.l2, this.numAccounts);
+  }
+
+  nextFundedL1Account(): HDAccount {
+    //TODO: what if iterator exhausted
+    return this.l1Iterator.next().value;
+  }
+  nextFundedL2Account(): HDAccount {
+    //TODO: what if iterator exhausted
+    return this.l2Iterator.next().value;
+  }
+  private *iterFundedAccounts(chain: Chain, num: number): Generator<HDAccount> {
+    //TODO: throw if chain not known
+    for (let i = 0; i < num; i++) {
+      yield this.getFundedAccount(chain, i);
+    }
+  }
+}
+
+export type { PublicClients, WalletClients };

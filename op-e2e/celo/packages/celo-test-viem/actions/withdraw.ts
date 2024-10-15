@@ -1,0 +1,217 @@
+import type {
+  PublicClient,
+  PublicClients,
+  WalletClients,
+} from "../clients/clients.ts";
+import type {
+  Account,
+  Address,
+  Chain,
+  GetBlockReturnType,
+  HttpTransport,
+} from "viem";
+import type {
+  BuildProveWithdrawalParameters,
+  WaitToFinalizeParameters,
+  WaitToFinalizeReturnType,
+} from "viem/op-stack";
+import { getPortalVersion } from "viem/op-stack";
+import { parseAbi } from "viem";
+import { pollFunction, sleep } from "@celo-test/util";
+
+// partial ABI, only the used functions and errors are defined here
+const portal2Abi = parseAbi([
+  "function disputeGameFinalityDelaySeconds() view returns (uint256)",
+  "function numProofSubmitters(bytes32 _withdrawalHash) view returns (uint256)",
+  "function proofSubmitters(bytes32 _withdrawalHash, uint256 index) view returns (address)",
+  "function checkWithdrawal(bytes32 _withdrawalHash, address _proofSubmitter) view",
+  "error AlreadyFinalized()",
+  "error GasEstimation()",
+  "error TransferFailed()",
+  "error BadTarget()",
+  "error Blacklisted()",
+  "error Unproven()",
+]);
+
+export type WithdrawReturnType = {
+  success: boolean;
+  l2GasPayment: bigint;
+};
+
+export async function withdraw(
+  value: bigint,
+  to: Address,
+  l1Gas: bigint,
+  publicClients: PublicClients,
+  walletClients: WalletClients<Account>,
+): Promise<WithdrawReturnType> {
+  const initiateHash = await walletClients.l2.initiateWithdrawal({
+    request: {
+      gas: l1Gas,
+      to: to,
+      value: value,
+    },
+  });
+  const receipt = await publicClients.l2.waitForTransactionReceipt({
+    hash: initiateHash,
+  });
+
+  const l2GasPayment = receipt.gasUsed * receipt.effectiveGasPrice +
+    (receipt.l1Fee ?? 0n);
+
+  // NOTE: this function requires the mulitcall3 contract to be deployed
+  // on the L1 chain.
+  const { output, game, withdrawal } = await publicClients.l1.waitToProve({
+    receipt,
+    //TODO: use proper types
+    // deno-lint-ignore no-explicit-any
+    targetChain: publicClients.l2.chain as any,
+  });
+
+  const portalVersion = await getPortalVersion(publicClients.l1, {
+    // deno-lint-ignore no-explicit-any
+    //TODO: use proper types
+    targetChain: publicClients.l2.chain as any,
+  });
+  const usesL2OO = portalVersion.major < 3;
+  const proveWithdrawalParams: BuildProveWithdrawalParameters = (() => {
+    if (usesL2OO) {
+      return {
+        chain: publicClients.l2.chain,
+        withdrawal: withdrawal,
+        output: output,
+      };
+    } else {
+      return {
+        chain: publicClients.l2.chain,
+        withdrawal: withdrawal,
+        game: game,
+      };
+    }
+  })();
+
+  const proveWithdrawalArgs = await publicClients.l2.buildProveWithdrawal(
+    proveWithdrawalParams,
+  );
+  const proveHash = await walletClients.l1.proveWithdrawal(
+    //TODO: use proper type
+    // deno-lint-ignore no-explicit-any
+    proveWithdrawalArgs as any,
+  );
+
+  const proveReceipt = await publicClients.l1.waitForTransactionReceipt({
+    hash: proveHash,
+  });
+
+  if (proveReceipt.status != "success") {
+    return {
+      success: false,
+      l2GasPayment: l2GasPayment,
+    };
+  }
+
+  const waitToFinalizeParams = {
+    withdrawalHash: withdrawal.withdrawalHash,
+    //TODO: use the proper type definition
+    // deno-lint-ignore no-explicit-any
+    targetChain: publicClients.l2.chain satisfies Chain as any,
+  };
+  const timeToFinalize = await publicClients.l1.getTimeToFinalize(
+    waitToFinalizeParams,
+  );
+  await sleep(timeToFinalize.seconds * 1000);
+  if (usesL2OO) {
+    // NOTE: actually wait until the block timestamp has reached
+    // the calculated finalization time.
+    // the necessity for this might be caused by a too slow progressing l1 (?)
+    await pollFunction(
+      async (): Promise<GetBlockReturnType> =>
+        await publicClients.l1.getBlock(),
+      (val: GetBlockReturnType | null, _err: Error | null) => {
+        if (val !== null) {
+          // block timestamp is given in seconds,
+          // finalize-suggestion timestamp in ms
+          return Number(val.timestamp) * 1000 >= timeToFinalize.timestamp;
+        } else {
+          return false;
+        }
+      },
+      1000,
+      180_000,
+    );
+  } else {
+    await pollCheckWithdrawal(publicClients.l1, waitToFinalizeParams);
+  }
+
+  const finalizeHash = await walletClients.l1.finalizeWithdrawal({
+    withdrawal: withdrawal,
+    //TODO: use the proper type definition
+    // deno-lint-ignore no-explicit-any
+    targetChain: publicClients.l2.chain satisfies Chain as any,
+  });
+
+  const finalizeReceipt = await publicClients.l1.waitForTransactionReceipt({
+    hash: finalizeHash,
+  });
+
+  return {
+    success: finalizeReceipt.status == "success",
+    l2GasPayment: l2GasPayment,
+  };
+}
+
+export async function pollCheckWithdrawal<
+  chain extends Chain | undefined,
+  account extends Account | undefined,
+  chainOverride extends Chain | undefined = undefined,
+>(
+  client: PublicClient<HttpTransport, chain, account>,
+  parameters: WaitToFinalizeParameters<chain, chainOverride>,
+): Promise<WaitToFinalizeReturnType> {
+  const { chain = client.chain, withdrawalHash, targetChain } = parameters;
+
+  const portalAddress = (() => {
+    if (parameters.portalAddress) return parameters.portalAddress;
+    if (chain) return targetChain!.contracts.portal[chain.id].address;
+    return Object.values(targetChain!.contracts.portal)[0].address;
+  })();
+  const numProofSubmitters = await client
+    .readContract({
+      abi: portal2Abi,
+      address: portalAddress,
+      functionName: "numProofSubmitters",
+      args: [withdrawalHash],
+    })
+    .catch(() => 1n);
+
+  const proofSubmitter = await client
+    .readContract({
+      abi: portal2Abi,
+      address: portalAddress,
+      functionName: "proofSubmitters",
+      args: [withdrawalHash, numProofSubmitters - 1n],
+    })
+    .catch(() => undefined);
+  if (proofSubmitter === undefined) {
+    throw Error("no proof submitter found");
+  }
+
+  await pollFunction(
+    async (): Promise<void> => {
+      await client.readContract({
+        abi: portal2Abi,
+        address: portalAddress,
+        functionName: "checkWithdrawal",
+        args: [withdrawalHash, proofSubmitter],
+      });
+    },
+    (_value: void | null | null, err: Error | null): boolean => {
+      if (err === null) {
+        return true;
+      }
+      return false;
+    },
+    1000,
+    180_000,
+  );
+}

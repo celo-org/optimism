@@ -1,0 +1,8 @@
+{
+  "name": "@celo-test/util",
+  "version": "0.1.0",
+  "exports": "./src/wait.ts",
+  "imports": {
+    "viem": "npm:viem@^2.22.16"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "tasks": {
+    "tests": "deno test --allow-read --allow-run --allow-net='127.0.0.1,localhost' --allow-env --env-file=.default.env --env-file=.env main.test.ts"
+    "cache-deps": "deno cache main.test.ts"
+  },
+  "workspace": [
+    "./packages/celo-test-runner",
+    "./packages/celo-test-util",
+    "./packages/celo-test-viem"
+  ],
+  "imports": {
+    "@dx/reflect": "jsr:@dx/reflect@^0.2.14",
+    "@std/assert": "jsr:@std/assert@^1.0.11",
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.3",
+    "@std/expect": "jsr:@std/expect@^1.0.12",
+    "@std/io": "jsr:@std/io@^0.225.1",
+    "@std/testing": "jsr:@std/testing@^1.0.9",
+    "reverse-mirage": "npm:reverse-mirage@^1.1.0",
+    "viem": "npm:viem@^2.22.16"
+  }
+}

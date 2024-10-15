@@ -10,7 +10,7 @@ if [[ $spawn_devnet != false ]]; then
   ## Start geth
   cd "$SCRIPT_DIR/../.." || exit 1
   trap 'cd "$SCRIPT_DIR/../.." && make devnet-down' EXIT # kill bg job at exit
-  DEVNET_CELO=true make devnet-up
+  DEVNET_L2OO=false GENERIC_ALTDA=true DEVNET_ALTDA=true DEVNET_CELO=true make devnet-up
 fi
 
 cd "$SCRIPT_DIR" || exit 1
@@ -24,6 +24,12 @@ for _ in {1..10}; do
   fi
   sleep 0.2
 done
+
+# There's a problem with geth return errors on the first transaction sent.
+# See https://github.com/ethereum/web3.py/issues/3212
+# To work around this, send a transaction before running tests
+cast send --async --json --private-key "$ACC_PRIVKEY" "$TOKEN_ADDR" 'transfer(address to, uint256 value) returns (bool)' 0x000000000000000000000000000000000000dEaD 100
+sleep 1
 
 ## Run tests
 echo Start tests
