@@ -70,7 +70,7 @@ cat << EOL > tmp_config.json
   "batchInboxAddress": "$batchInboxAddress",
   "batchSenderAddress": "$GS_BATCHER_ADDRESS",
 
-  "l2OutputOracleSubmissionInterval": 120,
+  "l2OutputOracleSubmissionInterval": 300,
   "l2OutputOracleStartingBlockNumber": 0,
   "l2OutputOracleStartingTimestamp": $timestamp,
 
@@ -142,20 +142,21 @@ cat << EOL >> tmp_config.json
   "requiredProtocolVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
   "recommendedProtocolVersion": "0x0000000000000000000000000000000000000000000000000000000000000000",
 
-  "faultGameAbsolutePrestate": "0x03c7ae758795765c6664a5d39bf63841c71ff191e9189522bad8ebff5d4eca98",
-  "faultGameMaxDepth": 44,
-  "faultGameClockExtension": 0,
-  "faultGameMaxClockDuration": 1200,
+  "faultGameAbsolutePrestate": "0x037ef3c1a487960b0e633d3e513df020c43432769f41a634d18a9595cbf53c55",
+  "faultGameMaxDepth": 73,
+  "faultGameClockExtension": 10800,
+  "faultGameMaxClockDuration": 302400,
   "faultGameGenesisBlock": 0,
   "faultGameGenesisOutputRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
-  "faultGameSplitDepth": 14,
-  "faultGameWithdrawalDelay": 600,
+  "faultGameSplitDepth": 30,
+  "faultGameWithdrawalDelay": 604800,
 
-  "preimageOracleMinProposalSize": 1800000,
-  "preimageOracleChallengePeriod": 300,
+  "preimageOracleMinProposalSize": 126000,
+  "preimageOracleChallengePeriod": 86400,
 
   "fundDevAccounts": $FUNDS_DEV_ACCOUNTS,
   "useFaultProofs": false,
+  "initializeAnchorStateRegistry": false,
   "proofMaturityDelaySeconds": 604800,
   "disputeGameFinalityDelaySeconds": 302400,
   "respectedGameType": 0,

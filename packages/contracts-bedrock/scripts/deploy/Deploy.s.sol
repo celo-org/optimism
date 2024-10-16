@@ -511,7 +511,9 @@ contract Deploy is Deployer {
         initializeDisputeGameFactory();
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
-        initializeAnchorStateRegistry();
+        if (cfg.initializeAnchorStateRegistry()) {
+            initializeAnchorStateRegistry();
+        }
 
         ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
