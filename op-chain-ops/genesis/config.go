@@ -830,6 +830,9 @@ type DeployConfig struct {
 
 	// DeployCeloContracts indicates whether to deploy Celo contracts.
 	DeployCeloContracts bool `json:"deployCeloContracts"`
+
+	// InitializeAnchorStateRegistry indicates whether to initialize the AnchorStateRegistry.
+	InitializeAnchorStateRegistry bool `json:"initializeAnchorStateRegistry"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
