@@ -208,12 +208,12 @@
     "sourceCodeHash": "0xd1479c60087f352385b6d5379ef3cc07839f671d617626b4c94ece91da781ef2"
   },
   "src/universal/OptimismMintableERC20.sol": {
-    "initCodeHash": "0x28c88484e1932253d6d12954492ac8a70744dc15c84429089af9944e5b158fd9",
-    "sourceCodeHash": "0x740b4043436d1b314ee3ba145acfcde60b6abd8416ea594f2b8e890b5d0bce6b"
+    "initCodeHash": "0xdb0a592cb79de48c9aa288b8d73e7cacc6e8a1ae8d176a4a674f00d1ecf2b6a0",
+    "sourceCodeHash": "0x1f92d976177778b91c96ee83bdd953c9edb1382d05a504959a7ef9493dc703e3"
   },
   "src/universal/OptimismMintableERC20Factory.sol": {
-    "initCodeHash": "0x9cd4102d3ca811d5dc67ae99ce7de95812264575a789f96a6057600e55dcab64",
-    "sourceCodeHash": "0xc70c8c11d6e754eabe746bbee47a5e1051f71f7a83913f62ebcce8db989a1357"
+    "initCodeHash": "0x308024e05a9907f5ffb511145573f02b65cc6dc91dd824493f59bf7a1641ef43",
+    "sourceCodeHash": "0x7ba693786c41b2e60b49be65af2720855511a10c88276929d7bfd42ed79be6d1"
   },
   "src/universal/OptimismMintableERC721.sol": {
     "initCodeHash": "0xec037be7fc28e072944b0a9e55d4278b92d6c68ccb41049ab52eafca59c6e023",

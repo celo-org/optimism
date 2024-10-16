@@ -7,6 +7,7 @@ import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol
 import { ILegacyMintableERC20, IOptimismMintableERC20 } from "src/universal/interfaces/IOptimismMintableERC20.sol";
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
 import { Preinstalls } from "src/libraries/Preinstalls.sol";
+import { AbstractFeeCurrency } from "src/celo/AbstractFeeCurrency.sol";
 
 /// @title OptimismMintableERC20
 /// @notice OptimismMintableERC20 is a standard extension of the base ERC20 token contract designed
@@ -14,7 +15,13 @@ import { Preinstalls } from "src/libraries/Preinstalls.sol";
 ///         use an OptimismMintablERC20 as the L2 representation of an L1 token, or vice-versa.
 ///         Designed to be backwards compatible with the older StandardL2ERC20 token which was only
 ///         meant for use on L2.
-contract OptimismMintableERC20 is IOptimismMintableERC20, ILegacyMintableERC20, ERC20Permit, ISemver {
+contract OptimismMintableERC20 is
+    IOptimismMintableERC20,
+    ILegacyMintableERC20,
+    ERC20Permit,
+    ISemver,
+    AbstractFeeCurrency
+{
     /// @notice Address of the corresponding version of this token on the remote chain.
     address public immutable REMOTE_TOKEN;
 
@@ -41,8 +48,8 @@ contract OptimismMintableERC20 is IOptimismMintableERC20, ILegacyMintableERC20, 
     }
 
     /// @notice Semantic version.
-    /// @custom:semver 1.4.0-beta.1
-    string public constant version = "1.4.0-beta.1";
+    /// @custom:semver 1.4.0-beta.1-celo
+    string public constant version = "1.4.0-beta.1-celo";
 
     /// @notice Getter function for the permit2 address. It deterministically deployed
     ///         so it will always be at the same address. It is also included as a preinstall,

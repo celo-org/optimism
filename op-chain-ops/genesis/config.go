@@ -271,9 +271,11 @@ var _ ConfigChecker = (*GasTokenDeployConfig)(nil)
 
 func (d *GasTokenDeployConfig) Check(log log.Logger) error {
 	if d.UseCustomGasToken {
-		if d.CustomGasTokenAddress == (common.Address{}) {
-			return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
-		}
+		// NOTE: we are using the address(0) as an instruction to deploy the L1 token,
+		//       so this deploy-config validation has to be disabled
+		// if d.CustomGasTokenAddress == (common.Address{}) {
+		//      return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
+		// }
 		log.Info("Using custom gas token", "address", d.CustomGasTokenAddress)
 	}
 	return nil
@@ -308,6 +310,8 @@ type EIP1559DeployConfig struct {
 	EIP1559Denominator uint64 `json:"eip1559Denominator"`
 	// EIP1559DenominatorCanyon is the denominator of EIP1559 base fee market when Canyon is active.
 	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+	// EIP1559BaseFeeFloor is the fixed floor for the EIP1559 base fee market.
+	EIP1559BaseFeeFloor uint64 `json:"eip1559BaseFeeFloor,omitempty"`
 }
 
 var _ ConfigChecker = (*EIP1559DeployConfig)(nil)
@@ -823,6 +827,9 @@ type DeployConfig struct {
 
 	// Legacy, ignored, here for strict-JSON decoding to be accepted.
 	LegacyDeployConfig `evm:"-"`
+
+	// DeployCeloContracts indicates whether to deploy Celo contracts.
+	DeployCeloContracts bool `json:"deployCeloContracts"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -934,6 +941,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 		InteropTime:             d.InteropTime(l1StartTime),
 		ProtocolVersionsAddress: d.ProtocolVersionsProxy,
 		AltDAConfig:             altDA,
+		Cel2Time:                d.RegolithTime(l1StartTime),
 	}, nil
 }
 

@@ -181,6 +181,7 @@ contract L2GenesisTest is Test {
     /// @notice Tests the number of accounts in the genesis setup
     function _test_allocs_size(string memory _path) internal {
         genesis.cfg().setFundDevAccounts(false);
+        genesis.cfg().setDeployCeloContracts(true);
         genesis.runWithLatestLocal(_dummyL1Deps());
         genesis.writeGenesisAllocs(_path);
 
@@ -190,6 +191,7 @@ contract L2GenesisTest is Test {
         expected += 256; // precompiles
         expected += 13; // preinstalls
         expected += 1; // 4788 deployer account
+        expected += 14; // Celo contracts
         // 16 prefunded dev accounts are excluded
         assertEq(expected, getJSONKeyCount(_path), "key count check");
 

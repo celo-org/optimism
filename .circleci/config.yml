@@ -44,51 +44,8 @@ parameters:
 
 orbs:
   go: circleci/go@1.8.0
-  gcp-cli: circleci/gcp-cli@3.0.1
-  slack: circleci/slack@4.10.1
   shellcheck: circleci/shellcheck@3.2.0
 commands:
-  gcp-oidc-authenticate:
-    description: "Authenticate with GCP using a CircleCI OIDC token."
-    parameters:
-      project_id:
-        type: env_var_name
-        default: GCP_PROJECT_ID
-      workload_identity_pool_id:
-        type: env_var_name
-        default: GCP_WIP_ID
-      workload_identity_pool_provider_id:
-        type: env_var_name
-        default: GCP_WIP_PROVIDER_ID
-      service_account_email:
-        type: env_var_name
-        default: GCP_SERVICE_ACCOUNT_EMAIL
-      gcp_cred_config_file_path:
-        type: string
-        default: /home/circleci/gcp_cred_config.json
-      oidc_token_file_path:
-        type: string
-        default: /home/circleci/oidc_token.json
-    steps:
-      - run:
-          name: "Create OIDC credential configuration"
-          command: |
-            # Store OIDC token in temp file
-            echo $CIRCLE_OIDC_TOKEN > << parameters.oidc_token_file_path >>
-            # Create a credential configuration for the generated OIDC ID Token
-            gcloud iam workload-identity-pools create-cred-config \
-                "projects/${<< parameters.project_id >>}/locations/global/workloadIdentityPools/${<< parameters.workload_identity_pool_id >>}/providers/${<< parameters.workload_identity_pool_provider_id >>}"\
-                --output-file="<< parameters.gcp_cred_config_file_path >>" \
-                --service-account="${<< parameters.service_account_email >>}" \
-                --credential-source-file=<< parameters.oidc_token_file_path >>
-      - run:
-          name: "Authenticate with GCP using OIDC"
-          command: |
-            # Configure gcloud to leverage the generated credential configuration
-            gcloud auth login --brief --cred-file "<< parameters.gcp_cred_config_file_path >>"
-            # Configure ADC
-            echo "export GOOGLE_APPLICATION_CREDENTIALS='<< parameters.gcp_cred_config_file_path >>'" | tee -a "$BASH_ENV"
-
   check-changed:
     description: "Conditionally halts a step if certain modules change"
     parameters:
@@ -126,12 +83,8 @@ commands:
         type: string
         default: ""
     steps:
-      - slack/notify:
-          channel: << parameters.channel >>
-          event: fail
-          template: basic_fail_1
-          branch_pattern: develop
-          mentions: "<< parameters.mentions >>"
+      - run:
+          command: "true"  # No notifications setup up for celo-org fork
 
   run-contracts-check:
     parameters:
@@ -275,6 +228,12 @@ jobs:
             USE_MT_CANNON="true" make devnet-allocs
             cp -r .devnet/ .devnet-mt-cannon/
       - run:
+          name: Generate Celo allocs
+          command: DEVNET_L2OO="true" DEVNET_CELO="true" make devnet-allocs
+      - run:
+          name: Copy Celo allocs to .devnet-celo
+          command: cp -r .devnet/ .devnet-celo/
+      - run:
           name: Generate default allocs
           command: make devnet-allocs
       - save_cache:
@@ -300,6 +259,12 @@ jobs:
             - ".devnet-altda"
             - ".devnet-altda-generic"
             - ".devnet-mt-cannon"
+            - ".devnet-celo/addresses.json"
+            - ".devnet-celo/allocs-l1.json"
+            - ".devnet-celo/allocs-l2-delta.json"
+            - ".devnet-celo/allocs-l2-ecotone.json"
+            - ".devnet-celo/allocs-l2-fjord.json"
+            - ".devnet-celo/addresses.json"
       - notify-failures-on-develop
 
   docker-build:
@@ -351,20 +316,6 @@ jobs:
           at: /tmp/docker_images
       - run:
           command: mkdir -p /tmp/docker_images
-      - when:
-          condition:
-            or:
-              - "<<parameters.publish>>"
-              - "<<parameters.release>>"
-          steps:
-            - gcp-cli/install
-      - when:
-          condition:
-            or:
-              - "<<parameters.publish>>"
-              - "<<parameters.release>>"
-          steps:
-            - gcp-oidc-authenticate
       - run:
           name: Build
           command: |
@@ -442,10 +393,6 @@ jobs:
 
           no_output_timeout: 45m
       - when:
-          condition: "<<parameters.publish>>"
-          steps:
-            - notify-failures-on-develop
-      - when:
           condition: "<<parameters.save_image_tag>>"
           steps:
             - run:
@@ -457,87 +404,7 @@ jobs:
                 root: /tmp/docker_images
                 paths:  # only write the one file, to avoid concurrent workspace-file additions
                   - "<<parameters.docker_name>>.tar"
-      - when:
-          condition: "<<parameters.release>>"
-          steps:
-            - run:
-                name: Tag
-                command: |
-                  ./ops/scripts/ci-docker-tag-op-stack-release.sh <<parameters.registry>>/<<parameters.repo>> $CIRCLE_TAG $CIRCLE_SHA1
-      - when:
-          condition:
-            or:
-              - and:
-                - "<<parameters.publish>>"
-                - "<<parameters.release>>"
-              - and:
-                - "<<parameters.publish>>"
-                - equal: [develop, << pipeline.git.branch >>]
-          steps:
-            - gcp-oidc-authenticate:
-                service_account_email: GCP_SERVICE_ATTESTOR_ACCOUNT_EMAIL
-            - run:
-                name: Sign
-                command: |
-                  VER=$(jq -r .binary_signer < versions.json)
-                  wget -O - "https://github.com/ethereum-optimism/binary_signer/archive/refs/tags/v${VER}.tar.gz" | tar xz
-                  cd "binary_signer-${VER}/signer"
 
-                  IMAGE_PATH="<<parameters.registry>>/<<parameters.repo>>/<<parameters.docker_name>>:<<pipeline.git.revision>>"
-                  echo $IMAGE_PATH
-                  pip3 install -r requirements.txt
-
-                  python3 ./sign_image.py --command="sign"\
-                      --attestor-project-name="$ATTESTOR_PROJECT_NAME"\
-                      --attestor-name="$ATTESTOR_NAME"\
-                      --image-path="$IMAGE_PATH"\
-                      --signer-logging-level="INFO"\
-                      --attestor-key-id="//cloudkms.googleapis.com/v1/projects/$ATTESTOR_PROJECT_NAME/locations/global/keyRings/$ATTESTOR_NAME-key-ring/cryptoKeys/$ATTESTOR_NAME-key/cryptoKeyVersions/1"
-
-  # Verify newly published images (built on AMD machine) will run on ARM
-  check-cross-platform:
-    docker:
-      - image: cimg/base:current
-    resource_class: arm.medium
-    parameters:
-      registry:
-        description: Docker registry
-        type: string
-        default: "us-docker.pkg.dev"
-      repo:
-        description: Docker repo
-        type: string
-        default: "oplabs-tools-artifacts/images"
-      op_component:
-        description: "Name of op-stack component (e.g. op-node)"
-        type: string
-        default: ""
-      docker_tag:
-        description: "Tag of docker image"
-        type: string
-        default: "<<pipeline.git.revision>>"
-    steps:
-      - setup_remote_docker
-      - run:
-          name: "Verify Image Platform"
-          command: |
-            image_name="<<parameters.registry>>/<<parameters.repo>>/<<parameters.op_component>>:<<parameters.docker_tag>>"
-            echo "Retrieving Docker image manifest: $image_name"
-            MANIFEST=$(docker manifest inspect $image_name)
-
-            echo "Verifying 'linux/arm64' is supported..."
-            SUPPORTED_PLATFORM=$(echo "$MANIFEST" | jq -r '.manifests[] | select(.platform.architecture == "arm64" and .platform.os == "linux")')
-            echo $SUPPORT_PLATFORM
-            if [ -z "$SUPPORTED_PLATFORM" ]; then
-              echo "Platform 'linux/arm64' not supported by this image"
-              exit 1
-            fi
-      - run:
-          name: "Pull and run docker image"
-          command: |
-            image_name="<<parameters.registry>>/<<parameters.repo>>/<<parameters.op_component>>:<<parameters.docker_tag>>"
-            docker pull $image_name || exit 1
-            docker run $image_name <<parameters.op_component>> --version || exit 1
 
   contracts-bedrock-coverage:
     docker:
@@ -1170,6 +1037,16 @@ jobs:
                 command: echo 'export DEVNET_ALTDA=true' >> $BASH_ENV
       - when:
           condition:
+            equal: ['celo', <<parameters.variant>>]
+          steps:
+            - run:
+                name: Set DEVNET_CELO = true
+                command: echo 'export DEVNET_CELO=true' >> $BASH_ENV
+            - run:
+                name: Set DEVNET_L2OO = true
+                command: echo 'export DEVNET_L2OO=true' >> $BASH_ENV
+      - when:
+          condition:
             equal: ['altda-generic', <<parameters.variant>>]
           steps:
             - run:
@@ -1251,9 +1128,35 @@ jobs:
             PYTHONPATH=./bedrock-devnet python3 ./bedrock-devnet/main.py --monorepo-dir=.
             echo "Waiting for 10 seconds to give the devnet time to settle in..."
             sleep 10
-      - run:
-          name: Test the stack
-          command: make devnet-test
+      - when:
+          condition:
+            not:
+              equal: ['celo', <<parameters.variant>>]
+          steps:
+            - run:
+                name: Test the stack
+                command: make devnet-test
+      - when:
+          condition:
+              equal: ['celo', <<parameters.variant>>]
+          steps:
+            - restore_cache:
+                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+            # install dependencies
+            - run:
+                working_directory:  op-e2e/celo
+                name: install dependencies
+                command: npm install
+            # save any changes to the cache
+            - save_cache:
+                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+                paths:
+                  - op-e2e/celo/node_modules
+            - run:
+                working_directory:  op-e2e/celo
+                name: Run Celo e2e tests
+                command: |
+                  SPAWN_DEVNET=false ./run_all_tests.sh
       - run:
           name: Dump op-node logs
           command: |
@@ -1405,40 +1308,6 @@ jobs:
     resource_class: medium
     steps:
       - run: echo Done
-
-  fpp-verify:
-    docker:
-      - image: cimg/go:1.21
-    steps:
-      - checkout
-      - run:
-          name: verify-sepolia
-          command: |
-            make verify-sepolia
-          working_directory: op-program
-      - notify-failures-on-develop:
-          mentions: "@proofs-squad"
-
-  op-program-compat:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    steps:
-      - checkout
-      - restore_cache:
-          name: Restore Go modules cache
-          key: gomod-{{ checksum "go.sum" }}
-      - restore_cache:
-          key: golang-build-cache-op-program-compat-{{ checksum "go.sum" }}
-      - run:
-          name: compat-sepolia
-          command: |
-            make verify-compat
-          working_directory: op-program
-      - save_cache:
-          name: Save Go build cache
-          key: golang-build-cache-op-program-compat-{{ checksum "go.sum" }}
-          paths:
-            - "/root/.cache/go-build"
 
   check-generated-mocks-op-node:
     docker:
@@ -1645,9 +1514,6 @@ workflows:
           requires:
             - contracts-bedrock-build
             - cannon-prestate
-      - op-program-compat:
-          requires:
-            - op-program-tests
       - bedrock-go-tests:
           requires:
             - go-mod-download
@@ -1666,45 +1532,64 @@ workflows:
             - op-dispute-mon-tests
             - op-conductor-tests
             - op-program-tests
-            - op-program-compat
             - op-service-tests
             - op-supervisor-tests
             - op-e2e-HTTP-tests
             - op-e2e-fault-proof-tests
             - op-e2e-action-tests
             - op-e2e-action-tests-altda
-            # Not needed for the devnet but we want to make sure they build successfully
-            - cannon-docker-build
-            - op-dispute-mon-docker-build
-            - op-program-docker-build
-            - op-supervisor-docker-build
-            - proofs-tools-docker-build
       - docker-build:
-          name: <<matrix.docker_name>>-docker-build
+          name: op-node-docker-build
+          docker_name: op-node
           docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          save_image_tag: <<pipeline.git.revision>>
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-program
-                - op-proposer
-                - op-challenger
-                - proofs-tools
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-supervisor
-                - op-deployer
-                - cannon
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-batcher-docker-build
+          docker_name: op-batcher
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-program-docker-build
+          docker_name: op-program
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-program is not part of the devnet, we don't save it.
+      - docker-build:
+          name: op-proposer-docker-build
+          docker_name: op-proposer
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-challenger-docker-build
+          docker_name: op-challenger
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-dispute-mon-docker-build
+          docker_name: op-dispute-mon
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-conductor-docker-build
+          docker_name: op-conductor
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-conductor is not part of the devnet, we don't save it.
+      - docker-build:
+          name: da-server-docker-build
+          docker_name: da-server
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          save_image_tag: <<pipeline.git.revision>> # for devnet later
+      - docker-build:
+          name: op-supervisor-docker-build
+          docker_name: op-supervisor
+          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+          # op-supervisor is not (yet) part of the devnet, we don't save it
       - cannon-prestate:
           requires:
             - go-mod-download
       - devnet:
           matrix:
             parameters:
-              variant: ["default", "altda", "altda-generic"]
+              variant: ["celo",]
           requires:
             - contracts-bedrock-build
             - op-batcher-docker-build
@@ -1718,275 +1603,10 @@ workflows:
       - cannon-go-lint-and-test:
           requires:
             - contracts-bedrock-build
-          skip_slow_tests: true
-          notify: true
       - cannon-build-test-vectors
-      - todo-issues:
-          name: todo-issues-check
-          check_closed: false
       - shellcheck/check:
           name: shell-check
           # We don't need the `exclude` key as the orb detects the `.shellcheckrc`
           dir: .
           ignore-dirs:
             ./packages/contracts-bedrock/lib
-
-  release:
-    when:
-      not:
-        equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
-    jobs:
-      # Wait for approval on the release
-      - hold:
-          type: approval
-          filters:
-            tags:
-              only: /^(da-server|ci-builder(-rust)?|proofs-tools|cannon|ufm-[a-z0-9\-]*|op-[a-z0-9\-]*)\/v.*/
-            branches:
-              ignore: /.*/
-      # Standard (medium) cross-platform docker images go here
-      - docker-build:
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-ufm
-                - op-supervisor
-                - op-deployer
-                - cannon
-          name: <<matrix.docker_name>>-docker-release
-          docker_tags: <<pipeline.git.revision>>
-          platforms: "linux/amd64,linux/arm64"
-          publish: true
-          release: true
-          filters:
-            tags:
-              only: /^<<matrix.docker_name>>\/v.*/
-            branches:
-              ignore: /.*/
-          context:
-            - oplabs-gcr-release
-          requires:
-            - hold
-      # Checks for cross-platform images go here
-      - check-cross-platform:
-          matrix:
-            parameters:
-              op_component:
-                - op-node
-                - op-batcher
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-ufm
-                - op-supervisor
-                - op-deployer
-                - cannon
-          name: <<matrix.op_component>>-cross-platform
-          requires:
-            - op-node-docker-release
-            - op-batcher-docker-release
-            - op-proposer-docker-release
-            - op-challenger-docker-release
-            - op-dispute-mon-docker-release
-            - op-conductor-docker-release
-            - da-server-docker-release
-            - op-ufm-docker-release
-            - op-supervisor-docker-release
-            - op-deployer-docker-release
-            - cannon-docker-release
-      # Standard (xlarge) AMD-only docker images go here
-      - docker-build:
-          matrix:
-            parameters:
-              docker_name:
-                - ci-builder
-                - ci-builder-rust
-                - proofs-tools
-          name: <<matrix.docker_name>>-docker-release
-          resource_class: xlarge
-          docker_tags: <<pipeline.git.revision>>
-          publish: true
-          release: true
-          filters:
-            tags:
-              only: /^<<matrix.docker_name>>\/v.*/
-            branches:
-              ignore: /.*/
-          context:
-            - oplabs-gcr-release
-          requires:
-            - hold
-
-  scheduled-todo-issues:
-    when:
-      equal: [ build_four_hours, <<pipeline.schedule.name>> ]
-    jobs:
-      - todo-issues:
-          name: todo-issue-checks
-          context:
-            - slack
-
-  scheduled-fpp:
-    when:
-      equal: [ build_four_hours, <<pipeline.schedule.name>> ]
-    jobs:
-      - fpp-verify:
-          context:
-            - slack
-            - oplabs-fpp-nodes
-
-  develop-publish-contract-artifacts:
-    when:
-      or:
-        - equal: [ "develop", <<pipeline.git.branch>> ]
-        - equal: [ true, <<pipeline.parameters.publish_contract_artifacts_dispatch>> ]
-    jobs:
-      - publish-contract-artifacts
-
-  develop-fault-proofs:
-    when:
-      and:
-        - or:
-          - equal: [ "develop", <<pipeline.git.branch>> ]
-          - equal: [ true, <<pipeline.parameters.fault_proofs_dispatch>> ]
-        - not:
-            equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
-    jobs:
-      - go-mod-download
-      - cannon-prestate:
-          requires:
-            - go-mod-download
-      - contracts-bedrock-build:
-          skip_pattern: test
-          context:
-            - slack
-      - go-e2e-test:
-          name: op-e2e-cannon-tests<< matrix.variant >>
-          matrix:
-            parameters:
-              variant: ["", "-mt-cannon"]
-          module: op-e2e
-          target: test-cannon
-          parallelism: 4
-          notify: true
-          mentions: "@proofs-squad"
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-          context:
-            - slack
-
-  develop-kontrol-tests:
-    when:
-      and:
-        - or:
-          - equal: [ "develop", <<pipeline.git.branch>> ]
-          - equal: [ true, <<pipeline.parameters.kontrol_dispatch>> ]
-        - not:
-           equal: [ scheduled_pipeline, << pipeline.trigger_source >> ]
-    jobs:
-      - kontrol-tests:
-          context:
-            - slack
-            - runtimeverification
-
-  scheduled-cannon-full-tests:
-    when:
-      or:
-        - equal: [ build_four_hours, <<pipeline.schedule.name>> ]
-        - equal: [ true, << pipeline.parameters.cannon_full_test_dispatch >> ]
-    jobs:
-      - contracts-bedrock-build:
-          skip_pattern: test
-      - cannon-go-lint-and-test:
-          requires:
-            - contracts-bedrock-build
-          context:
-            - slack
-
-  scheduled-docker-publish:
-    when:
-      or:
-        - equal: [ build_hourly, <<pipeline.schedule.name>> ]
-        # Trigger on manual triggers if explicitly requested
-        - equal: [ true, << pipeline.parameters.docker_publish_dispatch >> ]
-    jobs:
-      - docker-build:
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-program
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - op-supervisor
-                - cannon
-          name: <<matrix.docker_name>>-docker-publish
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          platforms: "linux/amd64,linux/arm64"
-          publish: true
-          context:
-            - oplabs-gcr
-            - slack
-      - check-cross-platform:
-          matrix:
-            parameters:
-              op_component:
-                - op-node
-                - op-batcher
-                - op-program
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - op-supervisor
-                - cannon
-          name: <<matrix.op_component>>-cross-platform
-          requires:
-            - <<matrix.op_component>>-docker-publish
-      - docker-build:
-          name: contracts-bedrock-docker-publish
-          docker_name: contracts-bedrock
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          resource_class: xlarge
-          publish: true
-          context:
-            - oplabs-gcr
-            - slack
-
-  scheduled-preimage-reproducibility:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>> ]
-        # Trigger on manual triggers if explicitly requested
-        - equal: [ true, << pipeline.parameters.reproducibility_dispatch >> ]
-    jobs:
-      - preimage-reproducibility:
-          matrix:
-            parameters:
-              version:
-                - "0.1.0"
-                - "0.2.0"
-                - "0.3.0"
-                - "1.0.0"
-                - "1.1.0"
-                - "1.2.0"
-                - "1.3.0-rc.1"
-                - "1.3.0-rc.2"
-                - "1.3.0-rc.3"
-                - "1.3.1-rc.1"
-                - "1.3.1-rc.2"
-          context:
-            slack

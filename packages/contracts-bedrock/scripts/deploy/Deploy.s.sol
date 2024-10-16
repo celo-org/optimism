@@ -63,6 +63,10 @@ import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistr
 import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimismMintableERC20Factory.sol";
 
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { Multicall3 } from "@multicall/Multicall3.sol";
+
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
 ///         To add a new contract to the system, add a public function that deploys that individual contract.
@@ -164,7 +168,10 @@ contract Deploy is Deployer {
             SystemConfig: mustGetAddress("SystemConfigProxy"),
             L1ERC721Bridge: mustGetAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: mustGetAddress("ProtocolVersionsProxy"),
-            SuperchainConfig: mustGetAddress("SuperchainConfigProxy")
+            SuperchainConfig: mustGetAddress("SuperchainConfigProxy"),
+            // allow for address(0) since it is not strictly required for all
+            // combinations of chain configs
+            CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
 
@@ -184,7 +191,8 @@ contract Deploy is Deployer {
             SystemConfig: getAddress("SystemConfigProxy"),
             L1ERC721Bridge: getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
-            SuperchainConfig: getAddress("SuperchainConfigProxy")
+            SuperchainConfig: getAddress("SuperchainConfigProxy"),
+            CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
 
@@ -446,11 +454,45 @@ contract Deploy is Deployer {
         deployPreimageOracle();
         deployMips();
         deployAnchorStateRegistry();
+
+        // Multicall3
+        deployMulticall3();
+    }
+
+    function preInitializeOptimismPortalBalance() public broadcast {
+        address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
+        address storageSetter = mustGetAddress("StorageSetter");
+
+        // NOTE: the storage slot index should stay the same across versions
+        // (OptimismPortal, OptimismPortal2, ...)  since slot spacers are used
+        // for legacy storage variables.
+        // We also assert correctness in a downstream ChainAssertion,
+        // so changing slot numbers should get detected for coming versions.
+        uint256 balanceStorageSlot = 61; // slot of _balance variable
+
+        address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
+        customGasTokenAddress = cfg.customGasTokenAddress();
+        IERC20 token = IERC20(customGasTokenAddress);
+        initialBalance = token.balanceOf(optimismPortalProxy);
+
+        _upgradeAndCallViaSafe({
+            _proxy: payable(optimismPortalProxy),
+            _implementation: storageSetter,
+            _innerCallData: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+        });
     }
 
     /// @notice Initialize all of the implementations
     function initializeImplementations() public {
         console.log("Initializing implementations");
+
+        if (cfg.useCustomGasToken()) {
+            setupCustomGasToken();
+            save("StorageSetter", deployStorageSetter());
+            preInitializeOptimismPortalBalance();
+        }
+
         // Selectively initialize either the original OptimismPortal or the new OptimismPortal2. Since this will upgrade
         // the proxy, we cannot initialize both.
         if (cfg.useFaultProofs()) {
@@ -470,6 +512,8 @@ contract Deploy is Deployer {
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
         initializeAnchorStateRegistry();
+
+        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 
     /// @notice Add AltDA setup to the OP chain
@@ -1705,5 +1749,54 @@ contract Deploy is Deployer {
         require(addr_ != address(0), "deployment failed");
         save(_nickname, addr_);
         console.log("%s deployed at %s", _nickname, addr_);
+    }
+
+    function setupCustomGasToken() internal {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress() == address(0)) {
+            deployERC1967Proxy("CustomGasTokenProxy");
+
+            console.log("Setting up Custom gas token");
+            deployCustomGasToken();
+            initializeCustomGasToken();
+
+            address proxyAddress = mustGetAddress("CustomGasTokenProxy");
+            cfg.setUseCustomGasToken(proxyAddress);
+        }
+    }
+
+    function deployCustomGasToken() public broadcast returns (address addr_) {
+        console.log("Deploying CustomGasToken implementation");
+
+        CeloTokenL1 customGasToken = new CeloTokenL1{ salt: _implSalt() }();
+
+        save("CustomGasToken", address(customGasToken));
+        console.log("CustomGasToken deployed at %s", address(customGasToken));
+        addr_ = address(customGasToken);
+    }
+
+    /// @notice Initialize the CustomGasToken
+    function initializeCustomGasToken() public broadcast {
+        console.log("Upgrading and initializing CustomGasToken proxy");
+        address customGasTokenProxyAddress = mustGetAddress("CustomGasTokenProxy");
+        address customGasTokenAddress = mustGetAddress("CustomGasToken");
+        address portalProxyAddress = mustGetAddress("OptimismPortalProxy");
+
+        _upgradeAndCallViaSafe({
+            _proxy: payable(customGasTokenProxyAddress),
+            _implementation: customGasTokenAddress,
+            _innerCallData: abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
+        });
+
+        ChainAssertions.checkCeloTokenL1({ _contracts: _proxies(), _isProxy: false });
+    }
+
+    function deployMulticall3() internal onlyDevnet returns (address addr_) {
+        // Necessary to be deployed on the L1 for viems withdraw logic
+        // Only necessary on local devnet, since on the common public testnets
+        // the multicall3 is already deployed.
+        console.log("Deploying up Multicall3 contact");
+        Multicall3 mc3 = new Multicall3();
+        addr_ = address(mc3);
+        save("Multicall3", addr_);
     }
 }

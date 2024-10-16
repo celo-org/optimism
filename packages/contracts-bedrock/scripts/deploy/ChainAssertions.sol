@@ -33,6 +33,13 @@ import { IDisputeGameFactory } from "src/dispute/interfaces/IDisputeGameFactory.
 import { IDelayedWETH } from "src/dispute/interfaces/IDelayedWETH.sol";
 import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimismMintableERC20Factory.sol";
 
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+interface IOptimismPortalBalance {
+    function balance() external view returns (uint256);
+}
+
 library ChainAssertions {
     Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
 
@@ -356,6 +363,39 @@ library ChainAssertions {
         }
     }
 
+    /// @notice Asserts the OptimismPortal custom gas token is setup correctly
+    function checkCustomGasTokenOptimismPortal(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy
+    )
+        internal
+        view
+    {
+        address payable portalAddress;
+        if (_cfg.useFaultProofs()) {
+            portalAddress = payable(_contracts.OptimismPortal2);
+        } else {
+            portalAddress = payable(_contracts.OptimismPortal);
+        }
+        IOptimismPortalBalance portal = IOptimismPortalBalance(portalAddress);
+
+        uint256 expectedInitialBalance = 0;
+        if (_isProxy && _cfg.useCustomGasToken()) {
+            address customGasTokenAddress = _cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            expectedInitialBalance = token.balanceOf(address(portal));
+            console.log("custom gas token expectedInitialBalance", expectedInitialBalance);
+        }
+
+        if (_isProxy) {
+            require(portal.balance() == expectedInitialBalance);
+        } else {
+            require(portal.balance() == 0);
+        }
+        require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(portal.balance()));
+    }
+
     /// @notice Asserts the OptimismPortal2 is setup correctly
     function checkOptimismPortal2(
         Types.ContractSet memory _contracts,
@@ -392,7 +432,13 @@ library ChainAssertions {
         }
         // This slot is the custom gas token _balance and this check ensures
         // that it stays unset for forwards compatibility with custom gas token.
-        require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(0));
+        // if we use the pre-locked storage modification, the comparison
+        // against 0 doesn't hold anymore.
+        // We do a check of the balance field downstream anyways, that's why we
+        // can disable this check
+        if (!_cfg.useCustomGasToken()) {
+            require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(0));
+        }
     }
 
     /// @notice Asserts that the ProtocolVersions is setup correctly
@@ -447,5 +493,20 @@ library ChainAssertions {
             uint8((uint256(slotVal) >> (_offset * 8)) & 0xFF) == uint8(1),
             "Storage value is not 1 at the given slot and offset"
         );
+    }
+
+    /// @notice Asserts the CeloTokenL1 is setup correctly
+    function checkCeloTokenL1(Types.ContractSet memory _contracts, bool _isProxy) internal view {
+        console.log("Running chain assertions on the CeloTokenL1");
+
+        CeloTokenL1 celoToken = CeloTokenL1(payable(_contracts.CustomGasToken));
+
+        // Check that the contract is initialized
+        assertSlotValueIsOne({ _contractAddress: address(celoToken), _slot: 0, _offset: 0 });
+
+        if (_isProxy) {
+            require(celoToken.totalSupply() == 1000000000e18); // 1 billion CELO
+            require(celoToken.balanceOf(_contracts.OptimismPortal) == 1000000000e18);
+        }
     }
 }
