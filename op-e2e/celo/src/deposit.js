@@ -98,6 +98,7 @@ export async function deposit(args, config) {
   const approveReceipt =
     await config.client.l1.public.waitForTransactionReceipt({
       hash: approveHash,
+      timeout: 30_000,
     })
 
   spentGas += approveReceipt.gasUsed * approveReceipt.effectiveGasPrice
@@ -108,6 +109,7 @@ export async function deposit(args, config) {
   // Wait for the L1 transaction to be processed.
   const receipt = await config.client.l1.public.waitForTransactionReceipt({
     hash: hash,
+    timeout: 30_000,
   })
 
   spentGas += receipt.gasUsed * receipt.effectiveGasPrice
@@ -118,6 +120,7 @@ export async function deposit(args, config) {
   // Wait for the L2 transaction to be processed.
   const l2Receipt = await config.client.l2.public.waitForTransactionReceipt({
     hash: l2Hash,
+    timeout: 30_000,
   })
 
   return {

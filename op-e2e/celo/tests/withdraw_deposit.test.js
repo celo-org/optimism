@@ -73,5 +73,5 @@ test(
       balanceL2Before - withdrawResult.l2GasPayment
     )
   },
-  15 * minute
+  10 * minute
 )
