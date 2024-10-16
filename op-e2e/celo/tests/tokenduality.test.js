@@ -30,6 +30,7 @@ test(
     const transferHash = await config.client.l2.wallet.writeContract(request)
     const receipt = await config.client.l2.public.waitForTransactionReceipt({
       hash: transferHash,
+      timeout: 30_000,
     })
     expect(receipt.status).toBe('success')
     const balanceAfter = await config.client.l2.public.getBalance({
