@@ -30,15 +30,4 @@ if [ -n "$go_mod_error" ]; then
   exit 1
 fi
 
-files="go.mod go.sum ops-bedrock/l2-op-geth.Dockerfile"
-if git diff --quiet HEAD -- $files; then
-  echo "No updates."
-else
-  echo "Updates, comitting"
-  git add $files
-  printf "update: \`celo/op-geth\`\n
-
- Update the go package dependency and the devnet
- docker container reference of the \`l2\` service
- to the latest commit ('%s') in the '%s' ref." "$commit" "$branch" | git commit -F -
-fi
+echo "$commit"
