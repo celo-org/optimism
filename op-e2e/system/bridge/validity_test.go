@@ -267,8 +267,6 @@ func TestMixedDepositValidity(t *testing.T) {
 // TestMixedWithdrawalValidity makes a number of withdrawal transactions and ensures ones with modified parameters are
 // rejected while unmodified ones are accepted. This runs test cases in different systems.
 func TestMixedWithdrawalValidity(t *testing.T) {
-	t.Skipf("Skipping withdrawal tests for now, must check in more detail!")
-
 	op_e2e.InitParallel(t)
 
 	// There are 7 different fields we try modifying to cause a failure, plus one "good" test result we test.
