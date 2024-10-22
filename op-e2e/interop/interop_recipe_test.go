@@ -16,8 +16,6 @@ import (
 )
 
 func TestInteropDevRecipe(t *testing.T) {
-	t.Skipf("Skipping interop tests for now. Celo doesn't use interop, so we can fix these tests at a later time")
-
 	rec := interopgen.InteropDevRecipe{
 		L1ChainID:        900100,
 		L2ChainIDs:       []uint64{900200, 900201},

@@ -20,8 +20,6 @@ import (
 // The balance of Bob on Chain A is checked before and after the tx.
 // The balance of Bob on Chain B is checked after the tx.
 func TestInteropTrivial(t *testing.T) {
-	t.Skipf("Skipping interop tests for now. Celo doesn't use interop, so we can fix these tests at a later time")
-
 	recipe := interopgen.InteropDevRecipe{
 		L1ChainID:        900100,
 		L2ChainIDs:       []uint64{900200, 900201},
