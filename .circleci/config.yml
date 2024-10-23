@@ -1144,7 +1144,9 @@ jobs:
             - run:
                 working_directory:  op-e2e/celo
                 name: install dependencies
-                command: npm install
+                command: |
+                  npm install
+                  npm list
             # save any changes to the cache
             - save_cache:
                 key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
