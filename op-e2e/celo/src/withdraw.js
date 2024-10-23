@@ -1,4 +1,4 @@
-export const withdraw = async function (args, config) {
+export const withdraw = async function(args, config) {
   const initiateHash = await config.client.l2.wallet.initiateWithdrawal({
     request: {
       gas: args.gas,
@@ -8,25 +8,24 @@ export const withdraw = async function (args, config) {
   })
   const receipt = await config.client.l2.public.waitForTransactionReceipt({
     hash: initiateHash,
+    timeout: 30_000,
   })
-  console.log('receipt', receipt)
 
   const l2GasPayment =
-    receipt.gasUsed * receipt.effectiveGasPrice + receipt.l1fee
+    receipt.gasUsed * receipt.effectiveGasPrice + receipt.l1Fee
 
-  // FIXME: this blocks longer, the longer the devnet is running, see
-  // https://github.com/ethereum-optimism/optimism/issues/7668
-  // NOTE: this function requires the mulitcall contract to be deployed
+  // NOTE: this function requires the mulitcall3 contract to be deployed
   // on the L1 chain.
-  const { output, withdrawal } = await config.client.l1.public.waitToProve({
-    receipt,
-    targetChain: config.client.l2.public.chain,
-  })
-  //
+  const { output, game, withdrawal } =
+    await config.client.l1.public.waitToProve({
+      receipt,
+      targetChain: config.client.l2.public.chain,
+    })
 
   const proveWithdrawalArgs =
     await config.client.l2.public.buildProveWithdrawal({
       output,
+      game,
       withdrawal,
     })
   const proveHash =
@@ -34,6 +33,7 @@ export const withdraw = async function (args, config) {
 
   const proveReceipt = await config.client.l1.public.waitForTransactionReceipt({
     hash: proveHash,
+    timeout: 30_000,
   })
   if (proveReceipt.status != 'success') {
     return {
@@ -61,6 +61,7 @@ export const withdraw = async function (args, config) {
   const finalizeReceipt =
     await config.client.l1.public.waitForTransactionReceipt({
       hash: finalizeHash,
+      timeout: 30_000,
     })
 
   return {
