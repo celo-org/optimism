@@ -12,7 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "reverse-mirage": "^1.1.0",
-    "viem": "^2.13.1"
+    "viem": "^2.21.33"
   },
   "devDependencies": {
     "@babel/core": "^7.24.7",
