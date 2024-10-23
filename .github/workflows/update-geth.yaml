@@ -3,12 +3,13 @@ on:
   schedule:
     - cron: "00 8 * * Mon"
   workflow_dispatch:
+    inputs:
+      op-geth-base-branch:
+        description: "celo-org/op-geth base branch to update dependencies from"
+        required: false
+        default: "celo10"
+  pull_request:
 
-inputs:
-  op-geth-base-branch:
-    description: "celo-org/op-geth base branch to update dependencies from"
-    required: false
-    default: "celo10"
 jobs:
   job_id:
     # Add "id-token" with the intended permissions.
@@ -31,7 +32,7 @@ jobs:
           version: ">= 363.0.0"
       - name: Run the update-geth script
         run: |
-          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh ${{ inputs.op-geth-base-branch }})
+          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh celo10)
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
         with:
@@ -49,6 +50,7 @@ jobs:
           author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: false
           branch: update/op-geth
+          base: celo10
           delete-branch: true
           title: "[Automatic] - Update op-geth dependencies "
           body: |
