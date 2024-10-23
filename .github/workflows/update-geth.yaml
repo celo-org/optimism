@@ -1,0 +1,60 @@
+name: "Update celo-org/op-geth"
+on:
+  schedule:
+    - cron: "00 8 * * Mon"
+  workflow_dispatch:
+    inputs:
+      op-geth-base-branch:
+        description: "celo-org/op-geth base branch to update dependencies from"
+        required: false
+        default: "celo10"
+  pull_request:
+
+jobs:
+  job_id:
+    # Add "id-token" with the intended permissions.
+    permissions:
+      contents: "read"
+      id-token: "write"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login at GCP Artifact Registry
+        uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@v2.0
+        with:
+          workload-id-provider: "projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos"
+          service-account: "celo-optimism-gh@devopsre.iam.gserviceaccount.com"
+          docker-gcp-registries: us-west1-docker.pkg.dev
+          access-token-lifetime: "2m"
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          version: ">= 363.0.0"
+      - name: Run the update-geth script
+        run: |
+          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh celo10)
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          add-paths: |
+            go.mod
+            go.sum
+            ops-bedrock/*.Dockerfile
+          commit-message: |
+            [Automatic] - Update op-geth dependencies
+
+             Update the go package dependency and the devnet
+             docker container reference of the \`l2\` service
+             to the latest commit ('${{ env.GETH_COMMIT }}') in the '${{ inputs.op-geth-base-branch }}' ref."
+          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
+          author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
+          signoff: false
+          branch: update/op-geth
+          base: celo10
+          delete-branch: true
+          title: "[Automatic] - Update op-geth dependencies "
+          body: |
+            Update the go package dependency and the devnet
+            docker container reference of the \`l2\` service
+            to the latest commit ('${{ env.GETH_COMMIT }}') in the '${{ inputs.op-geth-base-branch }}' ref."
+          draft: false
