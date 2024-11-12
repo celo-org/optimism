@@ -22,8 +22,8 @@ jobs:
       - name: Login at GCP Artifact Registry
         uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@v2.0
         with:
-          workload-id-provider: "projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos"
-          service-account: "celo-optimism-gh@devopsre.iam.gserviceaccount.com"
+          workload-id-provider: "projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism-ro/providers/github-by-repos"
+          service-account: "celo-optimism-gh-ro@devopsre.iam.gserviceaccount.com"
           docker-gcp-registries: us-west1-docker.pkg.dev
           access-token-lifetime: "2m"
       - name: "Set up Cloud SDK"
