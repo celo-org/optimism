@@ -45,8 +45,6 @@ jobs:
              Update the go package dependency and the devnet
              docker container reference of the \`l2\` service
              to the latest commit ('${{ env.GETH_COMMIT }}') in the '${{ inputs.op-geth-base-branch }}' ref."
-          committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
-          author: ${{ github.actor }} <${{ github.actor_id }}+${{ github.actor }}@users.noreply.github.com>
           signoff: false
           branch: update/op-geth
           base: celo10
