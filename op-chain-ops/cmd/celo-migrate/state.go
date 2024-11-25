@@ -80,12 +80,18 @@ var (
 			// CreateX
 			common.HexToAddress("0xba5Ed099633D3B313e4D5F7bdc1305d3c28ba5Ed"): false,
 		},
+		BaklavaNetworkID: {
+			// DeterministicDeploymentProxy
+			common.HexToAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C"): false,
+		},
 	}
 	unreleasedTreasuryAddressMap = map[uint64]common.Address{
 		AlfajoresNetworkID: common.HexToAddress("0x07bf0b2461A0cb608D5CF9a82ba97dAbA850F79F"),
+		BaklavaNetworkID:   common.HexToAddress("0x022c5d5837E177B6d145761feb4C5574e5b48F5e"),
 	}
 	celoTokenAddressMap = map[uint64]common.Address{
 		AlfajoresNetworkID: addresses.CeloTokenAlfajoresAddress,
+		BaklavaNetworkID:   addresses.CeloTokenBaklavaAddress,
 		MainnetNetworkID:   addresses.CeloTokenAddress,
 	}
 )
