@@ -294,7 +294,8 @@ func simulate(ctx context.Context, logger log.Logger, conf *params.ChainConfig,
 
 	// run the transaction
 	start := time.Now()
-	receipt, err := core.ApplyTransaction(conf, cCtx, &sender, &gp, state, header, tx, &usedGas, vmConfig)
+	feeCurrencyContext := core.GetFeeCurrencyContext(header, conf, state)
+	receipt, err := core.ApplyTransaction(conf, cCtx, &sender, &gp, state, header, tx, &usedGas, vmConfig, feeCurrencyContext)
 	if err != nil {
 		return fmt.Errorf("failed to apply tx: %w", err)
 	}
