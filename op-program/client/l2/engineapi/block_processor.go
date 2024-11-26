@@ -85,7 +85,8 @@ func NewBlockProcessorFromHeader(provider BlockDataProvider, h *types.Header) (*
 	mkEVM := func() *vm.EVM {
 		// Unfortunately this is not part of any Geth environment setup,
 		// we just have to apply it, like how the Geth block-builder worker does.
-		context := core.NewEVMBlockContext(header, provider, nil, provider.Config(), statedb)
+		feeCurrencyContext := core.GetFeeCurrencyContext(header, provider.Config(), statedb)
+		context := core.NewEVMBlockContext(header, provider, nil, provider.Config(), statedb, feeCurrencyContext)
 		// NOTE: Unlikely to be needed for the beacon block root, but we setup any precompile overrides anyways for forwards-compatibility
 		var precompileOverrides vm.PrecompileOverrides
 		if vmConfig := provider.GetVMConfig(); vmConfig != nil && vmConfig.PrecompileOverrides != nil {
@@ -136,11 +137,12 @@ func (b *BlockProcessor) AddTx(tx *types.Transaction) error {
 	txIndex := len(b.transactions)
 	b.state.SetTxContext(tx.Hash(), txIndex)
 
-	context := core.NewEVMBlockContext(b.header, b.dataProvider, nil, b.dataProvider.Config(), b.state)
+	feeCurrencyContext := core.GetFeeCurrencyContext(b.header, b.dataProvider.Config(), b.state)
+	context := core.NewEVMBlockContext(b.header, b.dataProvider, nil, b.dataProvider.Config(), b.state, feeCurrencyContext)
 	vmConfig := *b.dataProvider.GetVMConfig()
 	// TODO(#14038): reuse evm
 	evm := vm.NewEVM(context, b.state, b.dataProvider.Config(), vmConfig)
-	receipt, err := core.ApplyTransaction(evm, b.gasPool, b.state, b.header, tx, &b.header.GasUsed)
+	receipt, err := core.ApplyTransaction(evm, b.gasPool, b.state, b.header, tx, &b.header.GasUsed, feeCurrencyContext)
 	if err != nil {
 		return fmt.Errorf("failed to apply transaction to L2 block (tx %d): %w", txIndex, err)
 	}
