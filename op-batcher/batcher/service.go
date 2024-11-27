@@ -218,6 +218,9 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 		return fmt.Errorf("unknown data availability type: %v", cfg.DataAvailabilityType)
 	}
 
+	if bs.UseAltDA && cfg.DataAvailabilityType != flags.CalldataType {
+		return fmt.Errorf("cannot use Blobs with Alt DA")
+	}
 	if bs.UseAltDA && cc.MaxFrameSize > altda.MaxInputSize {
 		return fmt.Errorf("max frame size %d exceeds altDA max input size %d", cc.MaxFrameSize, altda.MaxInputSize)
 	}
