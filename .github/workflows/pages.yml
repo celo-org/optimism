@@ -5,6 +5,9 @@ on:
   push:
     branches:
       - celo[0-9]+
+
+  workflow_dispatch:
+
 jobs:
   deploy:
     concurrency: ci-${{ github.ref }}
