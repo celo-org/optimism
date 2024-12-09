@@ -4,6 +4,8 @@ pragma solidity 0.8.15;
 // Testing utilities
 import { Test } from "forge-std/Test.sol";
 import { StdCheatsSafe } from "forge-std/StdCheats.sol";
+import { AddressSortedLinkedList } from "src/celo/common/linkedlists/AddressSortedLinkedList.sol";
+import { AddressSortedLinkedListWithMedian } from "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol";
 
 // Target contract
 import { SafeCall } from "src/libraries/SafeCall.sol";
@@ -14,6 +16,10 @@ contract SafeCall_Test is Test {
         vm.assume(_addr.balance == 0);
         vm.assume(_addr != address(this));
         assumeAddressIsNot(_addr, StdCheatsSafe.AddressType.ForgeAddress, StdCheatsSafe.AddressType.Precompile);
+
+        // ignore address of library contract whose functions have 'public' or 'external' visibilities
+        vm.assume(_addr != address(AddressSortedLinkedList));
+        vm.assume(_addr != address(AddressSortedLinkedListWithMedian));
     }
 
     /// @notice Internal helper function for `send` tests
