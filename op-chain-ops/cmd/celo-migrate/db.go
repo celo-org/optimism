@@ -101,7 +101,7 @@ func removeBlocks(ldb ethdb.Database, numberHashes []*rawdb.NumberHash) error {
 	return nil
 }
 
-func getHeadHeader(dbpath string) (*types.Header, err error) {
+func getHeadHeader(dbpath string) (headHeader *types.Header, err error) {
 	db, err := openDBWithoutFreezer(dbpath, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %q err: %w", dbpath, err)
@@ -112,7 +112,7 @@ func getHeadHeader(dbpath string) (*types.Header, err error) {
 		}
 	}()
 
-	headHeader := rawdb.ReadHeadHeader(db)
+	headHeader = rawdb.ReadHeadHeader(db)
 	if headHeader == nil {
 		return nil, fmt.Errorf("head header not in database at: %s", dbpath)
 	}
