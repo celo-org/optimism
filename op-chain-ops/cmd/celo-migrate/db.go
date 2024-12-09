@@ -38,7 +38,8 @@ func headerKey(number uint64, hash common.Hash) []byte {
 
 // Opens a database with access to AncientsDb
 func openDB(chaindataPath string, readOnly bool) (ethdb.Database, error) {
-	if _, err := os.Stat(chaindataPath); errors.Is(err, os.ErrNotExist) {
+	// Will throw an error if the chaindataPath does not exist
+	if _, err := os.Stat(chaindataPath); err != nil {
 		return nil, err
 	}
 
@@ -100,18 +101,22 @@ func removeBlocks(ldb ethdb.Database, numberHashes []*rawdb.NumberHash) error {
 	return nil
 }
 
-func getHeadHeader(dbpath string) (*types.Header, error) {
+func getHeadHeader(dbpath string) (*types.Header, err error) {
 	db, err := openDBWithoutFreezer(dbpath, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database at %q err: %w", dbpath, err)
 	}
-	defer db.Close()
+	defer func() {
+		if tempErr := db.Close(); tempErr != nil && err == nil {
+			err = fmt.Errorf("failed to close database: %w", tempErr)
+		}
+	}()
 
 	headHeader := rawdb.ReadHeadHeader(db)
 	if headHeader == nil {
 		return nil, fmt.Errorf("head header not in database at: %s", dbpath)
 	}
-	return headHeader, nil
+	return headHeader, err
 }
 
 func cleanupNonAncientDb(dir string) error {

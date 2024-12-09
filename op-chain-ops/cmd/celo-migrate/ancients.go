@@ -89,6 +89,10 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 		return 0, 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
+	if numAncientsNewAfter != numAncientsOld {
+		return 0, 0, fmt.Errorf("failed to migrate all ancients from old to new db. Expected %d, got %d", numAncientsOld, numAncientsNewAfter)
+	}
+
 	log.Info("Ancient Block Migration Ended", "process", "ancients", "ancientsInOldDB", numAncientsOld, "ancientsInNewDB", numAncientsNewAfter, "migrated", numAncientsNewAfter-numAncientsNewBefore)
 	return numAncientsNewBefore, numAncientsNewAfter, nil
 }
@@ -214,19 +218,23 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 }
 
 // getStrayAncientBlocks returns a list of ancient block numbers / hashes that somehow were not removed from leveldb
-func getStrayAncientBlocks(dbPath string) ([]*rawdb.NumberHash, error) {
+func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error) {
 	defer timer("getStrayAncientBlocks")()
 
 	db, err := openDB(dbPath, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		if tempErr := db.Close(); tempErr != nil && err == nil {
+			err = fmt.Errorf("failed to close database: %w", tempErr)
+		}
+	}()
 
 	numAncients, err := db.Ancients()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get number of ancients in database: %w", err)
 	}
 
-	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), nil
+	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), err
 }
