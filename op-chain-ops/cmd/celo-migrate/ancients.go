@@ -153,6 +153,9 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RLPBlockRange) error {
 	// Transform blocks from the in channel and send them to the out channel
 	defer close(out)
+
+	prevBlockNumber := uint64(0)
+
 	for blockRange := range in {
 		select {
 		case <-ctx.Done():
@@ -160,6 +163,11 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 		default:
 			for i := range blockRange.hashes {
 				blockNumber := blockRange.start + uint64(i)
+
+				if blockNumber != 0 && blockNumber != prevBlockNumber+1 {
+					return fmt.Errorf("Gap found between ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, blockNumber)
+				}
+				prevBlockNumber = blockNumber
 
 				newHeader, err := transformHeader(blockRange.headers[i])
 				if err != nil {

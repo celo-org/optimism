@@ -78,11 +78,18 @@ func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSiz
 		}
 	}
 
+	prevBlockNumber := uint64(numAncients - 1)
+
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
 
 		log.Info("Processing Block Range", "process", "non-ancients", "from", i, "to(inclusve)", i+batchSize-1, "count", len(numbersHash))
 		for _, numberHash := range numbersHash {
+			if numberHash.Number != 0 && numberHash.Number != prevBlockNumber+1 {
+				return 0, fmt.Errorf("Gap found between non-ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, numberHash.Number)
+			}
+			prevBlockNumber = numberHash.Number
+
 			if err := migrateNonAncientBlock(numberHash.Number, numberHash.Hash, newDB); err != nil {
 				return 0, err
 			}
