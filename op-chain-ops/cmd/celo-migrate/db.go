@@ -107,16 +107,14 @@ func getHeadHeader(dbpath string) (headHeader *types.Header, err error) {
 		return nil, fmt.Errorf("failed to open database at %q err: %w", dbpath, err)
 	}
 	defer func() {
-		if tempErr := db.Close(); tempErr != nil && err == nil {
-			err = fmt.Errorf("failed to close database: %w", tempErr)
-		}
+		err = errors.Join(err, db.Close())
 	}()
 
 	headHeader = rawdb.ReadHeadHeader(db)
 	if headHeader == nil {
 		return nil, fmt.Errorf("head header not in database at: %s", dbpath)
 	}
-	return headHeader, err
+	return headHeader, nil
 }
 
 func cleanupNonAncientDb(dir string) error {

@@ -323,9 +323,7 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 		return fmt.Errorf("failed to open new database: %w", err)
 	}
 	defer func() {
-		if tempErr := newDB.Close(); tempErr != nil && err == nil {
-			err = fmt.Errorf("failed to close database: %w", tempErr)
-		}
+		err = errors.Join(err, newDB.Close())
 	}()
 
 	// get the last block number
@@ -348,7 +346,7 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 
 	log.Info("Non-Ancient Block Migration Completed", "process", "non-ancients", "migratedNonAncients", numNonAncients)
 
-	return err
+	return nil
 }
 
 func runStateMigration(newDBPath string, opts stateMigrationOptions) error {

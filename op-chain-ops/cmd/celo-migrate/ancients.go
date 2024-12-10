@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -226,9 +227,7 @@ func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 	defer func() {
-		if tempErr := db.Close(); tempErr != nil && err == nil {
-			err = fmt.Errorf("failed to close database: %w", tempErr)
-		}
+		err = errors.Join(err, db.Close())
 	}()
 
 	numAncients, err := db.Ancients()
@@ -236,5 +235,5 @@ func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error
 		return nil, fmt.Errorf("failed to get number of ancients in database: %w", err)
 	}
 
-	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), err
+	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), nil
 }
