@@ -3,11 +3,9 @@ on:
   schedule:
     - cron: "00 8 * * Mon"
   workflow_dispatch:
-    inputs:
-      op-geth-base-branch:
-        description: "celo-org/op-geth base branch to update dependencies from"
-        required: false
-        default: "celo10"
+
+env:
+  OP_GETH_BASE_BRANCH: "celo10"
 
 jobs:
   job_id:
@@ -31,28 +29,32 @@ jobs:
         with:
           version: ">= 363.0.0"
       - name: Run the update-geth script
+        id: geth-update-script
         run: |
-          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh celo10)
+          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh "$OP_GETH_BASE_BRANCH")
+          echo "GETH_COMMIT=${GETH_COMMIT}" >> $GITHUB_OUTPUT
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
+        env:
+          TITLE: "[Automatic] - Update op-geth dependencies"
+          MESSAGE: |
+            Update the go package dependency and the devnet
+            docker container reference of the `l2` service
+            to the latest commit (`${{ steps.geth-update-script.outputs.GETH_COMMIT }}`)
+            in the `${{ env.OP_GETH_BASE_BRANCH }}` ref.
         with:
           add-paths: |
             go.mod
             go.sum
             ops-bedrock/*.Dockerfile
           commit-message: |
-            [Automatic] - Update op-geth dependencies
+            ${{ env.TITLE }}
 
-             Update the go package dependency and the devnet
-             docker container reference of the \`l2\` service
-             to the latest commit ('${{ env.GETH_COMMIT }}') in the '${{ inputs.op-geth-base-branch }}' ref."
+            ${{ env.MESSAGE }}
           signoff: false
           branch: update/op-geth
-          base: celo10
+          base: "${{ env.OP_GETH_BASE_BRANCH }}"
           delete-branch: true
-          title: "[Automatic] - Update op-geth dependencies "
-          body: |
-            Update the go package dependency and the devnet
-            docker container reference of the \`l2\` service
-            to the latest commit ('${{ env.GETH_COMMIT }}') in the '${{ inputs.op-geth-base-branch }}' ref."
+          title: "${{ env.TITLE }}"
+          body: "${{ env.MESSAGE }}"
           draft: false
