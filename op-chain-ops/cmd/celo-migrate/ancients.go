@@ -165,7 +165,7 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 				blockNumber := blockRange.start + uint64(i)
 
 				if blockNumber != 0 && blockNumber != prevBlockNumber+1 {
-					return fmt.Errorf("Gap found between ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, blockNumber)
+					return fmt.Errorf("gap found between ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, blockNumber)
 				}
 				prevBlockNumber = blockNumber
 
