@@ -82,7 +82,7 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 	g.Go(func() error {
 		return readAncientBlocks(ctx, oldFreezer, numAncientsNewBefore, numAncientsOld, batchSize, readChan)
 	})
-	g.Go(func() error { return transformBlocks(ctx, readChan, transformChan) })
+	g.Go(func() error { return transformBlocks(ctx, readChan, transformChan, numAncientsNewBefore) })
 	g.Go(func() error { return writeAncientBlocks(ctx, newFreezer, transformChan, numAncientsOld) })
 
 	if err = g.Wait(); err != nil {
@@ -150,11 +150,11 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 	return nil
 }
 
-func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RLPBlockRange) error {
+func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RLPBlockRange, startBlock uint64) error {
 	// Transform blocks from the in channel and send them to the out channel
 	defer close(out)
 
-	prevBlockNumber := uint64(0)
+	prevBlockNumber := startBlock - 1
 
 	for blockRange := range in {
 		select {
