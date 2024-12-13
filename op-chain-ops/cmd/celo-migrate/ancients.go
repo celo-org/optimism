@@ -164,7 +164,7 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 			for i := range blockRange.hashes {
 				blockNumber := blockRange.start + uint64(i)
 
-				if blockNumber != 0 && blockNumber != prevBlockNumber+1 {
+				if blockNumber != prevBlockNumber+1 {
 					return fmt.Errorf("gap found between ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, blockNumber)
 				}
 				// Block ranges are contiguous and in order because they are read sequentially from the freezer
