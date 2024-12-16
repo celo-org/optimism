@@ -405,13 +405,16 @@ contract Deploy is Deployer {
         deployImplementations();
         initializeImplementations();
 
-        setAlphabetFaultGameImplementation({ _allowUpgrade: false });
-        setFastFaultGameImplementation({ _allowUpgrade: false });
+        transferDelayedWETHOwnership();
+    }
+
+    function setupFaultGames() public {
         setCannonFaultGameImplementation({ _allowUpgrade: false });
         setPermissionedCannonFaultGameImplementation({ _allowUpgrade: false });
 
+        initializeAnchorStateRegistry();
+
         transferDisputeGameFactoryOwnership();
-        transferDelayedWETHOwnership();
     }
 
     /// @notice Deploy all of the proxies
@@ -511,7 +514,7 @@ contract Deploy is Deployer {
         initializeDisputeGameFactory();
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
-        initializeAnchorStateRegistry();
+        // initializeAnchorStateRegistry();
 
         ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
@@ -1053,7 +1056,7 @@ contract Deploy is Deployer {
         address anchorStateRegistry = mustGetAddress("AnchorStateRegistry");
         ISuperchainConfig superchainConfig = ISuperchainConfig(mustGetAddress("SuperchainConfigProxy"));
 
-        IAnchorStateRegistry.StartingAnchorRoot[] memory roots = new IAnchorStateRegistry.StartingAnchorRoot[](5);
+        IAnchorStateRegistry.StartingAnchorRoot[] memory roots = new IAnchorStateRegistry.StartingAnchorRoot[](2);
         roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
             gameType: GameTypes.CANNON,
             outputRoot: OutputRoot({
@@ -1063,27 +1066,6 @@ contract Deploy is Deployer {
         });
         roots[1] = IAnchorStateRegistry.StartingAnchorRoot({
             gameType: GameTypes.PERMISSIONED_CANNON,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[2] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.ALPHABET,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[3] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.ASTERISC,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[4] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.FAST,
             outputRoot: OutputRoot({
                 root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
                 l2BlockNumber: cfg.faultGameGenesisBlock()
