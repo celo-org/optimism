@@ -686,17 +686,8 @@ contract L2Genesis is Deployer {
         setCeloFeeHandler();
         setCeloMentoFeeHandlerSeller();
         setCeloUniswapFeeHandlerSeller();
-        // setCeloSortedOracles();
-        // setCeloAddressSortedLinkedListWithMedian();
         setCeloFeeCurrency();
         setFeeCurrencyDirectory();
-
-        address[] memory initialBalanceAddresses = new address[](1);
-        initialBalanceAddresses[0] = devAccounts[0];
-
-        uint256[] memory initialBalances = new uint256[](1);
-        initialBalances[0] = 100_000 ether;
-        //deploycUSD(initialBalanceAddresses, initialBalances, 2);
     }
 
     /// @notice Sets up a proxy for the given impl address
@@ -766,17 +757,6 @@ contract L2Genesis is Deployer {
         _setupProxy(precompile, address(kontract));
     }
 
-    function setCeloSortedOracles() internal {
-        SortedOracles kontract = new SortedOracles({ test: false });
-
-        address precompile = CeloPredeploys.SORTED_ORACLES;
-        string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
-
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
-    }
-
     function setFeeCurrencyDirectory() internal {
         FeeCurrencyDirectory feeCurrencyDirectory = new FeeCurrencyDirectory({ test: false });
 
@@ -792,16 +772,6 @@ contract L2Genesis is Deployer {
         vm.stopPrank();
     }
 
-    // function setCeloAddressSortedLinkedListWithMedian() internal {
-    //     AddressSortedLinkedListWithMedian kontract = new AddressSortedLinkedListWithMedian({
-    //     });
-    //     address precompile = CeloPredeploys.ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN;
-    //     string memory cname = CeloPredeploys.getName(precompile);
-    //     console.log("Deploying %s implementation at: %s", cname, address(kontract ));
-    //     vm.resetNonce(address(kontract ));
-    //     _setupProxy(precompile, address(kontract));
-    // }
-
     function setCeloFeeCurrency() internal {
         FeeCurrency kontract = new FeeCurrency({ name_: "Test", symbol_: "TST" });
         address precompile = CeloPredeploys.FEE_CURRENCY;
@@ -809,49 +779,5 @@ contract L2Genesis is Deployer {
         console.log("Deploying %s implementation at: %s", cname, address(kontract));
         vm.resetNonce(address(kontract));
         _setupProxy(precompile, address(kontract));
-    }
-
-    function deploycUSD(
-        address[] memory initialBalanceAddresses,
-        uint256[] memory initialBalanceValues,
-        uint256 celoPrice
-    )
-        public
-    {
-        StableTokenV2 kontract = new StableTokenV2({ disable: false });
-        address cusdProxyAddress = CeloPredeploys.cUSD;
-        string memory cname = CeloPredeploys.getName(cusdProxyAddress);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
-        vm.resetNonce(address(kontract));
-
-        _setupProxy(cusdProxyAddress, address(kontract));
-
-        kontract.initialize("Celo Dollar", "cUSD", initialBalanceAddresses, initialBalanceValues);
-
-        SortedOracles sortedOracles = SortedOracles(CeloPredeploys.SORTED_ORACLES);
-
-        console.log("beofre add oracle");
-
-        vm.startPrank(sortedOracles.owner());
-        sortedOracles.addOracle(cusdProxyAddress, deployer);
-        vm.stopPrank();
-        vm.startPrank(deployer);
-
-        if (celoPrice != 0) {
-            sortedOracles.report(cusdProxyAddress, celoPrice * 1e24, address(0), address(0)); // TODO use fixidity
-        }
-
-        /*
-    Arbitrary intrinsic gas number take from existing `FeeCurrencyDirectory.t.sol` tests
-        Source:
-        https://github.com/celo-org/celo-monorepo/blob/2cec07d43328cf4216c62491a35eacc4960fffb6/packages/protocol/test-sol/common/FeeCurrencyDirectory.t.sol#L27
-        */
-        uint256 mockIntrinsicGas = 21000;
-
-        FeeCurrencyDirectory feeCurrencyDirectory = FeeCurrencyDirectory(CeloPredeploys.FEE_CURRENCY_DIRECTORY);
-        vm.startPrank(feeCurrencyDirectory.owner());
-        feeCurrencyDirectory.setCurrencyConfig(cusdProxyAddress, address(sortedOracles), mockIntrinsicGas);
-        vm.stopPrank();
-        vm.startPrank(deployer);
     }
 }
