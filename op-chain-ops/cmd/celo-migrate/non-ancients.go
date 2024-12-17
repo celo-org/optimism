@@ -102,8 +102,14 @@ func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSiz
 
 func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Database) error {
 	// read header and body
-	header := rawdb.ReadHeaderRLP(newDB, hash, number)
-	body := rawdb.ReadBodyRLP(newDB, hash, number)
+	header, err := newDB.Get(headerKey(number, hash))
+	if err != nil {
+		return fmt.Errorf("failed to read header: block %d - %x: %w", number, hash, err)
+	}
+	body, err := newDB.Get(blockBodyKey(number, hash))
+	if err != nil {
+		return fmt.Errorf("failed to read body: block %d - %x: %w", number, hash, err)
+	}
 
 	// transform header and body
 	newHeader, err := transformHeader(header)
