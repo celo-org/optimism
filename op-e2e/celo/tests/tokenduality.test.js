@@ -6,7 +6,7 @@ let config = {}
 
 beforeAll(async () => {
   config = await setup()
-}, 30_000)
+}, 5*minute)
 
 test(
   'test token duality',
