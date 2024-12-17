@@ -19,7 +19,10 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 
 	// Get rsync help output
 	cmdHelp := exec.Command("rsync", "--help")
-	output, _ := cmdHelp.CombinedOutput()
+	output, err := cmdHelp.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to get rsync help output: %w", err)
+	}
 
 	// Convert output to string
 	outputStr := string(output)
@@ -109,7 +112,9 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 	// write header and body
 	batch := newDB.NewBatch()
 	rawdb.WriteBodyRLP(batch, hash, number, newBody)
-	_ = batch.Put(headerKey(number, hash), newHeader)
+	if err := batch.Put(headerKey(number, hash), newHeader); err != nil {
+		return fmt.Errorf("failed to write header: block %d - %x: %w", number, hash, err)
+	}
 	if err := batch.Write(); err != nil {
 		return fmt.Errorf("failed to write header and body: block %d - %x: %w", number, hash, err)
 	}

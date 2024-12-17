@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -38,27 +39,31 @@ func NewChainFreezer(datadir string, namespace string, readonly bool) (*rawdb.Fr
 	return rawdb.NewFreezer(datadir, namespace, readonly, freezerTableSize, chainFreezerNoSnappy)
 }
 
-func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (uint64, uint64, error) {
+func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (numAncientsNewBefore uint64, numAncientsNewAfter uint64, err error) {
 	defer timer("ancients")()
 
 	oldFreezer, err := NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open old freezer: %w", err)
 	}
-	defer oldFreezer.Close()
+	defer func() {
+		err = errors.Join(err, oldFreezer.Close())
+	}()
 
 	newFreezer, err := NewChainFreezer(filepath.Join(newDBPath, "ancient"), "", false)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to open new freezer: %w", err)
 	}
-	defer newFreezer.Close()
+	defer func() {
+		err = errors.Join(err, newFreezer.Close())
+	}()
 
 	numAncientsOld, err := oldFreezer.Ancients()
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get number of ancients in old freezer: %w", err)
 	}
 
-	numAncientsNewBefore, err := newFreezer.Ancients()
+	numAncientsNewBefore, err = newFreezer.Ancients()
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
@@ -84,9 +89,13 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 		return 0, 0, fmt.Errorf("failed to migrate ancients: %w", err)
 	}
 
-	numAncientsNewAfter, err := newFreezer.Ancients()
+	numAncientsNewAfter, err = newFreezer.Ancients()
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
+	}
+
+	if numAncientsNewAfter != numAncientsOld {
+		return 0, 0, fmt.Errorf("failed to migrate all ancients from old to new db. Expected %d, got %d", numAncientsOld, numAncientsNewAfter)
 	}
 
 	log.Info("Ancient Block Migration Ended", "process", "ancients", "ancientsInOldDB", numAncientsOld, "ancientsInNewDB", numAncientsNewAfter, "migrated", numAncientsNewAfter-numAncientsNewBefore)
@@ -214,14 +223,16 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 }
 
 // getStrayAncientBlocks returns a list of ancient block numbers / hashes that somehow were not removed from leveldb
-func getStrayAncientBlocks(dbPath string) ([]*rawdb.NumberHash, error) {
+func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error) {
 	defer timer("getStrayAncientBlocks")()
 
 	db, err := openDB(dbPath, true)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
-	defer db.Close()
+	defer func() {
+		err = errors.Join(err, db.Close())
+	}()
 
 	numAncients, err := db.Ancients()
 	if err != nil {
