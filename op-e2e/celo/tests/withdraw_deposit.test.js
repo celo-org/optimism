@@ -8,7 +8,7 @@ var config = {}
 
 beforeAll(async () => {
   config = await setup()
-}, minute)
+}, 5*minute)
 
 test(
   'execute a withdraw and a deposit in succession',
