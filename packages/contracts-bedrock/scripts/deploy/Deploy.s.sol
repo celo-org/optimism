@@ -1085,8 +1085,9 @@ contract Deploy is Deployer {
         address anchorStateRegistry = mustGetAddress("AnchorStateRegistry");
         ISuperchainConfig superchainConfig = ISuperchainConfig(mustGetAddress("SuperchainConfigProxy"));
 
+        IAnchorStateRegistry.StartingAnchorRoot[] memory roots;
         if (_deployTestingGames) {
-            IAnchorStateRegistry.StartingAnchorRoot[] memory roots = new IAnchorStateRegistry.StartingAnchorRoot[](5);
+            roots = new IAnchorStateRegistry.StartingAnchorRoot[](5);
             roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
                 gameType: GameTypes.CANNON,
                 outputRoot: OutputRoot({
@@ -1123,7 +1124,7 @@ contract Deploy is Deployer {
                 })
             });
         } else {
-            IAnchorStateRegistry.StartingAnchorRoot[] memory roots = new IAnchorStateRegistry.StartingAnchorRoot[](2);
+            roots = new IAnchorStateRegistry.StartingAnchorRoot[](2);
             roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
                 gameType: GameTypes.CANNON,
                 outputRoot: OutputRoot({
