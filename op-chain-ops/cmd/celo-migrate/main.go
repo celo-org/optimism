@@ -218,7 +218,9 @@ func main() {
 			if isSubcommand {
 				return err
 			}
-			_ = cli.ShowAppHelp(ctx)
+			if err := cli.ShowAppHelp(ctx); err != nil {
+				log.Error("failed to show cli help", "err", err)
+			}
 			return fmt.Errorf("please provide a valid command")
 		},
 	}
