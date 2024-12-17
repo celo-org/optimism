@@ -90,6 +90,8 @@ func checkTransformedHeader(header, expectedHash []byte, expectedNumber uint64) 
 	if headerDecoded.Number.Uint64() != expectedNumber {
 		return fmt.Errorf("block number mismatch after transform at block %d - %x. Expected %d, actual %d", expectedNumber, expectedHash, expectedNumber, headerDecoded.Number.Uint64())
 	}
+
+	return nil
 }
 
 // transformBlockBody migrates the block body from the old format to the new format (works with []byte input output)
