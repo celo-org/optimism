@@ -51,3 +51,12 @@ crytic-export
 
 # ignore local asdf config
 .tool-versions
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
+
+# vscode
+.vscode/
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
