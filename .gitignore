@@ -50,3 +50,6 @@ __pycache__
 
 # Ignore echidna artifacts
 crytic-export
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
