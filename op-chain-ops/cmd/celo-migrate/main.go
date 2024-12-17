@@ -84,7 +84,7 @@ var (
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
 		Usage: "Batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
-		Value: 50000, // TODO(Alec) optimize default parameters
+		Value: 50000,
 	}
 	bufferSizeFlag = &cli.Uint64Flag{
 		Name:  "buffer-size",
@@ -315,14 +315,16 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 	return strayAncientBlocks, numAncientsNewAfter, nil
 }
 
-func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients uint64) error {
+func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.NumberHash, batchSize, numAncients uint64) (err error) {
 	defer timer("non-ancient migration")()
 
 	newDB, err := openDBWithoutFreezer(newDBPath, false)
 	if err != nil {
 		return fmt.Errorf("failed to open new database: %w", err)
 	}
-	defer newDB.Close()
+	defer func() {
+		err = errors.Join(err, newDB.Close())
+	}()
 
 	// get the last block number
 	hash := rawdb.ReadHeadHeaderHash(newDB)
