@@ -57,3 +57,9 @@ crytic-export
 
 # Rust files
 **/target
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
+
+# vscode
+.vscode/
