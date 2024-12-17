@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -21,6 +22,44 @@ type RLPBlockRange struct {
 	bodies   [][]byte
 	receipts [][]byte
 	tds      [][]byte
+}
+
+// CheckRLPBlockRangeForGaps checks for gaps in the given RLP block range by comparing the lengths for each table and checking the header numbers
+func CheckRLPBlockRangeForGaps(blockRange RLPBlockRange, expectedLength uint64) (err error) {
+	if uint64(len(blockRange.hashes)) != expectedLength {
+		err = fmt.Errorf("Expected count mismatch in block range hashes: expected %d, actual %d", expectedLength, len(blockRange.hashes))
+	}
+	if uint64(len(blockRange.bodies)) != expectedLength {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range bodies: expected %d, actual %d", expectedLength, len(blockRange.bodies)))
+	}
+	if uint64(len(blockRange.headers)) != expectedLength {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range headers: expected %d, actual %d", expectedLength, len(blockRange.headers)))
+	}
+	if uint64(len(blockRange.receipts)) != expectedLength {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range receipts: expected %d, actual %d", expectedLength, len(blockRange.receipts)))
+	}
+	if uint64(len(blockRange.tds)) != expectedLength {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range total difficulties: expected %d, actual %d", expectedLength, len(blockRange.tds)))
+	}
+
+	if err != nil {
+		return err
+	}
+
+	// Cbecm that block number in header matches the expected block number
+	for i := uint64(0); i < expectedLength; i++ {
+		header := new(types.Header)
+		err := rlp.DecodeBytes(blockRange.headers[i], &header)
+		if err != nil {
+			return fmt.Errorf("can't decode header: %w", err)
+		}
+		expectedBlockNumber := blockRange.start + i
+		if header.Number.Uint64() != expectedBlockNumber {
+			return fmt.Errorf("header number mismatch: expected %d, actual %d", expectedBlockNumber, header.Number.Uint64())
+		}
+	}
+
+	return nil
 }
 
 // NewChainFreezer is a small utility method around NewFreezer that sets the
@@ -144,6 +183,10 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 				return fmt.Errorf("failed to read tds from old freezer: %w", err)
 			}
 
+			if err := CheckRLPBlockRangeForGaps(blockRange, count); err != nil {
+				return fmt.Errorf("failed to ensure ancient block range has no gaps: %w", err)
+			}
+
 			out <- blockRange
 		}
 	}
@@ -154,7 +197,7 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 	// Transform blocks from the in channel and send them to the out channel
 	defer close(out)
 
-	prevBlockNumber := startBlock - 1
+	prevBlockNumber := uint64(startBlock - 1) // Will underflow when startBlock is 0, but then overflow back to 0
 
 	for blockRange := range in {
 		select {
@@ -164,10 +207,10 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 			for i := range blockRange.hashes {
 				blockNumber := blockRange.start + uint64(i)
 
-				if blockNumber != prevBlockNumber+1 {
-					return fmt.Errorf("gap found between ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, blockNumber)
+				if blockNumber != prevBlockNumber+1 { // Overflows back to 0 when startBlock is 0
+					return fmt.Errorf("gap found between ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory", prevBlockNumber, blockNumber)
 				}
-				// Block ranges are contiguous and in order because they are read sequentially from the freezer
+				// Block ranges are in order because they are read sequentially from the freezer
 				prevBlockNumber = blockNumber
 
 				newHeader, err := transformHeader(blockRange.headers[i])
