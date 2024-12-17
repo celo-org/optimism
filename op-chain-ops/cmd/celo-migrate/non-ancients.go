@@ -9,10 +9,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 func copyDbExceptAncients(oldDbPath, newDbPath string) error {
@@ -128,18 +126,8 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 		return fmt.Errorf("failed to transform body: block %d - %x: %w", number, hash, err)
 	}
 
-	// Check that transformed header has the same hash
-	if yes, newHash := hasSameHash(newHeader, hash[:]); !yes {
-		log.Error("Hash mismatch", "block", number, "oldHash", hash, "newHash", newHash)
-		return fmt.Errorf("hash mismatch after transform at block %d - %x", number, hash)
-	}
-	// Check that transformed header has the same block number
-	newHeaderDecoded := new(types.Header)
-	if err = rlp.DecodeBytes(newHeader, &newHeaderDecoded); err != nil {
+	if err := checkTransformedHeader(newHeader, hash[:], number); err != nil {
 		return err
-	}
-	if newHeaderDecoded.Number.Uint64() != number {
-		return fmt.Errorf("block number mismatch after transform at block %d - %x. Expected %d, actual %d", number, hash, number, newHeaderDecoded.Number.Uint64())
 	}
 
 	// write header and body

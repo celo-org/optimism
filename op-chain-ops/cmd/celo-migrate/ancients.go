@@ -179,9 +179,8 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 					return fmt.Errorf("can't transform body: %w", err)
 				}
 
-				if yes, newHash := hasSameHash(newHeader, blockRange.hashes[i]); !yes {
-					log.Error("Hash mismatch", "block", blockNumber, "oldHash", common.BytesToHash(blockRange.hashes[i]), "newHash", newHash)
-					return fmt.Errorf("hash mismatch at block %d", blockNumber)
+				if err := checkTransformedHeader(newHeader, blockRange.hashes[i], blockNumber); err != nil {
+					return err
 				}
 
 				blockRange.headers[i] = newHeader
