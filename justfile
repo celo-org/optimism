@@ -42,6 +42,3 @@ check-slither:
 
 upgrade-slither:
   jq '.slither = $v' --arg v $(just print-slither) <<<$(cat versions.json) > versions.json
-
-update-celo-geth:
-  bash ./ops/celo/update-geth.sh celo10
