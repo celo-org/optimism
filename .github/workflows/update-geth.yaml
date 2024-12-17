@@ -1,0 +1,60 @@
+name: "Update celo-org/op-geth"
+on:
+  schedule:
+    - cron: "00 8 * * Mon"
+  workflow_dispatch:
+
+env:
+  OP_GETH_BASE_BRANCH: "celo10"
+
+jobs:
+  job_id:
+    # Add "id-token" with the intended permissions.
+    permissions:
+      contents: write
+      pull-requests: write
+      id-token: "write"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Login at GCP Artifact Registry
+        uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@v2.0
+        with:
+          workload-id-provider: "projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism-ro/providers/github-by-repos"
+          service-account: "celo-optimism-gh-ro@devopsre.iam.gserviceaccount.com"
+          docker-gcp-registries: us-west1-docker.pkg.dev
+          access-token-lifetime: "2m"
+      - name: "Set up Cloud SDK"
+        uses: "google-github-actions/setup-gcloud@v2"
+        with:
+          version: ">= 363.0.0"
+      - name: Run the update-geth script
+        id: geth-update-script
+        run: |
+          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh "$OP_GETH_BASE_BRANCH")
+          echo "GETH_COMMIT=${GETH_COMMIT}" >> $GITHUB_OUTPUT
+      - name: Create pull request
+        uses: peter-evans/create-pull-request@v7
+        env:
+          TITLE: "[Automatic] - Update op-geth dependencies"
+          MESSAGE: |
+            Update the go package dependency and the devnet
+            docker container reference of the `l2` service
+            to the latest commit (`${{ steps.geth-update-script.outputs.GETH_COMMIT }}`)
+            in the `${{ env.OP_GETH_BASE_BRANCH }}` ref.
+        with:
+          add-paths: |
+            go.mod
+            go.sum
+            ops-bedrock/*.Dockerfile
+          commit-message: |
+            ${{ env.TITLE }}
+
+            ${{ env.MESSAGE }}
+          signoff: false
+          branch: update/op-geth
+          base: "${{ env.OP_GETH_BASE_BRANCH }}"
+          delete-branch: true
+          title: "${{ env.TITLE }}"
+          body: "${{ env.MESSAGE }}"
+          draft: false
