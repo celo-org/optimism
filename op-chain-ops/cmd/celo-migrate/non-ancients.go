@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -8,8 +9,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 func copyDbExceptAncients(oldDbPath, newDbPath string) error {
@@ -78,20 +81,24 @@ func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSiz
 		}
 	}
 
-	prevBlockNumber := uint64(numAncients - 1)
+	prevBlockNumber := uint64(numAncients - 1) // Will underflow if numAncients is 0
 
 	for i := numAncients; i <= lastBlock; i += batchSize {
 		numbersHash := rawdb.ReadAllHashesInRange(newDB, i, i+batchSize-1)
 
 		log.Info("Processing Block Range", "process", "non-ancients", "from", i, "to(inclusve)", i+batchSize-1, "count", len(numbersHash))
 		for _, numberHash := range numbersHash {
-			if numberHash.Number != prevBlockNumber+1 {
-				return 0, fmt.Errorf("gap found between non-ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory.", prevBlockNumber, numberHash.Number)
+			if numberHash.Number != prevBlockNumber+1 { // prevBlocNumber will overflow back to 0 here if numAncients is 0
+				return 0, fmt.Errorf("gap found between non-ancient blocks numbered %d and %d. Please delete the target directory and repeat the migration with an uncorrupted source directory", prevBlockNumber, numberHash.Number)
 			}
 			prevBlockNumber = numberHash.Number
 
 			if err := migrateNonAncientBlock(numberHash.Number, numberHash.Hash, newDB); err != nil {
-				return 0, err
+				return 0, fmt.Errorf("failed to migrate non-ancient block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
+			}
+
+			if err := checkOtherDataForNonAncientBlock(numberHash.Number, numberHash.Hash, newDB); err != nil {
+				return 0, fmt.Errorf("failed to ensure all non-transformed data is present for non-ancient block %d - %x: %w. Please delete the target directory and repeat the migration with an uncorrupted source directory", numberHash.Number, numberHash.Hash, err)
 			}
 		}
 	}
@@ -143,6 +150,37 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 	}
 	if err := batch.Write(); err != nil {
 		return fmt.Errorf("failed to write header and body: block %d - %x: %w", number, hash, err)
+	}
+
+	return nil
+}
+
+// checkOtherDataForNonAncientBlock checks that all the data that is not transformed is succesfully copied for non-ancient blocks.
+// I.e. receipts, total difficulty, canonical hash, and block number.
+// If an error is returned, it is likely the source directory is corrupted and the migration should be restarted with a clean source directory.
+func checkOtherDataForNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Database) error {
+	// Ensure receipts and total difficulty are present in non-ancient db
+	if has, err := newDB.Has(blockReceiptsKey(number, hash)); !has || err != nil {
+		return fmt.Errorf("failed to find receipts in newDB leveldb: block %d - %x: %w", number, hash, err)
+	}
+	if has, err := newDB.Has(headerTDKey(number, hash)); !has || err != nil {
+		return fmt.Errorf("failed to find total difficulty in newDB leveldb: block %d - %x: %w", number, hash, err)
+	}
+	// Ensure canonical hash and number are present in non-ancient db and that they match expected values
+	hashFromDB, err := newDB.Get(headerHashKey(number))
+	if err != nil {
+		return fmt.Errorf("failed to find canonical hash in newDB leveldb: block %d - %x: %w", number, hash, err)
+	}
+	if !bytes.Equal(hashFromDB, hash[:]) {
+		return fmt.Errorf("canonical hash mismatch in newDB leveldb: block %d - %x: %w", number, hash, err)
+	}
+	numberFromDB, err := newDB.Get(headerNumberKey(hash))
+	if err != nil {
+		return fmt.Errorf("failed to find number for hash in newDB leveldb: block %d - %x: %w", number, hash, err)
+	}
+	if !bytes.Equal(numberFromDB, encodeBlockNumber(number)) {
+		log.Error("Number for hash mismatch", "block", number, "numberFromDB", numberFromDB, "hash", hash)
+		return fmt.Errorf("number for hash mismatch in newDB leveldb: block %d - %x: %w", number, hash, err)
 	}
 
 	return nil
