@@ -121,9 +121,18 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 		return fmt.Errorf("failed to transform body: block %d - %x: %w", number, hash, err)
 	}
 
+	// Check that transformed header has the same hash
 	if yes, newHash := hasSameHash(newHeader, hash[:]); !yes {
 		log.Error("Hash mismatch", "block", number, "oldHash", hash, "newHash", newHash)
-		return fmt.Errorf("hash mismatch at block %d - %x", number, hash)
+		return fmt.Errorf("hash mismatch after transform at block %d - %x", number, hash)
+	}
+	// Check that transformed header has the same block number
+	newHeaderDecoded := new(types.Header)
+	if err = rlp.DecodeBytes(newHeader, &newHeaderDecoded); err != nil {
+		return err
+	}
+	if newHeaderDecoded.Number.Uint64() != number {
+		return fmt.Errorf("block number mismatch after transform at block %d - %x. Expected %d, actual %d", number, hash, number, newHeaderDecoded.Number.Uint64())
 	}
 
 	// write header and body
