@@ -46,7 +46,7 @@ func CheckRLPBlockRangeForGaps(blockRange RLPBlockRange, expectedLength uint64) 
 		return err
 	}
 
-	// Cbecm that block number in header matches the expected block number
+	// Check that block number in header matches the expected block number
 	for i := uint64(0); i < expectedLength; i++ {
 		header := new(types.Header)
 		err := rlp.DecodeBytes(blockRange.headers[i], &header)

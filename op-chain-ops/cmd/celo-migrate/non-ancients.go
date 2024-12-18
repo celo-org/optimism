@@ -143,7 +143,7 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 	return nil
 }
 
-// checkOtherDataForNonAncientBlock checks that all the data that is not transformed is succesfully copied for non-ancient blocks.
+// checkOtherDataForNonAncientBlock checks that all the data that is not transformed is successfully copied for non-ancient blocks.
 // I.e. receipts, total difficulty, canonical hash, and block number.
 // If an error is returned, it is likely the source directory is corrupted and the migration should be restarted with a clean source directory.
 func checkOtherDataForNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Database) error {
