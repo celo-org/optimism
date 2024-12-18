@@ -149,7 +149,7 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			count := min(batchSize, endBlock-i+1)
+			count := min(batchSize, endBlock-i)
 			start := i
 
 			blockRange := RLPBlockRange{
@@ -267,7 +267,7 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 				return fmt.Errorf("failed to write block range: %w", err)
 			}
 			blockRangeEnd := blockRange.start + uint64(len(blockRange.hashes)) - 1
-			log.Info("Wrote ancient blocks", "start", blockRange.start, "end", blockRangeEnd, "count", len(blockRange.hashes), "remaining", totalAncientBlocks-blockRangeEnd)
+			log.Info("Wrote ancient blocks", "start", blockRange.start, "end", blockRangeEnd, "count", len(blockRange.hashes), "remaining", totalAncientBlocks-(blockRangeEnd+1))
 		}
 	}
 	return nil
