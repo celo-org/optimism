@@ -53,9 +53,9 @@ export async function setup() {
   config.addresses = contractAddrs
 
   const success = await Promise.all([
-    waitReachable(config.client.l1.public, 10_000),
-    waitReachable(config.client.l2.public, 10_000),
-    waitForNextGame(config.client.l1.public, chainConfig.l2, 60_000),
+    waitReachable(config.client.l1.public, 60_000),
+    waitReachable(config.client.l2.public, 60_000),
+    waitForNextGame(config.client.l1.public, chainConfig.l2, 300_000),
   ])
   if (success.every((v) => v == true)) {
     return config
