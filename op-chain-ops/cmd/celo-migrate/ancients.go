@@ -24,8 +24,10 @@ type RLPBlockRange struct {
 	tds      [][]byte
 }
 
-// CheckRLPBlockRangeForGaps checks for gaps in the given RLP block range by comparing the lengths for each table and checking the header numbers
-func CheckRLPBlockRangeForGaps(blockRange RLPBlockRange, expectedLength uint64) (err error) {
+// CheckRLPBlockRangeForGaps checks for gaps in the given RLPBlockRange by comparing the lengths for each table and checking the header numbers.
+// It also checks that the parent hash of each block matches the hash of the previous block, and can check for continuity between RLPBlockRanges
+// by taking in the header of the preceeding block, and returning the last decoded header of the given RLPBlockRange so it can be passed into the next call.
+func CheckRLPBlockRangeForGaps(blockRange RLPBlockRange, expectedLength uint64, prevHeader *types.Header) (lastHeader *types.Header, err error) {
 	if uint64(len(blockRange.hashes)) != expectedLength {
 		err = fmt.Errorf("Expected count mismatch in block range hashes: expected %d, actual %d", expectedLength, len(blockRange.hashes))
 	}
@@ -43,23 +45,36 @@ func CheckRLPBlockRangeForGaps(blockRange RLPBlockRange, expectedLength uint64) 
 	}
 
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	// Check that block number in header matches the expected block number
 	for i := uint64(0); i < expectedLength; i++ {
 		header := new(types.Header)
-		err := rlp.DecodeBytes(blockRange.headers[i], &header)
+		err := rlp.DecodeBytes(blockRange.headers[i], header)
 		if err != nil {
-			return fmt.Errorf("can't decode header: %w", err)
+			return nil, fmt.Errorf("can't decode header: %w", err)
 		}
+		// Check that block number in header matches the expected block number
 		expectedBlockNumber := blockRange.start + i
 		if header.Number.Uint64() != expectedBlockNumber {
-			return fmt.Errorf("header number mismatch: expected %d, actual %d", expectedBlockNumber, header.Number.Uint64())
+			return nil, fmt.Errorf("header number mismatch: expected %d, actual %d", expectedBlockNumber, header.Number.Uint64())
 		}
+		if prevHeader != nil {
+			// Check that the block numbers are contiguous
+			if prevHeader.Number.Uint64() != header.Number.Uint64()-1 {
+				return nil, fmt.Errorf("gap found between blocks %d and %d", prevHeader.Number.Uint64(), header.Number.Uint64())
+			}
+			// Check that the parent hash of the current block matches the hash of the previous block
+			prevHeaderHash := prevHeader.Hash()
+			if prevHeaderHash != header.ParentHash {
+				log.Error("Parent hash mismatch", "blockNumber", header.Number.Uint64(), "expectedParentHash", prevHeaderHash, "actualParentHash", header.ParentHash, "currentBlockHash", header.Hash())
+				// return nil, fmt.Errorf("parent hash mismatch between blocks %d and %d", prevHeader.Number.Uint64(), header.Number.Uint64())
+			}
+		}
+		prevHeader = header
 	}
 
-	return nil
+	return prevHeader, nil
 }
 
 // NewChainFreezer is a small utility method around NewFreezer that sets the
@@ -144,6 +159,19 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, endBlock, batchSize uint64, out chan<- RLPBlockRange) error {
 	defer close(out)
 
+	var prevHeader *types.Header // used to check for continuity between RLPBlockRanges
+	if startBlock > 0 {
+		prevHeaderBytes, err := freezer.Ancient(rawdb.ChainFreezerHeaderTable, startBlock-1)
+		if err != nil {
+			return fmt.Errorf("failed to read previous header: %w", err)
+		}
+		prevHeader = new(types.Header)
+		err = rlp.DecodeBytes(prevHeaderBytes, prevHeader)
+		if err != nil {
+			return fmt.Errorf("can't decode previous header: %w", err)
+		}
+	}
+
 	for i := startBlock; i < endBlock; i += batchSize {
 		select {
 		case <-ctx.Done():
@@ -183,7 +211,8 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 				return fmt.Errorf("failed to read tds from old freezer: %w", err)
 			}
 
-			if err := CheckRLPBlockRangeForGaps(blockRange, count); err != nil {
+			prevHeader, err = CheckRLPBlockRangeForGaps(blockRange, count, prevHeader)
+			if err != nil {
 				return fmt.Errorf("failed to ensure ancient block range has no gaps: %w", err)
 			}
 
