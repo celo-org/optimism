@@ -9,7 +9,7 @@ CONTRACTS_DIR=$SCRIPT_DIR/../../packages/contracts-bedrock
 
 # Deploy WETH
 L1_WETH=$(
-  ETH_RPC_URL=$ETH_RPC_URL_L1 forge create --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/universal/WETH98.sol:WETH98 --json | jq .deployedTo -r
+  ETH_RPC_URL=$ETH_RPC_URL_L1 forge create --broadcast --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/universal/WETH98.sol:WETH98 --json | jq .deployedTo -r
 )
 
 # create ERC20 token on L2
@@ -27,7 +27,7 @@ ETH_RPC_URL=$ETH_RPC_URL_L1 cast send --private-key $ACC_PRIVKEY $L1_WETH 'appro
 ETH_RPC_URL=$ETH_RPC_URL_L1 cast send --private-key $ACC_PRIVKEY $L1_BRIDGE_ADDR 'bridgeERC20(address _localToken, address _remoteToken, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData)' $L1_WETH $L2_TOKEN 0.3ether 50000 0x --gas-limit 6000000
 
 # Setup up oracle and FeeCurrencyDirectory
-ORACLE=$(forge create --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/celo/testing/MockSortedOracles.sol:MockSortedOracles --json | jq .deployedTo -r)
+ORACLE=$(forge create --broadcast --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/celo/testing/MockSortedOracles.sol:MockSortedOracles --json | jq .deployedTo -r)
 cast send --private-key $ACC_PRIVKEY $ORACLE 'setMedianRate(address, uint256)' $L2_TOKEN 100000000000000000
 cast send --private-key $ACC_PRIVKEY $FEE_CURRENCY_DIRECTORY_ADDR 'setCurrencyConfig(address, address, uint256)' $L2_TOKEN $ORACLE 60000
 
