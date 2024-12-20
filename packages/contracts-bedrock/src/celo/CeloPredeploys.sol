@@ -12,7 +12,7 @@ library CeloPredeploys {
     address internal constant SORTED_ORACLES = 0xefB84935239dAcdecF7c5bA76d8dE40b077B7b33;
     address internal constant ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN = 0xED477A99035d0c1e11369F1D7A4e587893cc002B;
     address internal constant FEE_CURRENCY = 0x4200000000000000000000000000000000001022;
-    address internal constant FEE_CURRENCY_DIRECTORY = 0x4200000000000000000000000000000000001024;
+    address internal constant FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
     address internal constant cUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
 
     /// @notice Returns the name of the predeploy at the given address.
