@@ -25,67 +25,56 @@ type RLPBlockRange struct {
 	tds      [][]byte
 }
 
-// CheckRLPBlockRangeForGaps checks for gaps in the given RLPBlockRange by comparing the lengths for each table and checking the header numbers.
-// It also checks that the parent hash of each block matches the hash of the previous block, and can check for continuity between RLPBlockRanges
-// by taking in the header of the preceeding block, and returning the last decoded header of the given RLPBlockRange so it can be passed into the next call.
-func CheckRLPBlockRangeForGaps(blockRange RLPBlockRange, expectedLength uint64, prevHeader *types.Header, prevHeaderCanonicalHash *common.Hash) (lastHeader *types.Header, lastHeaderCanonicalHash *common.Hash, err error) {
-	// If there is no previous header or canonical hash provided and the range doesn't start at 0, throw an error.
-	if blockRange.start != 0 && (prevHeader == nil || prevHeaderCanonicalHash == nil) {
-		return nil, nil, fmt.Errorf("prevHeader and prevHeaderCanonicalHash must be provided if blockRange.start is not 0")
-	}
+type RLPBlockElement struct {
+	decodedHeader *types.Header
+	hash          []byte
+	header        []byte
+	body          []byte
+	receipts      []byte
+	td            []byte
+}
 
-	// Make sure the number of elements retrieved from each table matches the expected length
-	if uint64(len(blockRange.hashes)) != expectedLength {
-		err = fmt.Errorf("Expected count mismatch in block range hashes: expected %d, actual %d", expectedLength, len(blockRange.hashes))
-	}
-	if uint64(len(blockRange.bodies)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range bodies: expected %d, actual %d", expectedLength, len(blockRange.bodies)))
-	}
-	if uint64(len(blockRange.headers)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range headers: expected %d, actual %d", expectedLength, len(blockRange.headers)))
-	}
-	if uint64(len(blockRange.receipts)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range receipts: expected %d, actual %d", expectedLength, len(blockRange.receipts)))
-	}
-	if uint64(len(blockRange.tds)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range total difficulties: expected %d, actual %d", expectedLength, len(blockRange.tds)))
-	}
+func (r *RLPBlockRange) Element(i uint64) (*RLPBlockElement, error) {
+	header := types.Header{}
+	err := rlp.DecodeBytes(r.headers[i], &header)
 	if err != nil {
-		return nil, nil, err
+		return nil, fmt.Errorf("can't decode header: %w", err)
 	}
+	return &RLPBlockElement{
+		decodedHeader: &header,
+		hash:          r.hashes[i],
+		header:        r.headers[i],
+		body:          r.bodies[i],
+		receipts:      r.receipts[i],
+		td:            r.tds[i],
+	}, nil
+}
 
-	for i := uint64(0); i < expectedLength; i++ {
-		header := new(types.Header)
-		err := rlp.DecodeBytes(blockRange.headers[i], header)
-		if err != nil {
-			return nil, nil, fmt.Errorf("can't decode header: %w", err)
-		}
-		// Check that block number in header matches the expected block number
-		expectedBlockNumber := blockRange.start + i
-		if header.Number.Uint64() != expectedBlockNumber {
-			return nil, nil, fmt.Errorf("header number mismatch: expected %d, actual %d", expectedBlockNumber, header.Number.Uint64())
-		}
-		if prevHeader != nil {
-			// Check that the block numbers are contiguous
-			if prevHeader.Number.Uint64() != header.Number.Uint64()-1 {
-				return nil, nil, fmt.Errorf("gap found between blocks %d and %d", prevHeader.Number.Uint64(), header.Number.Uint64())
-			}
-		}
-		if prevHeaderCanonicalHash != nil {
-			// Check that the parent hash of the current block matches the hash of the previous block
-			// Note: We can't compare 'prevHeader.Hash() != header.ParentHash' here because the canonical hash is produced over a filtered version of the header (without the Istanbul extra data).
-			// The custom celo hasing logic that supported this is not ported over the celo's op-geth branch, and we have not yet transformed the block headers to remove the extra data.
-			// This means that the result of `prevHeader.Hash()` will not match the canonical hash stored in the freezer and in `header.ParentHash`.
-			if *prevHeaderCanonicalHash != header.ParentHash {
-				return nil, nil, fmt.Errorf("parent hash mismatch between blocks %d and %d. Expected %s, got %s", expectedBlockNumber-1, expectedBlockNumber, *prevHeaderCanonicalHash, header.ParentHash)
-			}
-		}
-		prevHeader = header
-		hash := common.BytesToHash(blockRange.hashes[i])
-		prevHeaderCanonicalHash = &hash
+func (r *RLPBlockRange) DropFirst() {
+	r.start = r.start + 1
+	r.hashes = r.hashes[1:]
+	r.headers = r.headers[1:]
+	r.bodies = r.bodies[1:]
+	r.receipts = r.receipts[1:]
+	r.tds = r.tds[1:]
+}
+
+func (e *RLPBlockElement) Header() *types.Header {
+
+	return e.decodedHeader
+}
+
+func (e *RLPBlockElement) Follows(prev *RLPBlockElement) error {
+	if e.Header().Number.Uint64() != prev.Header().Number.Uint64()+1 {
+		return fmt.Errorf("header number mismatch: expected %d, actual %d", prev.Header().Number.Uint64()+1, e.Header().Number.Uint64())
 	}
-
-	return prevHeader, prevHeaderCanonicalHash, nil
+	// We compare the parent hash with the stored hash of the previous block because
+	// at this point the header object will not calculate the correct hash since it
+	// first needs to be transformed.
+	if e.Header().ParentHash != common.Hash(prev.hash) {
+		return fmt.Errorf("parent hash mismatch between blocks %d and %d", e.Header().Number.Uint64(), prev.Header().Number.Uint64())
+	}
+	return nil
 }
 
 // NewChainFreezer is a small utility method around NewFreezer that sets the
@@ -169,28 +158,6 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 
 func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, endBlock, batchSize uint64, out chan<- RLPBlockRange) error {
 	defer close(out)
-
-	// used to check for continuity between RLPBlockRanges
-	var prevHeader *types.Header
-	var prevHeaderCanonicalHash *common.Hash
-	if startBlock > 0 {
-		prevHeaderBytes, err := freezer.Ancient(rawdb.ChainFreezerHeaderTable, startBlock-1)
-		if err != nil {
-			return fmt.Errorf("failed to read previous header: %w", err)
-		}
-		prevHeader = new(types.Header)
-		err = rlp.DecodeBytes(prevHeaderBytes, prevHeader)
-		if err != nil {
-			return fmt.Errorf("can't decode previous header: %w", err)
-		}
-		prevHeaderCanonicalHashBytes, err := freezer.Ancient(rawdb.ChainFreezerHashTable, startBlock-1)
-		if err != nil {
-			return fmt.Errorf("failed to read previous header: %w", err)
-		}
-		hash := common.BytesToHash(prevHeaderCanonicalHashBytes)
-		prevHeaderCanonicalHash = &hash
-	}
-
 	for i := startBlock; i < endBlock; i += batchSize {
 		select {
 		case <-ctx.Done():
@@ -198,47 +165,91 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 		default:
 			count := min(batchSize, endBlock-i)
 			start := i
-
-			blockRange := RLPBlockRange{
-				start:    start,
-				hashes:   make([][]byte, count),
-				headers:  make([][]byte, count),
-				bodies:   make([][]byte, count),
-				receipts: make([][]byte, count),
-				tds:      make([][]byte, count),
-			}
-			var err error
-
-			blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read hashes from old freezer: %w", err)
-			}
-			blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read headers from old freezer: %w", err)
-			}
-			blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read bodies from old freezer: %w", err)
-			}
-			blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read receipts from old freezer: %w", err)
-			}
-			blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read tds from old freezer: %w", err)
+			// If we are not at genesis include the last block of
+			// the previous range so we can check for continuity between ranges.
+			if start > 0 {
+				start = start - 1
+				count = count + 1
 			}
 
-			prevHeader, prevHeaderCanonicalHash, err = CheckRLPBlockRangeForGaps(blockRange, count, prevHeader, prevHeaderCanonicalHash)
+			blockRange, err := loadRange(freezer, start, count)
 			if err != nil {
-				return fmt.Errorf("failed to ensure ancient block range has no gaps: %w", err)
+				return fmt.Errorf("failed to load ancient block range: %w", err)
 			}
 
-			out <- blockRange
+			// Check continuity between blocks
+			var prevElement *RLPBlockElement
+			for i := uint64(0); i < count; i++ {
+				currElement, err := blockRange.Element(i)
+				if err != nil {
+					return err
+				}
+				if prevElement != nil {
+					if err := currElement.Follows(prevElement); err != nil {
+						return err
+					}
+				}
+				prevElement = currElement
+			}
+
+			if start > 0 {
+				blockRange.DropFirst()
+			}
+			out <- *blockRange
 		}
 	}
 	return nil
+}
+
+func loadRange(freezer *rawdb.Freezer, start, count uint64) (*RLPBlockRange, error) {
+	blockRange := &RLPBlockRange{
+		start:    start,
+		hashes:   make([][]byte, count),
+		headers:  make([][]byte, count),
+		bodies:   make([][]byte, count),
+		receipts: make([][]byte, count),
+		tds:      make([][]byte, count),
+	}
+
+	var err error
+	blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read hashes from old freezer: %w", err)
+	}
+	blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read headers from old freezer: %w", err)
+	}
+	blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read bodies from old freezer: %w", err)
+	}
+	blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read receipts from old freezer: %w", err)
+	}
+	blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read tds from old freezer: %w", err)
+	}
+
+	// Make sure the number of elements retrieved from each table matches the expected length
+	if uint64(len(blockRange.hashes)) != count {
+		err = fmt.Errorf("Expected count mismatch in block range hashes: expected %d, actual %d", count, len(blockRange.hashes))
+	}
+	if uint64(len(blockRange.bodies)) != count {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range bodies: expected %d, actual %d", count, len(blockRange.bodies)))
+	}
+	if uint64(len(blockRange.headers)) != count {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range headers: expected %d, actual %d", count, len(blockRange.headers)))
+	}
+	if uint64(len(blockRange.receipts)) != count {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range receipts: expected %d, actual %d", count, len(blockRange.receipts)))
+	}
+	if uint64(len(blockRange.tds)) != count {
+		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range total difficulties: expected %d, actual %d", count, len(blockRange.tds)))
+	}
+	return blockRange, err
 }
 
 func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RLPBlockRange, startBlock uint64) error {
