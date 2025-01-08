@@ -1,4 +1,5 @@
 #!/bin/bash
+set -eo pipefail
 
 branch="$1"
 if [ -z "$branch" ]; then
@@ -18,11 +19,11 @@ sha256digest=$(gcloud --format=json artifacts files list \
   --location=us-west1 \
   --package=op-geth \
   --limit=1 \
-  --tag="$commit" | jq ".[0].name" | grep -oP "sha256:\K[0-9a-f]{64}")
+  --tag="$commit" | jq ".[0].name" | grep -oE 'sha256:([0-9a-f]{64})' | sed 's/^sha256://')
 if [ -z "$sha256digest" ]; then exit 1; fi
 
-sed -i "s|\(.*op-geth@sha256:\)\(.*\)|\1$sha256digest|" ./ops-bedrock/l2-op-geth.Dockerfile
-sed -i "s|\(replace github.com/ethereum/go-ethereum => \)github.com/celo-org/op-geth v.*|\1$go_version|" go.mod
+# perl -pi -e "s|(.*op-geth@sha256:)(.*)|\1$sha256digest|" ./ops-bedrock/l2-op-geth.Dockerfile
+perl -pi -e "s|^(replace github.com/ethereum/go-ethereum .* )github.com/.*/op-geth v.*|\1$go_version|" go.mod
 
 go_mod_error=$(go mod tidy >/dev/null)
 if [ -n "$go_mod_error" ]; then
