@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/triedb"
 
 	"github.com/holiman/uint256"
 )
@@ -124,10 +125,10 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 	log.Info("Read chain config from database", "config", cfg)
 
 	// Set up the backing store.
-	underlyingDB := state.NewDatabase(ldb)
+	underlyingDB := state.NewDatabase(triedb.NewDatabase(ldb, nil), nil)
 
 	// Open up the state database.
-	db, err := state.New(header.Root, underlyingDB, nil)
+	db, err := state.New(header.Root, underlyingDB)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open StateDB: %w", err)
 	}

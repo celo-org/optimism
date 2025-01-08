@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/holiman/uint256"
 	"github.com/stretchr/testify/assert"
 )
@@ -99,8 +100,8 @@ func TestApplyAllocsToState(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db := rawdb.NewMemoryDatabase()
-			tdb := state.NewDatabase(db)
-			sdb, _ := state.New(types.EmptyRootHash, tdb, nil)
+			tdb := state.NewDatabase(triedb.NewDatabase(db, nil), nil)
+			sdb, _ := state.New(types.EmptyRootHash, tdb)
 
 			if tt.existingAccount != nil {
 				sdb.CreateAccount(address)
