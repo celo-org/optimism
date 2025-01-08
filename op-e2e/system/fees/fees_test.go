@@ -137,7 +137,8 @@ func testFees(t *testing.T, cfg e2esys.SystemConfig) {
 
 	baseFeeRecipient := predeploys.BaseFeeVaultAddr
 	if sys.RollupConfig.IsCel2(sys.L2GenesisCfg.Timestamp) {
-		baseFeeRecipient = addresses.FeeHandlerAddress
+		// We use the mainnet addresses in tests
+		baseFeeRecipient = addresses.GetAddresses(big.NewInt(params.CeloMainnetChainID)).FeeHandler
 	}
 	// BaseFee Recipient
 	baseFeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), baseFeeRecipient, big.NewInt(rpc.EarliestBlockNumber.Int64()))
