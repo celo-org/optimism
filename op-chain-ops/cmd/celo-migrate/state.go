@@ -90,11 +90,6 @@ var (
 		AlfajoresNetworkID: common.HexToAddress("0x07bf0b2461A0cb608D5CF9a82ba97dAbA850F79F"),
 		BaklavaNetworkID:   common.HexToAddress("0x022c5d5837E177B6d145761feb4C5574e5b48F5e"),
 	}
-	celoTokenAddressMap = map[uint64]common.Address{
-		AlfajoresNetworkID: addresses.AlfajoresAddresses.CeloToken,
-		BaklavaNetworkID:   addresses.BaklavaAddresses.CeloToken,
-		MainnetNetworkID:   addresses.MainnetAddresses.CeloToken,
-	}
 )
 
 func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.GenesisAlloc, dbPath, genesisOutPath string, migrationBlockTime uint64, l1StartBlock *types.Block) (*types.Header, error) {
@@ -380,14 +375,14 @@ func setupUnreleasedTreasury(db *state.StateDB, config *params.ChainConfig) erro
 		return errors.New("CeloUnreleasedTreasury account does not exist, skipping migration step")
 	}
 
-	tokenAddress, exists := celoTokenAddressMap[config.ChainID.Uint64()]
-	if !exists {
+	celoAddresses := addresses.GetAddresses(config.ChainID)
+	if celoAddresses == nil {
 		return errors.New("celo token address not configured for this chain, skipping migration step")
 	}
-	log.Info("Read contract addresses", "tokenAddress", tokenAddress, "celoUnreleasedTreasuryAddress", celoUnreleasedTreasuryAddress)
+	log.Info("Read contract addresses", "tokenAddress", celoAddresses.CeloToken, "celoUnreleasedTreasuryAddress", celoUnreleasedTreasuryAddress)
 
 	// totalSupply is stored in the third slot
-	totalSupply := db.GetState(tokenAddress, common.HexToHash("0x02")).Big()
+	totalSupply := db.GetState(celoAddresses.CeloToken, common.HexToHash("0x02")).Big()
 
 	// Get total supply of celo token
 	billion := new(uint256.Int).Exp(Big10, Big9)
