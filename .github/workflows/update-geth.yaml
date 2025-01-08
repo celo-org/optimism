@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  OP_GETH_BASE_BRANCH: "celo10"
+  OP_GETH_BASE_BRANCH: "celo11"
 
 jobs:
   job_id:
