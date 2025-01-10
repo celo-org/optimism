@@ -274,3 +274,11 @@ func (m *mockBlockType) HasOptimismWithdrawalsRoot(blkTime uint64) bool {
 func (m *mockBlockType) IsIsthmus(blkTime uint64) bool {
 	return false
 }
+
+func (m *mockBlockType) IsMigratedChain() bool {
+	return false
+}
+
+func (m *mockBlockType) IsGingerbread(blockNum *big.Int) bool {
+	return false
+}
