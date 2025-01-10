@@ -186,10 +186,11 @@ func (s *L1Miner) IncludeTx(t Testing, tx *types.Transaction) *types.Receipt {
 		return nil
 	}
 	s.l1BuildingState.SetTxContext(tx.Hash(), len(s.L1Transactions))
+	feeCurrencyContext := core.GetFeeCurrencyContext(s.l1BuildingHeader, s.l1Cfg.Config, s.l1BuildingState)
 	blockCtx := core.NewEVMBlockContext(s.l1BuildingHeader, s.l1Chain, nil, s.l1Cfg.Config, s.l1BuildingState)
 	evm := vm.NewEVM(blockCtx, s.l1BuildingState, s.l1Cfg.Config, *s.l1Chain.GetVMConfig())
 	receipt, err := core.ApplyTransaction(
-		evm, s.L1GasPool, s.l1BuildingState, s.l1BuildingHeader, tx.WithoutBlobTxSidecar())
+		evm, s.L1GasPool, s.l1BuildingState, s.l1BuildingHeader, tx.WithoutBlobTxSidecar(), feeCurrencyContext)
 	if err != nil {
 		s.l1TxFailed = append(s.l1TxFailed, tx)
 		t.Fatalf("failed to apply transaction to L1 block (tx %d): %v", len(s.L1Transactions), err)
