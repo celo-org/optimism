@@ -214,7 +214,7 @@ func (f *FakeBeacon) Start(addr string) error {
 	return nil
 }
 
-func (f *FakeBeacon) StoreBlobsBundle(slot uint64, bundle *engine.BlobsBundle) error {
+func (f *FakeBeacon) StoreBlobsBundle(slot uint64, bundle *engine.BlobsBundleV1) error {
 	f.blobsLock.Lock()
 	defer f.blobsLock.Unlock()
 
@@ -236,7 +236,7 @@ func (f *FakeBeacon) StoreBlobsBundle(slot uint64, bundle *engine.BlobsBundle) e
 	return nil
 }
 
-func (f *FakeBeacon) LoadBlobsBundle(slot uint64) (*engine.BlobsBundle, error) {
+func (f *FakeBeacon) LoadBlobsBundle(slot uint64) (*engine.BlobsBundleV1, error) {
 	f.blobsLock.Lock()
 	defer f.blobsLock.Unlock()
 
@@ -252,7 +252,7 @@ func (f *FakeBeacon) LoadBlobsBundle(slot uint64) (*engine.BlobsBundle, error) {
 	}
 
 	// Convert blobs to the bundle
-	out := engine.BlobsBundle{
+	out := engine.BlobsBundleV1{
 		Commitments: make([]hexutil.Bytes, len(blobs)),
 		Proofs:      make([]hexutil.Bytes, len(blobs)),
 		Blobs:       make([]hexutil.Bytes, len(blobs)),

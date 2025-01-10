@@ -102,12 +102,13 @@ func NewEVMEnv(t testing.TB, contracts *ContractMetadata) (*vm.EVM, *state.State
 	if err != nil {
 		t.Fatalf("failed to create memory state db: %v", err)
 	}
+
 	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
 	vmCfg := vm.Config{}
 
 	env := vm.NewEVM(blockContext, state, chainCfg, vmCfg)
 	// pre-deploy the contracts
-	env.StateDB.SetCode(contracts.Addresses.Oracle, contracts.Artifacts.Oracle.DeployedBytecode.Object, tracing.CodeChangeUnspecified)
+	env.StateDB.SetCode(contracts.Addresses.Oracle, contracts.Artifacts.Oracle.DeployedBytecode.Object)
 
 	var ctorArgs []byte
 	if contracts.Version == 0 { // Old MIPS.sol doesn't specify the state version in the constructor

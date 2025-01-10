@@ -269,7 +269,7 @@ func simulate(ctx context.Context, logger log.Logger, conf *params.ChainConfig,
 		state.CreateAccount(addr)
 		state.SetBalance(addr, uint256.MustFromBig((*big.Int)(&acc.Balance)), tracing.BalanceChangeUnspecified)
 		state.SetNonce(addr, acc.Nonce, tracing.NonceChangeUnspecified)
-		state.SetCode(addr, acc.Code, tracing.CodeChangeUnspecified)
+		state.SetCode(addr, acc.Code)
 		state.SetStorage(addr, acc.Storage)
 	}
 
@@ -302,10 +302,11 @@ func simulate(ctx context.Context, logger log.Logger, conf *params.ChainConfig,
 
 	// run the transaction
 	start := time.Now()
+	feeCurrencyContext := core.GetFeeCurrencyContext(header, conf, state)
 	// nil block-author, since it defaults to header.coinbase
 	blockCtx := core.NewEVMBlockContext(header, cCtx, nil, conf, state)
 	evm := vm.NewEVM(blockCtx, state, conf, vmConfig)
-	receipt, err := core.ApplyTransaction(evm, &gp, state, header, tx, &usedGas)
+	receipt, err := core.ApplyTransaction(evm, &gp, state, header, tx, &usedGas, feeCurrencyContext)
 	if err != nil {
 		return fmt.Errorf("failed to apply tx: %w", err)
 	}
