@@ -96,7 +96,7 @@ COPY ./versions.json ./versions.json
 
 RUN /bin/sh -c set -eux; \
   apt-get update; \
-  apt-get install -y --no-install-recommends bash curl openssh-client git build-essential ca-certificates jq gnupg binutils-mips-linux-gnu python3 python3-pip python3-setuptools; \
+  apt-get install -y --no-install-recommends bash curl openssh-client git build-essential ca-certificates jq gnupg binutils-mips-linux-gnu python3 python3-pip python3-setuptools parallel; \
   mkdir -p /etc/apt/keyrings; \
   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg; \
   chmod a+r /etc/apt/keyrings/docker.gpg; \
@@ -141,7 +141,7 @@ ENTRYPOINT ["/bin/bash", "-c"]
 FROM base-builder as rust-builder
 
 # Install clang & lld & parallel
-RUN apt-get update && apt-get install -y clang lld parallel
+RUN apt-get update && apt-get install -y clang lld
 
 # Copy the rust installation, alongside the installed toolchains
 COPY --from=rust-build /root/.cargo /root/.cargo
