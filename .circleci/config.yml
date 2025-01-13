@@ -3,7 +3,7 @@ version: 2.1
 parameters:
   ci_builder_image:
     type: string
-    default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder:v0.54.0
+    default: us-west1-docker.pkg.dev/blockchaintestsglobaltestnet/dev-images/ci-builder:4de51899db6a766a9e07b23ce994859a8fadb519
   ci_builder_rust_image:
     type: string
     default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-builder-rust:latest
