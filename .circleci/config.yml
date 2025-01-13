@@ -637,8 +637,9 @@ jobs:
         description: should load in foundry artifacts
         type: boolean
         default: false
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - check-changed:
@@ -652,8 +653,9 @@ jobs:
           working_directory: "<<parameters.package_name>>"
 
   go-lint:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -720,8 +722,9 @@ jobs:
           when: always
 
   go-test:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace:
@@ -782,13 +785,14 @@ jobs:
       resource_class:
         description: Machine resource class
         type: string
-        default: ethereum-optimism/latitude-1
+        default: xlarge
       skip_slow_tests:
         description: Indicates that slow tests should be skipped
         type: boolean
         default: false
-    machine: true
     resource_class: <<parameters.resource_class>>
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - attach_workspace:
