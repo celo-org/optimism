@@ -33,7 +33,7 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 ENV DEBIAN_FRONTEND=noninteractive
 RUN /bin/sh -c set -eux; \
   apt-get update; \
-  apt-get install -y --no-install-recommends bash curl openssh-client git build-essential ca-certificates gnupg binutils-mips-linux-gnu clang libffi-dev; \
+  apt-get install -y --no-install-recommends bash curl openssh-client git build-essential ca-certificates gnupg binutils-mips-linux-gnu clang libffi-dev parallel; \
   mkdir -p /etc/apt/keyrings; \
   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg; \
   chmod a+r /etc/apt/keyrings/docker.gpg; \
@@ -86,7 +86,7 @@ ENTRYPOINT ["/bin/bash", "-c"]
 
 FROM base-builder AS rust-builder
 
-# Install clang & lld
+# Install clang & lld & parallel
 RUN apt-get update && apt-get install -y clang lld
 
 # Install nightly toolchain
