@@ -54,7 +54,6 @@ parameters:
 orbs:
   go: circleci/go@1.8.0
   gcp-cli: circleci/gcp-cli@3.0.1
-  slack: circleci/slack@4.10.1
   shellcheck: circleci/shellcheck@3.2.0
   codecov: codecov/codecov@5.0.3
 commands:
@@ -148,12 +147,8 @@ commands:
         type: string
         default: ""
     steps:
-      - slack/notify:
-          channel: << parameters.channel >>
-          event: fail
-          template: basic_fail_1
-          branch_pattern: develop
-          mentions: "<< parameters.mentions >>"
+      - run:
+          command: "true"  # No notifications setup up for celo-org fork
 
   run-contracts-check:
     parameters:
@@ -255,19 +250,6 @@ jobs:
           steps:
             - notify-failures-on-develop:
                 mentions: "@proofs-team"
-
-  cannon-build-test-vectors:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    resource_class: medium
-    steps:
-      - checkout
-      - check-changed:
-          patterns: cannon/mipsevm/tests/open_mips_tests/test
-      - run:
-          name: Build MIPS test vectors
-          command: python3 maketests.py && git diff --exit-code
-          working_directory: cannon/mipsevm/tests/open_mips_tests
 
   diff-asterisc-bytecode:
     docker:
@@ -524,87 +506,6 @@ jobs:
                 root: /tmp/docker_images
                 paths: # only write the one file, to avoid concurrent workspace-file additions
                   - "<<parameters.docker_name>>.tar"
-      - when:
-          condition: "<<parameters.release>>"
-          steps:
-            - run:
-                name: Tag
-                command: |
-                  ./ops/scripts/ci-docker-tag-op-stack-release.sh <<parameters.registry>>/<<parameters.repo>> $CIRCLE_TAG $CIRCLE_SHA1
-      - when:
-          condition:
-            or:
-              - and:
-                  - "<<parameters.publish>>"
-                  - "<<parameters.release>>"
-              - and:
-                  - "<<parameters.publish>>"
-                  - equal: [develop, << pipeline.git.branch >>]
-          steps:
-            - gcp-oidc-authenticate:
-                service_account_email: GCP_SERVICE_ATTESTOR_ACCOUNT_EMAIL
-            - run:
-                name: Sign
-                command: |
-                  VER=$(yq '.tools.binary_signer' mise.toml)
-                  wget -O - "https://github.com/ethereum-optimism/binary_signer/archive/refs/tags/v${VER}.tar.gz" | tar xz
-                  cd "binary_signer-${VER}/signer"
-
-                  IMAGE_PATH="<<parameters.registry>>/<<parameters.repo>>/<<parameters.docker_name>>:<<pipeline.git.revision>>"
-                  echo $IMAGE_PATH
-                  pip3 install -r requirements.txt
-
-                  python3 ./sign_image.py --command="sign"\
-                      --attestor-project-name="$ATTESTOR_PROJECT_NAME"\
-                      --attestor-name="$ATTESTOR_NAME"\
-                      --image-path="$IMAGE_PATH"\
-                      --signer-logging-level="INFO"\
-                      --attestor-key-id="//cloudkms.googleapis.com/v1/projects/$ATTESTOR_PROJECT_NAME/locations/global/keyRings/$ATTESTOR_NAME-key-ring/cryptoKeys/$ATTESTOR_NAME-key/cryptoKeyVersions/1"
-
-  # Verify newly published images (built on AMD machine) will run on ARM
-  check-cross-platform:
-    docker:
-      - image: cimg/base:current
-    resource_class: arm.medium
-    parameters:
-      registry:
-        description: Docker registry
-        type: string
-        default: "us-docker.pkg.dev"
-      repo:
-        description: Docker repo
-        type: string
-        default: "oplabs-tools-artifacts/images"
-      op_component:
-        description: "Name of op-stack component (e.g. op-node)"
-        type: string
-        default: ""
-      docker_tag:
-        description: "Tag of docker image"
-        type: string
-        default: "<<pipeline.git.revision>>"
-    steps:
-      - setup_remote_docker
-      - run:
-          name: "Verify Image Platform"
-          command: |
-            image_name="<<parameters.registry>>/<<parameters.repo>>/<<parameters.op_component>>:<<parameters.docker_tag>>"
-            echo "Retrieving Docker image manifest: $image_name"
-            MANIFEST=$(docker manifest inspect $image_name)
-
-            echo "Verifying 'linux/arm64' is supported..."
-            SUPPORTED_PLATFORM=$(echo "$MANIFEST" | jq -r '.manifests[] | select(.platform.architecture == "arm64" and .platform.os == "linux")')
-            echo $SUPPORT_PLATFORM
-            if [ -z "$SUPPORTED_PLATFORM" ]; then
-              echo "Platform 'linux/arm64' not supported by this image"
-              exit 1
-            fi
-      - run:
-          name: "Pull and run docker image"
-          command: |
-            image_name="<<parameters.registry>>/<<parameters.repo>>/<<parameters.op_component>>:<<parameters.docker_tag>>"
-            docker pull $image_name || exit 1
-            docker run $image_name <<parameters.op_component>> --version || exit 1
 
   contracts-bedrock-frozen-code:
     machine: true
@@ -867,23 +768,6 @@ jobs:
           command: unused-imports-check-no-build
       - run-contracts-check:
           command: validate-spacers-no-build
-
-  todo-issues:
-    parameters:
-      check_closed:
-        type: boolean
-        default: true
-    machine:
-      image: <<pipeline.parameters.base_image>>
-    steps:
-      - checkout
-      - run:
-          name: Install ripgrep
-          command: sudo apt-get install -y ripgrep
-      - run:
-          name: Check TODO issues
-          command: ./ops/scripts/todo-checker.sh --verbose <<#parameters.check_closed>> --check-closed <</parameters.check_closed>>
-      - notify-failures-on-develop
 
   fuzz-golang:
     parameters:
@@ -1212,27 +1096,6 @@ jobs:
       - notify-failures-on-develop:
           mentions: "@proofs-team"
 
-  op-program-compat:
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
-    steps:
-      - checkout
-      - restore_cache:
-          name: Restore Go modules cache
-          key: gomod-{{ checksum "go.sum" }}
-      - restore_cache:
-          key: golang-build-cache-op-program-compat-{{ checksum "go.sum" }}
-      - run:
-          name: compat-sepolia
-          command: |
-            make verify-compat
-          working_directory: op-program
-      - save_cache:
-          name: Save Go build cache
-          key: golang-build-cache-op-program-compat-{{ checksum "go.sum" }}
-          paths:
-            - "/root/.cache/go-build"
-
   check-generated-mocks-op-node:
     docker:
       - image: <<pipeline.parameters.ci_builder_image>>
@@ -1286,33 +1149,6 @@ jobs:
               }'
           working_directory: ./packages/contracts-bedrock
       - notify-failures-on-develop
-
-  publish-contract-artifacts:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
-    steps:
-      - gcp-cli/install
-      - gcp-oidc-authenticate:
-          gcp_cred_config_file_path: /tmp/gcp_cred_config.json
-          oidc_token_file_path: /tmp/oidc_token.json
-          project_id: GCP_TOOLS_ARTIFACTS_PROJECT_ID
-          service_account_email: GCP_CONTRACTS_PUBLISHER_SERVICE_ACCOUNT_EMAIL
-      - checkout
-      - install-contracts-dependencies
-      - run:
-          name: Pull artifacts
-          command: bash scripts/ops/pull-artifacts.sh
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Build contracts
-          environment:
-            FOUNDRY_PROFILE: ci
-          command: just forge-build
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Publish artifacts
-          command: bash scripts/ops/publish-artifacts.sh
-          working_directory: packages/contracts-bedrock
 
   go-release:
     parameters:
@@ -1465,16 +1301,13 @@ workflows:
           requires:
             - contracts-bedrock-build
             - cannon-prestate-quick
-      - op-program-compat
       - bedrock-go-tests:
           requires:
             - go-lint
-            - cannon-build-test-vectors
             - cannon-go-lint-and-test-32-bit
             - cannon-go-lint-and-test-64-bit
             - check-generated-mocks-op-node
             - check-generated-mocks-op-service
-            - op-program-compat
             # Not needed for the devnet but we want to make sure they build successfully
             - cannon-docker-build
             - op-dispute-mon-docker-build
@@ -1516,10 +1349,6 @@ workflows:
           matrix:
             parameters:
               mips_word_size: [32, 64]
-      - cannon-build-test-vectors
-      - todo-issues:
-          name: todo-issues-check
-          check_closed: false
       - shellcheck/check:
           name: shell-check
           # We don't need the `exclude` key as the orb detects the `.shellcheckrc`
@@ -1581,34 +1410,6 @@ workflows:
             - oplabs-gcr-release
           requires:
             - hold
-      # Checks for cross-platform images go here
-      - check-cross-platform:
-          matrix:
-            parameters:
-              op_component:
-                - op-node
-                - op-batcher
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-ufm
-                - op-supervisor
-                - op-deployer
-                - cannon
-          name: <<matrix.op_component>>-cross-platform
-          requires:
-            - op-node-docker-release
-            - op-batcher-docker-release
-            - op-proposer-docker-release
-            - op-challenger-docker-release
-            - op-dispute-mon-docker-release
-            - op-conductor-docker-release
-            - da-server-docker-release
-            - op-ufm-docker-release
-            - op-supervisor-docker-release
-            - cannon-docker-release
       # Standard (xlarge) AMD-only docker images go here
       - docker-build:
           matrix:
@@ -1649,33 +1450,6 @@ workflows:
               only: /^op-program\/v.*/
             branches:
               ignore: /.*/
-
-  scheduled-todo-issues:
-    when:
-      equal: [build_four_hours, <<pipeline.schedule.name>>]
-    jobs:
-      - todo-issues:
-          name: todo-issue-checks
-          context:
-            - slack
-
-  scheduled-fpp:
-    when:
-      equal: [build_hourly, <<pipeline.schedule.name>>]
-    jobs:
-      - fpp-verify:
-          context:
-            - slack
-            - oplabs-fpp-nodes
-
-  develop-publish-contract-artifacts:
-    when:
-      or:
-        - equal: ["develop", <<pipeline.git.branch>>]
-        - equal:
-            [true, <<pipeline.parameters.publish_contract_artifacts_dispatch>>]
-    jobs:
-      - publish-contract-artifacts
 
   develop-fault-proofs:
     when:
@@ -1800,16 +1574,6 @@ workflows:
           name: <<matrix.op_component>>-cross-platform
           requires:
             - <<matrix.op_component>>-docker-publish
-
-  scheduled-preimage-reproducibility:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-        # Trigger on manual triggers if explicitly requested
-        - equal: [true, << pipeline.parameters.reproducibility_dispatch >>]
-    jobs:
-      - preimage-reproducibility:
-          context: slack
 
   scheduled-stale-check:
     when:
