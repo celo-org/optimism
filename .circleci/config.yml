@@ -147,8 +147,8 @@ commands:
 
 jobs:
   cannon-go-lint-and-test:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     parameters:
       skip_slow_tests:
         type: boolean
@@ -222,8 +222,8 @@ jobs:
                 mentions: "@proofs-team"
 
   contracts-bedrock-build:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     parameters:
       skip_pattern:
         description: Glob pattern of tests to skip
@@ -839,8 +839,8 @@ jobs:
                 mentions: "<<parameters.mentions>>"
 
   cannon-prestate:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - run:
