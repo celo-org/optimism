@@ -169,8 +169,9 @@ commands:
 
 jobs:
   cannon-go-lint-and-test:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     parameters:
       skip_slow_tests:
         type: boolean
@@ -292,8 +293,9 @@ jobs:
           mentions: "@clabby @proofs-team"
 
   contracts-bedrock-build:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     parameters:
       build_args:
         description: Forge build arguments
@@ -508,8 +510,9 @@ jobs:
                   - "<<parameters.docker_name>>.tar"
 
   contracts-bedrock-tests:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -600,8 +603,9 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-tests-upgrade:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace: { at: "." }
@@ -660,8 +664,9 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-checks:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - attach_workspace: { at: "." }
@@ -710,8 +715,9 @@ jobs:
         description: should load in foundry artifacts
         type: boolean
         default: false
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - check-changed:
@@ -735,8 +741,9 @@ jobs:
           when: always
 
   go-lint:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -758,7 +765,7 @@ jobs:
       resource_class:
         description: Machine resource class
         type: string
-        default: ethereum-optimism/latitude-1-go-e2e
+        default: xlarge
       no_output_timeout:
         description: Timeout for when CircleCI kills the job if there's no output
         type: string
@@ -831,8 +838,9 @@ jobs:
                 mentions: "<<parameters.mentions>>"
 
   cannon-prestate:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
+    resource_class: xlarge
     steps:
       - checkout
       - run:
@@ -1319,7 +1327,9 @@ workflows:
           mentions: "@proofs-team"
           no_output_timeout: 60m
           test_timeout: 59m
-          resource_class: ethereum-optimism/latitude-fps-1
+          docker:
+            - image: <<pipeline.parameters.ci_builder_image>>
+          resource_class: xlarge
           environment_overrides: |
             export OP_E2E_CANNON_ENABLED="true"
           packages: |
