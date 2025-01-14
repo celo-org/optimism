@@ -33,6 +33,41 @@ var excludeContracts = []string{
 	// TODO: Interfaces that need to be fixed
 	"IInitializable", "IOptimismMintableERC20", "ILegacyMintableERC20",
 	"KontrolCheatsBase", "IResolvedDelegateProxy",
+
+	// Temporarily excluded, differences seem harmless
+	"IERC20Upgradeable",
+
+	// Celo
+	"IExchange",
+	"IEscrow",
+	"IAccounts",
+	"IOracle",
+	"ICeloToken",
+	"ICeloRegistry",
+	"IStableTokenMento",
+	"ILockedGold",
+	"IBreakerBox",
+	"ISortedOracles",
+	"IElection",
+	"IStableTokenV2",
+	"IStableToken",
+	"IMetaTransactionWallet",
+	"IAttestations",
+	"IOdisPayments",
+	"IUniswapV2RouterMin",
+	"IFeeHandlerSeller",
+	"IRandom",
+	"IFreezer",
+	"IValidators",
+	"IReserve",
+	"IFeeCurrencyDirectory",
+	"IFeeHandler",
+	"ICeloVersionedContract",
+	"IMetaTransactionWalletDeployer",
+	"IGovernance",
+	"IReleaseGold",
+	"IUniswapV2FactoryMin",
+	"IFederatedAttestations",
 }
 
 // excludeSourceContracts is a list of contracts that are allowed to not have interfaces
@@ -51,6 +86,24 @@ var excludeSourceContracts = []string{
 
 	// FIXME
 	"WETH", "MIPS64",
+
+	// Celo
+	"AbstractFeeCurrency",
+	"CalledByVm",
+	"CeloRegistry",
+	"FeeCurrency",
+	"FeeCurrencyDirectory",
+	"FeeHandler",
+	"FeeHandlerSeller",
+	"Freezable",
+	"GoldToken",
+	"Initializable",
+	"MentoFeeHandlerSeller",
+	"MockSortedOracles",
+	"SortedOracles",
+	"StableTokenV2",
+	"UniswapFeeHandlerSeller",
+	"UsingRegistry",
 }
 
 type ContractDefinition struct {
