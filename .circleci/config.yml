@@ -1190,7 +1190,8 @@ workflows:
             - op-dispute-mon-docker-build
             - op-program-docker-build
             - op-supervisor-docker-build
-            - proofs-tools-docker-build
+            # Failing due to missing Kona permissions, e.g. https://app.circleci.com/pipelines/github/celo-org/optimism/2220/workflows/53e3b8f4-7614-4082-9b4d-5183118eb80e/jobs/48622
+            # - proofs-tools-docker-build
             - go-test-all
       - docker-build:
           name: <<matrix.docker_name>>-docker-build
@@ -1204,7 +1205,7 @@ workflows:
                 - op-program
                 - op-proposer
                 - op-challenger
-                - proofs-tools
+                #- proofs-tools
                 - op-dispute-mon
                 - op-conductor
                 - da-server
