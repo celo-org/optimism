@@ -1117,7 +1117,7 @@ jobs:
     parameters:
       diff_branch:
         type: string
-        default: develop
+        default: HEAD
       scan_command:
         type: string
         default: semgrep ci --timeout=100
