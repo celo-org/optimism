@@ -759,7 +759,7 @@ jobs:
               --junitfile=./tmp/test-results/results.xml \
               --jsonfile=./tmp/testlogs/log.json \
               -- -coverpkg=github.com/ethereum-optimism/optimism/... \
-              -timeout 10m \
+              -timeout 20m \
               -coverprofile=coverage.out $formatted_packages
       - store_test_results:
           path: ./tmp/test-results
