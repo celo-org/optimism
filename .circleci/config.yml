@@ -1132,10 +1132,11 @@ jobs:
           working_directory: packages/contracts-bedrock
       - run:
           name: Run coverage tests
-          command: just coverage-lcov-all <<parameters.test_flags>>
+          command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
+            just coverage-lcov-all <<parameters.test_flags>>
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
-            ETH_RPC_URL: https://ci-mainnet-l1-archive.optimism.io
           working_directory: packages/contracts-bedrock
           no_output_timeout: <<parameters.test_timeout>>
       - run:
@@ -1143,7 +1144,6 @@ jobs:
           command: just test-rerun | tee failed-test-traces.log
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
-            ETH_RPC_URL: https://ci-mainnet-l1-archive.optimism.io
           working_directory: packages/contracts-bedrock
           when: on_fail
       - codecov/upload:
@@ -1215,7 +1215,9 @@ jobs:
           features: <<parameters.features>>
       - run:
           name: Run tests
-          command: just test-upgrade
+          command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
+            just test-upgrade
           environment:
             FOUNDRY_FUZZ_SEED: 42424242
             FOUNDRY_FUZZ_RUNS: 1
