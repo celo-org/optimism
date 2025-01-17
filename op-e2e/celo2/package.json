@@ -1,0 +1,25 @@
+{
+    "name": "celo2test",
+    "version": "1.0.0",
+    "description": "",
+    "author": "Celo Labs Inc.",
+    "license": "ISC",
+    "scripts": {
+        "test": "jest"
+    },
+    "dependencies": {
+        "@types/chai": "^5.0.1",
+        "@types/mocha": "^10.0.10",
+        "chai": "^5.1.2",
+        "mocha": "^11.0.1",
+        "reverse-mirage": "^1.1.0",
+        "ts-node": "^10.9.2",
+        "viem": "^2.22.8"
+    },
+    "devDependencies": {
+        "@types/jest": "^29.5.14",
+        "jest": "^29.7.0",
+        "ts-jest": "^29.2.5",
+        "typescript": "^5.7.3"
+    }
+}
