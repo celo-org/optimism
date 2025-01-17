@@ -1,8 +1,8 @@
-import { getL2TransactionHashes } from 'viem/op-stack';
-import { Account, Hex, PublicClient, TransactionReceipt } from 'viem';
-import { OptimismPortalABI } from './OptimismPortal';
-import { Config } from './setup';
-import { portalAbi } from 'viem/_types/op-stack/abis';
+import { getL2TransactionHashes } from "viem/op-stack";
+import { Account, Hex, PublicClient, TransactionReceipt } from "viem";
+import { OptimismPortalABI } from "./OptimismPortal";
+import { Config } from "./setup";
+import { portalAbi } from "viem/_types/op-stack/abis";
 
 interface ConstructDepositCustomGasRequest {
   data?: string;
@@ -21,7 +21,7 @@ interface TargetChain {
 
 export interface ConstructDepositCustomGasParameters {
   account: Account; // Use appropriate Account type if available
-  chain?: any;     // Replace 'any' with specific Chain type if known
+  chain?: any; // Replace 'any' with specific Chain type if known
   gas?: bigint | null;
   maxFeePerGas?: bigint;
   maxPriorityFeePerGas?: bigint;
@@ -31,11 +31,11 @@ export interface ConstructDepositCustomGasParameters {
   portalAddress?: string;
 }
 
-const zeroAddress = "0x0000000000000000000000000000000000000000"
+const zeroAddress = "0x0000000000000000000000000000000000000000";
 
 export async function constructDepositCustomGas(
   client: PublicClient,
-  parameters: ConstructDepositCustomGasParameters
+  parameters: ConstructDepositCustomGasParameters,
 ) {
   const {
     account,
@@ -45,11 +45,11 @@ export async function constructDepositCustomGas(
     maxPriorityFeePerGas,
     nonce,
     request: {
-      data = '0x',
+      data = "0x",
       gas: l2Gas,
       isCreation = false,
       mint,
-      to = '0x',
+      to = "0x",
       value,
     },
     targetChain,
@@ -66,7 +66,7 @@ export async function constructDepositCustomGas(
     abi: OptimismPortalABI,
     address: portalAddress as Hex,
     chain,
-    functionName: 'depositERC20Transaction',
+    functionName: "depositERC20Transaction",
     args: [
       isCreation ? zeroAddress : to,
       mint ?? value ?? 0n,
@@ -78,7 +78,7 @@ export async function constructDepositCustomGas(
     maxFeePerGas,
     maxPriorityFeePerGas,
     nonce,
-    gas: 200_000n // default gas limit * 2
+    gas: 200_000n, // default gas limit * 2
   };
 
   // const gas_ =
@@ -88,12 +88,12 @@ export async function constructDepositCustomGas(
   // callArgs.gas = gas_!;
   const safeStringify = (obj: unknown): string =>
     JSON.stringify(obj, (_key: string, value: unknown): unknown =>
-      typeof value === 'bigint' ? value.toString() : value
+      typeof value === "bigint" ? value.toString() : value,
     );
 
   const result = await client.simulateContract(callArgs);
 
-  callArgs.account = null
+  callArgs.account = null;
 
   return { result, args: callArgs };
 }
@@ -103,10 +103,9 @@ interface DepositArgs {
   to: Hex;
 }
 
-
 export async function deposit(
   args: DepositArgs,
-  config: Config
+  config: Config,
 ): Promise<{ success: boolean; l1GasPayment: bigint }> {
   let spentGas = BigInt(0);
 
@@ -140,33 +139,37 @@ export async function deposit(
   }
 
   const approveHash = await config.client.l1.wallet.writeContract(
-    approve.request
+    approve.request,
   );
   // Wait for the L1 transaction to be processed.
-  const approveReceipt = await config.client.l1.public.waitForTransactionReceipt({
-    hash: approveHash,
-  }) as TransactionReceipt;
+  const approveReceipt =
+    (await config.client.l1.public.waitForTransactionReceipt({
+      hash: approveHash,
+    })) as TransactionReceipt;
 
   spentGas += approveReceipt.gasUsed * approveReceipt.effectiveGasPrice;
 
   console.log("wallet l1 address", config.client.l1.wallet.account.address);
 
-  const dep = await config.client.l1.public.prepareDepositGasPayingTokenERC20(depositArgs as any)
+  const dep = await config.client.l1.public.prepareDepositGasPayingTokenERC20(
+    depositArgs as any,
+  );
   dep.args.account = config.account;
   const depositHash = await config.client.l1.wallet.writeContract(dep.args);
 
   // Wait for the L1 transaction to be processed.
-  const depositReceipt = await config.client.l1.public.waitForTransactionReceipt({
-    hash: depositHash,
-  }) as TransactionReceipt;
+  const depositReceipt =
+    (await config.client.l1.public.waitForTransactionReceipt({
+      hash: depositHash,
+    })) as TransactionReceipt;
 
   spentGas += depositReceipt.gasUsed * depositReceipt.effectiveGasPrice;
 
-  if (depositReceipt.status !== 'success') {
+  if (depositReceipt.status !== "success") {
     return {
       success: false,
-      l1GasPayment: spentGas
-    }
+      l1GasPayment: spentGas,
+    };
   }
 
   // Get the L2 transaction hash from the L1 transaction receipt.
@@ -178,7 +181,7 @@ export async function deposit(
   });
 
   return {
-    success: l2Receipt.status === 'success',
+    success: l2Receipt.status === "success",
     l1GasPayment: spentGas,
   };
 }
