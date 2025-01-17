@@ -1,5 +1,5 @@
-import { setupClients, SetupClientsReturn } from "../src/config";
-import { makeChainConfigs } from "../src/chain";
+import { setupClients, SetupClientsReturn } from "./config";
+import { makeChainConfigs } from "./chain";
 import { privateKeyToAccount, Account } from "viem/accounts";
 import type { Hex, PublicClient } from "viem"; // Example: adjust based on actual types from viem
 import * as addresses from "../../../.devnet/addresses.json";
