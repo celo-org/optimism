@@ -28,7 +28,7 @@ export function makeChainConfigs(
       },
       rpcUrls: {
         default: {
-          http: [/*process.env.ETH_RPC_URL*/ "http://localhost:9545"],
+          http: [process.env.ETH_RPC_URL ?? "http://localhost:9545"],
         },
       },
       contracts: {
@@ -66,7 +66,7 @@ export function makeChainConfigs(
       },
       rpcUrls: {
         default: {
-          http: [/*process.env.ETH_RPC_URL_L1*/ "http://localhost:8545"],
+          http: [process.env.ETH_RPC_URL_L1 ?? "http://localhost:8545"],
         },
       },
       contracts: {

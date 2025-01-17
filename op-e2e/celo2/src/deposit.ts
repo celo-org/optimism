@@ -2,7 +2,6 @@ import { getL2TransactionHashes } from "viem/op-stack";
 import { Account, Hex, PublicClient, TransactionReceipt } from "viem";
 import { OptimismPortalABI } from "./OptimismPortal";
 import { Config } from "./setup";
-import { portalAbi } from "viem/_types/op-stack/abis";
 
 interface ConstructDepositCustomGasRequest {
   data?: string;
@@ -81,16 +80,6 @@ export async function constructDepositCustomGas(
     gas: 200_000n, // default gas limit * 2
   };
 
-  // const gas_ =
-  //   typeof gas !== 'number' && gas !== null
-  //     ? await client.estimateContractGas(callArgs)
-  //     : undefined;
-  // callArgs.gas = gas_!;
-  const safeStringify = (obj: unknown): string =>
-    JSON.stringify(obj, (_key: string, value: unknown): unknown =>
-      typeof value === "bigint" ? value.toString() : value,
-    );
-
   const result = await client.simulateContract(callArgs);
 
   callArgs.account = null;
@@ -148,8 +137,6 @@ export async function deposit(
     })) as TransactionReceipt;
 
   spentGas += approveReceipt.gasUsed * approveReceipt.effectiveGasPrice;
-
-  console.log("wallet l1 address", config.client.l1.wallet.account.address);
 
   const dep = await config.client.l1.public.prepareDepositGasPayingTokenERC20(
     depositArgs as any,
