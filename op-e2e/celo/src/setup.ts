@@ -80,6 +80,7 @@ export async function setup() {
   ])
 
   if (success.every((v) => v === true)) {
+    console.log("L1 and L2 clients are reachable now");
     return config
   }
   throw new Error('l1 and l2 clients not reachable within the deadline')

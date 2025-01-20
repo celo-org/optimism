@@ -10,7 +10,7 @@ jest.setTimeout(15 * 60 * 1000) // 15 minutes in milliseconds
 
 beforeAll(async () => {
   config = await setup()
-}, 5 * minute)
+}, 10 * minute)
 
 describe('OP Contract Deposit/Withdrawal', () => {
   it('should successfully deposit funds', async () => {
