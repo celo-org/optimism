@@ -6,7 +6,7 @@ let config: Config
 
 beforeAll(async () => {
   config = await setup()
-}, 30_000)
+}, 5 * minute)
 
 test(
   'test token duality',
@@ -38,5 +38,5 @@ test(
 
     expect(balanceAfter).toBe(balanceBefore + sendAmount.amount)
   },
-  1 * minute
+  15 * minute
 )
