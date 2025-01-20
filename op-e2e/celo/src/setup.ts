@@ -65,6 +65,8 @@ export async function setup() {
   const account = privateKeyToAccount(privKey)
   const client = setupClients(chainConfig, account)
 
+  const minute = 60 * 1000
+
   const config: Config = {
     account,
     client,
@@ -72,9 +74,9 @@ export async function setup() {
   }
 
   const success = await Promise.all([
-    waitReachable(config.client.l1.public, 10_000),
-    waitReachable(config.client.l2.public, 10_000),
-    waitForNextGame(config.client.l1.public, chainConfig.l2, 60_000),
+    waitReachable(config.client.l1.public, minute),
+    waitReachable(config.client.l2.public, minute),
+    waitForNextGame(config.client.l1.public, chainConfig.l2, 5 * minute),
   ])
 
   if (success.every((v) => v === true)) {
