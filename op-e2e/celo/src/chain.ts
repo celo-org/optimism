@@ -1,16 +1,14 @@
-import { chainConfig } from "viem/op-stack";
-import { Address, defineChain } from "viem";
-import { AddressesType } from "./setup";
+import { chainConfig } from 'viem/op-stack'
+import { Address, defineChain } from 'viem'
+import { AddressesType } from './setup'
 
-export type ChainConfigL1L2 = ReturnType<typeof makeChainConfigs>;
+export type ChainConfigL1L2 = ReturnType<typeof makeChainConfigs>
 
 export function makeChainConfigs(
   l1ChainID: number,
   l2ChainID: number,
-  contractAddresses: AddressesType,
+  contractAddresses: AddressesType
 ) {
-  console.log("chainConfigchainConfig", chainConfig);
-  console.log(process.env);
   return {
     l2: defineChain({
       formatters: {
@@ -20,15 +18,15 @@ export function makeChainConfigs(
         ...chainConfig.serializers,
       },
       id: l2ChainID,
-      name: "Celo",
+      name: 'Celo',
       nativeCurrency: {
         decimals: 18,
-        name: "Celo - native currency",
-        symbol: "CELO",
+        name: 'Celo - native currency',
+        symbol: 'CELO',
       },
       rpcUrls: {
         default: {
-          http: [process.env.ETH_RPC_URL ?? "http://localhost:9545"],
+          http: [process.env.ETH_RPC_URL_L2 ?? 'http://localhost:9545'],
         },
       },
       contracts: {
@@ -58,15 +56,15 @@ export function makeChainConfigs(
     l1: defineChain({
       id: l1ChainID,
       testnet: true,
-      name: "Ethereum L1",
+      name: 'Ethereum L1',
       nativeCurrency: {
         decimals: 18,
-        name: "Ether",
-        symbol: "ETH",
+        name: 'Ether',
+        symbol: 'ETH',
       },
       rpcUrls: {
         default: {
-          http: [process.env.ETH_RPC_URL_L1 ?? "http://localhost:8545"],
+          http: [process.env.ETH_RPC_URL_L1 ?? 'http://localhost:8545'],
         },
       },
       contracts: {
@@ -95,5 +93,5 @@ export function makeChainConfigs(
         },
       },
     }),
-  };
+  }
 }
