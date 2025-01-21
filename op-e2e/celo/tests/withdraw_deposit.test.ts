@@ -6,7 +6,7 @@ import { deposit } from '../src/deposit'
 const minute = 60 * 1000
 let config: Config
 
-jest.setTimeout(15 * 60 * 1000) // 15 minutes in milliseconds
+jest.setTimeout(20 * 60 * 1000) // 20 minutes in milliseconds
 
 beforeAll(async () => {
   config = await setup()

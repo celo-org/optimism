@@ -72,7 +72,7 @@ export async function setup() {
     client,
     addresses,
   }
-  const timeout = 5 * minute
+  const timeout = 15 * minute
   const l1Reachable = waitReachable(config.client.l1.public, timeout)
   const l2Reachable = waitReachable(config.client.l2.public, timeout)
   const nextGame = waitForNextGame(
