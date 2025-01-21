@@ -9,8 +9,7 @@ spawn_devnet=${SPAWN_DEVNET:-true}
 if [[ $spawn_devnet != false ]]; then
   ## Start geth
   cd "$SCRIPT_DIR/../.." || exit 1
-  trap 'cd "$SCRIPT_DIR/../.." && make devnet-down' EXIT # kill bg job at exit
-  DEVNET_CELO=true make devnet-up
+  make devnet-clean && DEVNET_CELO=true SAFE_AS_OWNER=true make devnet-up
 fi
 
 cd "$SCRIPT_DIR" || exit 1
