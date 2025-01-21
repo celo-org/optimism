@@ -92,7 +92,7 @@ export async function setup() {
     console.log("L1 and L2 clients are reachable now");
     return config
   }
-  throw new Error(`l1 and l2 clients not reachable within the deadline L1: ${l1Reachable} L2: ${l2Reachable} NextGame: ${nextGame} timeout ${timeout}`)
+  throw new Error(`l1 and l2 clients not reachable within the deadline L1: ${await l1Reachable} L2: ${await l2Reachable} NextGame: ${await nextGame} timeout ${timeout}`)
 }
 
 export interface Addresses {
