@@ -72,18 +72,27 @@ export async function setup() {
     client,
     addresses,
   }
+  const timeout = 5 * minute
+  const l1Reachable = waitReachable(config.client.l1.public, timeout)
+  const l2Reachable = waitReachable(config.client.l2.public, timeout)
+  const nextGame = waitForNextGame(
+    config.client.l1.public,
+    chainConfig.l2,
+    timeout
+  )
+
 
   const success = await Promise.all([
-    waitReachable(config.client.l1.public, minute),
-    waitReachable(config.client.l2.public, minute),
-    waitForNextGame(config.client.l1.public, chainConfig.l2, 5 * minute),
+    l1Reachable,
+    l2Reachable,
+    nextGame,
   ])
 
   if (success.every((v) => v === true)) {
     console.log("L1 and L2 clients are reachable now");
     return config
   }
-  throw new Error('l1 and l2 clients not reachable within the deadline')
+  throw new Error(`l1 and l2 clients not reachable within the deadline L1: ${l1Reachable} L2: ${l2Reachable} NextGame: ${nextGame} timeout ${timeout}`)
 }
 
 export interface Addresses {
