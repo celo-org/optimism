@@ -7,7 +7,9 @@ import (
 	"math/big"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"log/slog"
@@ -17,6 +19,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mattn/go-isatty"
 
 	"github.com/urfave/cli/v2"
@@ -101,6 +104,16 @@ var (
 		Usage: "Delete everything in the destination directory aside from /ancients. This is useful if you need to re-run the full migration but do not want to repeat the lengthy ancients migration. If you'd like to reset the entire destination directory, you can delete it manually.",
 		Value: false,
 	}
+	dbCheckPathFlag = &cli.PathFlag{
+		Name:     "db-path",
+		Usage:    "Path to the db to perform a continuity check on",
+		Required: true,
+	}
+	dbCheckFailFastFlag = &cli.BoolFlag{
+		Name:  "fail-fast",
+		Usage: "Fail fast on the first error encountered. If set, the db check will stop on the first error encountered, otherwise it will continue to check all blocks and print out all errors at the end.",
+		Value: false,
+	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -121,6 +134,11 @@ var (
 		migrationBlockTimeFlag,
 		migrationBlockNumberFlag,
 	)
+	dbCheckFlags = []cli.Flag{
+		dbCheckPathFlag,
+		batchSizeFlag,
+		dbCheckFailFastFlag,
+	}
 )
 
 type preMigrationOptions struct {
@@ -146,6 +164,12 @@ type fullMigrationOptions struct {
 	preMigrationOptions
 	stateMigrationOptions
 	migrationBlockNumber uint64
+}
+
+type dbCheckOptions struct {
+	dbPath    string
+	batchSize uint64
+	failFast  bool
 }
 
 func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
@@ -176,6 +200,14 @@ func parseFullMigrationOptions(ctx *cli.Context) fullMigrationOptions {
 		preMigrationOptions:   parsePreMigrationOptions(ctx),
 		stateMigrationOptions: parseStateMigrationOptions(ctx),
 		migrationBlockNumber:  ctx.Uint64(migrationBlockNumberFlag.Name),
+	}
+}
+
+func parseDBCheckOptions(ctx *cli.Context) dbCheckOptions {
+	return dbCheckOptions{
+		dbPath:    ctx.String(dbCheckPathFlag.Name),
+		batchSize: ctx.Uint64(batchSizeFlag.Name),
+		failFast:  ctx.Bool(dbCheckFailFastFlag.Name),
 	}
 }
 
@@ -213,18 +245,32 @@ func main() {
 					return nil
 				},
 			},
+			{
+				Name:  "check-db",
+				Usage: "Perform a continuity check on the db, ensuring that all blocks are present and in order",
+				Flags: dbCheckFlags,
+				Action: func(ctx *cli.Context) error {
+					if err := runDBCheck(parseDBCheckOptions(ctx)); err != nil {
+						return fmt.Errorf("DB continuity check failed: %w", err)
+					}
+					log.Info("Finished db continuity check successfully!")
+					return nil
+				},
+			},
 		},
 		OnUsageError: func(ctx *cli.Context, err error, isSubcommand bool) error {
 			if isSubcommand {
 				return err
 			}
-			_ = cli.ShowAppHelp(ctx)
+			if err := cli.ShowAppHelp(ctx); err != nil {
+				log.Error("failed to show cli help", "err", err)
+			}
 			return fmt.Errorf("please provide a valid command")
 		},
 	}
 
 	if err := app.Run(os.Args); err != nil {
-		log.Crit("error in migration", "err", err)
+		log.Crit("error in celo-migrate", "err", err)
 	}
 }
 
@@ -445,6 +491,138 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 
 	log.Info("State Migration Completed")
+
+	return nil
+}
+
+func runDBCheck(opts dbCheckOptions) (err error) {
+	defer timer("db continuity check")()
+
+	log.Info("DB Continuity Check Started", "dbPath", opts.dbPath)
+
+	ancientDB, err := NewChainFreezer(filepath.Join(opts.dbPath, "ancient"), "", true)
+	if err != nil {
+		return fmt.Errorf("failed to open ancient db: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, ancientDB.Close())
+	}()
+	nonAncientDB, err := openDBWithoutFreezer(opts.dbPath, true)
+	if err != nil {
+		return fmt.Errorf("failed to open non-ancient db: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, nonAncientDB.Close())
+	}()
+
+	lastAncient, err := loadLastAncient(ancientDB)
+	if err != nil {
+		return fmt.Errorf("failed to load last ancient block: %w", err)
+	}
+	lastAncientNumber := lastAncient.Header().Number.Uint64()
+	lastBlockNumber := *rawdb.ReadHeaderNumber(nonAncientDB, rawdb.ReadHeadHeaderHash(nonAncientDB))
+
+	var errResult *multierror.Error
+
+	// First, check continuity between ancients and non-ancients.
+	// Gaps in data will often halt the freezing process, so attempting to load the first non-ancient block
+	// will most likely fail if there is a gap.
+	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncientNumber+1, 1)
+	if err != nil {
+		if opts.failFast {
+			return fmt.Errorf("failed to load first non-ancient block: %w", err)
+		}
+		// We don't need to add the error to errResult here because it will be added below when we call checkContinuity on non-ancients
+	} else {
+		if _, err := firstNonAncientRange.CheckContinuity(lastAncient, 1); err != nil {
+			err = fmt.Errorf("failed continuity check between ancients and non-ancients: %w", err)
+			if opts.failFast {
+				return err
+			}
+			errResult = multierror.Append(errResult, err)
+		}
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(8)
+
+	var mu sync.Mutex
+
+	checkRange := func(start, count uint64, loadRangeFunc func(uint64, uint64) (*RLPBlockRange, error)) {
+		// If we are not at genesis or the first non-ancient block, include the last block of
+		// the previous range so we can check for continuity between ranges.
+		if start != 0 && start != lastAncientNumber+1 {
+			start = start - 1
+			count = count + 1
+		}
+		g.Go(func() error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				blockRange, err := loadRangeFunc(start, count)
+				if err != nil {
+					err = fmt.Errorf("failed to load block range: %w", err)
+					if opts.failFast {
+						return err
+					}
+					log.Error(err.Error())
+					mu.Lock()
+					errResult = multierror.Append(errResult, err)
+					mu.Unlock()
+					return nil
+				}
+				if _, err := blockRange.CheckContinuity(nil, count); err != nil {
+					err = fmt.Errorf("failed continuity check: %w", err)
+					if opts.failFast {
+						return err
+					}
+					log.Error(err.Error())
+					mu.Lock()
+					errResult = multierror.Append(errResult, err)
+					mu.Unlock()
+					return nil
+				}
+				log.Info("Successfully checked block range continuity", "start", start, "end", start+count-1, "count", count)
+				return nil
+			}
+		})
+	}
+	checkContinuity := func(start, end uint64, loadRangeFunc func(uint64, uint64) (*RLPBlockRange, error)) error {
+		if (start <= lastAncientNumber && end > lastAncientNumber) || (end > lastBlockNumber) || (end < start) {
+			return fmt.Errorf("invalid range for continuity check: start=%d, end=%d, lastAncientNumber=%d, lastBlockNumber=%d", start, end, lastAncientNumber, lastBlockNumber)
+		}
+		for i := start; i <= end; i += opts.batchSize {
+			count := min(opts.batchSize, end-i+1)
+			checkRange(i, count, loadRangeFunc)
+		}
+		return nil
+	}
+
+	log.Info("Checking continuity of ancient blocks", "start", 0, "end", lastAncientNumber, "count", lastAncientNumber+1)
+	if err := checkContinuity(0, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
+		return loadAncientRange(ancientDB, start, count)
+	}); err != nil {
+		return err
+	}
+	log.Info("Checking continuity of non-ancient blocks", "start", lastAncientNumber+1, "end", lastBlockNumber, "count", lastBlockNumber-lastAncientNumber)
+	if err := checkContinuity(lastAncientNumber+1, lastBlockNumber, func(start, count uint64) (*RLPBlockRange, error) {
+		return loadNonAncientRange(nonAncientDB, start, count)
+	}); err != nil {
+		return err
+	}
+
+	if err := g.Wait(); err != nil {
+		return err
+	}
+
+	if errResult.ErrorOrNil() != nil {
+		return errResult
+	}
+
+	log.Info("DB Continuity Check Finished", "dbPath", opts.dbPath)
 
 	return nil
 }
