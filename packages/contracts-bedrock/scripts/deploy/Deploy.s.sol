@@ -436,6 +436,7 @@ contract Deploy is Deployer {
 
     /// @notice Deploy the fault games and set the implementations. Initialize AnchorStateRegistry.
     function setupFaultGames() public {
+        initializeL2OutputOracle();
         setCannonFaultGameImplementation({ _allowUpgrade: false });
         setPermissionedCannonFaultGameImplementation({ _allowUpgrade: false });
         initializeAnchorStateRegistry(false);
@@ -535,11 +536,11 @@ contract Deploy is Deployer {
         initializeL1ERC721Bridge();
         initializeOptimismMintableERC20Factory();
         initializeL1CrossDomainMessenger();
-        initializeL2OutputOracle();
         initializeDisputeGameFactory();
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
         if (_initializeAnchorStateRegistry) {
+            initializeL2OutputOracle();
             initializeAnchorStateRegistry(true);
         }
 
