@@ -125,3 +125,12 @@ func (r *RLPBlockRange) CheckLengths(expectedLength uint64) error {
 	}
 	return err
 }
+
+func (r *RLPBlockRange) DropFirst() {
+	r.start = r.start + 1
+	r.hashes = r.hashes[1:]
+	r.headers = r.headers[1:]
+	r.bodies = r.bodies[1:]
+	r.receipts = r.receipts[1:]
+	r.tds = r.tds[1:]
+}

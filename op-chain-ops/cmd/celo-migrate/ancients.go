@@ -103,9 +103,24 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 		count := min(batchSize, endBlock-i)
 		start := i
 
+		// If we are not at genesis include the last block of
+		// the previous range so we can check for continuity between ranges.
+		if start > 0 {
+			start = start - 1
+			count = count + 1
+		}
+
 		blockRange, err := loadAncientRange(freezer, start, count)
 		if err != nil {
 			return fmt.Errorf("Failed to load ancient block range: %w", err)
+		}
+
+		if _, err = blockRange.CheckContinuity(nil, count); err != nil {
+			return fmt.Errorf("Failed continuity check for ancient block range: %w. This is likely due to a corrupted source directory. Please delete the target directory and repeat the migration with an uncorrupted source directory", err)
+		}
+
+		if start > 0 {
+			blockRange.DropFirst()
 		}
 
 		select {
