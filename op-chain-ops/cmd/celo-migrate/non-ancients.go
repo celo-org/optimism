@@ -64,13 +64,18 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 	return nil
 }
 
-func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, numAncients, batchSize uint64) (uint64, error) {
+func migrateNonAncientsDb(newDB ethdb.Database, lastBlock, batchSize uint64, lastAncient *RLPBlockElement) (uint64, error) {
 	defer timer("migrateNonAncientsDb")()
 
-	// Delete bad blocks, we could migrate them, but we have no need of the historical bad blocks. AFAICS bad blocks
+	// Delete bad blocks, we could migrate them, but we have no need for the historical bad blocks. AFAICS bad blocks
 	// are stored solely so that they can be retrieved or traced via the debug API, but we are no longer interested
 	// in these old bad blocks.
 	rawdb.DeleteBadBlocks(newDB)
+
+	numAncients := 0
+	if lastAncient != nil {
+		numAncients = lastAncient.Header().Number.Uint64() + 1
+	}
 
 	// The genesis block is the only block that should remain stored in the non-ancient db even after it is frozen.
 	if numAncients > 0 {
