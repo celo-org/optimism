@@ -106,46 +106,47 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 	defer close(out)
 
 	for i := startBlock; i < endBlock; i += batchSize {
+		count := min(batchSize, endBlock-i+1)
+		start := i
+
+		blockRange := RLPBlockRange{
+			start:    start,
+			hashes:   make([][]byte, count),
+			headers:  make([][]byte, count),
+			bodies:   make([][]byte, count),
+			receipts: make([][]byte, count),
+			tds:      make([][]byte, count),
+		}
+		var err error
+
+		blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
+		if err != nil {
+			return fmt.Errorf("failed to read hashes from old freezer: %w", err)
+		}
+		blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
+		if err != nil {
+			return fmt.Errorf("failed to read headers from old freezer: %w", err)
+		}
+		blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
+		if err != nil {
+			return fmt.Errorf("failed to read bodies from old freezer: %w", err)
+		}
+		blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
+		if err != nil {
+			return fmt.Errorf("failed to read receipts from old freezer: %w", err)
+		}
+		blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
+		if err != nil {
+			return fmt.Errorf("failed to read tds from old freezer: %w", err)
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-			count := min(batchSize, endBlock-i+1)
-			start := i
-
-			blockRange := RLPBlockRange{
-				start:    start,
-				hashes:   make([][]byte, count),
-				headers:  make([][]byte, count),
-				bodies:   make([][]byte, count),
-				receipts: make([][]byte, count),
-				tds:      make([][]byte, count),
-			}
-			var err error
-
-			blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read hashes from old freezer: %w", err)
-			}
-			blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read headers from old freezer: %w", err)
-			}
-			blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read bodies from old freezer: %w", err)
-			}
-			blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read receipts from old freezer: %w", err)
-			}
-			blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read tds from old freezer: %w", err)
-			}
-
-			out <- blockRange
+		case out <- blockRange:
 		}
+
+		log.Info("Read ancient blocks", "start", start, "end", start+count-1, "count", count)
 	}
 	return nil
 }
@@ -154,31 +155,31 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 	// Transform blocks from the in channel and send them to the out channel
 	defer close(out)
 	for blockRange := range in {
+		for i := range blockRange.hashes {
+			blockNumber := blockRange.start + uint64(i)
+
+			newHeader, err := transformHeader(blockRange.headers[i])
+			if err != nil {
+				return fmt.Errorf("can't transform header: %w", err)
+			}
+			newBody, err := transformBlockBody(blockRange.bodies[i])
+			if err != nil {
+				return fmt.Errorf("can't transform body: %w", err)
+			}
+
+			if yes, newHash := hasSameHash(newHeader, blockRange.hashes[i]); !yes {
+				log.Error("Hash mismatch", "block", blockNumber, "oldHash", common.BytesToHash(blockRange.hashes[i]), "newHash", newHash)
+				return fmt.Errorf("hash mismatch at block %d", blockNumber)
+			}
+
+			blockRange.headers[i] = newHeader
+			blockRange.bodies[i] = newBody
+		}
+
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		default:
-			for i := range blockRange.hashes {
-				blockNumber := blockRange.start + uint64(i)
-
-				newHeader, err := transformHeader(blockRange.headers[i])
-				if err != nil {
-					return fmt.Errorf("can't transform header: %w", err)
-				}
-				newBody, err := transformBlockBody(blockRange.bodies[i])
-				if err != nil {
-					return fmt.Errorf("can't transform body: %w", err)
-				}
-
-				if yes, newHash := hasSameHash(newHeader, blockRange.hashes[i]); !yes {
-					log.Error("Hash mismatch", "block", blockNumber, "oldHash", common.BytesToHash(blockRange.hashes[i]), "newHash", newHash)
-					return fmt.Errorf("hash mismatch at block %d", blockNumber)
-				}
-
-				blockRange.headers[i] = newHeader
-				blockRange.bodies[i] = newBody
-			}
-			out <- blockRange
+		case out <- blockRange:
 		}
 	}
 	return nil
