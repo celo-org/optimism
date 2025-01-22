@@ -103,46 +103,57 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 			count := min(batchSize, endBlock-i+1)
 			start := i
 
-			blockRange := RLPBlockRange{
-				start:    start,
-				hashes:   make([][]byte, count),
-				headers:  make([][]byte, count),
-				bodies:   make([][]byte, count),
-				receipts: make([][]byte, count),
-				tds:      make([][]byte, count),
-			}
-			var err error
-
-			blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
+			blockRange, err := loadAncientRange(freezer, start, count)
 			if err != nil {
-				return fmt.Errorf("failed to read hashes from old freezer: %w", err)
+				return fmt.Errorf("Failed to load ancient block range: %w", err)
 			}
-			blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read headers from old freezer: %w", err)
-			}
-			blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read bodies from old freezer: %w", err)
-			}
-			blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read receipts from old freezer: %w", err)
-			}
-			blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
-			if err != nil {
-				return fmt.Errorf("failed to read tds from old freezer: %w", err)
-			}
-
-			out <- blockRange
+			out <- *blockRange
 		}
 	}
 	return nil
 }
 
+func loadAncientRange(freezer *rawdb.Freezer, start, count uint64) (*RLPBlockRange, error) {
+	log.Info("Loading ancient block range", "start", start, "end", start+count-1, "count", count)
+
+	blockRange := &RLPBlockRange{
+		start:    start,
+		hashes:   make([][]byte, count),
+		headers:  make([][]byte, count),
+		bodies:   make([][]byte, count),
+		receipts: make([][]byte, count),
+		tds:      make([][]byte, count),
+	}
+
+	var err error
+	blockRange.hashes, err = freezer.AncientRange(rawdb.ChainFreezerHashTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read hashes from old freezer: %w", err)
+	}
+	blockRange.headers, err = freezer.AncientRange(rawdb.ChainFreezerHeaderTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read headers from old freezer: %w", err)
+	}
+	blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read bodies from old freezer: %w", err)
+	}
+	blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read receipts from old freezer: %w", err)
+	}
+	blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read tds from old freezer: %w", err)
+	}
+
+	return blockRange, nil
+}
+
 func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RLPBlockRange) error {
 	// Transform blocks from the in channel and send them to the out channel
 	defer close(out)
+
 	for blockRange := range in {
 		select {
 		case <-ctx.Done():
