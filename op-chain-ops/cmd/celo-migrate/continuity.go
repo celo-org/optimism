@@ -129,3 +129,29 @@ func (r *RLPBlockRange) CheckLengths(expectedLength uint64) error {
 	}
 	return err
 }
+
+func (r *RLPBlockRange) DropFirst() {
+	r.start = r.start + 1
+	r.hashes = r.hashes[1:]
+	r.headers = r.headers[1:]
+	r.bodies = r.bodies[1:]
+	r.receipts = r.receipts[1:]
+	r.tds = r.tds[1:]
+}
+
+// Transform transforms the necessary block data in the range
+func (r *RLPBlockRange) Transform() error {
+	for i := range r.hashes {
+		blockNumber := r.start + uint64(i)
+
+		newHeader, newBody, err := transform(r.headers[i], r.bodies[i], r.hashes[i], blockNumber)
+		if err != nil {
+			return err
+		}
+
+		r.headers[i] = newHeader
+		r.bodies[i] = newBody
+	}
+
+	return nil
+}

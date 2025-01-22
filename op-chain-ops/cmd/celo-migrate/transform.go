@@ -77,6 +77,24 @@ func hasSameHash(newHeader, oldHash []byte) (bool, common.Hash) {
 	return bytes.Equal(oldHash, newHash.Bytes()), newHash
 }
 
+// checkTransformedHeader checks that the transformed header has the same hash and block number as expected
+func checkTransformedHeader(header, expectedHash []byte, expectedNumber uint64) error {
+	// Check that transformed header has the same hash
+	if yes, newHash := hasSameHash(header, expectedHash); !yes {
+		return fmt.Errorf("hash mismatch after transform at block %d - %x. Expected %d, actual %d", expectedNumber, expectedHash, expectedHash, newHash)
+	}
+	// Check that transformed header has the same block number
+	headerDecoded := new(types.Header)
+	if err := rlp.DecodeBytes(header, &headerDecoded); err != nil {
+		return err
+	}
+	if headerDecoded.Number.Uint64() != expectedNumber {
+		return fmt.Errorf("block number mismatch after transform at block %d - %x. Expected %d, actual %d", expectedNumber, expectedHash, expectedNumber, headerDecoded.Number.Uint64())
+	}
+
+	return nil
+}
+
 // transformBlockBody migrates the block body from the old format to the new format (works with []byte input output)
 func transformBlockBody(oldBodyData []byte) ([]byte, error) {
 	// decode body into celo-blockchain Body structure
@@ -106,4 +124,21 @@ func transformBlockBody(oldBodyData []byte) ([]byte, error) {
 	}
 
 	return newBodyData, nil
+}
+
+// transform header and body
+func transform(header, body, hash []byte, number uint64) (newHeader []byte, newBody []byte, err error) {
+	newHeader, err = transformHeader(header)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to transform header: block %d - %x: %w", number, hash, err)
+	}
+	if err = checkTransformedHeader(newHeader, hash[:], number); err != nil {
+		return nil, nil, err
+	}
+	newBody, err = transformBlockBody(body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to transform body: block %d - %x: %w", number, hash, err)
+	}
+
+	return newHeader, newBody, nil
 }

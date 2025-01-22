@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -29,12 +28,12 @@ func NewChainFreezer(datadir string, namespace string, readonly bool) (*rawdb.Fr
 	return rawdb.NewFreezer(datadir, namespace, readonly, freezerTableSize, chainFreezerNoSnappy)
 }
 
-func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (numAncientsNewBefore uint64, numAncientsNewAfter uint64, err error) {
+func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSize, bufferSize uint64) (numAncientsNewBefore uint64, lastAncient *RLPBlockElement, err error) {
 	defer timer("ancients")()
 
 	oldFreezer, err := NewChainFreezer(filepath.Join(oldDBPath, "ancient"), "", false) // Can't be readonly because we need the .meta files to be created
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to open old freezer: %w", err)
+		return 0, nil, fmt.Errorf("failed to open old freezer: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, oldFreezer.Close())
@@ -42,7 +41,7 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 
 	newFreezer, err := NewChainFreezer(filepath.Join(newDBPath, "ancient"), "", false)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to open new freezer: %w", err)
+		return 0, nil, fmt.Errorf("failed to open new freezer: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, newFreezer.Close())
@@ -50,17 +49,21 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 
 	numAncientsOld, err := oldFreezer.Ancients()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get number of ancients in old freezer: %w", err)
+		return 0, nil, fmt.Errorf("failed to get number of ancients in old freezer: %w", err)
 	}
 
 	numAncientsNewBefore, err = newFreezer.Ancients()
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
+		return 0, nil, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
 	}
 
 	if numAncientsNewBefore >= numAncientsOld {
 		log.Info("Ancient Block Migration Skipped", "process", "ancients", "ancientsInOldDB", numAncientsOld, "ancientsInNewDB", numAncientsNewBefore)
-		return numAncientsNewBefore, numAncientsNewBefore, nil
+		lastAncient, err = loadLastAncient(newFreezer)
+		if err != nil {
+			return 0, nil, err
+		}
+		return numAncientsNewBefore, lastAncient, nil
 	}
 
 	log.Info("Ancient Block Migration Started", "process", "ancients", "startBlock", numAncientsNewBefore, "endBlock", numAncientsOld-1, "count", numAncientsOld-numAncientsNewBefore, "step", batchSize)
@@ -76,20 +79,21 @@ func migrateAncientsDb(ctx context.Context, oldDBPath, newDBPath string, batchSi
 	g.Go(func() error { return writeAncientBlocks(ctx, newFreezer, transformChan, numAncientsOld) })
 
 	if err = g.Wait(); err != nil {
-		return 0, 0, fmt.Errorf("failed to migrate ancients: %w", err)
+		return 0, nil, fmt.Errorf("failed to migrate ancients: %w", err)
 	}
 
-	numAncientsNewAfter, err = newFreezer.Ancients()
+	lastAncient, err = loadLastAncient(newFreezer)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
+		return 0, nil, err
 	}
 
+	numAncientsNewAfter := lastAncient.Header().Number.Uint64() + 1
 	if numAncientsNewAfter != numAncientsOld {
-		return 0, 0, fmt.Errorf("failed to migrate all ancients from old to new db. Expected %d, got %d", numAncientsOld, numAncientsNewAfter)
+		return 0, nil, fmt.Errorf("failed to migrate all ancients from old to new db. Expected %d, got %d", numAncientsOld, numAncientsNewAfter)
 	}
 
 	log.Info("Ancient Block Migration Ended", "process", "ancients", "ancientsInOldDB", numAncientsOld, "ancientsInNewDB", numAncientsNewAfter, "migrated", numAncientsNewAfter-numAncientsNewBefore)
-	return numAncientsNewBefore, numAncientsNewAfter, nil
+	return numAncientsNewBefore, lastAncient, nil
 }
 
 func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, endBlock, batchSize uint64, out chan<- RLPBlockRange) error {
@@ -98,9 +102,24 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 		count := min(batchSize, endBlock-i)
 		start := i
 
+		// If we are not at genesis include the last block of
+		// the previous range so we can check for continuity between ranges.
+		if start > 0 {
+			start = start - 1
+			count = count + 1
+		}
+
 		blockRange, err := loadAncientRange(freezer, start, count)
 		if err != nil {
 			return fmt.Errorf("Failed to load ancient block range: %w", err)
+		}
+
+		if _, err = blockRange.CheckContinuity(nil, count); err != nil {
+			return fmt.Errorf("Failed continuity check for ancient block range: %w. This is likely due to a corrupted source directory. Please delete the target directory and repeat the migration with an uncorrupted source directory", err)
+		}
+
+		if start > 0 {
+			blockRange.DropFirst()
 		}
 
 		select {
@@ -156,25 +175,8 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 	defer close(out)
 
 	for blockRange := range in {
-		for i := range blockRange.hashes {
-			blockNumber := blockRange.start + uint64(i)
-
-			newHeader, err := transformHeader(blockRange.headers[i])
-			if err != nil {
-				return fmt.Errorf("can't transform header: %w", err)
-			}
-			newBody, err := transformBlockBody(blockRange.bodies[i])
-			if err != nil {
-				return fmt.Errorf("can't transform body: %w", err)
-			}
-
-			if yes, newHash := hasSameHash(newHeader, blockRange.hashes[i]); !yes {
-				log.Error("Hash mismatch", "block", blockNumber, "oldHash", common.BytesToHash(blockRange.hashes[i]), "newHash", newHash)
-				return fmt.Errorf("hash mismatch at block %d", blockNumber)
-			}
-
-			blockRange.headers[i] = newHeader
-			blockRange.bodies[i] = newBody
+		if err := blockRange.Transform(); err != nil {
+			return err
 		}
 
 		select {
