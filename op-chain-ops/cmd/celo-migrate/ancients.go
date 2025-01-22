@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -177,25 +176,8 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 		case <-ctx.Done():
 			return ctx.Err()
 		default:
-			for i := range blockRange.hashes {
-				blockNumber := blockRange.start + uint64(i)
-
-				newHeader, err := transformHeader(blockRange.headers[i])
-				if err != nil {
-					return fmt.Errorf("can't transform header: %w", err)
-				}
-				newBody, err := transformBlockBody(blockRange.bodies[i])
-				if err != nil {
-					return fmt.Errorf("can't transform body: %w", err)
-				}
-
-				if yes, newHash := hasSameHash(newHeader, blockRange.hashes[i]); !yes {
-					log.Error("Hash mismatch", "block", blockNumber, "oldHash", common.BytesToHash(blockRange.hashes[i]), "newHash", newHash)
-					return fmt.Errorf("hash mismatch at block %d", blockNumber)
-				}
-
-				blockRange.headers[i] = newHeader
-				blockRange.bodies[i] = newBody
+			if err := blockRange.Transform(); err != nil {
+				return err
 			}
 			out <- blockRange
 		}
