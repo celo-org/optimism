@@ -321,6 +321,9 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 	debug.SetMemoryLimit(opts.memoryLimit * 1 << 20) // Set memory limit, converting from MiB to bytes
 
 	var err error
+	if err = checkForGapAfterLastAncient(opts.oldDBPath); err != nil {
+		return nil, nil, fmt.Errorf("failed to ensure data continuity between ancients and non-ancients: %w", err)
+	}
 
 	if err = createNewDbPathIfNotExists(opts.newDBPath); err != nil {
 		return nil, 0, fmt.Errorf("failed to create new db path: %w", err)
@@ -623,6 +626,43 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	}
 
 	log.Info("DB Continuity Check Finished", "dbPath", opts.dbPath)
+
+	return nil
+}
+
+// Gaps in data will often halt the freezing process, so attempting to load the first non-ancient block
+// will likely fail if there is a gap. We perform this check at the beginning of the migration script in order
+// to fail fast if the source db is corrupted.
+func checkForGapAfterLastAncient(dbPath string) error {
+	defer timer("check for gap after last ancient")()
+
+	ancientDB, err := NewChainFreezer(filepath.Join(dbPath, "ancient"), "", true)
+	if err != nil {
+		return fmt.Errorf("failed to open ancient db: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, ancientDB.Close())
+	}()
+	nonAncientDB, err := openDBWithoutFreezer(dbPath, true)
+	if err != nil {
+		return fmt.Errorf("failed to open non-ancient db: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, nonAncientDB.Close())
+	}()
+
+	lastAncient, err := loadLastAncient(ancientDB)
+	if err != nil {
+		return fmt.Errorf("failed to load last ancient block: %w", err)
+	}
+
+	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncient.Header().Number.Uint64()+1, 1)
+	if err != nil {
+		return fmt.Errorf("failed to load first non-ancient block: %w", err)
+	}
+	if _, err := firstNonAncientRange.CheckContinuity(lastAncient, 1); err != nil {
+		return fmt.Errorf("failed continuity check between ancients and non-ancients: %w", err)
+	}
 
 	return nil
 }
