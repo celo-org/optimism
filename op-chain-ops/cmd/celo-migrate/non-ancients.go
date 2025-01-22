@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -123,5 +125,72 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 		return fmt.Errorf("failed to write header and body: block %d - %x: %w", number, hash, err)
 	}
 
+	return nil
+}
+
+func loadNonAncientRange(db ethdb.Database, start, count uint64) (*RLPBlockRange, error) {
+	blockRange := &RLPBlockRange{
+		start:    start,
+		hashes:   make([][]byte, count),
+		headers:  make([][]byte, count),
+		bodies:   make([][]byte, count),
+		receipts: make([][]byte, count),
+		tds:      make([][]byte, count),
+	}
+	end := start + count - 1
+	log.Info("Loading non-ancient block range", "start", start, "end", end, "count", count)
+	numberHashes := rawdb.ReadAllHashesInRange(db, start, end)
+	err := checkNumberHashes(db, numberHashes)
+	if err != nil {
+		return nil, err
+	}
+
+	var combinedErr error
+
+	for i, numberHash := range numberHashes {
+		number := numberHash.Number
+		hash := numberHash.Hash
+
+		blockRange.hashes[i] = hash[:]
+		blockRange.headers[i], err = db.Get(headerKey(number, hash))
+		if err != nil {
+			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find header in db for non-ancient block %d - %x: %w", number, hash, err))
+		}
+		blockRange.bodies[i], err = db.Get(blockBodyKey(number, hash))
+		if err != nil {
+			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find body in db for non-ancient block %d - %x: %w", number, hash, err))
+		}
+		blockRange.receipts[i], err = db.Get(blockReceiptsKey(number, hash))
+		if err != nil {
+			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find receipts in db for non-ancient block %d - %x: %w", number, hash, err))
+		}
+		blockRange.tds[i], err = db.Get(headerTDKey(number, hash))
+		if err != nil {
+			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find total difficulty in db for non-ancient block %d - %x: %w", number, hash, err))
+		}
+	}
+
+	return blockRange, combinedErr
+}
+
+// checkNumberHashes checks that the contents of a NumberHash slice match the contents in the headerNumber and headerHash db tables.
+// We do this to account for any differences in the way NumberHashes are read from the db, and to ensure the slice only contains canonical data.
+func checkNumberHashes(db ethdb.Database, numberHashes []*rawdb.NumberHash) error {
+	for _, numberHash := range numberHashes {
+		numberRLP, err := db.Get(headerNumberKey(numberHash.Hash))
+		if err != nil {
+			return fmt.Errorf("failed to find number for hash in db for non-ancient block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
+		}
+		hashRLP, err := db.Get(headerHashKey(numberHash.Number))
+		if err != nil {
+			return fmt.Errorf("failed to find canonical hash in db for non-ancient block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
+		}
+		if !bytes.Equal(hashRLP, numberHash.Hash[:]) {
+			return fmt.Errorf("canonical hash mismatch in db for non-ancient block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
+		}
+		if !bytes.Equal(numberRLP, encodeBlockNumber(numberHash.Number)) {
+			return fmt.Errorf("number for hash mismatch in db for non-ancient block %d - %x: %w", numberHash.Number, numberHash.Hash, err)
+		}
+	}
 	return nil
 }
