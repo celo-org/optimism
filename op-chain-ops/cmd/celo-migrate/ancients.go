@@ -13,16 +13,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-// RLPBlockRange is a range of blocks in RLP format
-type RLPBlockRange struct {
-	start    uint64
-	hashes   [][]byte
-	headers  [][]byte
-	bodies   [][]byte
-	receipts [][]byte
-	tds      [][]byte
-}
-
 // NewChainFreezer is a small utility method around NewFreezer that sets the
 // default parameters for the chain storage.
 func NewChainFreezer(datadir string, namespace string, readonly bool) (*rawdb.Freezer, error) {
