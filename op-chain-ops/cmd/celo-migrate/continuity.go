@@ -125,4 +125,3 @@ func (r *RLPBlockRange) CheckLengths(expectedLength uint64) error {
 	}
 	return err
 }
-
