@@ -2,7 +2,23 @@
 
 ## Generate Devnet L1 and L2 Allocations
 
+1. Run
+    ```bash
+    make devnet-clean && DEVNET_CELO=true SAFE_AS_OWNER=true make devnet-up
+    ```
+    This will generate and run full devnet in local docker
+2. Copy `.devnet/genesis-L1.json`, `.devnet/genesis-L2.json`, and `.devnet/rollup.json` to the `.devnet` folder in other branch
+3. Run on other branch
+    ```bash
+    DEVNET_CELO=true SAFE_AS_OWNER=true make devnet-up
+    ```
+4. To double check that everything is working correctly, search for
 
+    ``` L1 genesis already generated.```
+
+    ``` L2 genesis and rollup configs already generated.```
+
+    in logs
 
 
 ## Generate L2 Allocations for real network (Alfajores, Baklava, Mainnet)
