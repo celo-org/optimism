@@ -109,19 +109,19 @@ func (r *RLPBlockRange) CheckContinuity(prevElement *RLPBlockElement, expectedLe
 func (r *RLPBlockRange) CheckLengths(expectedLength uint64) error {
 	var err error
 	if uint64(len(r.hashes)) != expectedLength {
-		err = fmt.Errorf("Expected count mismatch in block range hashes: expected %d, actual %d", expectedLength, len(r.hashes))
+		err = fmt.Errorf("Unexpected number of hashes for block range: expected %d, actual %d", expectedLength, len(r.hashes))
 	}
 	if uint64(len(r.bodies)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range bodies: expected %d, actual %d", expectedLength, len(r.bodies)))
+		err = errors.Join(err, fmt.Errorf("Unexpected number of bodies for block range: expected %d, actual %d", expectedLength, len(r.bodies)))
 	}
 	if uint64(len(r.headers)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range headers: expected %d, actual %d", expectedLength, len(r.headers)))
+		err = errors.Join(err, fmt.Errorf("Unexpected number of headers for block range: expected %d, actual %d", expectedLength, len(r.headers)))
 	}
 	if uint64(len(r.receipts)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range receipts: expected %d, actual %d", expectedLength, len(r.receipts)))
+		err = errors.Join(err, fmt.Errorf("Unexpected number of receipts for block range: expected %d, actual %d", expectedLength, len(r.receipts)))
 	}
 	if uint64(len(r.tds)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Expected count mismatch in block range total difficulties: expected %d, actual %d", expectedLength, len(r.tds)))
+		err = errors.Join(err, fmt.Errorf("Unexpected number of total difficulties for block range: expected %d, actual %d", expectedLength, len(r.tds)))
 	}
 	return err
 }
