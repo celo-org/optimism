@@ -148,6 +148,10 @@ func loadAncientRange(freezer *rawdb.Freezer, start, count uint64) (*RLPBlockRan
 		return nil, fmt.Errorf("failed to read tds from freezer: %w", err)
 	}
 
+	if err := blockRange.CheckLengths(int(count)); err != nil {
+		return nil, fmt.Errorf("lengths check failed: %v", err)
+	}
+
 	return blockRange, nil
 }
 
@@ -242,17 +246,4 @@ func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error
 	}
 
 	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), nil
-}
-
-// Get the last ancient block data so we can check for continuity between ancients and non-ancients
-func loadLastAncient(freezer *rawdb.Freezer) (*RLPBlockElement, error) {
-	numAncients, err := freezer.Ancients()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get number of ancients in freezer: %w", err)
-	}
-	blockRange, err := loadAncientRange(freezer, numAncients-1, 1)
-	if err != nil {
-		return nil, err
-	}
-	return blockRange.Element(0)
 }

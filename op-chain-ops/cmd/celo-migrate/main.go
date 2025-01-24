@@ -8,8 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"runtime/debug"
-	"sync"
 	"time"
 
 	"log/slog"
@@ -19,7 +19,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
-	"github.com/hashicorp/go-multierror"
 	"github.com/mattn/go-isatty"
 
 	"github.com/urfave/cli/v2"
@@ -27,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
@@ -515,115 +515,34 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 		err = errors.Join(err, nonAncientDB.Close())
 	}()
 
-	lastAncient, err := loadLastAncient(ancientDB)
+	ancients, err := ancientDB.Ancients()
 	if err != nil {
-		return fmt.Errorf("failed to load last ancient block: %w", err)
+		return fmt.Errorf("failed to call Ancients: %w", err)
 	}
-	lastAncientNumber := lastAncient.Header().Number.Uint64()
+	// Check the range covering the ancient to non-ancient transition first, since this is where we previously encountered continuity issues.
+	err = checkRange(ancientDB, nonAncientDB, ancients-1, ancients+1)
+	if err != nil {
+		return fmt.Errorf("failed to check range covering ancient to non-ancient transition (blocks %d-%d): %w", ancients-1, ancients+1, err)
+	}
+	// Now check the whole chain
+	g := new(errgroup.Group)
+	g.SetLimit(runtime.NumCPU() * 2)
 	lastBlockNumber := *rawdb.ReadHeaderNumber(nonAncientDB, rawdb.ReadHeadHeaderHash(nonAncientDB))
-
-	var errResult *multierror.Error
-
-	// First, check continuity between ancients and non-ancients.
-	// Gaps in data will often halt the freezing process, so attempting to load the first non-ancient block
-	// will most likely fail if there is a gap.
-	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncientNumber+1, 1)
-	if err != nil {
-		if opts.failFast {
-			return fmt.Errorf("failed to load first non-ancient block: %w", err)
-		}
-		// We don't need to add the error to errResult here because it will be added below when we call checkContinuity on non-ancients
-	} else {
-		if _, err := firstNonAncientRange.CheckContinuity(lastAncient, 1); err != nil {
-			err = fmt.Errorf("failed continuity check between ancients and non-ancients: %w", err)
-			if opts.failFast {
-				return err
-			}
-			errResult = multierror.Append(errResult, err)
-		}
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(8)
-
-	var mu sync.Mutex
-
-	checkRange := func(start, count uint64, loadRangeFunc func(uint64, uint64) (*RLPBlockRange, error)) {
-		// If we are not at genesis or the first non-ancient block, include the last block of
-		// the previous range so we can check for continuity between ranges.
-		if start != 0 && start != lastAncientNumber+1 {
-			start = start - 1
-			count = count + 1
-		}
+	for i := uint64(0); i <= lastBlockNumber; i += opts.batchSize {
+		start := i
 		g.Go(func() error {
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			default:
-				blockRange, err := loadRangeFunc(start, count)
-				if err != nil {
-					err = fmt.Errorf("failed to load block range: %w", err)
-					if opts.failFast {
-						return err
-					}
-					log.Error(err.Error())
-					mu.Lock()
-					errResult = multierror.Append(errResult, err)
-					mu.Unlock()
-					return nil
-				}
-				if _, err := blockRange.CheckContinuity(nil, count); err != nil {
-					err = fmt.Errorf("failed continuity check: %w", err)
-					if opts.failFast {
-						return err
-					}
-					log.Error(err.Error())
-					mu.Lock()
-					errResult = multierror.Append(errResult, err)
-					mu.Unlock()
-					return nil
-				}
-				log.Info("Successfully checked block range continuity", "start", start, "end", start+count-1, "count", count)
-				return nil
+			end := min(start+opts.batchSize-1, lastBlockNumber)
+			if start > 0 {
+				start -= 1 // Ensure we check continuity across batch boundaries
 			}
+			log.Info("Checking data continuity for block range", "start", start, "end", end, "count", end-start+1)
+			err := checkRange(ancientDB, nonAncientDB, start, end)
+			if err != nil {
+				return fmt.Errorf("failed to check range (%d-%d): %w", start, end, err)
+			}
+			return nil
 		})
 	}
-	checkContinuity := func(start, end uint64, loadRangeFunc func(uint64, uint64) (*RLPBlockRange, error)) error {
-		if (start <= lastAncientNumber && end > lastAncientNumber) || (end > lastBlockNumber) || (end < start) {
-			return fmt.Errorf("invalid range for continuity check: start=%d, end=%d, lastAncientNumber=%d, lastBlockNumber=%d", start, end, lastAncientNumber, lastBlockNumber)
-		}
-		for i := start; i <= end; i += opts.batchSize {
-			count := min(opts.batchSize, end-i+1)
-			checkRange(i, count, loadRangeFunc)
-		}
-		return nil
-	}
-
-	log.Info("Checking continuity of ancient blocks", "start", 0, "end", lastAncientNumber, "count", lastAncientNumber+1)
-	if err := checkContinuity(0, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
-		return loadAncientRange(ancientDB, start, count)
-	}); err != nil {
-		return err
-	}
-	log.Info("Checking continuity of non-ancient blocks", "start", lastAncientNumber+1, "end", lastBlockNumber, "count", lastBlockNumber-lastAncientNumber)
-	if err := checkContinuity(lastAncientNumber+1, lastBlockNumber, func(start, count uint64) (*RLPBlockRange, error) {
-		return loadNonAncientRange(nonAncientDB, start, count)
-	}); err != nil {
-		return err
-	}
-
-	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	if errResult.ErrorOrNil() != nil {
-		return errResult
-	}
-
-	log.Info("DB Continuity Check Finished", "dbPath", opts.dbPath)
-
 	return nil
 }
 
@@ -632,4 +551,45 @@ func timer(name string) func() {
 	return func() {
 		log.Info("TIMER", "process", name, "duration", time.Since(start))
 	}
+}
+
+// checkRange loads a range of blocks from the db, it transparently handles loading from the freezer and the normal db.
+func checkRange(freezer *rawdb.Freezer, db ethdb.Database, start, end uint64) error {
+	numAncients, err := freezer.Ancients()
+	if err != nil {
+		return fmt.Errorf("failed to get number of ancients in freezer: %w", err)
+	}
+	var ancientRange, nonAncientRange *RLPBlockRange
+	if start < numAncients {
+		ancientRange, err = loadAncientRange(freezer, start, min(numAncients-1, end)-start+1)
+		if err != nil {
+			return err
+		}
+		if err := ancientRange.CheckContinuity(); err != nil {
+			return err
+		}
+	}
+	if end > numAncients {
+		start := max(numAncients, start)
+		nonAncientRange, err = loadNonAncientRange(db, start, end-start+1)
+		if err != nil {
+			return err
+		}
+		if err := nonAncientRange.CheckContinuity(); err != nil {
+			return err
+		}
+	}
+	if ancientRange != nil && nonAncientRange != nil {
+		n, err := nonAncientRange.Element(0)
+		if err != nil {
+			return fmt.Errorf("failed to get element 0, block (%d) from non-ancient range: %w", nonAncientRange.start, err)
+		}
+		lastElement := uint64(len(ancientRange.hashes) - 1)
+		a, err := ancientRange.Element(lastElement)
+		if err != nil {
+			return fmt.Errorf("failed to get lastAncient element %d, block (%d) from ancient range: %w", lastElement, lastElement+start, err)
+		}
+		return n.Follows(a)
+	}
+	return nil
 }
