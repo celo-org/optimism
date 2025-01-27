@@ -519,7 +519,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	if err != nil {
 		return fmt.Errorf("failed to load last ancient block: %w", err)
 	}
-	lastAncientNumber := lastAncient.Header().Number.Uint64()
+	lastAncientNumber := lastAncient.Number()
 	lastBlockNumber := *rawdb.ReadHeaderNumber(nonAncientDB, rawdb.ReadHeadHeaderHash(nonAncientDB))
 
 	var errResult *multierror.Error

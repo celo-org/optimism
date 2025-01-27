@@ -33,20 +33,24 @@ type RLPBlockElement struct {
 // Follows checks if the current block has a number one greater than the previous block
 // and if the parent hash of the current block matches the hash of the previous block.
 func (e *RLPBlockElement) Follows(prev *RLPBlockElement) (err error) {
-	if e.Header().Number.Uint64() != prev.Header().Number.Uint64()+1 {
-		err = errors.Join(err, fmt.Errorf("header number mismatch indicating a gap in block numbers: expected %d, actual %d", prev.Header().Number.Uint64()+1, e.Header().Number.Uint64()))
+	if e.Number() != prev.Number()+1 {
+		err = errors.Join(err, fmt.Errorf("header number mismatch indicating a gap in block numbers: expected %d, actual %d", prev.Number()+1, e.Number()))
 	}
 	// We compare the parent hash with the stored hash of the previous block because
 	// at this point the header object will not calculate the correct hash since it
 	// first needs to be transformed.
 	if e.Header().ParentHash != common.BytesToHash(prev.hash) {
-		err = errors.Join(err, fmt.Errorf("parent hash mismatch between blocks %d and %d", e.Header().Number.Uint64(), prev.Header().Number.Uint64()))
+		err = errors.Join(err, fmt.Errorf("parent hash mismatch between blocks %d and %d", e.Number(), prev.Number()))
 	}
 	return err
 }
 
 func (e *RLPBlockElement) Header() *types.Header {
 	return e.decodedHeader
+}
+
+func (e *RLPBlockElement) Number() uint64 {
+	return e.Header().Number.Uint64()
 }
 
 func (r *RLPBlockRange) Element(i uint64) (*RLPBlockElement, error) {
@@ -77,7 +81,7 @@ func (r *RLPBlockRange) CheckContinuity(prevElement *RLPBlockElement, expectedLe
 		"count", expectedLength,
 		"prevElement", func() interface{} {
 			if prevElement != nil {
-				return prevElement.Header().Number.Uint64()
+				return prevElement.Number()
 			}
 			return "nil"
 		}(),
@@ -91,11 +95,11 @@ func (r *RLPBlockRange) CheckContinuity(prevElement *RLPBlockElement, expectedLe
 		if err != nil {
 			return nil, err
 		}
-		if currElement.Header().Number.Uint64() != r.start+uint64(i) {
-			return nil, fmt.Errorf("decoded header number mismatch indicating a gap in block numbers: expected %d, actual %d", r.start+uint64(i), currElement.Header().Number.Uint64())
+		if currElement.Number() != r.start+uint64(i) {
+			return nil, fmt.Errorf("decoded header number mismatch indicating a gap in block numbers: expected %d, actual %d", r.start+uint64(i), currElement.Number())
 		}
 		if prevElement != nil {
-			log.Debug("Checking continuity", "block", currElement.Header().Number.Uint64(), "prev", prevElement.Header().Number.Uint64())
+			log.Debug("Checking continuity", "block", currElement.Number(), "prev", prevElement.Number())
 			if err := currElement.Follows(prevElement); err != nil {
 				return nil, err
 			}
