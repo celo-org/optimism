@@ -28,7 +28,10 @@ COPY ./versions.json ./versions.json
 COPY ./ops/scripts/install-foundry.sh ./install-foundry.sh
 
 RUN curl -L https://foundry.paradigm.xyz | bash
-RUN source $HOME/.profile && ./install-foundry.sh
+RUN source $HOME/.profile &&\
+    ./install-foundry.sh &&\
+    git config --global http.postBuffer 1048576000 &&\
+    git config --global https.postBuffer 1048576000
 
 RUN strip /root/.foundry/bin/forge && \
   strip /root/.foundry/bin/cast && \
@@ -96,7 +99,7 @@ COPY ./versions.json ./versions.json
 
 RUN /bin/sh -c set -eux; \
   apt-get update; \
-  apt-get install -y --no-install-recommends bash curl openssh-client git build-essential ca-certificates jq gnupg binutils-mips-linux-gnu python3 python3-pip python3-setuptools parallel git; \
+  apt-get install -y --no-install-recommends bash curl openssh-client git build-essential ca-certificates jq gnupg binutils-mips-linux-gnu python3 python3-pip python3-setuptools parallel; \
   mkdir -p /etc/apt/keyrings; \
   curl -fsSL https://download.docker.com/linux/debian/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg; \
   chmod a+r /etc/apt/keyrings/docker.gpg; \
