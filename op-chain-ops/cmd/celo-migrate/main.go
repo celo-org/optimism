@@ -553,6 +553,10 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 			return nil
 		})
 	}
+	err = g.Wait()
+	if opts.failFast {
+		return err
+	}
 	return errResult
 }
 
