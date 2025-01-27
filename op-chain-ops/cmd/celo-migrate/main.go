@@ -522,7 +522,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 		return fmt.Errorf("failed to call Ancients: %w", err)
 	}
 	// Check the range covering the ancient to non-ancient transition first, since this is where we previously encountered continuity issues.
-	err = checkRange(ancientDB, nonAncientDB, ancients-1, ancients+1)
+	err = checkRange(ancientDB, nonAncientDB, ancients-1, ancients)
 	if err != nil {
 		return fmt.Errorf("failed to check range covering ancient to non-ancient transition (blocks %d-%d): %w", ancients-1, ancients+1, err)
 	}
