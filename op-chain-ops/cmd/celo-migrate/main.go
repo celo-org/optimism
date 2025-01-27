@@ -579,7 +579,7 @@ func checkRange(freezer *rawdb.Freezer, db ethdb.Database, start, end uint64) er
 			return err
 		}
 	}
-	if end > numAncients {
+	if end >= numAncients {
 		start := max(numAncients, start)
 		nonAncientRange, err = loadNonAncientRange(db, start, end-start+1)
 		if err != nil {
