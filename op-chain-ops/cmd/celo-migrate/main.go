@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"log/slog"
@@ -19,6 +20,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/hashicorp/go-multierror"
 	"github.com/mattn/go-isatty"
 
 	"github.com/urfave/cli/v2"
@@ -525,6 +527,8 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 		return fmt.Errorf("failed to check range covering ancient to non-ancient transition (blocks %d-%d): %w", ancients-1, ancients+1, err)
 	}
 	// Now check the whole chain
+	var errResult *multierror.Error
+	var errMu sync.Mutex
 	g := new(errgroup.Group)
 	g.SetLimit(runtime.NumCPU() * 2)
 	lastBlockNumber := *rawdb.ReadHeaderNumber(nonAncientDB, rawdb.ReadHeadHeaderHash(nonAncientDB))
@@ -538,12 +542,18 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 			log.Info("Checking data continuity for block range", "start", start, "end", end, "count", end-start+1)
 			err := checkRange(ancientDB, nonAncientDB, start, end)
 			if err != nil {
-				return fmt.Errorf("failed to check range (%d-%d): %w", start, end, err)
+				err = fmt.Errorf("failed to check range (%d-%d): %w", start, end, err)
+				if opts.failFast {
+					return err
+				}
+				errMu.Lock()
+				defer errMu.Unlock()
+				errResult = multierror.Append(errResult, err)
 			}
 			return nil
 		})
 	}
-	return nil
+	return errResult
 }
 
 func timer(name string) func() {
