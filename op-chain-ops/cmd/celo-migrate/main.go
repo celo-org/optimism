@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -257,10 +258,10 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 
 	// Set up the backing store.
 	// TODO(pl): Do we need the preimages setting here?
-	underlyingDB := state.NewDatabaseWithConfig(ldb, &triedb.Config{Preimages: true})
+	underlyingDB := state.NewDatabase(triedb.NewDatabase(ldb, &triedb.Config{Preimages: true}), nil)
 
 	// Open up the state database.
-	db, err := state.New(header.Root, underlyingDB, nil)
+	db, err := state.New(header.Root, underlyingDB)
 	if err != nil {
 		return nil, fmt.Errorf("cannot open StateDB: %w", err)
 	}
@@ -330,7 +331,7 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 
 	// Create the Bedrock transition block from the header. Note that there are no transactions,
 	// uncle blocks, or receipts in the Bedrock transition block.
-	cel2Block := types.NewBlock(cel2Header, nil, nil, trie.NewStackTrie(nil))
+	cel2Block := types.NewBlock(cel2Header, nil, nil, trie.NewStackTrie(nil), types.DefaultBlockConfig)
 
 	// We did it!
 	log.Info(
@@ -373,7 +374,6 @@ func ApplyMigrationChangesToDB(genesis *core.Genesis, dbPath string, dbCache int
 	cfg.GrayGlacierBlock = cel2Block.Number()
 	cfg.MergeNetsplitBlock = cel2Block.Number()
 	cfg.TerminalTotalDifficulty = big.NewInt(0)
-	cfg.TerminalTotalDifficultyPassed = true
 	cfg.ShanghaiTime = &cel2Header.Time
 	cfg.CancunTime = &cel2Header.Time
 
@@ -420,17 +420,13 @@ func openCeloDb(path string, cache int, handles int) (ethdb.Database, error) {
 
 	chaindataPath := filepath.Join(path, "celo", "chaindata")
 	ancientPath := filepath.Join(chaindataPath, "ancient")
-	ldb, err := rawdb.Open(rawdb.OpenOptions{
-		Type:              "leveldb",
-		Directory:         chaindataPath,
-		AncientsDirectory: ancientPath,
-		Namespace:         "",
-		Cache:             cache,
-		Handles:           handles,
-		ReadOnly:          false,
-	})
+	kvs, err := leveldb.New(chaindataPath, cache, handles, "", false)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open leveldb: %w", err)
+	}
+	ldb, err := rawdb.NewDatabaseWithFreezer(kvs, ancientPath, "", false)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open db with freezer: %w", err)
 	}
 	return ldb, nil
 }
