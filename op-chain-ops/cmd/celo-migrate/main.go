@@ -557,7 +557,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	if opts.failFast {
 		return err
 	}
-	return errResult
+	return errResult.ErrorOrNil()
 }
 
 func timer(name string) func() {
