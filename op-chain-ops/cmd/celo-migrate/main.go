@@ -546,7 +546,8 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(8)
+	// Use double the CPUs to account for the fact that each routine will block while reading from the db.
+	g.SetLimit(runtime.NumCPU() * 2)
 
 	var mu sync.Mutex
 
