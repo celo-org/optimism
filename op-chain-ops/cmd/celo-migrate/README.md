@@ -129,7 +129,7 @@ If node operators would like to practice a `full migration` they can do so and r
 > [!IMPORTANT]
 > The pre-migration should be run using a chaindata snapshot, rather than a db that is being used by a node. To avoid network downtime, we recommend that node operators do not stop any nodes in order to perform the pre-migration.
 
-Node operators should inspect their migration logs after the dry-run to ensure the migration completed succesfully and direct any questions to the Celo developer community on Discord before the actual migration.
+Node operators should inspect their migration logs after the dry-run to ensure the migration completed successfully and direct any questions to the Celo developer community on Discord before the actual migration.
 
 ##### Final migration
 

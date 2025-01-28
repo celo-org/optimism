@@ -21,7 +21,13 @@ const (
 )
 
 var (
-	headerPrefix = []byte("h") // headerPrefix + num (uint64 big endian) + hash -> header
+	headerPrefix       = []byte("h") // headerPrefix + num (uint64 big endian) + hash -> header
+	headerTDSuffix     = []byte("t") // headerPrefix + num (uint64 big endian) + hash + headerTDSuffix -> td
+	headerHashSuffix   = []byte("n") // headerPrefix + num (uint64 big endian) + headerHashSuffix -> hash
+	headerNumberPrefix = []byte("H") // headerNumberPrefix + hash -> num (uint64 big endian)
+
+	blockBodyPrefix     = []byte("b") // blockBodyPrefix + num (uint64 big endian) + hash -> block body
+	blockReceiptsPrefix = []byte("r") // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts
 )
 
 // encodeBlockNumber encodes a block number as big endian uint64
@@ -34,6 +40,31 @@ func encodeBlockNumber(number uint64) []byte {
 // headerKey = headerPrefix + num (uint64 big endian) + hash
 func headerKey(number uint64, hash common.Hash) []byte {
 	return append(append(headerPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
+}
+
+// headerTDKey = headerPrefix + num (uint64 big endian) + hash + headerTDSuffix
+func headerTDKey(number uint64, hash common.Hash) []byte {
+	return append(headerKey(number, hash), headerTDSuffix...)
+}
+
+// headerHashKey = headerPrefix + num (uint64 big endian) + headerHashSuffix
+func headerHashKey(number uint64) []byte {
+	return append(append(headerPrefix, encodeBlockNumber(number)...), headerHashSuffix...)
+}
+
+// headerNumberKey = headerNumberPrefix + hash
+func headerNumberKey(hash common.Hash) []byte {
+	return append(headerNumberPrefix, hash.Bytes()...)
+}
+
+// blockBodyKey = blockBodyPrefix + num (uint64 big endian) + hash
+func blockBodyKey(number uint64, hash common.Hash) []byte {
+	return append(append(blockBodyPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
+}
+
+// blockReceiptsKey = blockReceiptsPrefix + num (uint64 big endian) + hash
+func blockReceiptsKey(number uint64, hash common.Hash) []byte {
+	return append(append(blockReceiptsPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }
 
 // Opens a database with access to AncientsDb
@@ -61,7 +92,7 @@ func openDB(chaindataPath string, readOnly bool) (ethdb.Database, error) {
 
 // Opens a database without access to AncientsDb
 func openDBWithoutFreezer(chaindataPath string, readOnly bool) (ethdb.Database, error) {
-	if _, err := os.Stat(chaindataPath); errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(chaindataPath); err != nil {
 		return nil, err
 	}
 
