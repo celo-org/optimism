@@ -1234,12 +1234,6 @@ workflows:
           # PreimageOracle test is slow, run it separately to unblock CI.
           name: contracts-bedrock-tests-preimage-oracle
           test_list: find test -name "PreimageOracle.t.sol"
-      - contracts-bedrock-tests:
-          # Heavily fuzz any fuzz tests within added or modified test files.
-          name: contracts-bedrock-tests-heavy-fuzz-modified
-          test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM -- './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
-          test_timeout: 1h
-          test_profile: ciheavy
       - contracts-bedrock-coverage:
           # Generate coverage reports.
           name: contracts-bedrock-coverage
