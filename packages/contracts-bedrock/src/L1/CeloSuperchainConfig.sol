@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { SuperchainConfig } from "./SuperchainConfig.sol";
+import { ISuperchainConfig } from "./interfaces/ISuperchainConfig.sol";
 import { Storage } from "src/libraries/Storage.sol";
 
 /// @custom:proxied true
@@ -34,6 +35,17 @@ contract CeloSuperchainConfig is SuperchainConfig {
 
     function superchainConfig() public view returns (address superchainConfig_) {
         superchainConfig_ = Storage.getAddress(SUPERCHAIN_CONFIG_SLOT);
+    }
+
+    function paused() public view override returns (bool paused_) {
+        paused_ = super.paused();
+        if (paused_) {
+            return paused_;
+        }
+
+        paused_ = ISuperchainConfig(superchainConfig()).paused();
+
+        return paused_;
     }
 
     function _setSuperchainConfig(address _superchainConfig) internal {

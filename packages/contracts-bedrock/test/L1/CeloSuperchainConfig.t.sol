@@ -39,12 +39,7 @@ contract CeloSuperchainConfig_Test_Setup is CommonTest {
         vm.startPrank(alice);
         newProxy.upgradeToAndCall(
             address(newImpl),
-            abi.encodeWithSignature(
-                "initialize(address,bool,address)",
-                celoGuardian,
-                false,
-                address(superchainConfig)
-            )
+            abi.encodeWithSignature("initialize(address,bool,address)", celoGuardian, false, address(superchainConfig))
         );
         vm.stopPrank();
 
@@ -78,12 +73,7 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
         vm.startPrank(alice);
         newProxy.upgradeToAndCall(
             address(newImpl),
-            abi.encodeWithSignature(
-                "initialize(address,bool,address)",
-                celoGuardian,
-                true,
-                address(superchainConfig)
-            )
+            abi.encodeWithSignature("initialize(address,bool,address)", celoGuardian, true, address(superchainConfig))
         );
 
         assertTrue(ICeloSuperchainConfig(address(newProxy)).paused());
@@ -165,5 +155,44 @@ contract CeloSuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
         celoSuperchainConfig.unpause();
 
         assertFalse(celoSuperchainConfig.paused());
+    }
+}
+
+contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
+    function test_paused_whenSuperchainUnpaused_succeeds() external {
+        assertFalse(superchainConfig.paused());
+        bool paused = celoSuperchainConfig.paused();
+        assertFalse(paused);
+    }
+
+    function test_paused_whenSuperchainPaused_succeeds() external {
+        vm.prank(superchainConfig.guardian());
+        superchainConfig.pause("identifier");
+        assertTrue(superchainConfig.paused());
+
+        bool paused = celoSuperchainConfig.paused();
+        assertTrue(paused);
+    }
+
+    function test_paused_whenCeloPaused_succeeds() external {
+        vm.prank(celoGuardian);
+        celoSuperchainConfig.pause("identifier");
+
+        assertFalse(superchainConfig.paused());
+
+        bool paused = celoSuperchainConfig.paused();
+        assertTrue(paused);
+    }
+
+    function test_paused_whenBothPaused_succeeds() external {
+        vm.prank(superchainConfig.guardian());
+        superchainConfig.pause("identifier");
+        assertTrue(superchainConfig.paused());
+
+        vm.prank(celoGuardian);
+        celoSuperchainConfig.pause("identifier");
+
+        bool paused = celoSuperchainConfig.paused();
+        assertTrue(paused);
     }
 }
