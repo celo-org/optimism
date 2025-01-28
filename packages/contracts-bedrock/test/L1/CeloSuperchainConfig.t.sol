@@ -11,11 +11,48 @@ import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.s
 
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
-contract CeloSuperchainConfig_Init_Test is CommonTest {
+/// @dev For now, testing this using an individual setup contract here, rather
+///      than including this contract in the global CommonTest setup. TBD how
+///      this should be handled.
+contract CeloSuperchainConfig_Test_Setup is CommonTest {
+    ICeloSuperchainConfig internal celoSuperchainConfig;
+
+    function setUp() public override {
+        super.setUp();
+
+        IProxy newProxy = IProxy(
+            DeployUtils.create1({
+                _name: "Proxy",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxy.__constructor__, (alice)))
+            })
+        );
+        ICeloSuperchainConfig newImpl = ICeloSuperchainConfig(
+            DeployUtils.create1({
+                _name: "CeloSuperchainConfig",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloSuperchainConfig.__constructor__, ()))
+            })
+        );
+
+        vm.startPrank(alice);
+        newProxy.upgradeToAndCall(
+            address(newImpl),
+            abi.encodeWithSignature(
+                "initialize(address,bool,address)",
+                deploy.cfg().superchainConfigGuardian(), false,
+                address(superchainConfig)
+            )
+        );
+        vm.stopPrank();
+
+        celoSuperchainConfig = ICeloSuperchainConfig(address(newProxy));
+    }
+}
+
+contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that initialization sets the correct values. These are defined in CommonTest.sol.
     function test_initialize_unpaused_succeeds() external view {
-        assertFalse(superchainConfig.paused());
-        assertEq(superchainConfig.guardian(), deploy.cfg().superchainConfigGuardian());
+        assertFalse(celoSuperchainConfig.paused());
+        assertEq(celoSuperchainConfig.guardian(), deploy.cfg().superchainConfigGuardian());
     }
 
     /// @dev Tests that it can be intialized as paused.
@@ -46,64 +83,64 @@ contract CeloSuperchainConfig_Init_Test is CommonTest {
     }
 }
 
-contract SuperchainConfig_Pause_TestFail is CommonTest {
+contract SuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `pause` reverts when called by a non-guardian.
     function test_pause_notGuardian_reverts() external {
-        assertFalse(superchainConfig.paused());
+        assertFalse(celoSuperchainConfig.paused());
 
-        assertTrue(superchainConfig.guardian() != alice);
+        assertTrue(celoSuperchainConfig.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can pause");
         vm.prank(alice);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
-        assertFalse(superchainConfig.paused());
+        assertFalse(celoSuperchainConfig.paused());
     }
 }
 
-contract SuperchainConfig_Pause_Test is CommonTest {
+contract SuperchainConfig_Pause_Test is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `pause` successfully pauses
     ///      when called by the guardian.
     function test_pause_succeeds() external {
-        assertFalse(superchainConfig.paused());
+        assertFalse(celoSuperchainConfig.paused());
 
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Paused("identifier");
 
-        vm.prank(superchainConfig.guardian());
-        superchainConfig.pause("identifier");
+        vm.prank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("identifier");
 
-        assertTrue(superchainConfig.paused());
+        assertTrue(celoSuperchainConfig.paused());
     }
 }
 
-contract SuperchainConfig_Unpause_TestFail is CommonTest {
+contract SuperchainConfig_Unpause_TestFail is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `unpause` reverts when called by a non-guardian.
     function test_unpause_notGuardian_reverts() external {
-        vm.prank(superchainConfig.guardian());
-        superchainConfig.pause("identifier");
-        assertEq(superchainConfig.paused(), true);
+        vm.prank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("identifier");
+        assertEq(celoSuperchainConfig.paused(), true);
 
-        assertTrue(superchainConfig.guardian() != alice);
+        assertTrue(celoSuperchainConfig.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can unpause");
         vm.prank(alice);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
-        assertTrue(superchainConfig.paused());
+        assertTrue(celoSuperchainConfig.paused());
     }
 }
 
-contract SuperchainConfig_Unpause_Test is CommonTest {
+contract SuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `unpause` successfully unpauses
     ///      when called by the guardian.
     function test_unpause_succeeds() external {
-        vm.startPrank(superchainConfig.guardian());
-        superchainConfig.pause("identifier");
-        assertEq(superchainConfig.paused(), true);
+        vm.startPrank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("identifier");
+        assertEq(celoSuperchainConfig.paused(), true);
 
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Unpaused();
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
-        assertFalse(superchainConfig.paused());
+        assertFalse(celoSuperchainConfig.paused());
     }
 }
