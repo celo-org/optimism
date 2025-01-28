@@ -196,3 +196,32 @@ contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
         assertTrue(paused);
     }
 }
+
+contract CeloSuperchainConfig_PauseIfSuperchainPaused_Test is CeloSuperchainConfig_Test_Setup {
+    function test_pauseIfSuperchainPaused_whenSuperchainUnpaused_succeeds() external {
+        assertFalse(superchainConfig.paused());
+
+        celoSuperchainConfig.pauseIfSuperchainPaused();
+
+        bool paused = celoSuperchainConfig.paused();
+        assertFalse(paused);
+    }
+
+    function test_pauseIfSuperchainPaused_whenSuperchainPaused_succeeds() external {
+        vm.prank(superchainConfig.guardian());
+        superchainConfig.pause("identifier");
+        assertTrue(superchainConfig.paused());
+
+        celoSuperchainConfig.pauseIfSuperchainPaused();
+
+        bool paused = celoSuperchainConfig.paused();
+        assertTrue(paused);
+
+        vm.prank(superchainConfig.guardian());
+        superchainConfig.unpause();
+        assertFalse(superchainConfig.paused());
+
+        paused = celoSuperchainConfig.paused();
+        assertTrue(paused);
+    }
+}

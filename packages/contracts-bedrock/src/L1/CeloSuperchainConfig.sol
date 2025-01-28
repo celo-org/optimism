@@ -33,6 +33,12 @@ contract CeloSuperchainConfig is SuperchainConfig {
         }
     }
 
+    function pauseIfSuperchainPaused() public {
+        if (ISuperchainConfig(superchainConfig()).paused()) {
+            _pause("Superchain paused");
+        }
+    }
+
     function superchainConfig() public view returns (address superchainConfig_) {
         superchainConfig_ = Storage.getAddress(SUPERCHAIN_CONFIG_SLOT);
     }
