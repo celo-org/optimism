@@ -853,7 +853,8 @@ jobs:
       packages:
         description: List of packages to test
         type: string
-    machine: true
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     resource_class: <<parameters.resource_class>>
     steps:
       - checkout
