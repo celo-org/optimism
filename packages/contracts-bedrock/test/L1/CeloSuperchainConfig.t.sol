@@ -174,7 +174,7 @@ contract CeloSuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
 }
 
 contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
-    function test_paused_whenSuperchainUnpaused_succeeds() external {
+    function test_paused_whenSuperchainUnpaused_succeeds() external view {
         assertFalse(superchainConfig.paused());
         bool paused = celoSuperchainConfig.paused();
         assertFalse(paused);
