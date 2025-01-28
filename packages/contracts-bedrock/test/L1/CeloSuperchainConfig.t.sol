@@ -53,6 +53,7 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
     function test_initialize_unpaused_succeeds() external view {
         assertFalse(celoSuperchainConfig.paused());
         assertEq(celoSuperchainConfig.guardian(), deploy.cfg().superchainConfigGuardian());
+        assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
     }
 
     /// @dev Tests that it can be intialized as paused.
@@ -74,12 +75,15 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
         newProxy.upgradeToAndCall(
             address(newImpl),
             abi.encodeWithSignature(
-                "initialize(address,bool,address)", deploy.cfg().superchainConfigGuardian(), true, address(0)
+                "initialize(address,bool,address)",
+                deploy.cfg().superchainConfigGuardian(), true,
+                address(superchainConfig)
             )
         );
 
         assertTrue(ICeloSuperchainConfig(address(newProxy)).paused());
         assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), deploy.cfg().superchainConfigGuardian());
+        assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
     }
 }
 

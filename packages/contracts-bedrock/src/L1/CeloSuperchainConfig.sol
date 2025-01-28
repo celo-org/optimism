@@ -32,6 +32,10 @@ contract CeloSuperchainConfig is SuperchainConfig {
         }
     }
 
+    function superchainConfig() public view returns (address superchainConfig_) {
+        superchainConfig_ = Storage.getAddress(SUPERCHAIN_CONFIG_SLOT);
+    }
+
     function _setSuperchainConfig(address _superchainConfig) internal {
         Storage.setAddress(SUPERCHAIN_CONFIG_SLOT, _superchainConfig);
     }
