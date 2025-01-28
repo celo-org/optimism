@@ -92,7 +92,7 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
     }
 }
 
-contract SuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup {
+contract CeloSuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `pause` reverts when called by a non-guardian.
     function test_pause_notGuardian_reverts() external {
         assertFalse(celoSuperchainConfig.paused());
@@ -120,7 +120,7 @@ contract SuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup {
     }
 }
 
-contract SuperchainConfig_Pause_Test is CeloSuperchainConfig_Test_Setup {
+contract CeloSuperchainConfig_Pause_Test is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `pause` successfully pauses
     ///      when called by the guardian.
     function test_pause_succeeds() external {
@@ -136,7 +136,7 @@ contract SuperchainConfig_Pause_Test is CeloSuperchainConfig_Test_Setup {
     }
 }
 
-contract SuperchainConfig_Unpause_TestFail is CeloSuperchainConfig_Test_Setup {
+contract CeloSuperchainConfig_Unpause_TestFail is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `unpause` reverts when called by a non-guardian.
     function test_unpause_notGuardian_reverts() external {
         vm.prank(celoSuperchainConfig.guardian());
@@ -152,7 +152,7 @@ contract SuperchainConfig_Unpause_TestFail is CeloSuperchainConfig_Test_Setup {
     }
 }
 
-contract SuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
+contract CeloSuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that `unpause` successfully unpauses
     ///      when called by the guardian.
     function test_unpause_succeeds() external {
