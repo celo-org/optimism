@@ -871,8 +871,8 @@ jobs:
             export OP_E2E_SKIP_SLOW_TEST=true
             export OP_E2E_USE_HTTP=true
             export ENABLE_ANVIL=true
-            export SEPOLIA_RPC_URL="wss://sepolia.drpc.org"
-            export MAINNET_RPC_URL="wss://ethereum.drpc.org"
+            export SEPOLIA_RPC_URL="https://sepolia.drpc.org"
+            export MAINNET_RPC_URL="https://eth.drpc.org"
             export PARALLEL=$(nproc)
 
             <<parameters.environment_overrides>>
