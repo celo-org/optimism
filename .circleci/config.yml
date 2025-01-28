@@ -955,7 +955,8 @@ jobs:
       # Use a smaller base image to avoid pulling the huge ci-builder
       # image which is not needed for this job and sometimes misses
       # the cache.
-      - image: cimg/base:2024.01
+      # - image: cimg/base:2024.01
+      - image: <<pipeline.parameters.ci_builder_image>>
     resource_class: medium
     steps:
       - run: echo Done
