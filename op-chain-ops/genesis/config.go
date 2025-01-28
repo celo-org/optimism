@@ -271,9 +271,11 @@ var _ ConfigChecker = (*GasTokenDeployConfig)(nil)
 
 func (d *GasTokenDeployConfig) Check(log log.Logger) error {
 	if d.UseCustomGasToken {
-		if d.CustomGasTokenAddress == (common.Address{}) {
-			return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
-		}
+		// NOTE: we are using the address(0) as an instruction to deploy the L1 token,
+		//       so this deploy-config validation has to be disabled
+		// if d.CustomGasTokenAddress == (common.Address{}) {
+		// 	return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
+		// }
 		log.Info("Using custom gas token", "address", d.CustomGasTokenAddress)
 	}
 	return nil
@@ -905,6 +907,9 @@ type DeployConfig struct {
 
 	// Legacy, ignored, here for strict-JSON decoding to be accepted.
 	LegacyDeployConfig `evm:"-"`
+
+	// DeployCeloContracts indicates whether to deploy Celo contracts.
+	DeployCeloContracts bool `json:"deployCeloContracts"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
