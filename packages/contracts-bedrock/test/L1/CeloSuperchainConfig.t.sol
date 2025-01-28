@@ -16,9 +16,12 @@ import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 ///      this should be handled.
 contract CeloSuperchainConfig_Test_Setup is CommonTest {
     ICeloSuperchainConfig internal celoSuperchainConfig;
+    address internal celoGuardian;
 
     function setUp() public override {
         super.setUp();
+
+        celoGuardian = makeAddr("celoGuardian");
 
         IProxy newProxy = IProxy(
             DeployUtils.create1({
@@ -38,7 +41,8 @@ contract CeloSuperchainConfig_Test_Setup is CommonTest {
             address(newImpl),
             abi.encodeWithSignature(
                 "initialize(address,bool,address)",
-                deploy.cfg().superchainConfigGuardian(), false,
+                celoGuardian,
+                false,
                 address(superchainConfig)
             )
         );
@@ -52,7 +56,7 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
     /// @dev Tests that initialization sets the correct values. These are defined in CommonTest.sol.
     function test_initialize_unpaused_succeeds() external view {
         assertFalse(celoSuperchainConfig.paused());
-        assertEq(celoSuperchainConfig.guardian(), deploy.cfg().superchainConfigGuardian());
+        assertEq(celoSuperchainConfig.guardian(), celoGuardian);
         assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
     }
 
@@ -76,13 +80,14 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
             address(newImpl),
             abi.encodeWithSignature(
                 "initialize(address,bool,address)",
-                deploy.cfg().superchainConfigGuardian(), true,
+                celoGuardian,
+                true,
                 address(superchainConfig)
             )
         );
 
         assertTrue(ICeloSuperchainConfig(address(newProxy)).paused());
-        assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), deploy.cfg().superchainConfigGuardian());
+        assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), celoGuardian);
         assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
     }
 }
@@ -95,6 +100,20 @@ contract SuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup {
         assertTrue(celoSuperchainConfig.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can pause");
         vm.prank(alice);
+        celoSuperchainConfig.pause("identifier");
+
+        assertFalse(celoSuperchainConfig.paused());
+    }
+
+    /// @dev Tests that `pause` reverts when called by the Superchain Guardian.
+    function test_pause_superchainGuardian_reverts() external {
+        assertFalse(celoSuperchainConfig.paused());
+
+        address superchainConfigGuardian = deploy.cfg().superchainConfigGuardian();
+        assertTrue(celoSuperchainConfig.guardian() != superchainConfigGuardian);
+
+        vm.expectRevert("SuperchainConfig: only guardian can pause");
+        vm.prank(superchainConfigGuardian);
         celoSuperchainConfig.pause("identifier");
 
         assertFalse(celoSuperchainConfig.paused());
