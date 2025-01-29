@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Celo: contract changes are handled differently, skip semver check for now.
+exit 0
+
 # Grab the directory of the contracts-bedrock package.
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
