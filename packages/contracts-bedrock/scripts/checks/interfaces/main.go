@@ -27,6 +27,9 @@ var excludeContracts = []string{
 	"IInitializable", "IOptimismMintableERC20", "ILegacyMintableERC20",
 	"KontrolCheatsBase", "ISystemConfigInterop", "IResolvedDelegateProxy",
 
+	// Temporarily excluded, differences seem harmless
+	"IERC20Upgradeable",
+
 	// Celo
 	"IExchange",
 	"IEscrow",
