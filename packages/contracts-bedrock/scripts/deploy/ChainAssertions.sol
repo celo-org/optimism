@@ -584,7 +584,7 @@ library ChainAssertions {
         // TODO: Add assertions for blueprints and setters?
     }
 
-     /// @notice Asserts the CeloTokenL1 is setup correctly
+    /// @notice Asserts the CeloTokenL1 is setup correctly
     function checkCeloTokenL1(Types.ContractSet memory _contracts, bool _isProxy) internal view {
         console.log("Running chain assertions on the CeloTokenL1");
 
@@ -599,7 +599,7 @@ library ChainAssertions {
         }
     }
 
-     /// @notice Asserts the OptimismPortal custom gas token is setup correctly
+    /// @notice Asserts the OptimismPortal custom gas token is setup correctly
     function checkCustomGasTokenOptimismPortal(
         Types.ContractSet memory _contracts,
         DeployConfig _cfg,

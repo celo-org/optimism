@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
-pragma solidity ^0.8.15;
+pragma solidity ^0.8.0;
 
 import "../../../lib/openzeppelin-contracts/contracts/access/Ownable.sol";
 import "../../../lib/openzeppelin-contracts/contracts/utils/math/SafeMath.sol";

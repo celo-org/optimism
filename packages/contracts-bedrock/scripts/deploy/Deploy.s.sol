@@ -591,10 +591,7 @@ contract Deploy is Deployer {
             _data: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
         });
 
-        proxyAdmin.upgrade({
-            _proxy: payable(optimismPortalProxy),
-            _implementation: originalImplementationAddress
-        });
+        proxyAdmin.upgrade({ _proxy: payable(optimismPortalProxy), _implementation: originalImplementationAddress });
     }
 
     function setupCustomGasToken() internal {

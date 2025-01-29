@@ -1,4 +1,3 @@
-
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
@@ -21,7 +20,6 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 
 contract L2GenesisCelo is Deployer {
-
     mapping(string => address) public deployedContractNamesToAddresses;
     string internal _celoL2Outfile;
 

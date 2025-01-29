@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LGPL-3.0-only
-pragma solidity ^0.8.15;
+pragma solidity ^0.8.0;
 
 import "./common/FixidityLib.sol";
 import "../../lib/openzeppelin-contracts/contracts/access/Ownable.sol";

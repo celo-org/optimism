@@ -65,11 +65,7 @@ contract AnchorStateRegistry is Initializable, ISemver {
         superchainConfig = _superchainConfig;
     }
 
-    function setAnchorRoots(
-        StartingAnchorRoot[] memory _startingAnchorRoots
-    )
-        public
-    {
+    function setAnchorRoots(StartingAnchorRoot[] memory _startingAnchorRoots) public {
         for (uint256 i = 0; i < _startingAnchorRoots.length; i++) {
             StartingAnchorRoot memory startingAnchorRoot = _startingAnchorRoots[i];
             anchors[startingAnchorRoot.gameType] = startingAnchorRoot.outputRoot;
