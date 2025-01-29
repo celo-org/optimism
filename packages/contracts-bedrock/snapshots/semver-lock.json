@@ -204,12 +204,12 @@
     "sourceCodeHash": "0x918965e52bbd358ac827ebe35998f5d8fa5ca77d8eb9ab8986b44181b9aaa48a"
   },
   "src/universal/OptimismMintableERC20.sol:OptimismMintableERC20": {
-    "initCodeHash": "0xc3289416829b252c830ad7d389a430986a7404df4fe0be37cb19e1c40907f047",
-    "sourceCodeHash": "0xf5e29dd5c750ea935c7281ec916ba5277f5610a0a9e984e53ae5d5245b3cf2f4"
+    "initCodeHash": "0x9de2243fb496091b0e434ccff90eb0f0fc97fd1be72a3896c96dec1c622fb26f",
+    "sourceCodeHash": "0xc0ac18b0b8b43bb1b6addaadb258ede2c6cd268515d57638c3d3deccc263ca8f"
   },
   "src/universal/OptimismMintableERC20Factory.sol:OptimismMintableERC20Factory": {
-    "initCodeHash": "0xdb4d93a65cf9d3e3af77d3d62249f06580e80a0431542350f953f0a4041566b4",
-    "sourceCodeHash": "0xd1bad4408c26eb9c7b0ddcb088f0d4e3be73a43d899263ec8610f4d41a178ec7"
+    "initCodeHash": "0x01e6bde145bf9ecd19b2668c13f67682ab7de0a9df43c7d2f9009ac732755d51",
+    "sourceCodeHash": "0xc041f6b559c7fc9b08fb41afbd187401d2bcb7e164f9fe7bc7969e008cc76da8"
   },
   "src/universal/StorageSetter.sol:StorageSetter": {
     "initCodeHash": "0x8831c079f7b7a52679e8a15e0ea14e30ea7bb4f93feed0fcd369942fe8c1f1ec",
