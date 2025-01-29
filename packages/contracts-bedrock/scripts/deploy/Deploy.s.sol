@@ -59,6 +59,8 @@ import { IPreimageOracle } from "src/cannon/interfaces/IPreimageOracle.sol";
 import { IAddressManager } from "src/legacy/interfaces/IAddressManager.sol";
 import { IL1ChugSplashProxy } from "src/legacy/interfaces/IL1ChugSplashProxy.sol";
 import { IResolvedDelegateProxy } from "src/legacy/interfaces/IResolvedDelegateProxy.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
@@ -162,7 +164,10 @@ contract Deploy is Deployer {
             L1ERC721Bridge: getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
             SuperchainConfig: getAddress("SuperchainConfigProxy"),
-            OPContractsManager: getAddress("OPContractsManagerProxy")
+            OPContractsManager: getAddress("OPContractsManagerProxy"),
+            // allow for address(0) since it is not strictly required for all
+            // combinations of chain configs
+            CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
 
@@ -183,7 +188,8 @@ contract Deploy is Deployer {
             L1ERC721Bridge: getAddress("L1ERC721Bridge"),
             ProtocolVersions: getAddress("ProtocolVersions"),
             SuperchainConfig: getAddress("SuperchainConfig"),
-            OPContractsManager: getAddress("OPContractsManager")
+            OPContractsManager: getAddress("OPContractsManager"),
+            CustomGasToken: getAddress("CustomGasTokenProxy")
         });
     }
 
@@ -281,6 +287,12 @@ contract Deploy is Deployer {
 
         // Deploy Current OPChain Contracts
         deployOpChain();
+
+        if (cfg.useCustomGasToken()) {
+            setupCustomGasToken();
+            save("StorageSetter", deployStorageSetter());
+            // preInitializeOptimismPortalBalance();
+        }
 
         // Apply modifications for non-standard configurations not supported by the OPCM deployment
         if (cfg.useFaultProofs()) {
@@ -548,6 +560,71 @@ contract Deploy is Deployer {
 
         // Return the address of the deployed contract.
         addr_ = address(admin);
+    }
+
+    function preInitializeOptimismPortalBalance() public broadcast {
+        address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
+        address storageSetter = mustGetAddress("StorageSetter");
+
+        // NOTE: the storage slot index should stay the same across versions
+        // (OptimismPortal, OptimismPortal2, ...)  since slot spacers are used
+        // for legacy storage variables.
+        // We also assert correctness in a downstream ChainAssertion,
+        // so changing slot numbers should get detected for coming versions.
+        uint256 balanceStorageSlot = 61; // slot of _balance variable
+
+        address customGasTokenAddress = Constants.ETHER;
+        uint256 initialBalance = 0;
+        customGasTokenAddress = cfg.customGasTokenAddress();
+        IERC20 token = IERC20(customGasTokenAddress);
+        initialBalance = token.balanceOf(optimismPortalProxy);
+
+        IProxyAdmin proxyAdmin = IProxyAdmin(payable(mustGetAddress("ProxyAdmin")));
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(optimismPortalProxy),
+            _implementation: storageSetter,
+            _data: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+        });
+    }
+
+    function setupCustomGasToken() internal {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress() == address(0)) {
+            deployERC1967Proxy("CustomGasTokenProxy");
+
+            console.log("Setting up Custom gas token");
+            deployCustomGasToken();
+            initializeCustomGasToken();
+
+            address proxyAddress = mustGetAddress("CustomGasTokenProxy");
+            cfg.setUseCustomGasToken(proxyAddress);
+        }
+    }
+
+    function deployCustomGasToken() public broadcast returns (address addr_) {
+        console.log("Deploying CustomGasToken implementation");
+
+        CeloTokenL1 customGasToken = new CeloTokenL1{ salt: _implSalt() }();
+
+        save("CustomGasToken", address(customGasToken));
+        console.log("CustomGasToken deployed at %s", address(customGasToken));
+        addr_ = address(customGasToken);
+    }
+
+    /// @notice Initialize the CustomGasToken
+    function initializeCustomGasToken() public broadcast {
+        console.log("Upgrading and initializing CustomGasToken proxy");
+        address customGasTokenProxyAddress = mustGetAddress("CustomGasTokenProxy");
+        address customGasTokenAddress = mustGetAddress("CustomGasToken");
+        address portalProxyAddress = mustGetAddress("OptimismPortalProxy");
+
+        IProxyAdmin proxyAdmin = IProxyAdmin(payable(mustGetAddress("ProxyAdmin")));
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(customGasTokenProxyAddress),
+            _implementation: customGasTokenAddress,
+            _data: abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
+        });
+
+        ChainAssertions.checkCeloTokenL1({ _contracts: _proxies(), _isProxy: false });
     }
 
     /// @notice Deploy the StorageSetter contract, used for upgrades.
