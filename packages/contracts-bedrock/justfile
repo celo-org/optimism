@@ -276,7 +276,7 @@ semver-lock-no-build:
 semver-lock: build-source semver-lock-no-build
 
 # Generates core snapshots without building contracts.
-snapshots-no-build: snapshots-abi-storage-no-build semver-lock-no-build
+snapshots-no-build: snapshots-abi-storage-no-build
 
 # Builds contracts and then generates core snapshots.
 snapshots: build-source snapshots-no-build
