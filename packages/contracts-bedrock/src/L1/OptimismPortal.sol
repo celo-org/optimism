@@ -34,7 +34,7 @@ import { ISemver } from "src/universal/interfaces/ISemver.sol";
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IL1Block } from "src/L2/interfaces/IL1Block.sol";
 
 /// @custom:proxied true
@@ -82,7 +82,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     bool private spacer_53_0_1;
 
     /// @notice Contract of the Superchain Config.
-    ISuperchainConfig public superchainConfig;
+    ICeloSuperchainConfig public superchainConfig;
 
     /// @notice Contract of the L2OutputOracle.
     /// @custom:network-specific
@@ -156,7 +156,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
         initialize({
             _l2Oracle: IL2OutputOracle(address(0)),
             _systemConfig: ISystemConfig(address(0)),
-            _superchainConfig: ISuperchainConfig(address(0))
+            _superchainConfig: ICeloSuperchainConfig(address(0))
         });
     }
 
@@ -167,7 +167,7 @@ contract OptimismPortal is Initializable, ResourceMetering, ISemver {
     function initialize(
         IL2OutputOracle _l2Oracle,
         ISystemConfig _systemConfig,
-        ISuperchainConfig _superchainConfig
+        ICeloSuperchainConfig _superchainConfig
     )
         public
         initializer

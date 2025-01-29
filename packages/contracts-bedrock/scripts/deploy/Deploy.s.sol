@@ -50,6 +50,7 @@ import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMess
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IDataAvailabilityChallenge } from "src/L1/interfaces/IDataAvailabilityChallenge.sol";
 import { IL1ERC721Bridge } from "src/L1/interfaces/IL1ERC721Bridge.sol";
@@ -1341,7 +1342,7 @@ contract Deploy is Deployer {
                 (
                     IL2OutputOracle(l2OutputOracleProxy),
                     ISystemConfig(systemConfigProxy),
-                    ISuperchainConfig(superchainConfigProxy)
+                    ICeloSuperchainConfig(superchainConfigProxy)
                 )
             )
         });

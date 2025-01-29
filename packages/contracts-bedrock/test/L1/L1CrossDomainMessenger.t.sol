@@ -14,7 +14,7 @@ import { Encoding } from "src/libraries/Encoding.sol";
 // Target contract dependencies
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 
 contract L1CrossDomainMessenger_Test is Bridge_Initializer {
@@ -606,7 +606,7 @@ contract L1CrossDomainMessenger_Test is Bridge_Initializer {
 
     /// @dev Tests that the superchain config is called by the messengers paused function
     function test_pause_callsSuperchainConfig_succeeds() external {
-        vm.expectCall(address(superchainConfig), abi.encodeCall(ISuperchainConfig.paused, ()));
+        vm.expectCall(address(superchainConfig), abi.encodeCall(ICeloSuperchainConfig.paused, ()));
         l1CrossDomainMessenger.paused();
     }
 
@@ -773,7 +773,9 @@ contract L1CrossDomainMessenger_ReinitReentryTest is Bridge_Initializer {
 
             // call the initializer function
             l1CrossDomainMessenger.initialize(
-                ISuperchainConfig(superchainConfig), IOptimismPortal(optimismPortal), ISystemConfig(systemConfig)
+                ICeloSuperchainConfig(address(superchainConfig)),
+                IOptimismPortal(optimismPortal),
+                ISystemConfig(systemConfig)
             );
 
             // attempt to re-replay the withdrawal
