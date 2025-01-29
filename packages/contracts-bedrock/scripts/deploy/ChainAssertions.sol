@@ -33,6 +33,12 @@ import { IMIPS } from "src/cannon/interfaces/IMIPS.sol";
 import { OPContractsManager } from "src/L1/OPContractsManager.sol";
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
+interface IOptimismPortalBalance {
+    function balance() external view returns (uint256);
+}
+
 library ChainAssertions {
     Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
 
@@ -591,6 +597,39 @@ library ChainAssertions {
             require(celoToken.totalSupply() == 1000000000e18); // 1 billion CELO
             require(celoToken.balanceOf(_contracts.OptimismPortal) == 1000000000e18);
         }
+    }
+
+     /// @notice Asserts the OptimismPortal custom gas token is setup correctly
+    function checkCustomGasTokenOptimismPortal(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isProxy
+    )
+        internal
+        view
+    {
+        address payable portalAddress;
+        if (_cfg.useFaultProofs()) {
+            portalAddress = payable(_contracts.OptimismPortal2);
+        } else {
+            portalAddress = payable(_contracts.OptimismPortal);
+        }
+        IOptimismPortalBalance portal = IOptimismPortalBalance(portalAddress);
+
+        uint256 expectedInitialBalance = 0;
+        if (_isProxy && _cfg.useCustomGasToken()) {
+            address customGasTokenAddress = _cfg.customGasTokenAddress();
+            IERC20 token = IERC20(customGasTokenAddress);
+            expectedInitialBalance = token.balanceOf(address(portal));
+            console.log("custom gas token expectedInitialBalance", expectedInitialBalance);
+        }
+
+        if (_isProxy) {
+            require(portal.balance() == expectedInitialBalance);
+        } else {
+            require(portal.balance() == 0);
+        }
+        require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(portal.balance()));
     }
 
     /// @dev Asserts that for a given contract the value of a storage slot at an offset is 1 or 0xff.

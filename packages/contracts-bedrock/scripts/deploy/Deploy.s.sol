@@ -291,7 +291,7 @@ contract Deploy is Deployer {
         if (cfg.useCustomGasToken()) {
             setupCustomGasToken();
             save("StorageSetter", deployStorageSetter());
-            // preInitializeOptimismPortalBalance();
+            preInitializeOptimismPortalBalance();
         }
 
         // Apply modifications for non-standard configurations not supported by the OPCM deployment
@@ -326,6 +326,8 @@ contract Deploy is Deployer {
                 setupOpAltDA();
             }
         }
+
+        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
 
         transferProxyAdminOwnership();
         console.log("set up op chain!");
@@ -566,6 +568,9 @@ contract Deploy is Deployer {
         address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
         address storageSetter = mustGetAddress("StorageSetter");
 
+        bytes32 storageSlot = 0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc;
+        address originalImplementationAddress = address(uint160(uint256(vm.load(optimismPortalProxy, storageSlot))));
+
         // NOTE: the storage slot index should stay the same across versions
         // (OptimismPortal, OptimismPortal2, ...)  since slot spacers are used
         // for legacy storage variables.
@@ -584,6 +589,11 @@ contract Deploy is Deployer {
             _proxy: payable(optimismPortalProxy),
             _implementation: storageSetter,
             _data: abi.encodeCall(StorageSetter.setUint, (bytes32(balanceStorageSlot), initialBalance))
+        });
+
+        proxyAdmin.upgrade({
+            _proxy: payable(optimismPortalProxy),
+            _implementation: originalImplementationAddress
         });
     }
 
