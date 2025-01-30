@@ -40,6 +40,9 @@ RUN /bin/sh -c set -eux; \
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/debian $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null; \
   apt-get update; \
   apt-get install -y docker-ce-cli; \
+  echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list; \
+  apt update; \
+  apt install kurtosis-cli; \
   curl https://mise.run | sh; \
   mise trust ./mise.toml; \
   mise install; \
