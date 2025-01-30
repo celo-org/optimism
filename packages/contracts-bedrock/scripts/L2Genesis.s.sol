@@ -689,6 +689,7 @@ contract L2Genesis is Deployer {
 
         setCeloRegistry();
         setCeloGoldToken();
+        setCeloTreasury();
         setCeloFeeHandler();
         setCeloMentoFeeHandlerSeller();
         setCeloUniswapFeeHandlerSeller();
@@ -753,6 +754,17 @@ contract L2Genesis is Deployer {
 
         vm.resetNonce(address(contract_));
         _setupProxy(precompile, address(contract_));
+    }
+
+     function setCeloTreasury() internal {
+        // GoldToken contract_ = new GoldToken({ test: false });
+
+        address precompile = CeloPredeploys.TREASURY;
+        string memory cname = CeloPredeploys.getName(precompile);
+        console.log("Deploying %s implementation at: %s", cname, address(0));
+
+        // vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(0));
     }
 
     function setCeloFeeHandler() internal {
