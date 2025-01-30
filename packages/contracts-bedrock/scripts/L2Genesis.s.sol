@@ -705,7 +705,7 @@ contract L2Genesis is Deployer {
         vm.etch(addr, code);
 
         console.log("Owner of Celo proxy is:", ICeloProxy(addr)._getOwner());
-        vm.startPrank(address(0));
+        vm.startPrank(ICeloProxy(addr)._getOwner());
         ICeloProxy(addr)._transferOwnership(defaultOwner);
 
         vm.stopPrank();
@@ -733,7 +733,7 @@ contract L2Genesis is Deployer {
         vm.resetNonce(address(contract_));
         _setupProxy(precompile, address(contract_));
 
-        CeloRegistry registry = CeloRegistry(precompile);
+        // CeloRegistry registry = CeloRegistry(precompile);
         // address celoOwner = registry.owner();
         // vm.startPrank(address(celoOwner));
         //     registry._transferOwnership(defaultOwner);
