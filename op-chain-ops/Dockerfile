@@ -16,7 +16,7 @@ COPY ./op-chain-ops /app/op-chain-ops
 WORKDIR /app/op-chain-ops
 RUN make celo-migrate
 
-FROM alpine:3.18
+FROM alpine:3.20
 RUN apk --no-cache add ca-certificates bash rsync
 
 # RUN addgroup -S app && adduser -S app -G app
