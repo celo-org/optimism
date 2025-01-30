@@ -44,6 +44,7 @@ import { CeloRegistry } from "src/celo/CeloRegistry.sol";
 import { FeeHandler } from "src/celo/FeeHandler.sol";
 import { MentoFeeHandlerSeller } from "src/celo/MentoFeeHandlerSeller.sol";
 import { UniswapFeeHandlerSeller } from "src/celo/UniswapFeeHandlerSeller.sol";
+import { ICeloProxy } from "src/celo/ICeloProxy.sol";
 import { SortedOracles } from "src/celo/stability/SortedOracles.sol";
 import { FeeCurrencyDirectory } from "src/celo/FeeCurrencyDirectory.sol";
 import { FeeCurrency } from "src/celo/testing/FeeCurrency.sol";
@@ -698,12 +699,18 @@ contract L2Genesis is Deployer {
 
     /// @notice Sets up a proxy for the given impl address
     function _setupProxy(address addr, address impl) internal returns (address) {
-        bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
+        // bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
+        bytes memory code = vm.getDeployedCode("CeloProxy.sol:CeloProxy");
         vm.etch(addr, code);
-        EIP1967Helper.setAdmin(addr, Predeploys.PROXY_ADMIN);
+
+        console.log("Owner of Celo proxy is:", ICeloProxy(addr)._getOwner());
+        vm.startPrank(address(0));
+        ICeloProxy(addr)._transferOwnership(defaultOwner);
+
+        vm.stopPrank();
+        // EIP1967Helper.setAdmin(addr, Predeploys.PROXY_ADMIN);
 
         console.log("Setting proxy %s with implementation: %s", addr, impl);
-        EIP1967Helper.setImplementation(addr, impl);
 
         return addr;
     }
@@ -726,13 +733,13 @@ contract L2Genesis is Deployer {
         _setupProxy(precompile, address(contract_));
 
         CeloRegistry registry = CeloRegistry(precompile);
-        address celoOwner = registry.owner();
-        vm.startPrank(address(celoOwner));
-            registry.transferOwnership(defaultOwner);
-        vm.stopPrank();
+        // address celoOwner = registry.owner();
+        // vm.startPrank(address(celoOwner));
+        //     registry._transferOwnership(defaultOwner);
+        // vm.stopPrank();
         vm.deal(defaultOwner, 600000e18);
 
-        console.log("CeloRegistry owner: %s", celoOwner);
+        // console.log("CeloRegistry owner: %s", celoOwner);
         // revert("vert on puporse");
 
     }
@@ -791,9 +798,9 @@ contract L2Genesis is Deployer {
         vm.resetNonce(address(feeCurrencyDirectory));
         _setupProxy(precompile, address(feeCurrencyDirectory));
 
-        vm.startPrank(devAccounts[0]);
-        FeeCurrencyDirectory(precompile).initialize();
-        vm.stopPrank();
+        // vm.startPrank(devAccounts[0]);
+        // FeeCurrencyDirectory(precompile).initialize();
+        // vm.stopPrank();
     }
 
     function setCeloFeeCurrency() internal {
