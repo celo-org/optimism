@@ -1370,7 +1370,7 @@ contract Deploy is Deployer {
         address optimismPortal = mustGetAddress("OptimismPortal");
         address l2OutputOracleProxy = mustGetAddress("L2OutputOracleProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address superchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),

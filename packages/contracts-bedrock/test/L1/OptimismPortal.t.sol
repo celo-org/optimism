@@ -62,7 +62,7 @@ contract OptimismPortal_Test is CommonTest {
         assertEq(address(optimismPortal.l2Oracle()), address(l2OutputOracle));
         assertEq(address(optimismPortal.systemConfig()), address(systemConfig));
         assertEq(optimismPortal.guardian(), guardian);
-        assertEq(address(optimismPortal.superchainConfig()), address(superchainConfig));
+        assertEq(address(optimismPortal.superchainConfig()), address(celoSuperchainConfig));
         assertEq(optimismPortal.l2Sender(), Constants.DEFAULT_L2_SENDER);
         assertEq(optimismPortal.paused(), false);
         (uint128 prevBaseFee, uint64 prevBoughtGas, uint64 prevBlockNum) = optimismPortal.params();

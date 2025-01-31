@@ -352,7 +352,8 @@ library ChainAssertions {
             require(address(portal.l2Oracle()) == _contracts.L2OutputOracle);
             require(address(portal.systemConfig()) == _contracts.SystemConfig);
             require(portal.guardian() == guardian);
-            require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
+            //TODO(m-chrzan): reenable check once CeloSuperchainConfig included in contracts
+            //require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
             require(portal.paused() == ISuperchainConfig(_contracts.SuperchainConfig).paused());
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
         } else {
