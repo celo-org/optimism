@@ -875,6 +875,7 @@ jobs:
           name: run tests
           no_output_timeout: <<parameters.no_output_timeout>>
           command: |
+            kurtosis engine start
             mkdir -p ./tmp/test-results && mkdir -p ./tmp/testlogs
 
             cd op-e2e && make pre-test && cd ..
