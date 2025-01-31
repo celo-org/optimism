@@ -33,10 +33,13 @@ contract CeloSuperchainConfig is SuperchainConfig {
         }
     }
 
-    function pauseIfSuperchainPaused() public {
+    function checkAndPauseIfSuperchainPaused() public returns (bool paused_) {
         if (ISuperchainConfig(superchainConfig()).paused()) {
             _pause("Superchain paused");
+            return true;
         }
+
+        return paused();
     }
 
     function superchainConfig() public view returns (address superchainConfig_) {
@@ -49,7 +52,9 @@ contract CeloSuperchainConfig is SuperchainConfig {
             return paused_;
         }
 
-        paused_ = ISuperchainConfig(superchainConfig()).paused();
+        if (superchainConfig() != address(0)) {
+            paused_ = ISuperchainConfig(superchainConfig()).paused();
+        }
 
         return paused_;
     }

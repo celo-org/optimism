@@ -8,7 +8,7 @@ interface ICeloSuperchainConfig is ISuperchainConfig {
     function initialize(address _guardian, bool _paused, address _superchainConfig) external;
     function superchainConfig() external view returns (address superchainConfig_);
     function paused() external view returns (bool paused_);
-    function pauseIfSuperchainPaused() external;
+    function checkAndPauseIfSuperchainPaused() external returns (bool paused_);
 
     function __constructor__() external;
 }
