@@ -853,13 +853,20 @@ jobs:
       packages:
         description: List of packages to test
         type: string
-    docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+    # docker:
+    #   - image: <<pipeline.parameters.ci_builder_image>>
+    machine:
+      image: ubuntu-2404:2024.11.1
     resource_class: <<parameters.resource_class>>
     steps:
       - checkout
       - attach_workspace:
           at: "."
+      - run:
+          name: Install dependencies
+          command: |
+            # TODO
+            echo "Installing dependencies..."
       - run:
           name: build op-program-client
           command: make op-program-client
@@ -871,13 +878,6 @@ jobs:
       - run:
           name: build cannon
           command: make cannon
-      - setup_remote_docker
-      - run:
-          name: Setup docker access
-          command: |
-            apt update
-            apt install -y uuid-runtime
-            echo $(uuidgen) | sudo tee /etc/machine-id
       - run:
           name: run tests
           no_output_timeout: <<parameters.no_output_timeout>>
