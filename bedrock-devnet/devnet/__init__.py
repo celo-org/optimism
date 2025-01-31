@@ -122,6 +122,19 @@ def main():
 
 def init_devnet_l1_deploy_config(paths, update_timestamp=False):
     deploy_config = read_json(paths.devnet_config_template_path)
+    if DEVNET_CELO:
+        deploy_config['useFaultProofs'] = True
+        deploy_config['gasPriceOracleScalar'] = 0
+        # 'gasPriceOracleScalar' has to be zero in order for those
+        # to work
+        deploy_config['gasPriceOracleBlobBaseFeeScalar'] = 0
+        deploy_config['gasPriceOracleBaseFeeScalar'] = 0
+
+        deploy_config['useCustomGasToken'] = True
+        deploy_config['deployCeloContracts'] = True
+        # Usage of the zero address in combination of the useCustomGasToken == True
+        # will deploy a new contract
+        deploy_config['customGasTokenAddress'] = "0x0000000000000000000000000000000000000000"
     if update_timestamp:
         deploy_config['l1GenesisBlockTimestamp'] = '{:#x}'.format(int(time.time()))
     if DEVNET_L2OO:
@@ -130,15 +143,6 @@ def init_devnet_l1_deploy_config(paths, update_timestamp=False):
         deploy_config['useAltDA'] = True
     if GENERIC_ALTDA:
         deploy_config['daCommitmentType'] = "GenericCommitment"
-    if DEVNET_CELO:
-        deploy_config['useFaultProofs'] = True
-        deploy_config['useCustomGasToken'] = True
-        deploy_config['gasPriceOracleBlobBaseFeeScalar'] = 0
-        deploy_config['gasPriceOracleBaseFeeScalar'] = 0
-        deploy_config['deployCeloContracts'] = True
-        # Usage of the zero address in combination of the useCustomGasToken == True
-        # will deploy a new contract
-        deploy_config['customGasTokenAddress'] = "0x0000000000000000000000000000000000000000"
     write_json(paths.devnet_config_path, deploy_config)
 
 def devnet_l1_allocs(paths):
