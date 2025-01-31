@@ -871,6 +871,7 @@ jobs:
       - run:
           name: build cannon
           command: make cannon
+      - setup_remote_docker
       - run:
           name: run tests
           no_output_timeout: <<parameters.no_output_timeout>>
