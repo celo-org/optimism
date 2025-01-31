@@ -77,7 +77,7 @@ contract L2Genesis is Deployer {
     address constant defaultOwner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // TODO this is DEV_ACCOUNT_FUND_AMT
     uint256 public constant PRECOMPILE_COUNT = 256;
 
-    uint80 internal constant DEV_ACCOUNT_FUND_AMT = 60_000 ether;
+    uint80 internal constant DEV_ACCOUNT_FUND_AMT = 70_000 ether;
 
     /// @notice Default Anvil dev accounts. Only funded if `cfg.fundDevAccounts == true`.
     /// Also known as "test test test test test test test test test test test junk" mnemonic accounts,
@@ -723,22 +723,21 @@ contract L2Genesis is Deployer {
         // bytes memory code = vm.getDeployedCode("CeloRegistry.sol:CeloRegistry");
         // vm.etch(REGISTRY_ADDRESS, code);
 
-        CeloRegistry contract_ = new CeloRegistry({ test: false });
+        // CeloRegistry contract_ = new CeloRegistry({ test: false });
 
         address precompile = CeloPredeploys.CELO_REGISTRY;
 
         string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(contract_));
+        // console.log("Deploying %s implementation at: %s", cname, address(contract_));
 
-        vm.resetNonce(address(contract_));
-        _setupProxy(precompile, address(contract_));
+        // vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(0));
 
         // CeloRegistry registry = CeloRegistry(precompile);
         // address celoOwner = registry.owner();
         // vm.startPrank(address(celoOwner));
         //     registry._transferOwnership(defaultOwner);
         // vm.stopPrank();
-        vm.deal(defaultOwner, 600000e18);
 
         // console.log("CeloRegistry owner: %s", celoOwner);
         // revert("vert on puporse");
