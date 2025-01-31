@@ -83,7 +83,7 @@ contract L1ERC721Bridge_Test is Bridge_Initializer {
         assertEq(address(l1ERC721Bridge.messenger()), address(l1CrossDomainMessenger));
         assertEq(address(l1ERC721Bridge.OTHER_BRIDGE()), Predeploys.L2_ERC721_BRIDGE);
         assertEq(address(l1ERC721Bridge.otherBridge()), Predeploys.L2_ERC721_BRIDGE);
-        assertEq(address(l1ERC721Bridge.superchainConfig()), address(superchainConfig));
+        assertEq(address(l1ERC721Bridge.superchainConfig()), address(celoSuperchainConfig));
     }
 
     /// @dev Tests that the ERC721 can be bridged successfully.

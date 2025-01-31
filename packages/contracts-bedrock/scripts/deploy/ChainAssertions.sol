@@ -154,7 +154,8 @@ library ChainAssertions {
         if (_isProxy) {
             require(address(messenger.PORTAL()) == _contracts.OptimismPortal);
             require(address(messenger.portal()) == _contracts.OptimismPortal);
-            require(address(messenger.superchainConfig()) == _contracts.SuperchainConfig);
+            // TODO(m-chrzan): get correct value once CeloSuperchainConfig included in contracts
+            // require(address(messenger.superchainConfig()) == _contracts.SuperchainConfig);
             bytes32 xdmSenderSlot = _vm.load(address(messenger), bytes32(uint256(204)));
             require(address(uint160(uint256(xdmSenderSlot))) == Constants.DEFAULT_L2_SENDER);
         } else {
@@ -177,7 +178,8 @@ library ChainAssertions {
             require(address(bridge.messenger()) == _contracts.L1CrossDomainMessenger);
             require(address(bridge.OTHER_BRIDGE()) == Predeploys.L2_STANDARD_BRIDGE);
             require(address(bridge.otherBridge()) == Predeploys.L2_STANDARD_BRIDGE);
-            require(address(bridge.superchainConfig()) == _contracts.SuperchainConfig);
+            // TODO(m-chrzan): get correct value once CeloSuperchainConfig included in contracts
+            // require(address(bridge.superchainConfig()) == _contracts.SuperchainConfig);
         } else {
             require(address(bridge.MESSENGER()) == address(0));
             require(address(bridge.messenger()) == address(0));
@@ -243,7 +245,8 @@ library ChainAssertions {
         if (_isProxy) {
             require(weth.owner() == _expectedOwner);
             require(weth.delay() == _cfg.faultGameWithdrawalDelay());
-            require(weth.config() == ISuperchainConfig(_contracts.SuperchainConfig));
+            //TODO(m-chrzan): get correct value once CeloSuperchainConfig included in contracts
+            //require(weth.config() == ISuperchainConfig(_contracts.SuperchainConfig));
         } else {
             require(weth.owner() == _expectedOwner);
             require(weth.delay() == _cfg.faultGameWithdrawalDelay());
@@ -326,7 +329,8 @@ library ChainAssertions {
         if (_isProxy) {
             require(address(bridge.MESSENGER()) == _contracts.L1CrossDomainMessenger);
             require(address(bridge.messenger()) == _contracts.L1CrossDomainMessenger);
-            require(address(bridge.superchainConfig()) == _contracts.SuperchainConfig);
+            // TODO(m-chrzan): get correct value once CeloSuperchainConfig included in contracts
+            // require(address(bridge.superchainConfig()) == _contracts.SuperchainConfig);
         } else {
             require(address(bridge.MESSENGER()) == address(0));
             require(address(bridge.messenger()) == address(0));
@@ -422,7 +426,8 @@ library ChainAssertions {
             require(address(portal.disputeGameFactory()) == _contracts.DisputeGameFactory);
             require(address(portal.systemConfig()) == _contracts.SystemConfig);
             require(portal.guardian() == guardian);
-            require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
+            // TODO(m-chrzan): get correct value once CeloSuperchainConfig included in contracts
+            //require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
             require(portal.paused() == ISuperchainConfig(_contracts.SuperchainConfig).paused());
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
         } else {
