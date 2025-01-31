@@ -1,6 +1,13 @@
 FROM golang:1.22.7-alpine3.20 AS builder
+RUN apk add --no-cache curl tar gzip make gcc musl-dev linux-headers git jq bash
 
-RUN apk --no-cache add make
+# install yq
+RUN wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/local/bin/yq && \
+    chmod +x /usr/local/bin/yq
+
+COPY ./mise.toml .
+RUN curl -L https://github.com/casey/just/releases/download/$(yq '.tools.just' mise.toml)/just-$(yq '.tools.just' mise.toml)-x86_64-unknown-linux-musl.tar.gz | \
+    tar xz -C /usr/local/bin just
 
 COPY ./go.mod /app/go.mod
 COPY ./go.sum /app/go.sum
@@ -13,8 +20,10 @@ COPY ./op-service /app/op-service
 COPY ./op-node /app/op-node
 COPY ./op-alt-da /app/op-alt-da
 COPY ./op-chain-ops /app/op-chain-ops
+COPY ./justfiles /app/justfiles
+
 WORKDIR /app/op-chain-ops
-RUN make celo-migrate
+RUN just celo-migrate
 
 FROM alpine:3.20
 RUN apk --no-cache add ca-certificates bash rsync

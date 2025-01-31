@@ -35,6 +35,9 @@ fuzz:
         "FuzzVersionedNonce" \
     | parallel -j {{PARALLEL_JOBS}} {{just_executable()}} fuzz_task {}
 
+celo-migrate:
+	mkdir -p ./bin && go build -o ./bin/celo-migrate ./cmd/celo-migrate/*.go
+
 abis := '../packages/contracts-bedrock/snapshots/abi'
 
 bindings-celo-migrate:
