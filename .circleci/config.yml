@@ -873,6 +873,12 @@ jobs:
           command: make cannon
       - setup_remote_docker
       - run:
+          name: Setup docker access
+          command: |
+            apt update
+            apt install -y uuid-runtime
+            echo $(uuidgen) | sudo tee /etc/machine-id
+      - run:
           name: run tests
           no_output_timeout: <<parameters.no_output_timeout>>
           command: |
