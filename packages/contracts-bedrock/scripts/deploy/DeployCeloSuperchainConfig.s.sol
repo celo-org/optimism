@@ -57,10 +57,15 @@ contract DeployCeloSuperchainConfigOutput is BaseDeployIO {
 
     function set(bytes4 _sel, address _address) public {
         require(_address != address(0), "DeployCeloSuperchainConfigOutput: cannot set zero address");
-        if (_sel == this.celoSuperchainConfigImpl.selector) _celoSuperchainConfigImpl = ICeloSuperchainConfig(_address);
-        else if (_sel == this.celoSuperchainConfigProxy.selector) _celoSuperchainConfigProxy = ICeloSuperchainConfig(_address);
-        else if (_sel == this.tmpProxyAdmin.selector) _tmpProxyAdmin = IProxyAdmin(_address);
-        else revert("DeployCeloSuperchainConfigOutput: unknown selector");
+        if (_sel == this.celoSuperchainConfigImpl.selector) {
+            _celoSuperchainConfigImpl = ICeloSuperchainConfig(_address);
+        } else if (_sel == this.celoSuperchainConfigProxy.selector) {
+            _celoSuperchainConfigProxy = ICeloSuperchainConfig(_address);
+        } else if (_sel == this.tmpProxyAdmin.selector) {
+            _tmpProxyAdmin = IProxyAdmin(_address);
+        } else {
+            revert("DeployCeloSuperchainConfigOutput: unknown selector");
+        }
     }
 
     function checkOutput(DeployCeloSuperchainConfigInput _dsi) public {
@@ -114,7 +119,8 @@ contract DeployCeloSuperchainConfigOutput is BaseDeployIO {
 
         vm.startPrank(address(0));
         require(
-            IProxy(payable(address(celoSuperchainConfig))).implementation() == address(celoSuperchainConfigImpl()), "SUPCON-30"
+            IProxy(payable(address(celoSuperchainConfig))).implementation() == address(celoSuperchainConfigImpl()),
+            "SUPCON-30"
         );
         require(IProxy(payable(address(celoSuperchainConfig))).admin() == address(tmpProxyAdmin()), "SUPCON-40");
         vm.stopPrank();
@@ -142,7 +148,12 @@ contract DeployCeloSuperchainConfig is Script {
 
     // -------- Deployment Steps --------
 
-    function deployCeloSuperchainImplementationContracts(DeployCeloSuperchainConfigInput, DeployCeloSuperchainConfigOutput _dso) public {
+    function deployCeloSuperchainImplementationContracts(
+        DeployCeloSuperchainConfigInput,
+        DeployCeloSuperchainConfigOutput _dso
+    )
+        public
+    {
         // Deploy implementation contracts.
         vm.startBroadcast(msg.sender);
         ICeloSuperchainConfig celoSuperchainConfigImpl = ICeloSuperchainConfig(
@@ -163,8 +174,7 @@ contract DeployCeloSuperchainConfig is Script {
         IProxyAdmin proxyAdmin = IProxyAdmin(
             DeployUtils.create1({
                 _name: "ProxyAdmin",
-                _args:
-                    DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (msg.sender)))
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (msg.sender)))
             })
         );
         vm.stopBroadcast();
@@ -174,7 +184,12 @@ contract DeployCeloSuperchainConfig is Script {
         _dso.set(_dso.tmpProxyAdmin.selector, address(proxyAdmin));
     }
 
-    function deployAndInitializeCeloSuperchainConfig(DeployCeloSuperchainConfigInput _dsi, DeployCeloSuperchainConfigOutput _dso) public {
+    function deployAndInitializeCeloSuperchainConfig(
+        DeployCeloSuperchainConfigInput _dsi,
+        DeployCeloSuperchainConfigOutput _dso
+    )
+        public
+    {
         address guardian = _dsi.celoGuardian();
         bool paused = _dsi.paused();
         address superchainConfig = _dsi.superchainConfig();
@@ -186,9 +201,7 @@ contract DeployCeloSuperchainConfig is Script {
         ICeloSuperchainConfig celoSuperchainConfigProxy = ICeloSuperchainConfig(
             DeployUtils.create1({
                 _name: "Proxy",
-                _args: DeployUtils.encodeConstructor(
-                    abi.encodeCall(IProxy.__constructor__, (address(celoProxyAdmin)))
-                )
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxy.__constructor__, (address(celoProxyAdmin))))
             })
         );
         vm.stopBroadcast();
@@ -210,7 +223,10 @@ contract DeployCeloSuperchainConfig is Script {
 
     // This etches the IO contracts into memory so that we can use them in tests.
     // When interacting with the script programmatically (e.g. in a Solidity test), this must be called.
-    function etchIOContracts() public returns (DeployCeloSuperchainConfigInput dsi_, DeployCeloSuperchainConfigOutput dso_) {
+    function etchIOContracts()
+        public
+        returns (DeployCeloSuperchainConfigInput dsi_, DeployCeloSuperchainConfigOutput dso_)
+    {
         (dsi_, dso_) = getIOContracts();
         vm.etch(address(dsi_), type(DeployCeloSuperchainConfigInput).runtimeCode);
         vm.etch(address(dso_), type(DeployCeloSuperchainConfigOutput).runtimeCode);
@@ -219,8 +235,16 @@ contract DeployCeloSuperchainConfig is Script {
     }
 
     // This returns the addresses of the IO contracts for this script.
-    function getIOContracts() public view returns (DeployCeloSuperchainConfigInput dsi_, DeployCeloSuperchainConfigOutput dso_) {
-        dsi_ = DeployCeloSuperchainConfigInput(DeployUtils.toIOAddress(msg.sender, "optimism.DeployCeloSuperchainConfigInput"));
-        dso_ = DeployCeloSuperchainConfigOutput(DeployUtils.toIOAddress(msg.sender, "optimism.DeployCeloSuperchainConfigOutput"));
+    function getIOContracts()
+        public
+        view
+        returns (DeployCeloSuperchainConfigInput dsi_, DeployCeloSuperchainConfigOutput dso_)
+    {
+        dsi_ = DeployCeloSuperchainConfigInput(
+            DeployUtils.toIOAddress(msg.sender, "optimism.DeployCeloSuperchainConfigInput")
+        );
+        dso_ = DeployCeloSuperchainConfigOutput(
+            DeployUtils.toIOAddress(msg.sender, "optimism.DeployCeloSuperchainConfigOutput")
+        );
     }
 }
