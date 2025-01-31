@@ -510,8 +510,8 @@ jobs:
                   - "<<parameters.docker_name>>.tar"
 
   contracts-bedrock-frozen-code:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - attach_workspace: { at: "." }
