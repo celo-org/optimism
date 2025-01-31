@@ -355,6 +355,8 @@ contract Deploy is Deployer {
             console.log("set up superchain!");
         }
 
+        setupCeloSuperchainConfig();
+
         if (cfg.useAltDA()) {
             bytes32 typeHash = keccak256(bytes(cfg.daCommitmentType()));
             bytes32 keccakHash = keccak256(bytes("KeccakCommitment"));
@@ -393,6 +395,17 @@ contract Deploy is Deployer {
         deployERC1967Proxy("ProtocolVersionsProxy");
         deployProtocolVersions();
         initializeProtocolVersions();
+    }
+
+    /// @notice Deploy a CeloSuperchainConfig, which allows for propagating the
+    ///         paused state from the official Superchain to the Celo L1 system.
+    function setupCeloSuperchainConfig() public {
+        console.log("Setting up CeloSuperchainConfig");
+
+        // Deploy the CeloSuperchainConfigProxy
+        deployERC1967Proxy("CeloSuperchainConfigProxy");
+        deployCeloSuperchainConfig();
+        initializeCeloSuperchainConfig();
     }
 
     /// @notice Deploy a new OP Chain, with an existing SuperchainConfig provided
@@ -720,6 +733,16 @@ contract Deploy is Deployer {
         require(initialized != 0);
     }
 
+    /// @notice Deploy the CeloSuperchainConfig contract
+    function deployCeloSuperchainConfig() public broadcast {
+        ICeloSuperchainConfig celoSuperchainConfig = ICeloSuperchainConfig(_deploy("CeloSuperchainConfig", hex""));
+
+        require(celoSuperchainConfig.guardian() == address(0));
+        require(celoSuperchainConfig.superchainConfig() == address(0));
+        bytes32 initialized = vm.load(address(celoSuperchainConfig), bytes32(0));
+        require(initialized != 0);
+    }
+
     /// @notice Deploy the L1CrossDomainMessenger
     function deployL1CrossDomainMessenger() public broadcast returns (address addr_) {
         IL1CrossDomainMessenger messenger = IL1CrossDomainMessenger(_deploy("L1CrossDomainMessenger", hex""));
@@ -987,6 +1010,21 @@ contract Deploy is Deployer {
         ChainAssertions.checkSuperchainConfig({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isPaused: false });
     }
 
+    /// @notice Initialize the CeloSuperchainConfig
+    function initializeCeloSuperchainConfig() public broadcast {
+        address payable superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address payable celoSuperchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
+        address payable celoSuperchainConfig = mustGetAddress("CeloSuperchainConfig");
+        _upgradeAndCallViaSafe({
+            _proxy: celoSuperchainConfigProxy,
+            _implementation: celoSuperchainConfig,
+            _innerCallData: abi.encodeCall(ICeloSuperchainConfig.initialize, (cfg.superchainConfigGuardian(), false, superchainConfigProxy))
+        });
+
+        // TODO(m-chrzan): implement ChainAssertions for CeloSuperchainConfig
+        //ChainAssertions.checkSuperchainConfig({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isPaused: false });
+    }
+
     /// @notice Initialize the DisputeGameFactory
     function initializeDisputeGameFactory() public broadcast {
         console.log("Upgrading and initializing DisputeGameFactory proxy");
@@ -1097,7 +1135,7 @@ contract Deploy is Deployer {
         _upgradeAndCallViaSafe({
             _proxy: payable(anchorStateRegistryProxy),
             _implementation: anchorStateRegistry,
-            _innerCallData: abi.encodeCall(IAnchorStateRegistry.initialize, (roots, superchainConfig))
+            _innerCallData: abi.encodeCall(IAnchorStateRegistry.initialize, (roots, ICeloSuperchainConfig(address(superchainConfig))))
         });
 
         string memory version = IAnchorStateRegistry(payable(anchorStateRegistryProxy)).version();
@@ -1179,7 +1217,7 @@ contract Deploy is Deployer {
                 IL1StandardBridge.initialize,
                 (
                     ICrossDomainMessenger(l1CrossDomainMessengerProxy),
-                    ISuperchainConfig(superchainConfigProxy),
+                    ICeloSuperchainConfig(superchainConfigProxy),
                     ISystemConfig(systemConfigProxy)
                 )
             )
@@ -1204,7 +1242,7 @@ contract Deploy is Deployer {
             _implementation: l1ERC721Bridge,
             _innerCallData: abi.encodeCall(
                 IL1ERC721Bridge.initialize,
-                (ICrossDomainMessenger(payable(l1CrossDomainMessengerProxy)), ISuperchainConfig(superchainConfigProxy))
+                (ICrossDomainMessenger(payable(l1CrossDomainMessengerProxy)), ICeloSuperchainConfig(superchainConfigProxy))
             )
         });
 
@@ -1276,7 +1314,7 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(
                 IL1CrossDomainMessenger.initialize,
                 (
-                    ISuperchainConfig(superchainConfigProxy),
+                    ICeloSuperchainConfig(superchainConfigProxy),
                     IOptimismPortal(payable(optimismPortalProxy)),
                     ISystemConfig(systemConfigProxy)
                 )
@@ -1371,7 +1409,7 @@ contract Deploy is Deployer {
                 (
                     IDisputeGameFactory(disputeGameFactoryProxy),
                     ISystemConfig(systemConfigProxy),
-                    ISuperchainConfig(superchainConfigProxy),
+                    ICeloSuperchainConfig(superchainConfigProxy),
                     GameType.wrap(uint32(cfg.respectedGameType()))
                 )
             )
