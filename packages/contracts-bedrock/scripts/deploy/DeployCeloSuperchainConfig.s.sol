@@ -13,6 +13,7 @@ import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
 
+// See DeploySuperchain.s.sol for detailed comments on the script architecture used here.
 contract DeployCeloSuperchainConfigInput is BaseDeployIO {
     using stdToml for string;
 
