@@ -397,8 +397,11 @@ contract Deploy is Deployer {
         initializeProtocolVersions();
     }
 
-    /// @notice Deploy a CeloSuperchainConfig, which allows for propagating the
-    ///         paused state from the official Superchain to the Celo L1 system.
+    /// @notice Deploys the CeloSuperchainConfig, which is currently used to
+    ///         enable a dual Guardian setup, i.e. having the Celo L1 system be
+    ///         pausable by both the global Superchain Guardian (whenever the
+    ///         SuperchainConfig contract is paused) and a new Celo Guardian
+    ///         role.
     function setupCeloSuperchainConfig() public {
         console.log("Setting up CeloSuperchainConfig");
 
