@@ -17,14 +17,15 @@ contract CeloSuperchainConfig is SuperchainConfig {
     bytes32 public constant SUPERCHAIN_CONFIG_SLOT =
         bytes32(uint256(keccak256("superchainConfig.superchainConfig")) - 1);
 
+    /// @notice Constructs the CeloSuperchainConfig contract.
     constructor() {
         initialize({ _guardian: address(0), _paused: false, _superchainConfig: address(0) });
     }
 
     /// @notice Initializer.
-    /// @param _guardian    Address of the guardian, can pause the OptimismPortal.
-    /// @param _paused      Initial paused status.
-    /// @param _superchainConfig      Address of the global SuperchainConfig.
+    /// @param _guardian           Address of the guardian, can pause the OptimismPortal.
+    /// @param _paused             Initial paused status.
+    /// @param _superchainConfig   Address of the global SuperchainConfig.
     function initialize(address _guardian, bool _paused, address _superchainConfig) public initializer {
         _setGuardian(_guardian);
         _setSuperchainConfig(_superchainConfig);
@@ -33,6 +34,9 @@ contract CeloSuperchainConfig is SuperchainConfig {
         }
     }
 
+    /// @notice Checks whether the Celo system should be paused, while also
+    ///         propagating the paused value from Superchain to Celo if
+    ///         necessary.
     function checkAndPauseIfSuperchainPaused() public returns (bool paused_) {
         if (ISuperchainConfig(superchainConfig()).paused()) {
             _pause("Superchain paused");
@@ -42,10 +46,13 @@ contract CeloSuperchainConfig is SuperchainConfig {
         return paused();
     }
 
+    /// @notice Getter for the address of the global SuperchainConfig.
     function superchainConfig() public view returns (address superchainConfig_) {
         superchainConfig_ = Storage.getAddress(SUPERCHAIN_CONFIG_SLOT);
     }
 
+    /// @notice Getter for the current paused status, which depends both on the
+    ///         local paused value, and the paused status of Superchain.
     function paused() public view override returns (bool paused_) {
         paused_ = super.paused();
         if (paused_) {
@@ -59,6 +66,9 @@ contract CeloSuperchainConfig is SuperchainConfig {
         return paused_;
     }
 
+    /// @notice Sets the global SuperchainConfig address. This is only callable
+    ///         during initialization, so an upgrade will be required to change this address.
+    /// @param _superchainConfig The new SuperchainConfig address.
     function _setSuperchainConfig(address _superchainConfig) internal {
         Storage.setAddress(SUPERCHAIN_CONFIG_SLOT, _superchainConfig);
     }
