@@ -54,6 +54,42 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
         assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), celoGuardian);
         assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
     }
+
+    /// @dev Tests that it will be intialized as paused if Superchain was paused
+    ///      at initialization time.
+    function test_initialize_whenSuperchainPaused_succeeds() external {
+        vm.prank(superchainConfig.guardian());
+        superchainConfig.pause("identifier");
+        assertTrue(superchainConfig.paused());
+
+        IProxy newProxy = IProxy(
+            DeployUtils.create1({
+                _name: "Proxy",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxy.__constructor__, (alice)))
+            })
+        );
+        ICeloSuperchainConfig newImpl = ICeloSuperchainConfig(
+            DeployUtils.create1({
+                _name: "CeloSuperchainConfig",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloSuperchainConfig.__constructor__, ()))
+            })
+        );
+
+        vm.startPrank(alice);
+        newProxy.upgradeToAndCall(
+            address(newImpl),
+            abi.encodeWithSignature("initialize(address,bool,address)", celoGuardian, false, address(superchainConfig))
+        );
+        vm.stopPrank();
+
+        vm.prank(superchainConfig.guardian());
+        superchainConfig.unpause();
+        assertFalse(superchainConfig.paused());
+
+        assertTrue(ICeloSuperchainConfig(address(newProxy)).paused());
+        assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), celoGuardian);
+        assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
+    }
 }
 
 contract CeloSuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup {

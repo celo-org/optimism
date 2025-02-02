@@ -45,6 +45,8 @@ contract CeloSuperchainConfig is SuperchainConfig {
         _setSuperchainConfig(_superchainConfig);
         if (_paused) {
             _pause("Initializer paused");
+        } else if (_superchainConfig != address(0)) {
+            checkAndPauseIfSuperchainPaused();
         }
     }
 
