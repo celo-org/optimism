@@ -12,10 +12,24 @@ import { Storage } from "src/libraries/Storage.sol";
 /// typically part of the global superchain configuration, but potentially need to
 /// be handled differently by Celo.
 contract CeloSuperchainConfig is SuperchainConfig {
+    /// @notice Enum representing different types of updates for the Celo
+    //          extension of SuperchainConfig.
+    /// @custom:value SUPERCHAIN_CONFIG  Represents an update to the SuperchainConfig address.
+    enum CeloUpdateType {
+        SUPERCHAIN_CONFIG
+    }
+
     /// @notice The address of the global OP Superchain SuperchainConfig contract.
     ///         It can only be modified by an upgrade.
     bytes32 public constant SUPERCHAIN_CONFIG_SLOT =
         bytes32(uint256(keccak256("superchainConfig.superchainConfig")) - 1);
+
+
+    /// @notice Emitted when configuration of the Celo-specific portion of the
+    ///         config is updated.
+    /// @param updateType Type of update.
+    /// @param data       Encoded update data.
+    event CeloConfigUpdate(CeloUpdateType indexed updateType, bytes data);
 
     /// @notice Constructs the CeloSuperchainConfig contract.
     constructor() {
@@ -71,5 +85,6 @@ contract CeloSuperchainConfig is SuperchainConfig {
     /// @param _superchainConfig The new SuperchainConfig address.
     function _setSuperchainConfig(address _superchainConfig) internal {
         Storage.setAddress(SUPERCHAIN_CONFIG_SLOT, _superchainConfig);
+        emit CeloConfigUpdate(CeloUpdateType.SUPERCHAIN_CONFIG, abi.encode(_superchainConfig));
     }
 }
