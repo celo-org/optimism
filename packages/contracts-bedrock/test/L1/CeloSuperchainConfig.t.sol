@@ -11,9 +11,6 @@ import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.s
 
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
-/// @dev For now, testing this using an individual setup contract here, rather
-///      than including this contract in the global CommonTest setup. TBD how
-///      this should be handled.
 contract CeloSuperchainConfig_Test_Setup is CommonTest {
     address internal celoGuardian;
 
@@ -25,7 +22,7 @@ contract CeloSuperchainConfig_Test_Setup is CommonTest {
 }
 
 contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
-    /// @dev Tests that initialization sets the correct values. These are defined in CommonTest.sol.
+    /// @dev Tests that initialization sets the correct values.
     function test_initialize_unpaused_succeeds() external view {
         assertFalse(celoSuperchainConfig.paused());
         assertEq(celoSuperchainConfig.guardian(), celoGuardian);
@@ -73,6 +70,8 @@ contract CeloSuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup 
     }
 
     /// @dev Tests that `pause` reverts when called by the Superchain Guardian.
+    ///      Currently this test is skipped because the dev Deploy setup ends up
+    ///      using the same address for both Guardian roles.
     function test_pause_superchainGuardian_reverts() external {
         assertFalse(celoSuperchainConfig.paused());
 
@@ -90,8 +89,7 @@ contract CeloSuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup 
 }
 
 contract CeloSuperchainConfig_Pause_Test is CeloSuperchainConfig_Test_Setup {
-    /// @dev Tests that `pause` successfully pauses
-    ///      when called by the guardian.
+    /// @dev Tests that `pause` successfully pauses when called by the guardian.
     function test_pause_succeeds() external {
         assertFalse(celoSuperchainConfig.paused());
 
@@ -136,6 +134,8 @@ contract CeloSuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
         assertFalse(celoSuperchainConfig.paused());
     }
 
+    /// @dev Tests that after `unpause`, if the Superchain is still paused, Celo
+    ///      remains paused anyways.
     function test_unpause_whenSuperchainPaused_succeeds() external {
         vm.prank(celoSuperchainConfig.guardian());
         celoSuperchainConfig.pause("identifier");
@@ -153,12 +153,16 @@ contract CeloSuperchainConfig_Unpause_Test is CeloSuperchainConfig_Test_Setup {
 }
 
 contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
+    /// @dev Tests that the `paused` getter returns `false` whenever both Celo
+    ///      and Superchain are unpaused.
     function test_paused_whenSuperchainUnpaused_succeeds() external view {
         assertFalse(superchainConfig.paused());
         bool paused = celoSuperchainConfig.paused();
         assertFalse(paused);
     }
 
+    /// @dev Tests that the `paused` getter returns `true` whenever Superchain
+    ///      is paused, even when Celo is unpaused.
     function test_paused_whenSuperchainPaused_succeeds() external {
         vm.prank(superchainConfig.guardian());
         superchainConfig.pause("identifier");
@@ -168,6 +172,8 @@ contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
         assertTrue(paused);
     }
 
+    /// @dev Tests that the `paused` getter returns `true` whenever Celo is paused,
+    ///      even when the Superchain is unpaused.
     function test_paused_whenCeloPaused_succeeds() external {
         vm.prank(celoGuardian);
         celoSuperchainConfig.pause("identifier");
@@ -178,6 +184,8 @@ contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
         assertTrue(paused);
     }
 
+    /// @dev Tests that the `paused` getter returns `true` whenever both Celo
+    ///      and the Superchain are paused.
     function test_paused_whenBothPaused_succeeds() external {
         vm.prank(superchainConfig.guardian());
         superchainConfig.pause("identifier");
@@ -192,6 +200,8 @@ contract CeloSuperchainConfig_Paused_Test is CeloSuperchainConfig_Test_Setup {
 }
 
 contract CeloSuperchainConfig_CheckAndPauseIfSuperchainPaused_Test is CeloSuperchainConfig_Test_Setup {
+    /// @dev Tests that `checkAndPauseIfSuperchainPaused` is a no-op when
+    ///      Superchain is unpaused.
     function test_checkAndPauseIfSuperchainPaused_whenSuperchainUnpaused_succeeds() external {
         assertFalse(superchainConfig.paused());
 
@@ -202,6 +212,8 @@ contract CeloSuperchainConfig_CheckAndPauseIfSuperchainPaused_Test is CeloSuperc
         assertFalse(paused);
     }
 
+    /// @dev Tests that `checkAndPauseIfSuperchainPaused` propagatates
+    ///      Superchain's paused status to Celo when the Superchain is paused.
     function test_checkAndPauseIfSuperchainPaused_whenSuperchainPaused_succeeds() external {
         vm.prank(superchainConfig.guardian());
         superchainConfig.pause("identifier");
