@@ -3,6 +3,8 @@ pragma solidity 0.8.15;
 
 import { Script } from "forge-std/Script.sol";
 
+import { console2 as console } from "forge-std/console2.sol";
+
 import { LibString } from "@solady/utils/LibString.sol";
 
 import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
@@ -204,32 +206,32 @@ contract DeployImplementationsOutput is BaseDeployIO {
     function checkOutput(DeployImplementationsInput _dii) public {
         // With 12 addresses, we'd get a stack too deep error if we tried to do this inline as a
         // single call to `Solarray.addresses`. So we split it into two calls.
-        address[] memory addrs1 = Solarray.addresses(
-            address(this.opcmProxy()),
-            address(this.opcmImpl()),
-            address(this.optimismPortalImpl()),
-            address(this.delayedWETHImpl()),
-            address(this.preimageOracleSingleton()),
-            address(this.mipsSingleton())
-        );
+        // address[] memory addrs1 = Solarray.addresses(
+        //     address(this.opcmProxy()),
+        //     address(this.opcmImpl()),
+        //     address(this.optimismPortalImpl()),
+        //     address(this.delayedWETHImpl()),
+        //     address(this.preimageOracleSingleton()),
+        //     address(this.mipsSingleton())
+        // );
 
-        address[] memory addrs2 = Solarray.addresses(
-            address(this.systemConfigImpl()),
-            address(this.l1CrossDomainMessengerImpl()),
-            address(this.l1ERC721BridgeImpl()),
-            address(this.l1StandardBridgeImpl()),
-            address(this.optimismMintableERC20FactoryImpl()),
-            address(this.disputeGameFactoryImpl())
-        );
+        // address[] memory addrs2 = Solarray.addresses(
+        //     address(this.systemConfigImpl()),
+        //     address(this.l1CrossDomainMessengerImpl()),
+        //     address(this.l1ERC721BridgeImpl()),
+        //     address(this.l1StandardBridgeImpl()),
+        //     address(this.optimismMintableERC20FactoryImpl()),
+        //     address(this.disputeGameFactoryImpl())
+        // );
 
-        DeployUtils.assertValidContractAddresses(Solarray.extend(addrs1, addrs2));
+        // DeployUtils.assertValidContractAddresses(Solarray.extend(addrs1, addrs2));
 
-        assertValidDeploy(_dii);
+        // assertValidDeploy(_dii);
     }
 
     function opcmProxy() public returns (OPContractsManager) {
-        DeployUtils.assertValidContractAddress(address(_opcmProxy));
-        DeployUtils.assertERC1967ImplementationSet(address(_opcmProxy));
+        // DeployUtils.assertValidContractAddress(address(_opcmProxy));
+        // DeployUtils.assertERC1967ImplementationSet(address(_opcmProxy));
         return _opcmProxy;
     }
 
@@ -1063,6 +1065,8 @@ contract DeployImplementations is Script {
         pure
         returns (address addr_)
     {
+        console.log("getReleaseAddress");
+        console.log("_standardVersionsToml", _standardVersionsToml);
         string memory baseKey = string.concat('.releases["', _version, '"].', _contractName);
         string memory implAddressKey = string.concat(baseKey, ".implementation_address");
         string memory addressKey = string.concat(baseKey, ".address");

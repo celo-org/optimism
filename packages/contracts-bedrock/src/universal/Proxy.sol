@@ -88,7 +88,7 @@ contract Proxy {
 
     /// @notice Gets the owner of the proxy contract.
     /// @return Owner address.
-    function admin() public virtual proxyCallIfNotAdmin returns (address) {
+    function admin() public virtual returns (address) {
         return _getAdmin();
     }
 

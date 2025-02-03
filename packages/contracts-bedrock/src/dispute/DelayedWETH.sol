@@ -9,6 +9,8 @@ import { WETH98 } from "src/universal/WETH98.sol";
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
 
+import { console2 as console } from "forge-std/console2.sol";
+
 /// @custom:proxied true
 /// @title DelayedWETH
 /// @notice DelayedWETH is an extension to WETH9 that allows for delayed withdrawals. Accounts must trigger an unlock
@@ -54,6 +56,8 @@ contract DelayedWETH is OwnableUpgradeable, WETH98, ISemver {
     /// @param _owner The address of the owner.
     /// @param _config Address of the SuperchainConfig contract.
     function initialize(address _owner, ISuperchainConfig _config) public initializer {
+        console.log("in intialized");
+        console.log("_owner", _owner);
         __Ownable_init();
         _transferOwnership(_owner);
         config = _config;

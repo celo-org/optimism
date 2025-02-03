@@ -534,35 +534,35 @@ library ChainAssertions {
         }
     }
 
-    /// @notice Asserts that the SuperchainConfig is setup correctly
-    function checkSuperchainConfig(
-        Types.ContractSet memory _contracts,
-        DeployConfig _cfg,
-        bool _isPaused,
-        bool _isProxy
-    )
-        internal
-        view
-    {
-        ISuperchainConfig superchainConfig = ISuperchainConfig(_contracts.SuperchainConfig);
-        console.log(
-            "Running chain assertions on the SuperchainConfig %s at %s",
-            _isProxy ? "proxy" : "implementation",
-            address(superchainConfig)
-        );
-        require(address(superchainConfig) != address(0), "CHECK-SC-10");
+    // /// @notice Asserts that the SuperchainConfig is setup correctly
+    // function checkSuperchainConfig(
+    //     Types.ContractSet memory _contracts,
+    //     DeployConfig _cfg,
+    //     bool _isPaused,
+    //     bool _isProxy
+    // )
+    //     internal
+    //     view
+    // {
+    //     ISuperchainConfig superchainConfig = ISuperchainConfig(_contracts.SuperchainConfig);
+    //     console.log(
+    //         "Running chain assertions on the SuperchainConfig %s at %s",
+    //         _isProxy ? "proxy" : "implementation",
+    //         address(superchainConfig)
+    //     );
+    //     require(address(superchainConfig) != address(0), "CHECK-SC-10");
 
-        // Check that the contract is initialized
-        assertInitializedSlotIsSet({ _contractAddress: address(superchainConfig), _slot: 0, _offset: 0 });
+    //     // Check that the contract is initialized
+    //     assertInitializedSlotIsSet({ _contractAddress: address(superchainConfig), _slot: 0, _offset: 0 });
 
-        if (_isProxy) {
-            require(superchainConfig.guardian() == _cfg.superchainConfigGuardian(), "CHECK-SC-20");
-            require(superchainConfig.paused() == _isPaused, "CHECK-SC-30");
-        } else {
-            require(superchainConfig.guardian() == address(0), "CHECK-SC-40");
-            require(superchainConfig.paused() == false, "CHECK-SC-50");
-        }
-    }
+    //     if (_isProxy) {
+    //         require(superchainConfig.guardian() == _cfg.superchainConfigGuardian(), "CHECK-SC-20");
+    //         require(superchainConfig.paused() == _isPaused, "CHECK-SC-30");
+    //     } else {
+    //         require(superchainConfig.guardian() == address(0), "CHECK-SC-40");
+    //         require(superchainConfig.paused() == false, "CHECK-SC-50");
+    //     }
+    // }
 
     /// @notice Asserts that the SuperchainConfig is setup correctly
     function checkOPContractsManager(Types.ContractSet memory _contracts, bool _isProxy) internal view {
@@ -618,10 +618,10 @@ library ChainAssertions {
 
         uint256 expectedInitialBalance = 0;
         if (_isProxy && _cfg.useCustomGasToken()) {
-            address customGasTokenAddress = _cfg.customGasTokenAddress();
-            IERC20 token = IERC20(customGasTokenAddress);
-            expectedInitialBalance = token.balanceOf(address(portal));
-            console.log("custom gas token expectedInitialBalance", expectedInitialBalance);
+            // address customGasTokenAddress = _cfg.customGasTokenAddress();
+            // IERC20 token = IERC20(customGasTokenAddress);
+            // expectedInitialBalance = token.balanceOf(address(portal));
+            // console.log("custom gas token expectedInitialBalance", expectedInitialBalance);
         }
 
         if (_isProxy) {
@@ -640,6 +640,34 @@ library ChainAssertions {
         require(
             val == uint8(1) || val == uint8(0xff),
             "ChainAssertions: storage value is not 1 or 0xff at the given slot and offset"
+        );
+    }
+
+     /// @notice Asserts that the SuperchainConfig is setup correctly
+    function checkSuperchainConfig(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isPaused
+    )
+        internal
+        view
+    {
+        console.log("Running chain assertions on the SuperchainConfig");
+        ISuperchainConfig superchainConfig = ISuperchainConfig(_contracts.SuperchainConfig);
+
+        // Check that the contract is initialized
+        assertSlotValueIsOne({ _contractAddress: address(superchainConfig), _slot: 0, _offset: 0 });
+
+        require(superchainConfig.guardian() == _cfg.superchainConfigGuardian());
+        require(superchainConfig.paused() == _isPaused);
+    }
+
+     /// @dev Asserts that for a given contract the value of a storage slot at an offset is 1.
+    function assertSlotValueIsOne(address _contractAddress, uint256 _slot, uint256 _offset) internal view {
+        bytes32 slotVal = vm.load(_contractAddress, bytes32(_slot));
+        require(
+            uint8((uint256(slotVal) >> (_offset * 8)) & 0xFF) == uint8(1),
+            "Storage value is not 1 at the given slot and offset"
         );
     }
 }

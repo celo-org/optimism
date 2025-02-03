@@ -233,6 +233,7 @@ library DeployUtils {
     function assertERC1967ImplementationSet(address _proxy) internal returns (address implementation_) {
         // We prank as the zero address due to the Proxy's `proxyCallIfNotAdmin` modifier.
         // Pranking inside this function also means it can no longer be considered `view`.
+        vm.allowCheatcodes(address(0x32C3144332bfB6a3e638Cba8160351B96Ef92ED2));
         vm.prank(address(0));
         implementation_ = IProxy(payable(_proxy)).implementation();
         assertValidContractAddress(implementation_);
