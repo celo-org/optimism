@@ -871,6 +871,8 @@ jobs:
             sudo apt update
             sudo apt install kurtosis-cli gotestsum
             curl https://mise.run | sh
+            echo "eval \"\$(/home/circleci/.local/bin/mise activate bash)\"" >> ~/.bashrc
+            eval "$(/home/circleci/.local/bin/mise activate bash)"
       - install-contracts-dependencies
       - run:
           name: build op-program-client
