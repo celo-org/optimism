@@ -862,7 +862,6 @@ jobs:
       - checkout
       - attach_workspace:
           at: "."
-      - install-contracts-dependencies
       - run:
           name: Install dependencies
           command: |
@@ -871,6 +870,8 @@ jobs:
             echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
             sudo apt update
             sudo apt install kurtosis-cli gotestsum
+            curl https://mise.run | sh
+      - install-contracts-dependencies
       - run:
           name: build op-program-client
           command: make op-program-client
