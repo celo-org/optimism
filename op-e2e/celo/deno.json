@@ -1,6 +1,6 @@
 {
   "tasks": {
-    "tests": "deno test --allow-read --allow-run --allow-net='127.0.0.1,localhost' --allow-env --env-file=.default.env --env-file=.env main.test.ts"
+    "test": "deno test --allow-read --allow-run --allow-net='127.0.0.1,localhost' --allow-env --env-file=.default.env --env-file=.env main.test.ts"
     "cache-deps": "deno cache main.test.ts"
   },
   "workspace": [

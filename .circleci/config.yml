@@ -1136,25 +1136,37 @@ jobs:
                 command: make devnet-test
       - when:
           condition:
-              equal: ['celo', <<parameters.variant>>]
+            equal: ['celo', <<parameters.variant>>]
           steps:
+            # TODO: include this in the base image directly
+            - run:
+                name: install Deno v2.
+                command: |
+                  curl -fsSL https://deno.land/install.sh | DENO_INSTALL=$HOME/.local sh -s v2.1.9 &&
+                  echo 'export PATH=$HOME/.local/bin/:${PATH}' >> $BASH_ENV
+            - run:
+                name: set Deno cache path in env
+                command: |
+                  echo 'export DENO_DIR=$HOME/.cache/deno' >> $BASH_ENV
             - restore_cache:
-                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
-            # install dependencies
-            - run:
-                working_directory:  op-e2e/celo
-                name: install dependencies
-                command: npm install
-            # save any changes to the cache
-            - save_cache:
-                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+                key: deno-cache-v2-{{ checksum "op-e2e/celo/deno.lock" }}
                 paths:
-                  - op-e2e/celo/node_modules
+                  - ~/.cache/deno 
             - run:
-                working_directory:  op-e2e/celo
+                name: Cache Deno Dependencies
+                working_directory: op-e2e/celo
+                command: deno run cache-deps
+            - save_cache:
+                key: deno-cache-v2-{{ checksum "op-e2e/celo/deno.lock" }}
+                paths:
+                  - ~/.cache/deno 
+            - run:
+                environment:
+                  CELOTEST_SPAWN_DEVNET: false
+                working_directory: op-e2e/celo
                 name: Run Celo e2e tests
                 command: |
-                  SPAWN_DEVNET=false ./run_all_tests.sh
+                  deno run test
       - run:
           name: Dump op-node logs
           command: |
