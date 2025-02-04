@@ -73,7 +73,7 @@ contract L1ERC721Bridge is ERC721Bridge, ISemver {
         external
         onlyOtherBridge
     {
-        require(paused() == false, "L1ERC721Bridge: paused");
+        require(superchainConfig.checkAndPauseIfSuperchainPaused() == false, "L1ERC721Bridge: paused");
         require(_localToken != address(this), "L1ERC721Bridge: local token cannot be self");
 
         // Checks that the L1/L2 NFT pair has a token ID that is escrowed in the L1 Bridge.
