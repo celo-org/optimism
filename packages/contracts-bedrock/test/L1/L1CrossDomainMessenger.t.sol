@@ -45,6 +45,55 @@ contract L1CrossDomainMessenger_Test is Bridge_Initializer {
         assertEq(address(l1CrossDomainMessenger.otherMessenger()), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
     }
 
+    /// @dev Tests that `pause` successfully pauses
+    ///      when called by the GUARDIAN.
+    function test_pause_succeeds() external {
+        address guardian = celoSuperchainConfig.guardian();
+
+        assertEq(l1CrossDomainMessenger.paused(), false);
+
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+
+        assertEq(l1CrossDomainMessenger.paused(), true);
+    }
+
+    /// @dev Tests that pausing the Superchain successfully pauses
+    ///      when called by the Superchain GUARDIAN.
+    function test_superchainPause_succeeds() external {
+        address guardian = superchainConfig.guardian();
+
+        assertEq(l1CrossDomainMessenger.paused(), false);
+
+        vm.expectEmit(address(superchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        superchainConfig.pause("identifier");
+
+        assertEq(l1CrossDomainMessenger.paused(), true);
+    }
+
+    /// @dev Tests that `unpause` successfully unpauses
+    ///      when called by the GUARDIAN.
+    function test_unpause_succeeds() external {
+        address guardian = celoSuperchainConfig.guardian();
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+        assertEq(l1CrossDomainMessenger.paused(), true);
+
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Unpaused();
+        vm.prank(guardian);
+        celoSuperchainConfig.unpause();
+
+        assertEq(l1CrossDomainMessenger.paused(), false);
+    }
+
     /// @dev Tests that the version can be decoded from the message nonce.
     function test_messageVersion_succeeds() external view {
         (, uint16 version) = Encoding.decodeVersionedNonce(l1CrossDomainMessenger.messageNonce());
