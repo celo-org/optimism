@@ -37,6 +37,9 @@ export async function setupDevnet(config: Config) {
 }
 
 export async function teardownDevnet(config: Config) {
+  if (!config.SpawnDevnet) {
+    return;
+  }
   console.log("stopping and clearing devnet...");
   const devnetClean = new Deno.Command("make", {
     args: ["devnet-clean"],
