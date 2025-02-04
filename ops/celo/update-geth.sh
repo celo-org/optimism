@@ -32,7 +32,7 @@ if [ -z "$sha256digest" ]; then
 fi
 
 # We need to escape the '@' otherwise '@sha256' is interpreted as a global
-# Symbol by python.
+# Symbol by perl.
 docker_search_string="(.*op-geth\@sha256:)(.*)"
 gomod_search_string="^(replace github.com/ethereum/go-ethereum .*=> )github.com/.*/op-geth v.*"
 
