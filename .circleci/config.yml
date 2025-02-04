@@ -508,7 +508,7 @@ jobs:
 
   cannon-go-lint-and-test:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
+      - image: cimg/base:2025.02
     resource_class: xlarge
     parameters:
       skip_slow_tests:
@@ -572,7 +572,7 @@ jobs:
 
   diff-asterisc-bytecode:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
+      - image: cimg/base:2025.02
     resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
@@ -1254,9 +1254,10 @@ jobs:
           when: on_fail
       - notify-failures-on-develop
 
-  contracts-bedrock-upload:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+  contracts-bedrock-checks:
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -1378,8 +1379,8 @@ jobs:
 
   go-lint:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: large
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -1404,6 +1405,10 @@ jobs:
         description: Slack user or group to mention when notifying of failures
         type: string
         default: ""
+      resource_class:
+        description: Machine resource class
+        type: string
+        default: xlarge
       no_output_timeout:
         description: Timeout for when CircleCI kills the job if there's no output
         type: string
@@ -1958,7 +1963,7 @@ jobs:
 
   cannon-prestate-quick:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
+      - image: cimg/base:2025.02
     resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
@@ -2001,9 +2006,10 @@ jobs:
             - "op-program/bin/prestate*"
             - "op-program/bin/meta*"
 
-  cannon-kona-prestate:
-    machine:
-      docker_layer_caching: true # we rely on this for faster builds, and actively warm it up for builds with common stages
+  publish-cannon-prestates:
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -2212,8 +2218,8 @@ jobs:
 
   op-program-compat:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: large
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -2225,8 +2231,8 @@ jobs:
 
   check-generated-mocks-op-node:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: large
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -2238,8 +2244,8 @@ jobs:
 
   check-generated-mocks-op-service:
     docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: large
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -2877,7 +2883,7 @@ workflows:
           notify: true
           mentions: "@proofs-team"
           no_output_timeout: 90m
-          test_timeout: 480m
+          test_timeout: 120m
           resource_class: xlarge
           context:
             - slack
