@@ -78,6 +78,22 @@ contract OptimismPortal_Test is CommonTest {
 
         assertEq(optimismPortal.paused(), false);
 
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+
+        assertEq(optimismPortal.paused(), true);
+    }
+
+    /// @dev Tests that pausing the Superchain successfully pauses
+    ///      when called by the Superchain GUARDIAN.
+    function test_superchainPause_succeeds() external {
+        address guardian = superchainConfig.guardian();
+
+        assertEq(optimismPortal.paused(), false);
+
         vm.expectEmit(address(superchainConfig));
         emit Paused("identifier");
 
@@ -94,7 +110,7 @@ contract OptimismPortal_Test is CommonTest {
         assertTrue(optimismPortal.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can pause");
         vm.prank(alice);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         assertEq(optimismPortal.paused(), false);
     }
@@ -105,13 +121,13 @@ contract OptimismPortal_Test is CommonTest {
         address guardian = optimismPortal.guardian();
 
         vm.prank(guardian);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
         assertEq(optimismPortal.paused(), true);
 
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Unpaused();
         vm.prank(guardian);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
         assertEq(optimismPortal.paused(), false);
     }
@@ -121,13 +137,13 @@ contract OptimismPortal_Test is CommonTest {
         address guardian = optimismPortal.guardian();
 
         vm.prank(guardian);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
         assertEq(optimismPortal.paused(), true);
 
         assertTrue(optimismPortal.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can unpause");
         vm.prank(alice);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
         assertEq(optimismPortal.paused(), true);
     }
