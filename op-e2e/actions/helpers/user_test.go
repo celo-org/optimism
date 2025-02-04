@@ -100,7 +100,9 @@ func testCrossLayerUser(t *testing.T, allocType config.AllocType) {
 				for _, f := range forks[:i+1] { // activate, all up to and incl this fork, at genesis
 					tc.SetFork(f, 0)
 				}
-				runCrossLayerUserTest(t, tc)
+				if fork != "regolith" { // regolith does not need testing for Cel2
+					runCrossLayerUserTest(t, tc)
+				}
 			})
 			t.Run("after_genesis", func(t *testing.T) {
 				tc := hardforkScheduledTest{
@@ -112,7 +114,9 @@ func testCrossLayerUser(t *testing.T, allocType config.AllocType) {
 				// activate this fork after genesis
 				tc.SetFork(fork, futureTime)
 				tc.runToFork = fork
-				runCrossLayerUserTest(t, tc)
+				if fork != "regolith" { // regolith does not need testing for Cel2
+					runCrossLayerUserTest(t, tc)
+				}
 			})
 			t.Run("not_yet", func(t *testing.T) {
 				tc := hardforkScheduledTest{
@@ -126,7 +130,9 @@ func testCrossLayerUser(t *testing.T, allocType config.AllocType) {
 				if i > 0 {
 					tc.runToFork = forks[i-1]
 				}
-				runCrossLayerUserTest(t, tc)
+				if fork != "regolith" { // regolith does not need testing for Cel2
+					runCrossLayerUserTest(t, tc)
+				}
 			})
 		})
 	}
