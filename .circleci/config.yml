@@ -830,6 +830,11 @@ jobs:
     machine: true
     resource_class: xlarge
     steps:
+      - run:
+          name: Install GNU parallel
+          command: |
+            sudo apt update
+            sudo apt install parallel
       - checkout-with-mise
       - check-changed:
           patterns: "<<parameters.package_name>>"
