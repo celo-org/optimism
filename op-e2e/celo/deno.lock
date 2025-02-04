@@ -6,21 +6,22 @@
     "jsr:@std/assert@^1.0.10": "1.0.11",
     "jsr:@std/assert@^1.0.11": "1.0.11",
     "jsr:@std/async@^1.0.9": "1.0.10",
-    "jsr:@std/bytes@^1.0.4": "1.0.4",
+    "jsr:@std/bytes@^1.0.5": "1.0.5",
     "jsr:@std/data-structures@^1.0.6": "1.0.6",
     "jsr:@std/dotenv@*": "0.225.3",
     "jsr:@std/dotenv@~0.225.3": "0.225.3",
-    "jsr:@std/expect@*": "1.0.12",
-    "jsr:@std/expect@^1.0.12": "1.0.12",
+    "jsr:@std/expect@*": "1.0.13",
+    "jsr:@std/expect@^1.0.13": "1.0.13",
     "jsr:@std/fs@^1.0.9": "1.0.9",
     "jsr:@std/internal@^1.0.5": "1.0.5",
-    "jsr:@std/io@~0.225.1": "0.225.1",
+    "jsr:@std/io@~0.225.2": "0.225.2",
     "jsr:@std/path@*": "1.0.8",
     "jsr:@std/path@^1.0.8": "1.0.8",
     "jsr:@std/testing@^1.0.9": "1.0.9",
     "npm:reverse-mirage@^1.1.0": "1.1.0_viem@2.22.16__ws@8.18.0",
     "npm:viem@*": "2.22.16_ws@8.18.0",
-    "npm:viem@^2.22.16": "2.22.16_ws@8.18.0"
+    "npm:viem@^2.22.16": "2.22.16_ws@8.18.0",
+    "npm:viem@^2.22.21": "2.22.21_ws@8.18.0"
   },
   "jsr": {
     "@dx/reflect@0.2.14": {
@@ -41,8 +42,8 @@
     "@std/async@1.0.10": {
       "integrity": "2ff1b1c7d33d1416159989b0f69e59ec7ee8cb58510df01e454def2108b3dbec"
     },
-    "@std/bytes@1.0.4": {
-      "integrity": "11a0debe522707c95c7b7ef89b478c13fb1583a7cfb9a85674cd2cc2e3a28abc"
+    "@std/bytes@1.0.5": {
+      "integrity": "4465dd739d7963d964c809202ebea6d5c6b8e3829ef25c6a224290fbb8a1021e"
     },
     "@std/data-structures@1.0.6": {
       "integrity": "76a7fd8080c66604c0496220a791860492ab21a04a63a969c0b9a0609bbbb760"
@@ -50,8 +51,8 @@
     "@std/dotenv@0.225.3": {
       "integrity": "a95e5b812c27b0854c52acbae215856d9cce9d4bbf774d938c51d212711e8d4a"
     },
-    "@std/expect@1.0.12": {
-      "integrity": "417509358ca7c10632c2a30273c952e447020767706d8c5e11f9793e00ec9d55",
+    "@std/expect@1.0.13": {
+      "integrity": "d8e236c7089cd9fcf5e6032f27dadc3db6349d0aee48c15bc71d717bca5baa42",
       "dependencies": [
         "jsr:@std/assert@^1.0.11",
         "jsr:@std/internal"
@@ -66,8 +67,8 @@
     "@std/internal@1.0.5": {
       "integrity": "54a546004f769c1ac9e025abd15a76b6671ddc9687e2313b67376125650dc7ba"
     },
-    "@std/io@0.225.1": {
-      "integrity": "0a055fa523288d596f09ba11af5e006f17cecc75bab949b233ceba7eba40293e",
+    "@std/io@0.225.2": {
+      "integrity": "3c740cd4ee4c082e6cfc86458f47e2ab7cb353dc6234d5e9b1f91a2de5f4d6c7",
       "dependencies": [
         "jsr:@std/bytes"
       ]
@@ -145,11 +146,24 @@
     "reverse-mirage@1.1.0_viem@2.22.16__ws@8.18.0": {
       "integrity": "sha512-cA1O7GR0pn4rMFoaiEG7Skms9GenuW91DtCxeR5hphyNhH90eowV4RmUVlVPVS11CPkezm/iUjnCfmxlHri05w==",
       "dependencies": [
-        "viem"
+        "viem@2.22.16_ws@8.18.0"
       ]
     },
     "viem@2.22.16_ws@8.18.0": {
       "integrity": "sha512-Eb4Ggna2fblb0oHBmy5XZ3Q4cN6fEmKxVpIWHjmAbtYVC9IfbZ28Z1/yZP2oOgvyRrostNndmnR298pgarBVGw==",
+      "dependencies": [
+        "@noble/curves",
+        "@noble/hashes",
+        "@scure/bip32",
+        "@scure/bip39",
+        "abitype",
+        "isows",
+        "ox",
+        "ws"
+      ]
+    },
+    "viem@2.22.21_ws@8.18.0": {
+      "integrity": "sha512-CujapStF+F3VP+bKBQOGFk5YHyJKZOY2TGvD1e04CAm8VrtLo3sfTydYW2Rri6LMktqp6ilGB9GvSiZczxvOBQ==",
       "dependencies": [
         "@noble/curves",
         "@noble/hashes",
@@ -170,11 +184,11 @@
       "jsr:@dx/reflect@~0.2.14",
       "jsr:@std/assert@^1.0.11",
       "jsr:@std/dotenv@~0.225.3",
-      "jsr:@std/expect@^1.0.12",
-      "jsr:@std/io@~0.225.1",
+      "jsr:@std/expect@^1.0.13",
+      "jsr:@std/io@~0.225.2",
       "jsr:@std/testing@^1.0.9",
       "npm:reverse-mirage@^1.1.0",
-      "npm:viem@^2.22.16"
+      "npm:viem@^2.22.21"
     ],
     "members": {
       "packages/celo-test-runner": {
