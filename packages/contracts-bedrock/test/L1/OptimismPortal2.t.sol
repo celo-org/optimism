@@ -78,6 +78,22 @@ contract OptimismPortal2_Test is CommonTest {
 
         assertEq(optimismPortal2.paused(), false);
 
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+
+        assertEq(optimismPortal2.paused(), true);
+    }
+
+    /// @dev Tests that pausing the Superchain successfully pauses
+    ///      when called by the Superchain GUARDIAN.
+    function test_superchainPause_succeeds() external {
+        address guardian = superchainConfig.guardian();
+
+        assertEq(optimismPortal2.paused(), false);
+
         vm.expectEmit(address(superchainConfig));
         emit Paused("identifier");
 
@@ -94,7 +110,7 @@ contract OptimismPortal2_Test is CommonTest {
         assertTrue(optimismPortal2.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can pause");
         vm.prank(alice);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         assertEq(optimismPortal2.paused(), false);
     }
@@ -105,13 +121,13 @@ contract OptimismPortal2_Test is CommonTest {
         address guardian = optimismPortal2.guardian();
 
         vm.prank(guardian);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
         assertEq(optimismPortal2.paused(), true);
 
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Unpaused();
         vm.prank(guardian);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
         assertEq(optimismPortal2.paused(), false);
     }
@@ -121,13 +137,13 @@ contract OptimismPortal2_Test is CommonTest {
         address guardian = optimismPortal2.guardian();
 
         vm.prank(guardian);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
         assertEq(optimismPortal2.paused(), true);
 
         assertTrue(optimismPortal2.guardian() != alice);
         vm.expectRevert("SuperchainConfig: only guardian can unpause");
         vm.prank(alice);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
         assertEq(optimismPortal2.paused(), true);
     }
@@ -532,7 +548,7 @@ contract OptimismPortal2_FinalizeWithdrawal_Test is CommonTest {
     /// @dev Tests that `proveWithdrawalTransaction` reverts when paused.
     function test_proveWithdrawalTransaction_paused_reverts() external {
         vm.prank(optimismPortal2.guardian());
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         vm.expectRevert(CallPaused.selector);
         optimismPortal2.proveWithdrawalTransaction({
@@ -917,7 +933,7 @@ contract OptimismPortal2_FinalizeWithdrawal_Test is CommonTest {
     /// @dev Tests that `finalizeWithdrawalTransaction` reverts if the contract is paused.
     function test_finalizeWithdrawalTransaction_paused_reverts() external {
         vm.prank(optimismPortal2.guardian());
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         vm.expectRevert(CallPaused.selector);
         optimismPortal2.finalizeWithdrawalTransaction(_defaultTx);
