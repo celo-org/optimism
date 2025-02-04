@@ -203,8 +203,9 @@ commands:
 
 jobs:
   cannon-go-lint-and-test:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     parameters:
       skip_slow_tests:
         type: boolean
@@ -306,8 +307,9 @@ jobs:
           working_directory: cannon/mipsevm/tests/open_mips_tests
 
   diff-asterisc-bytecode:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - run:
@@ -911,8 +913,9 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-checks:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - attach_workspace: { at: "." }
@@ -1004,8 +1007,9 @@ jobs:
           when: always
 
   go-lint:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - run:
@@ -1027,7 +1031,7 @@ jobs:
       resource_class:
         description: Machine resource class
         type: string
-        default: ethereum-optimism/latitude-1-go-e2e
+        default: xlarge
       no_output_timeout:
         description: Timeout for when CircleCI kills the job if there's no output
         type: string
@@ -1247,8 +1251,9 @@ jobs:
           working_directory: cannon
 
   cannon-prestate-quick:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - restore_cache:
@@ -1287,8 +1292,9 @@ jobs:
             - "op-program/bin/meta*"
 
   publish-cannon-prestates:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - attach_workspace:
@@ -1443,8 +1449,9 @@ jobs:
           working_directory: op-program
 
   op-program-compat:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - run:
@@ -1454,8 +1461,9 @@ jobs:
           working_directory: op-program
 
   check-generated-mocks-op-node:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - check-changed:
@@ -1465,8 +1473,9 @@ jobs:
           command: make generate-mocks-op-node && git diff --exit-code
 
   check-generated-mocks-op-service:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: cimg/base:2025.02
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise
       - check-changed:
@@ -2005,7 +2014,7 @@ workflows:
           mentions: "@proofs-team"
           no_output_timeout: 60m
           test_timeout: 59m
-          resource_class: ethereum-optimism/latitude-fps-1
+          resource_class: xlarge
           environment_overrides: |
             export OP_E2E_CANNON_ENABLED="true"
             export PARALLEL=24
