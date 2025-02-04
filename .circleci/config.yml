@@ -1311,9 +1311,10 @@ workflows:
             parameters:
               package_name:
                 - op-challenger
-                - op-node
-                - op-service
-                - op-chain-ops
+                # These have go versioning problems at the moment
+                # - op-node
+                # - op-service
+                # - op-chain-ops
       - fuzz-golang:
           name: cannon-fuzz
           package_name: cannon
