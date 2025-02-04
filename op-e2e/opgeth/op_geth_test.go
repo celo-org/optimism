@@ -236,6 +236,7 @@ func TestGethOnlyPendingBlockIsLatest(t *testing.T) {
 }
 
 func TestPreregolith(t *testing.T) {
+	t.Skip("Not applicable to Celo chains")
 	futureTimestamp := hexutil.Uint64(4)
 	tests := []struct {
 		name         string
@@ -416,6 +417,7 @@ func TestPreregolith(t *testing.T) {
 }
 
 func TestRegolith(t *testing.T) {
+	t.Skip("Not applicable to Celo chains")
 	tests := []struct {
 		name             string
 		regolithTime     hexutil.Uint64
