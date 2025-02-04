@@ -47,7 +47,7 @@ if [ "$(perl -ne "m|$gomod_search_string| && print" go.mod | wc -l)" != "1" ]; t
   exit 1
 fi
 
-perl -pi -e "s|$docker_search_String|\1$sha256digest|" ops-bedrock/l2-op-geth.Dockerfile
+perl -pi -e "s|$docker_search_string|\1$sha256digest|" ops-bedrock/l2-op-geth.Dockerfile
 perl -pi -e "s|$gomod_search_string|\1$go_version|" go.mod
 
 go_mod_error=$(go mod tidy >/dev/null)
