@@ -7,7 +7,7 @@ ACC_ADDR=$(cast wallet address $ACC_PRIVKEY)
 
 # Deploy WETH
 L1_WETH=$(
-  ETH_RPC_URL=$ETH_RPC_URL_L1 forge create --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/universal/WETH98.sol:WETH98 --json | jq .deployedTo -r
+  forge create --rpc-url $ETH_RPC_URL_L1 --broadcast --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/universal/WETH98.sol:WETH98 --json | jq .deployedTo -r
 )
 
 # create ERC20 token on L2
@@ -17,12 +17,12 @@ L2_TOKEN=$(
 )
 
 # Wrap some ETH
-ETH_RPC_URL=$ETH_RPC_URL_L1 cast send --private-key $ACC_PRIVKEY $L1_WETH --value 1ether
+cast send --private-key $ACC_PRIVKEY $L1_WETH --value 1ether --rpc-url $ETH_RPC_URL_L1
 # Approve transfer to bridge
 L1_BRIDGE_ADDR=$(cast call 0x4200000000000000000000000000000000000010 'otherBridge() returns (address)')
-ETH_RPC_URL=$ETH_RPC_URL_L1 cast send --private-key $ACC_PRIVKEY $L1_WETH 'approve(address, uint256) returns (bool)' $L1_BRIDGE_ADDR 1ether
+cast send --private-key $ACC_PRIVKEY $L1_WETH 'approve(address, uint256) returns (bool)' $L1_BRIDGE_ADDR 1ether --rpc-url $ETH_RPC_URL_L1
 # Bridge to L2
-ETH_RPC_URL=$ETH_RPC_URL_L1 cast send --private-key $ACC_PRIVKEY $L1_BRIDGE_ADDR 'bridgeERC20(address _localToken, address _remoteToken, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData)' $L1_WETH $L2_TOKEN 0.3ether 50000 0x --gas-limit 6000000
+cast send --private-key $ACC_PRIVKEY $L1_BRIDGE_ADDR 'bridgeERC20(address _localToken, address _remoteToken, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData)' $L1_WETH $L2_TOKEN 0.3ether 50000 0x --gas-limit 6000000 --rpc-url $ETH_RPC_URL_L1
 
 # Setup up oracle and FeeCurrencyDirectory
 ORACLE=$(forge create --private-key=$ACC_PRIVKEY --root $CONTRACTS_DIR $CONTRACTS_DIR/src/celo/testing/MockSortedOracles.sol:MockSortedOracles --json | jq .deployedTo -r)
