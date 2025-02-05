@@ -24,7 +24,6 @@ contract CeloSuperchainConfig is SuperchainConfig {
     bytes32 public constant SUPERCHAIN_CONFIG_SLOT =
         bytes32(uint256(keccak256("superchainConfig.superchainConfig")) - 1);
 
-
     /// @notice Emitted when configuration of the Celo-specific portion of the
     ///         config is updated.
     /// @param updateType Type of update.

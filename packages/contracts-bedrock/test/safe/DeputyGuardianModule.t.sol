@@ -53,8 +53,7 @@ contract DeputyGuardianModule_TestInit is CommonTest, SafeTestTools {
                 _name: "DeputyGuardianModule",
                 _args: DeployUtils.encodeConstructor(
                     abi.encodeCall(
-                        IDeputyGuardianModule.__constructor__,
-                        (safeInstance.safe, celoSuperchainConfig, deputyGuardian)
+                        IDeputyGuardianModule.__constructor__, (safeInstance.safe, celoSuperchainConfig, deputyGuardian)
                     )
                 )
             })
