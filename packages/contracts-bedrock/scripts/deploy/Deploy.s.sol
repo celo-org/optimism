@@ -1061,8 +1061,7 @@ contract Deploy is Deployer {
             )
         });
 
-        // TODO(m-chrzan): implement ChainAssertions for CeloSuperchainConfig
-        //ChainAssertions.checkSuperchainConfig({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isPaused: false });
+        ChainAssertions.checkCeloSuperchainConfig({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isPaused: false });
     }
 
     /// @notice Initialize the DisputeGameFactory

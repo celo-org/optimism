@@ -23,6 +23,7 @@ import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
 import { IOptimismPortal2 } from "src/L1/interfaces/IOptimismPortal2.sol";
@@ -484,6 +485,27 @@ library ChainAssertions {
 
         require(superchainConfig.guardian() == _cfg.superchainConfigGuardian());
         require(superchainConfig.paused() == _isPaused);
+    }
+
+    /// @notice Asserts that the CeloSuperchainConfig is setup correctly
+    function checkCeloSuperchainConfig(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isPaused
+    )
+        internal
+        view
+    {
+        console.log("Running chain assertions on the CeloSuperchainConfig");
+        ICeloSuperchainConfig celoSuperchainConfig = ICeloSuperchainConfig(_contracts.CeloSuperchainConfig);
+        address superchainConfig = _contracts.SuperchainConfig;
+
+        // Check that the contract is initialized
+        assertSlotValueIsOne({ _contractAddress: address(celoSuperchainConfig), _slot: 0, _offset: 0 });
+
+        require(celoSuperchainConfig.guardian() == _cfg.superchainConfigGuardian());
+        require(celoSuperchainConfig.paused() == _isPaused);
+        require(celoSuperchainConfig.superchainConfig() == superchainConfig);
     }
 
     /// @dev Asserts that for a given contract the value of a storage slot at an offset is 1.
