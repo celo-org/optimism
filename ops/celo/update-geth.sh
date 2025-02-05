@@ -37,18 +37,18 @@ docker_search_string="(.*op-geth\@sha256:)(.*)"
 gomod_search_string="^(replace github.com/ethereum/go-ethereum .*=> )github.com/.*/op-geth v.*"
 
 # Check that the searches are each matching a single line
-if [ "$(perl -ne "m|$docker_search_string| && print" ops-bedrock/l2-op-geth.Dockerfile | wc -l)" != "1" ]; then
+if [ "$(perl -ne "m|${docker_search_string}| && print" ops-bedrock/l2-op-geth.Dockerfile | wc -l)" != "1" ]; then
   echo "Failed to find exactly one match for docker search string in ops-bedrock/l2-op-geth.Dockerfile" >&2
   exit 1
 fi
 
-if [ "$(perl -ne "m|$gomod_search_string| && print" go.mod | wc -l)" != "1" ]; then
+if [ "$(perl -ne "m|${gomod_search_string}| && print" go.mod | wc -l)" != "1" ]; then
   echo "Failed to find exactly one match for go mod search string in go.mod" >&2
   exit 1
 fi
 
-# perl -pi -e "s|$docker_search_string|\1$sha256digest|" ops-bedrock/l2-op-geth.Dockerfile
-perl -pi -e "s|$gomod_search_string|\1$go_version|" go.mod
+# perl -pi -e "s|${docker_search_string}|\${1}${sha256digest}|" ops-bedrock/l2-op-geth.Dockerfile
+perl -pi -e "s|${gomod_search_string}|\${1}${go_version}|" go.mod
 
 go_mod_error=$(go mod tidy >/dev/null)
 if [ -n "$go_mod_error" ]; then
