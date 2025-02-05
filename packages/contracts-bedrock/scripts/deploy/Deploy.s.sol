@@ -289,6 +289,17 @@ contract Deploy is Deployer {
         _run();
     }
 
+    /// @notice Deploy all of the L1 contracts necessary for a full Superchain with a single Op Chain.
+    ///         The two parameters correspond to:
+    ///         1. Whether or not the Superchain contracts need to be deployed. Set to deploy a new Superchain contracts
+    ///         2. Whether or not the fault games need to be initialized. Set to false, and execute latter
+    /// `setupFaultGames()` to initialize
+    ///            when the config `faultGameGenesisOutputRoot` is known
+    function runCelo() public {
+        console.log("Deploying a fresh OP Stack including SuperchainConfig");
+        _run(true, false);
+    }
+
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
     /// @param _superchainConfigProxy Address of the existing SuperchainConfig proxy
     /// @param _protocolVersionsProxy Address of the existing ProtocolVersions proxy
@@ -335,11 +346,18 @@ contract Deploy is Deployer {
 
     /// @notice Compatibility function for tests that override _run().
     function _run() internal virtual {
-        _run(true);
+        _run(true, true);
     }
 
-    /// @notice Internal function containing the deploy logic.
-    function _run(bool _needsSuperchain) internal {
+    /// @notice (Celo) Compatibility function for OP stack
+    function _run(bool _needsSuperchain) internal virtual {
+        _run(_needsSuperchain, true);
+    }
+
+    /// @notice Internal function containing the deploy logic.    /// @param _needsSuperchain Whether or not the
+    /// Superchain contracts need to be deployed.
+    /// @param _initializeFaultGames Whether or not the fault games need to be initialized.
+    function _run(bool _needsSuperchain, bool _initializeFaultGames) internal {
         console.log("start of L1 Deploy!");
         deploySafe("SystemOwnerSafe");
         console.log("deployed Safe!");
@@ -361,7 +379,7 @@ contract Deploy is Deployer {
                 setupOpAltDA();
             }
         }
-        setupOpChain();
+        setupOpChain(_initializeFaultGames);
         console.log("set up op chain!");
     }
 
@@ -395,7 +413,7 @@ contract Deploy is Deployer {
     }
 
     /// @notice Deploy a new OP Chain, with an existing SuperchainConfig provided
-    function setupOpChain() public {
+    function setupOpChain(bool _initializeFaultGames) public {
         console.log("Deploying OP Chain");
 
         // Ensure that the requisite contracts are deployed
@@ -406,15 +424,26 @@ contract Deploy is Deployer {
 
         deployProxies();
         deployImplementations();
-        initializeImplementations();
+        initializeImplementations(_initializeFaultGames);
 
-        setAlphabetFaultGameImplementation({ _allowUpgrade: false });
-        setFastFaultGameImplementation({ _allowUpgrade: false });
+        if (_initializeFaultGames) {
+            setAlphabetFaultGameImplementation({ _allowUpgrade: false });
+            setFastFaultGameImplementation({ _allowUpgrade: false });
+            setCannonFaultGameImplementation({ _allowUpgrade: false });
+            setPermissionedCannonFaultGameImplementation({ _allowUpgrade: false });
+            transferDisputeGameFactoryOwnership();
+        }
+
+        transferDelayedWETHOwnership();
+    }
+
+    /// @notice Deploy the fault games and set the implementations. Initialize AnchorStateRegistry.
+    function setupFaultGames() public {
+        initializeL2OutputOracle();
         setCannonFaultGameImplementation({ _allowUpgrade: false });
         setPermissionedCannonFaultGameImplementation({ _allowUpgrade: false });
-
+        initializeAnchorStateRegistry(false);
         transferDisputeGameFactoryOwnership();
-        transferDelayedWETHOwnership();
     }
 
     /// @notice Deploy all of the proxies
@@ -487,7 +516,7 @@ contract Deploy is Deployer {
     }
 
     /// @notice Initialize all of the implementations
-    function initializeImplementations() public {
+    function initializeImplementations(bool _initializeAnchorStateRegistry) public {
         console.log("Initializing implementations");
 
         if (cfg.useCustomGasToken()) {
@@ -510,13 +539,15 @@ contract Deploy is Deployer {
         initializeL1ERC721Bridge();
         initializeOptimismMintableERC20Factory();
         initializeL1CrossDomainMessenger();
-        initializeL2OutputOracle();
         initializeDisputeGameFactory();
         initializeDelayedWETH();
         initializePermissionedDelayedWETH();
-        initializeAnchorStateRegistry();
+        if (_initializeAnchorStateRegistry) {
+            initializeL2OutputOracle();
+            initializeAnchorStateRegistry(true);
+        }
 
-        // ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
+        ChainAssertions.checkCustomGasTokenOptimismPortal({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 
     /// @notice Add AltDA setup to the OP chain
@@ -1050,48 +1081,69 @@ contract Deploy is Deployer {
         });
     }
 
-    function initializeAnchorStateRegistry() public broadcast {
+    /// @notice Initialize the AnchorStateRegistry with a known root anchor
+    /// @param _deployTestingGames Whether to deploy the testing Fualt Game implementations)
+    function initializeAnchorStateRegistry(bool _deployTestingGames) public broadcast {
         console.log("Upgrading and initializing AnchorStateRegistry proxy");
         address anchorStateRegistryProxy = mustGetAddress("AnchorStateRegistryProxy");
         address anchorStateRegistry = mustGetAddress("AnchorStateRegistry");
         ISuperchainConfig superchainConfig = ISuperchainConfig(mustGetAddress("SuperchainConfigProxy"));
 
-        IAnchorStateRegistry.StartingAnchorRoot[] memory roots = new IAnchorStateRegistry.StartingAnchorRoot[](5);
-        roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.CANNON,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[1] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.PERMISSIONED_CANNON,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[2] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.ALPHABET,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[3] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.ASTERISC,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
-        roots[4] = IAnchorStateRegistry.StartingAnchorRoot({
-            gameType: GameTypes.FAST,
-            outputRoot: OutputRoot({
-                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
-                l2BlockNumber: cfg.faultGameGenesisBlock()
-            })
-        });
+        IAnchorStateRegistry.StartingAnchorRoot[] memory roots;
+        if (_deployTestingGames) {
+            roots = new IAnchorStateRegistry.StartingAnchorRoot[](5);
+            roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.CANNON,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+            roots[1] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.PERMISSIONED_CANNON,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+            roots[2] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.ALPHABET,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+            roots[3] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.ASTERISC,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+            roots[4] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.FAST,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+        } else {
+            roots = new IAnchorStateRegistry.StartingAnchorRoot[](2);
+            roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.CANNON,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+            roots[1] = IAnchorStateRegistry.StartingAnchorRoot({
+                gameType: GameTypes.PERMISSIONED_CANNON,
+                outputRoot: OutputRoot({
+                    root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                    l2BlockNumber: cfg.faultGameGenesisBlock()
+                })
+            });
+        }
 
         _upgradeAndCallViaSafe({
             _proxy: payable(anchorStateRegistryProxy),
