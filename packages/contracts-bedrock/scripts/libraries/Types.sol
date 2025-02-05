@@ -18,6 +18,7 @@ library Types {
         address L1ERC721Bridge;
         address ProtocolVersions;
         address SuperchainConfig;
+        address CeloSuperchainConfig;
         address OPContractsManager;
         address CustomGasToken;
     }
