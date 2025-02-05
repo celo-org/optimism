@@ -354,7 +354,8 @@ contract Deploy is Deployer {
         _run(_needsSuperchain, true);
     }
 
-    /// @notice Internal function containing the deploy logic.    /// @param _needsSuperchain Whether or not the
+    /// @notice Internal function containing the deploy logic.
+    /// @param _needsSuperchain Whether or not the
     /// Superchain contracts need to be deployed.
     /// @param _initializeFaultGames Whether or not the fault games need to be initialized.
     function _run(bool _needsSuperchain, bool _initializeFaultGames) internal {
