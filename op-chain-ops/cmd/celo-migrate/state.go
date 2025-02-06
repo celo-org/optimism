@@ -90,9 +90,9 @@ var (
 		BaklavaNetworkID:   common.HexToAddress("0x022c5d5837E177B6d145761feb4C5574e5b48F5e"),
 	}
 	celoTokenAddressMap = map[uint64]common.Address{
-		AlfajoresNetworkID: addresses.AlfajoresAddresses.CeloToken,
-		BaklavaNetworkID:   addresses.BaklavaAddresses.CeloToken,
-		MainnetNetworkID:   addresses.MainnetAddresses.CeloToken,
+		AlfajoresNetworkID: addresses.CeloTokenAlfajoresAddress,
+		BaklavaNetworkID:   addresses.CeloTokenBaklavaAddress,
+		MainnetNetworkID:   addresses.CeloTokenAddress,
 	}
 )
 
