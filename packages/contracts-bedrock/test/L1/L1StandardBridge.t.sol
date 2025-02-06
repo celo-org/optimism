@@ -26,7 +26,7 @@ contract L1StandardBridge_Getter_Test is Bridge_Initializer {
         assert(address(l1StandardBridge.OTHER_BRIDGE()) == address(l2StandardBridge));
         assert(address(l1StandardBridge.messenger()) == address(l1CrossDomainMessenger));
         assert(address(l1StandardBridge.MESSENGER()) == address(l1CrossDomainMessenger));
-        assert(l1StandardBridge.superchainConfig() == superchainConfig);
+        assert(l1StandardBridge.superchainConfig() == celoSuperchainConfig);
         assert(l1StandardBridge.systemConfig() == systemConfig);
     }
 }
@@ -48,7 +48,7 @@ contract L1StandardBridge_Initialize_Test is Bridge_Initializer {
 
     /// @dev Test that the initialize function sets the correct values.
     function test_initialize_succeeds() external view {
-        assertEq(address(l1StandardBridge.superchainConfig()), address(superchainConfig));
+        assertEq(address(l1StandardBridge.superchainConfig()), address(celoSuperchainConfig));
         assertEq(address(l1StandardBridge.MESSENGER()), address(l1CrossDomainMessenger));
         assertEq(address(l1StandardBridge.messenger()), address(l1CrossDomainMessenger));
         assertEq(address(l1StandardBridge.OTHER_BRIDGE()), Predeploys.L2_STANDARD_BRIDGE);

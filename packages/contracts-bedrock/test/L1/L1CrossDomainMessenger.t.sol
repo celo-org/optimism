@@ -14,7 +14,7 @@ import { Encoding } from "src/libraries/Encoding.sol";
 // Target contract dependencies
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 
 contract L1CrossDomainMessenger_Test is Bridge_Initializer {
@@ -38,11 +38,60 @@ contract L1CrossDomainMessenger_Test is Bridge_Initializer {
 
     /// @dev Tests that the proxy is initialized correctly.
     function test_initialize_succeeds() external view {
-        assertEq(address(l1CrossDomainMessenger.superchainConfig()), address(superchainConfig));
+        assertEq(address(l1CrossDomainMessenger.superchainConfig()), address(celoSuperchainConfig));
         assertEq(address(l1CrossDomainMessenger.PORTAL()), address(optimismPortal));
         assertEq(address(l1CrossDomainMessenger.portal()), address(optimismPortal));
         assertEq(address(l1CrossDomainMessenger.OTHER_MESSENGER()), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
         assertEq(address(l1CrossDomainMessenger.otherMessenger()), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
+    }
+
+    /// @dev Tests that `pause` successfully pauses
+    ///      when called by the GUARDIAN.
+    function test_pause_succeeds() external {
+        address guardian = celoSuperchainConfig.guardian();
+
+        assertEq(l1CrossDomainMessenger.paused(), false);
+
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+
+        assertEq(l1CrossDomainMessenger.paused(), true);
+    }
+
+    /// @dev Tests that pausing the Superchain successfully pauses
+    ///      when called by the Superchain GUARDIAN.
+    function test_superchainPause_succeeds() external {
+        address guardian = superchainConfig.guardian();
+
+        assertEq(l1CrossDomainMessenger.paused(), false);
+
+        vm.expectEmit(address(superchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        superchainConfig.pause("identifier");
+
+        assertEq(l1CrossDomainMessenger.paused(), true);
+    }
+
+    /// @dev Tests that `unpause` successfully unpauses
+    ///      when called by the GUARDIAN.
+    function test_unpause_succeeds() external {
+        address guardian = celoSuperchainConfig.guardian();
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+        assertEq(l1CrossDomainMessenger.paused(), true);
+
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Unpaused();
+        vm.prank(guardian);
+        celoSuperchainConfig.unpause();
+
+        assertEq(l1CrossDomainMessenger.paused(), false);
     }
 
     /// @dev Tests that the version can be decoded from the message nonce.
@@ -606,7 +655,7 @@ contract L1CrossDomainMessenger_Test is Bridge_Initializer {
 
     /// @dev Tests that the superchain config is called by the messengers paused function
     function test_pause_callsSuperchainConfig_succeeds() external {
-        vm.expectCall(address(superchainConfig), abi.encodeCall(ISuperchainConfig.paused, ()));
+        vm.expectCall(address(superchainConfig), abi.encodeCall(ICeloSuperchainConfig.paused, ()));
         l1CrossDomainMessenger.paused();
     }
 
@@ -773,7 +822,9 @@ contract L1CrossDomainMessenger_ReinitReentryTest is Bridge_Initializer {
 
             // call the initializer function
             l1CrossDomainMessenger.initialize(
-                ISuperchainConfig(superchainConfig), IOptimismPortal(optimismPortal), ISystemConfig(systemConfig)
+                ICeloSuperchainConfig(address(superchainConfig)),
+                IOptimismPortal(optimismPortal),
+                ISystemConfig(systemConfig)
             );
 
             // attempt to re-replay the withdrawal

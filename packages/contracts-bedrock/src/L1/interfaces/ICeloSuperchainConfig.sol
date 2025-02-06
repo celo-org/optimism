@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import { ISuperchainConfig } from "./ISuperchainConfig.sol";
+
+interface ICeloSuperchainConfig is ISuperchainConfig {
+    enum CeloUpdateType {
+        SUPERCHAIN_CONFIG
+    }
+
+    event CeloConfigUpdate(CeloUpdateType indexed updateType, bytes data);
+
+    function SUPERCHAIN_CONFIG_SLOT() external view returns (bytes32);
+    function initialize(address _guardian, bool _paused, address _superchainConfig) external;
+    function superchainConfig() external view returns (address superchainConfig_);
+    function paused() external view returns (bool paused_);
+    function checkAndPauseIfSuperchainPaused() external returns (bool paused_);
+
+    function __constructor__() external;
+}

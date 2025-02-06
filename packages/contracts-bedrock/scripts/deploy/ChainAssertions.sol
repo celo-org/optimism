@@ -23,6 +23,7 @@ import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
 import { IOptimismPortal2 } from "src/L1/interfaces/IOptimismPortal2.sol";
@@ -154,7 +155,7 @@ library ChainAssertions {
         if (_isProxy) {
             require(address(messenger.PORTAL()) == _contracts.OptimismPortal);
             require(address(messenger.portal()) == _contracts.OptimismPortal);
-            require(address(messenger.superchainConfig()) == _contracts.SuperchainConfig);
+            require(address(messenger.superchainConfig()) == _contracts.CeloSuperchainConfig);
             bytes32 xdmSenderSlot = _vm.load(address(messenger), bytes32(uint256(204)));
             require(address(uint160(uint256(xdmSenderSlot))) == Constants.DEFAULT_L2_SENDER);
         } else {
@@ -177,7 +178,7 @@ library ChainAssertions {
             require(address(bridge.messenger()) == _contracts.L1CrossDomainMessenger);
             require(address(bridge.OTHER_BRIDGE()) == Predeploys.L2_STANDARD_BRIDGE);
             require(address(bridge.otherBridge()) == Predeploys.L2_STANDARD_BRIDGE);
-            require(address(bridge.superchainConfig()) == _contracts.SuperchainConfig);
+            require(address(bridge.superchainConfig()) == _contracts.CeloSuperchainConfig);
         } else {
             require(address(bridge.MESSENGER()) == address(0));
             require(address(bridge.messenger()) == address(0));
@@ -326,7 +327,7 @@ library ChainAssertions {
         if (_isProxy) {
             require(address(bridge.MESSENGER()) == _contracts.L1CrossDomainMessenger);
             require(address(bridge.messenger()) == _contracts.L1CrossDomainMessenger);
-            require(address(bridge.superchainConfig()) == _contracts.SuperchainConfig);
+            require(address(bridge.superchainConfig()) == _contracts.CeloSuperchainConfig);
         } else {
             require(address(bridge.MESSENGER()) == address(0));
             require(address(bridge.messenger()) == address(0));
@@ -352,7 +353,7 @@ library ChainAssertions {
             require(address(portal.l2Oracle()) == _contracts.L2OutputOracle);
             require(address(portal.systemConfig()) == _contracts.SystemConfig);
             require(portal.guardian() == guardian);
-            require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
+            require(address(portal.superchainConfig()) == address(_contracts.CeloSuperchainConfig));
             require(portal.paused() == ISuperchainConfig(_contracts.SuperchainConfig).paused());
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
         } else {
@@ -421,7 +422,7 @@ library ChainAssertions {
             require(address(portal.disputeGameFactory()) == _contracts.DisputeGameFactory);
             require(address(portal.systemConfig()) == _contracts.SystemConfig);
             require(portal.guardian() == guardian);
-            require(address(portal.superchainConfig()) == address(_contracts.SuperchainConfig));
+            require(address(portal.superchainConfig()) == address(_contracts.CeloSuperchainConfig));
             require(portal.paused() == ISuperchainConfig(_contracts.SuperchainConfig).paused());
             require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER);
         } else {
@@ -484,6 +485,27 @@ library ChainAssertions {
 
         require(superchainConfig.guardian() == _cfg.superchainConfigGuardian());
         require(superchainConfig.paused() == _isPaused);
+    }
+
+    /// @notice Asserts that the CeloSuperchainConfig is setup correctly
+    function checkCeloSuperchainConfig(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isPaused
+    )
+        internal
+        view
+    {
+        console.log("Running chain assertions on the CeloSuperchainConfig");
+        ICeloSuperchainConfig celoSuperchainConfig = ICeloSuperchainConfig(_contracts.CeloSuperchainConfig);
+        address superchainConfig = _contracts.SuperchainConfig;
+
+        // Check that the contract is initialized
+        assertSlotValueIsOne({ _contractAddress: address(celoSuperchainConfig), _slot: 0, _offset: 0 });
+
+        require(celoSuperchainConfig.guardian() == _cfg.superchainConfigGuardian());
+        require(celoSuperchainConfig.paused() == _isPaused);
+        require(celoSuperchainConfig.superchainConfig() == superchainConfig);
     }
 
     /// @dev Asserts that for a given contract the value of a storage slot at an offset is 1.

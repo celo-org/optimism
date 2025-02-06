@@ -23,6 +23,7 @@ import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMesseng
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IDataAvailabilityChallenge } from "src/L1/interfaces/IDataAvailabilityChallenge.sol";
 import { IL1StandardBridge } from "src/L1/interfaces/IL1StandardBridge.sol";
 import { IProtocolVersions } from "src/L1/interfaces/IProtocolVersions.sol";
@@ -86,6 +87,7 @@ contract Setup {
     IOptimismMintableERC20Factory l1OptimismMintableERC20Factory;
     IProtocolVersions protocolVersions;
     ISuperchainConfig superchainConfig;
+    ICeloSuperchainConfig celoSuperchainConfig;
     IDataAvailabilityChallenge dataAvailabilityChallenge;
 
     // L2 contracts
@@ -157,6 +159,7 @@ contract Setup {
             IOptimismMintableERC20Factory(deploy.mustGetAddress("OptimismMintableERC20FactoryProxy"));
         protocolVersions = IProtocolVersions(deploy.mustGetAddress("ProtocolVersionsProxy"));
         superchainConfig = ISuperchainConfig(deploy.mustGetAddress("SuperchainConfigProxy"));
+        celoSuperchainConfig = ICeloSuperchainConfig(deploy.mustGetAddress("CeloSuperchainConfigProxy"));
         anchorStateRegistry = IAnchorStateRegistry(deploy.mustGetAddress("AnchorStateRegistryProxy"));
 
         vm.label(address(optimismPortal), "OptimismPortal");
@@ -179,6 +182,7 @@ contract Setup {
         vm.label(address(protocolVersions), "ProtocolVersions");
         vm.label(deploy.mustGetAddress("ProtocolVersionsProxy"), "ProtocolVersionsProxy");
         vm.label(address(superchainConfig), "SuperchainConfig");
+        vm.label(address(celoSuperchainConfig), "CeloSuperchainConfig");
         vm.label(deploy.mustGetAddress("SuperchainConfigProxy"), "SuperchainConfigProxy");
         vm.label(AddressAliasHelper.applyL1ToL2Alias(address(l1CrossDomainMessenger)), "L1CrossDomainMessenger_aliased");
 

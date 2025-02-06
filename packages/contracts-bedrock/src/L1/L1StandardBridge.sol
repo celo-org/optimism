@@ -10,7 +10,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 // Interfaces
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
 import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMessenger.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 
 /// @custom:proxied true
@@ -79,7 +79,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
     string public constant version = "2.2.1-beta.2";
 
     /// @notice Address of the SuperchainConfig contract.
-    ISuperchainConfig public superchainConfig;
+    ICeloSuperchainConfig public superchainConfig;
 
     /// @notice Address of the SystemConfig contract.
     ISystemConfig public systemConfig;
@@ -88,7 +88,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
     constructor() StandardBridge() {
         initialize({
             _messenger: ICrossDomainMessenger(address(0)),
-            _superchainConfig: ISuperchainConfig(address(0)),
+            _superchainConfig: ICeloSuperchainConfig(address(0)),
             _systemConfig: ISystemConfig(address(0))
         });
     }
@@ -98,7 +98,7 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @param _superchainConfig Contract for the SuperchainConfig on this network.
     function initialize(
         ICrossDomainMessenger _messenger,
-        ISuperchainConfig _superchainConfig,
+        ICeloSuperchainConfig _superchainConfig,
         ISystemConfig _systemConfig
     )
         public

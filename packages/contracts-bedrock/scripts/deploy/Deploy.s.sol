@@ -50,6 +50,7 @@ import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMess
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IDataAvailabilityChallenge } from "src/L1/interfaces/IDataAvailabilityChallenge.sol";
 import { IL1ERC721Bridge } from "src/L1/interfaces/IL1ERC721Bridge.sol";
@@ -170,6 +171,7 @@ contract Deploy is Deployer {
             L1ERC721Bridge: mustGetAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: mustGetAddress("ProtocolVersionsProxy"),
             SuperchainConfig: mustGetAddress("SuperchainConfigProxy"),
+            CeloSuperchainConfig: mustGetAddress("CeloSuperchainConfigProxy"),
             OPContractsManager: getAddress("OPContractsManagerProxy"),
             // allow for address(0) since it is not strictly required for all
             // combinations of chain configs
@@ -194,6 +196,7 @@ contract Deploy is Deployer {
             L1ERC721Bridge: getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: getAddress("ProtocolVersionsProxy"),
             SuperchainConfig: getAddress("SuperchainConfigProxy"),
+            CeloSuperchainConfig: getAddress("CeloSuperchainConfigProxy"),
             OPContractsManager: getAddress("OPContractsManagerProxy"),
             CustomGasToken: getAddress("CustomGasTokenProxy")
         });
@@ -373,6 +376,8 @@ contract Deploy is Deployer {
             console.log("set up superchain!");
         }
 
+        setupCeloSuperchainConfig();
+
         if (cfg.useAltDA()) {
             bytes32 typeHash = keccak256(bytes(cfg.daCommitmentType()));
             bytes32 keccakHash = keccak256(bytes("KeccakCommitment"));
@@ -413,12 +418,27 @@ contract Deploy is Deployer {
         initializeProtocolVersions();
     }
 
+    /// @notice Deploys the CeloSuperchainConfig, which is currently used to
+    ///         enable a dual Guardian setup, i.e. having the Celo L1 system be
+    ///         pausable by both the global Superchain Guardian (whenever the
+    ///         SuperchainConfig contract is paused) and a new Celo Guardian
+    ///         role.
+    function setupCeloSuperchainConfig() public {
+        console.log("Setting up CeloSuperchainConfig");
+
+        // Deploy the CeloSuperchainConfigProxy
+        deployERC1967Proxy("CeloSuperchainConfigProxy");
+        deployCeloSuperchainConfig();
+        initializeCeloSuperchainConfig();
+    }
+
     /// @notice Deploy a new OP Chain, with an existing SuperchainConfig provided
     function setupOpChain(bool _initializeFaultGames) public {
         console.log("Deploying OP Chain");
 
         // Ensure that the requisite contracts are deployed
         mustGetAddress("SuperchainConfigProxy");
+        mustGetAddress("CeloSuperchainConfigProxy");
         mustGetAddress("SystemOwnerSafe");
         mustGetAddress("AddressManager");
         mustGetAddress("ProxyAdmin");
@@ -751,6 +771,16 @@ contract Deploy is Deployer {
         require(initialized != 0);
     }
 
+    /// @notice Deploy the CeloSuperchainConfig contract
+    function deployCeloSuperchainConfig() public broadcast {
+        ICeloSuperchainConfig celoSuperchainConfig = ICeloSuperchainConfig(_deploy("CeloSuperchainConfig", hex""));
+
+        require(celoSuperchainConfig.guardian() == address(0));
+        require(celoSuperchainConfig.superchainConfig() == address(0));
+        bytes32 initialized = vm.load(address(celoSuperchainConfig), bytes32(0));
+        require(initialized != 0);
+    }
+
     /// @notice Deploy the L1CrossDomainMessenger
     function deployL1CrossDomainMessenger() public broadcast returns (address addr_) {
         IL1CrossDomainMessenger messenger = IL1CrossDomainMessenger(_deploy("L1CrossDomainMessenger", hex""));
@@ -1018,6 +1048,22 @@ contract Deploy is Deployer {
         ChainAssertions.checkSuperchainConfig({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isPaused: false });
     }
 
+    /// @notice Initialize the CeloSuperchainConfig
+    function initializeCeloSuperchainConfig() public broadcast {
+        address payable superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address payable celoSuperchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
+        address payable celoSuperchainConfig = mustGetAddress("CeloSuperchainConfig");
+        _upgradeAndCallViaSafe({
+            _proxy: celoSuperchainConfigProxy,
+            _implementation: celoSuperchainConfig,
+            _innerCallData: abi.encodeCall(
+                ICeloSuperchainConfig.initialize, (cfg.superchainConfigGuardian(), false, superchainConfigProxy)
+            )
+        });
+
+        ChainAssertions.checkCeloSuperchainConfig({ _contracts: _proxiesUnstrict(), _cfg: cfg, _isPaused: false });
+    }
+
     /// @notice Initialize the DisputeGameFactory
     function initializeDisputeGameFactory() public broadcast {
         console.log("Upgrading and initializing DisputeGameFactory proxy");
@@ -1088,7 +1134,7 @@ contract Deploy is Deployer {
         console.log("Upgrading and initializing AnchorStateRegistry proxy");
         address anchorStateRegistryProxy = mustGetAddress("AnchorStateRegistryProxy");
         address anchorStateRegistry = mustGetAddress("AnchorStateRegistry");
-        ISuperchainConfig superchainConfig = ISuperchainConfig(mustGetAddress("SuperchainConfigProxy"));
+        ICeloSuperchainConfig superchainConfig = ICeloSuperchainConfig(mustGetAddress("CeloSuperchainConfigProxy"));
 
         IAnchorStateRegistry.StartingAnchorRoot[] memory roots;
         if (_deployTestingGames) {
@@ -1210,7 +1256,7 @@ contract Deploy is Deployer {
         address l1StandardBridgeProxy = mustGetAddress("L1StandardBridgeProxy");
         address l1StandardBridge = mustGetAddress("L1StandardBridge");
         address l1CrossDomainMessengerProxy = mustGetAddress("L1CrossDomainMessengerProxy");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address superchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
 
         uint256 proxyType = uint256(proxyAdmin.proxyType(l1StandardBridgeProxy));
@@ -1231,7 +1277,7 @@ contract Deploy is Deployer {
                 IL1StandardBridge.initialize,
                 (
                     ICrossDomainMessenger(l1CrossDomainMessengerProxy),
-                    ISuperchainConfig(superchainConfigProxy),
+                    ICeloSuperchainConfig(superchainConfigProxy),
                     ISystemConfig(systemConfigProxy)
                 )
             )
@@ -1249,14 +1295,14 @@ contract Deploy is Deployer {
         address l1ERC721BridgeProxy = mustGetAddress("L1ERC721BridgeProxy");
         address l1ERC721Bridge = mustGetAddress("L1ERC721Bridge");
         address l1CrossDomainMessengerProxy = mustGetAddress("L1CrossDomainMessengerProxy");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address superchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(l1ERC721BridgeProxy),
             _implementation: l1ERC721Bridge,
             _innerCallData: abi.encodeCall(
                 IL1ERC721Bridge.initialize,
-                (ICrossDomainMessenger(payable(l1CrossDomainMessengerProxy)), ISuperchainConfig(superchainConfigProxy))
+                (ICrossDomainMessenger(payable(l1CrossDomainMessengerProxy)), ICeloSuperchainConfig(superchainConfigProxy))
             )
         });
 
@@ -1293,7 +1339,7 @@ contract Deploy is Deployer {
         ProxyAdmin proxyAdmin = ProxyAdmin(mustGetAddress("ProxyAdmin"));
         address l1CrossDomainMessengerProxy = mustGetAddress("L1CrossDomainMessengerProxy");
         address l1CrossDomainMessenger = mustGetAddress("L1CrossDomainMessenger");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address superchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
         address optimismPortalProxy = mustGetAddress("OptimismPortalProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
 
@@ -1328,7 +1374,7 @@ contract Deploy is Deployer {
             _innerCallData: abi.encodeCall(
                 IL1CrossDomainMessenger.initialize,
                 (
-                    ISuperchainConfig(superchainConfigProxy),
+                    ICeloSuperchainConfig(superchainConfigProxy),
                     IOptimismPortal(payable(optimismPortalProxy)),
                     ISystemConfig(systemConfigProxy)
                 )
@@ -1384,7 +1430,7 @@ contract Deploy is Deployer {
         address optimismPortal = mustGetAddress("OptimismPortal");
         address l2OutputOracleProxy = mustGetAddress("L2OutputOracleProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address superchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),
@@ -1394,7 +1440,7 @@ contract Deploy is Deployer {
                 (
                     IL2OutputOracle(l2OutputOracleProxy),
                     ISystemConfig(systemConfigProxy),
-                    ISuperchainConfig(superchainConfigProxy)
+                    ICeloSuperchainConfig(superchainConfigProxy)
                 )
             )
         });
@@ -1413,7 +1459,7 @@ contract Deploy is Deployer {
         address optimismPortal2 = mustGetAddress("OptimismPortal2");
         address disputeGameFactoryProxy = mustGetAddress("DisputeGameFactoryProxy");
         address systemConfigProxy = mustGetAddress("SystemConfigProxy");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address superchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(optimismPortalProxy),
@@ -1423,7 +1469,7 @@ contract Deploy is Deployer {
                 (
                     IDisputeGameFactory(disputeGameFactoryProxy),
                     ISystemConfig(systemConfigProxy),
-                    ISuperchainConfig(superchainConfigProxy),
+                    ICeloSuperchainConfig(superchainConfigProxy),
                     GameType.wrap(uint32(cfg.respectedGameType()))
                 )
             )
