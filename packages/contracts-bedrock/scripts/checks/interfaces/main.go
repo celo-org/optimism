@@ -31,6 +31,7 @@ var excludeContracts = []string{
 	// TODO: Interfaces that need to be fixed
 	"IInitializable", "IOptimismMintableERC20", "ILegacyMintableERC20",
 	"KontrolCheatsBase", "ISystemConfigInterop", "IResolvedDelegateProxy",
+	"ICeloSuperchainConfig",
 }
 
 type ContractDefinition struct {
@@ -304,6 +305,8 @@ func compareABIs(abi1, abi2 json.RawMessage) (bool, error) {
 	// Compare using go-cmp
 	diff := cmp.Diff(data1, data2)
 	if diff != "" {
+		log.Printf("data1 %s", data1)
+		log.Printf("data2 %s", data2)
 		log.Printf("ABI diff: %s", diff)
 		return false, nil
 	}
