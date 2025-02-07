@@ -153,9 +153,8 @@ contract L2Genesis is L2GenesisCelo {
         vm.startPrank(deployer);
         vm.chainId(cfg.l2ChainID());
 
-        if (cfg.deployCeloContracts()) {
-            dealEthToPrecompiles();
-        }
+        dealEthToPrecompiles();
+
         setPredeployProxies();
         setPredeployImplementations(_l1Dependencies);
         setPreinstalls();
