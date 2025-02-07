@@ -397,6 +397,28 @@ contract Initializer_Test is Bridge_Initializer {
                 )
             })
         );
+        // CeloSuperchainConfig
+        contracts.push(
+            InitializeableContract({
+                name: "CeloSuperchainConfig",
+                target: address(celoSuperchainConfig),
+                initCalldata: abi.encodeWithSignature(
+                    "initialize(address,bool,address)",
+                    address(0), false, address(0)
+                )
+            })
+        );
+        // CeloSuperchainConfigProxy
+        contracts.push(
+            InitializeableContract({
+                name: "CeloSuperchainConfigProxy",
+                target: address(celoSuperchainConfig),
+                initCalldata: abi.encodeWithSignature(
+                    "initialize(address,bool,address)",
+                    address(0), false, address(0)
+                )
+            })
+        );
 
         // Nicknamed contracts.
         nicknames["OptimismPortal2Proxy"] = "OptimismPortalProxy";
@@ -408,7 +430,7 @@ contract Initializer_Test is Bridge_Initializer {
     ///         3. The `initialize()` function of each contract cannot be called again.
     function test_cannotReinitialize_succeeds() public {
         // Collect exclusions.
-        string[] memory excludes = new string[](10);
+        string[] memory excludes = new string[](9);
         // TODO: Neither of these contracts are labeled properly in the deployment script. Both are
         //       currently being labeled as their non-interop versions. Remove these exclusions once
         //       the deployment script is fixed.
@@ -429,9 +451,6 @@ contract Initializer_Test is Bridge_Initializer {
         excludes[7] = "src/L1/OPContractsManagerInterop.sol";
         // The L2OutputOracle is not always deployed (and is no longer being modified)
         excludes[8] = "src/L1/L2OutputOracle.sol";
-        // Excluded for now. Need to decide where CeloSuperchainConfig should
-        // live, whether it should be included in the Deploy script.
-        excludes[9] = "src/L1/CeloSuperchainConfig.sol";
 
         // Get all contract names in the src directory, minus the excluded contracts.
         string[] memory contractNames = ForgeArtifacts.getContractNames("src/*", excludes);
