@@ -25,7 +25,6 @@ interface IAnchorStateRegistry {
         ICeloSuperchainConfig _superchainConfig
     )
         external;
-    function setAnchorRoots(StartingAnchorRoot[] memory _startingAnchorRoots) external;
     function setAnchorState(IFaultDisputeGame _game) external;
     function superchainConfig() external view returns (ICeloSuperchainConfig);
     function tryUpdateAnchorState() external;
