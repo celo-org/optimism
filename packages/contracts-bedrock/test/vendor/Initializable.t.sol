@@ -397,6 +397,28 @@ contract Initializer_Test is Bridge_Initializer {
                 )
             })
         );
+        // CeloSuperchainConfig
+        contracts.push(
+            InitializeableContract({
+                name: "CeloSuperchainConfig",
+                target: address(celoSuperchainConfig),
+                initCalldata: abi.encodeWithSignature(
+                    "initialize(address,bool,address)",
+                    address(0), false, address(0)
+                )
+            })
+        );
+        // CeloSuperchainConfigProxy
+        contracts.push(
+            InitializeableContract({
+                name: "CeloSuperchainConfigProxy",
+                target: address(celoSuperchainConfig),
+                initCalldata: abi.encodeWithSignature(
+                    "initialize(address,bool,address)",
+                    address(0), false, address(0)
+                )
+            })
+        );
 
         // Nicknamed contracts.
         nicknames["OptimismPortal2Proxy"] = "OptimismPortalProxy";
@@ -429,9 +451,8 @@ contract Initializer_Test is Bridge_Initializer {
         excludes[7] = "src/L1/OPContractsManagerInterop.sol";
         // The L2OutputOracle is not always deployed (and is no longer being modified)
         excludes[8] = "src/L1/L2OutputOracle.sol";
-        // Excluded for now. Need to decide where CeloSuperchainConfig should
-        // live, whether it should be included in the Deploy script.
-        excludes[9] = "src/L1/CeloSuperchainConfig.sol";
+        // Celo contracts are not setup the same way as most of the OP L2 Genesis contracts.
+        excludes[9] = "src/celo/*";
 
         // Get all contract names in the src directory, minus the excluded contracts.
         string[] memory contractNames = ForgeArtifacts.getContractNames("src/*", excludes);
