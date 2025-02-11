@@ -111,7 +111,8 @@ func (s *L1Miner) ActL1StartBlock(timeDelta uint64) Action {
 			// TODO(client-pod#826)
 			// Unfortunately this is not part of any Geth environment setup,
 			// we just have to apply it, like how the Geth block-builder worker does.
-			context := core.NewEVMBlockContext(header, s.l1Chain, nil, s.l1Chain.Config(), statedb)
+			feeCurrencyContext := core.GetFeeCurrencyContext(header, s.l1Chain.Config(), statedb)
+			context := core.NewEVMBlockContext(header, s.l1Chain, nil, s.l1Chain.Config(), statedb, feeCurrencyContext)
 			// NOTE: Unlikely to be needed for the beacon block root, but we setup any precompile overrides anyways for forwards-compatibility
 			var precompileOverrides vm.PrecompileOverrides
 			if vmConfig := s.l1Chain.GetVMConfig(); vmConfig != nil && vmConfig.PrecompileOverrides != nil {
@@ -177,10 +178,11 @@ func (s *L1Miner) IncludeTx(t Testing, tx *types.Transaction) {
 		return
 	}
 	s.l1BuildingState.SetTxContext(tx.Hash(), len(s.L1Transactions))
-	blockCtx := core.NewEVMBlockContext(s.l1BuildingHeader, s.l1Chain, nil, s.l1Cfg.Config, s.l1BuildingState)
+	feeCurrencyContext := core.GetFeeCurrencyContext(s.l1BuildingHeader, s.l1Cfg.Config, s.l1BuildingState)
+	blockCtx := core.NewEVMBlockContext(s.l1BuildingHeader, s.l1Chain, nil, s.l1Cfg.Config, s.l1BuildingState, feeCurrencyContext)
 	evm := vm.NewEVM(blockCtx, s.l1BuildingState, s.l1Cfg.Config, *s.l1Chain.GetVMConfig())
 	receipt, err := core.ApplyTransaction(
-		evm, s.L1GasPool, s.l1BuildingState, s.l1BuildingHeader, tx.WithoutBlobTxSidecar(), &s.l1BuildingHeader.GasUsed)
+		evm, s.L1GasPool, s.l1BuildingState, s.l1BuildingHeader, tx.WithoutBlobTxSidecar(), &s.l1BuildingHeader.GasUsed, feeCurrencyContext)
 	if err != nil {
 		s.l1TxFailed = append(s.l1TxFailed, tx)
 		t.Fatalf("failed to apply transaction to L1 block (tx %d): %v", len(s.L1Transactions), err)

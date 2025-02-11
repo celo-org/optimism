@@ -106,7 +106,9 @@ func NewEVMEnv(contracts *ContractMetadata) (*vm.EVM, *state.StateDB) {
 	if err != nil {
 		panic(fmt.Errorf("failed to create memory state db: %w", err))
 	}
-	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
+
+	feeCurrencyContext := core.GetFeeCurrencyContext(header, chainCfg, state)
+	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state, feeCurrencyContext)
 	vmCfg := vm.Config{}
 
 	env := vm.NewEVM(blockContext, state, chainCfg, vmCfg)
