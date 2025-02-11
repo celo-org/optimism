@@ -321,7 +321,7 @@ func Process(logger log.Logger, config *params.ChainConfig,
 		blockContext vm.BlockContext
 		signer       = types.MakeSigner(config, header.Number, header.Time)
 	)
-	blockContext = core.NewEVMBlockContext(header, chainCtx, nil, config, statedb)
+	blockContext = core.NewEVMBlockContext(header, chainCtx, nil, config, statedb, &blockContext.FeeCurrencyContext)
 	vmenv := vm.NewEVM(blockContext, statedb, config, cfg)
 	if beaconRoot := block.ParentBeaconRoot; beaconRoot != nil {
 		core.ProcessBeaconBlockRoot(*beaconRoot, vmenv)
@@ -336,7 +336,7 @@ func Process(logger log.Logger, config *params.ChainConfig,
 	for i, tx := range block.Transactions {
 		logger.Info("Processing tx", "i", i, "hash", tx.Hash())
 		_, _ = fmt.Fprintf(outW, "# Processing tx %d\n", i)
-		msg, err := core.TransactionToMessage(tx, signer, header.BaseFee)
+		msg, err := core.TransactionToMessage(tx, signer, header.BaseFee, blockContext.FeeCurrencyContext.ExchangeRates)
 		if err != nil {
 			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
