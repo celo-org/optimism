@@ -164,7 +164,7 @@ func (s *FakeDAServer) SetGetRequestLatency(latency time.Duration) {
 
 // SetResponseStatusForNRequests sets the next n Put requests to return 503 status code.
 func (s *FakeDAServer) SetPutFailoverForNRequests(n uint64) {
-	s.failoverCount = uint64(n)
+	s.failoverCount = n
 }
 
 type MemStore struct {
