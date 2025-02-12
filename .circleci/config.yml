@@ -176,28 +176,8 @@ commands:
         type: string
         default: ""
     steps:
-      - slack/notify:
-          channel: << parameters.channel >>
-          event: fail
-          template: basic_fail_1
-          branch_pattern: develop
-          mentions: "<< parameters.mentions >>"
-
-  # Notifies us on Discord when a build fails on develop
-  # For Discord to properly trigger notifications, mentions need to be in the format:
-  # User mentions: <@USER_ID>
-  # Role mentions: <@&ROLE_ID>
-  # Example: <@&1346448413172170807> is how we'd tag the Protocol DevX Pod
-  discord-notification-failures-on-develop:
-    description: "Notify Discord"
-    parameters:
-      message:
-        type: string
-        default: ""
-      mentions:
-        type: string
-        default: ""
-    steps:
+      - run:
+          command: "true" # No notifications setup up for celo-org fork
       - run:
           name: "Notify Discord"
           command: |
@@ -224,7 +204,6 @@ commands:
                 -d "{\"content\": \"${DISCORD_MESSAGE}\"}" "${notify_ci}"
             fi
           when: on_fail
-
 
   run-contracts-check:
     parameters:
@@ -382,28 +361,6 @@ jobs:
             - "packages/contracts-bedrock/cache"
             - "packages/contracts-bedrock/artifacts"
             - "packages/contracts-bedrock/forge-artifacts"
-      - notify-failures-on-develop
-
-  check-kontrol-build:
-    docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: xlarge
-    steps:
-      - utils/checkout-with-mise
-      - attach_workspace: { at: "." }
-      - install-contracts-dependencies
-      - check-changed:
-          patterns: contracts-bedrock
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - run:
-          name: Run Kontrol build
-          command: just kontrol-summary-full
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Build Kontrol summary files
-          command: forge build ./test/kontrol/proofs
-          working_directory: packages/contracts-bedrock
       - notify-failures-on-develop
 
   docker-build:
@@ -599,6 +556,7 @@ jobs:
                       --attestor-key-id="//cloudkms.googleapis.com/v1/projects/$ATTESTOR_PROJECT_NAME/locations/global/keyRings/$ATTESTOR_NAME-key-ring/cryptoKeys/$ATTESTOR_NAME-key/cryptoKeyVersions/1"
 
   # Verify newly published images (built on AMD machine) will run on ARM
+
   check-cross-platform:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
@@ -774,7 +732,7 @@ jobs:
   contracts-bedrock-coverage:
     circleci_ip_ranges: true
     docker:
-        - image: <<pipeline.parameters.default_docker_image>>
+      - image: <<pipeline.parameters.default_docker_image>>
     resource_class: 2xlarge
     parameters:
       test_flags:
@@ -1605,33 +1563,6 @@ jobs:
           working_directory: ./packages/contracts-bedrock
       - notify-failures-on-develop
 
-  publish-contract-artifacts:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
-    steps:
-      - gcp-cli/install
-      - gcp-oidc-authenticate:
-          gcp_cred_config_file_path: /tmp/gcp_cred_config.json
-          oidc_token_file_path: /tmp/oidc_token.json
-          project_id: GCP_TOOLS_ARTIFACTS_PROJECT_ID
-          service_account_email: GCP_CONTRACTS_PUBLISHER_SERVICE_ACCOUNT_EMAIL
-      - utils/checkout-with-mise
-      - install-contracts-dependencies
-      - run:
-          name: Pull artifacts
-          command: bash scripts/ops/pull-artifacts.sh
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Build contracts
-          environment:
-            FOUNDRY_PROFILE: ci
-          command: just forge-build
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Publish artifacts
-          command: bash scripts/ops/publish-artifacts.sh
-          working_directory: packages/contracts-bedrock
-
   go-release:
     parameters:
       module:
@@ -1689,18 +1620,18 @@ jobs:
             echo "✅ Checked-in forge artifacts match the ci build"
 
   stale-check:
-      machine:
-        image: ubuntu-2204:2024.08.1
-      steps:
-        - utils/github-stale:
-            stale-issue-message: 'This issue has been automatically marked as stale and will be closed in 5 days if no updates'
-            stale-pr-message: 'This pr has been automatically marked as stale and will be closed in 5 days if no updates'
-            close-issue-message: 'This issue was closed as stale.  Please reopen if this is a mistake'
-            close-pr-message: 'This PR was closed as stale.  Please reopen if this is a mistake'
-            days-before-issue-stale: 999
-            days-before-pr-stale: 14
-            days-before-issue-close: 5
-            days-before-pr-close: 5
+    machine:
+      image: ubuntu-2204:2024.08.1
+    steps:
+      - utils/github-stale:
+          stale-issue-message: "This issue has been automatically marked as stale and will be closed in 5 days if no updates"
+          stale-pr-message: "This pr has been automatically marked as stale and will be closed in 5 days if no updates"
+          close-issue-message: "This issue was closed as stale.  Please reopen if this is a mistake"
+          close-pr-message: "This PR was closed as stale.  Please reopen if this is a mistake"
+          days-before-issue-stale: 999
+          days-before-pr-stale: 14
+          days-before-issue-close: 5
+          days-before-pr-close: 5
 
   close-issue:
     machine:
@@ -1777,16 +1708,18 @@ jobs:
           path: ./op-acceptance-tests/reports
           destination: flaky-test-reports
 
-
 workflows:
   main:
     when:
       or:
-        - equal: ["webhook",<< pipeline.trigger_source >>]
+        - equal: ["webhook", << pipeline.trigger_source >>]
         - and:
-          - equal: [true, <<pipeline.parameters.main_dispatch>>]
-          - equal: ["api",<< pipeline.trigger_source >>]
-          - equal: [<< pipeline.parameters.github-event-type >>, "__not_set__"] #this is to prevent triggering this workflow as the default value is always set for main_dispatch
+            - equal: [true, <<pipeline.parameters.main_dispatch>>]
+            - equal: ["api", << pipeline.trigger_source >>]
+            - equal: [
+                  << pipeline.parameters.github-event-type >>,
+                  "__not_set__",
+                ] #this is to prevent triggering this workflow as the default value is always set for main_dispatch
     jobs:
       - contracts-bedrock-build:
           name: contracts-bedrock-build
@@ -1794,11 +1727,7 @@ workflows:
           build_args: --deny-warnings --skip test
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - check-kontrol-build:
-          requires:
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+            - discord
       - contracts-bedrock-tests:
           # Test everything except PreimageOracle.t.sol since it's slow.
           name: contracts-bedrock-tests
@@ -1809,14 +1738,6 @@ workflows:
           # PreimageOracle test is slow, run it separately to unblock CI.
           name: contracts-bedrock-tests-preimage-oracle
           test_list: find test -name "PreimageOracle.t.sol"
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-tests:
-          # Heavily fuzz any fuzz tests within added or modified test files.
-          name: contracts-bedrock-tests-heavy-fuzz-modified
-          test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM -- './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
-          test_timeout: 1h
-          test_profile: ciheavy
           context:
             - circleci-repo-readonly-authenticated-github-token
       - contracts-bedrock-coverage:
@@ -1858,11 +1779,6 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
       - contracts-bedrock-checks:
-          requires:
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-frozen-code:
           requires:
             - contracts-bedrock-build
           context:
@@ -1925,16 +1841,16 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
           filters:
             branches:
-              ignore: develop  # Run on all branches EXCEPT develop (PR branches only)
+              ignore: develop # Run on all branches EXCEPT develop (PR branches only)
       - go-tests:
           name: go-tests-full
-          rule: "go-tests-ci"  # Run full test suite instead of short
-          no_output_timeout: 89m  # Longer timeout for full tests
+          rule: "go-tests-ci" # Run full test suite instead of short
+          no_output_timeout: 89m # Longer timeout for full tests
           test_timeout: 90m
           notify: true
           filters:
             branches:
-              only: develop  # Only runs on develop branch (post-merge)
+              only: develop # Only runs on develop branch (post-merge)
           requires:
             - contracts-bedrock-build
             - cannon-prestate-quick
@@ -1944,9 +1860,13 @@ workflows:
       - analyze-op-program-client:
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - op-program-compat:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+            - discord
+      # TODO(#15353) - Need to regenerate data used in op-program-compat and then reenable this test
+      #   See: https://github.com/ethereum-optimism/chain-test-data?tab=readme-ov-file#generating-new-data
+      #      - op-program-compat:
+      #          context:
+      #            - circleci-repo-readonly-authenticated-github-token
+      #            - discord
       - bedrock-go-tests:
           requires:
             - go-lint
@@ -1955,41 +1875,11 @@ workflows:
             - check-generated-mocks-op-service
             - op-program-compat
             # Not needed for the devnet but we want to make sure they build successfully
-            - cannon-docker-build
-            - op-dispute-mon-docker-build
-            - op-program-docker-build
-            - op-supervisor-docker-build
-            - op-test-sequencer-docker-build
-            - go-tests-short
+            - go-tests
             - sanitize-op-program
           context:
             - circleci-repo-readonly-authenticated-github-tokens
-      - docker-build:
-          name: <<matrix.docker_name>>-docker-build
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          save_image_tag: <<pipeline.git.revision>>
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-faucet
-                - op-program
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-supervisor
-                - op-test-sequencer
-                - cannon
-                - op-dripper
-                - op-interop-mon
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate-quick:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+            - discord
       - sanitize-op-program:
           requires:
             - cannon-prestate-quick
@@ -2008,9 +1898,8 @@ workflows:
           notify: true
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - todo-issues:
-          name: todo-issues-check
-          check_closed: false
+            - discord
+      - cannon-build-test-vectors:
           context:
             - circleci-repo-readonly-authenticated-github-token
       - shellcheck/check:
@@ -2154,11 +2043,15 @@ workflows:
     when:
       or:
         - and:
-          - equal: ["develop", <<pipeline.git.branch>>]
-          - equal: ["webhook",<< pipeline.trigger_source >>]
+            - equal: ["develop", <<pipeline.git.branch>>]
+            - equal: ["webhook", << pipeline.trigger_source >>]
         - and:
-          - equal: [true, <<pipeline.parameters.publish_contract_artifacts_dispatch>>]
-          - equal: ["api",<< pipeline.trigger_source >>]
+            - equal:
+                [
+                  true,
+                  <<pipeline.parameters.publish_contract_artifacts_dispatch>>,
+                ]
+            - equal: ["api", << pipeline.trigger_source >>]
     jobs:
       - publish-contract-artifacts:
           context:
@@ -2168,11 +2061,11 @@ workflows:
     when:
       or:
         - and:
-          - equal: ["develop", <<pipeline.git.branch>>]
-          - equal: ["webhook",<< pipeline.trigger_source >>]
+            - equal: ["develop", <<pipeline.git.branch>>]
+            - equal: ["webhook", << pipeline.trigger_source >>]
         - and:
-          - equal: [true, <<pipeline.parameters.fault_proofs_dispatch>>]
-          - equal: ["api",<< pipeline.trigger_source >>]
+            - equal: [true, <<pipeline.parameters.fault_proofs_dispatch>>]
+            - equal: ["api", << pipeline.trigger_source >>]
     jobs:
       - cannon-prestate:
           context:
@@ -2212,11 +2105,11 @@ workflows:
     when:
       or:
         - and:
-          - equal: ["develop", <<pipeline.git.branch>>]
-          - equal: ["webhook",<< pipeline.trigger_source >>]
+            - equal: ["develop", <<pipeline.git.branch>>]
+            - equal: ["webhook", << pipeline.trigger_source >>]
         - and:
-          - equal: [true, <<pipeline.parameters.kontrol_dispatch>>]
-          - equal: ["api",<< pipeline.trigger_source >>]
+            - equal: [true, <<pipeline.parameters.kontrol_dispatch>>]
+            - equal: ["api", << pipeline.trigger_source >>]
     jobs:
       - kontrol-tests:
           context:
@@ -2327,11 +2220,11 @@ workflows:
     when:
       or:
         - and:
-          - equal: ["develop", <<pipeline.git.branch>>]
-          - equal: ["webhook",<< pipeline.trigger_source >>]
+            - equal: ["develop", <<pipeline.git.branch>>]
+            - equal: ["webhook", << pipeline.trigger_source >>]
         - and:
-          - equal: [true, <<pipeline.parameters.acceptance_tests_dispatch>>]
-          - equal: ["api",<< pipeline.trigger_source >>]
+            - equal: [true, <<pipeline.parameters.acceptance_tests_dispatch>>]
+            - equal: ["api", << pipeline.trigger_source >>]
     jobs:
       # KURTOSIS (Simple)
       - op-acceptance-tests:
@@ -2427,21 +2320,21 @@ workflows:
         - equal: [<< pipeline.parameters.github-event-action >>, "labeled"]
     jobs:
       - close-issue:
-         label_name: "auto-close-trivial-contribution"
-         message: "Thank you for your interest in contributing!
-                At this time, we are not accepting contributions that primarily fix spelling, stylistic, or grammatical errors in documentation, code, or elsewhere.
-                Please check our [contribution guidelines](https://github.com/ethereum-optimism/optimism/blob/develop/CONTRIBUTING.md#contributions-related-to-spelling-and-grammar) for more information.
-                This issue will be closed now."
-         context:
-          - circleci-repo-optimism
+          label_name: "auto-close-trivial-contribution"
+          message: "Thank you for your interest in contributing!
+            At this time, we are not accepting contributions that primarily fix spelling, stylistic, or grammatical errors in documentation, code, or elsewhere.
+            Please check our [contribution guidelines](https://github.com/ethereum-optimism/optimism/blob/develop/CONTRIBUTING.md#contributions-related-to-spelling-and-grammar) for more information.
+            This issue will be closed now."
+          context:
+            - circleci-repo-optimism
 
   devnet-metrics-collect:
     when:
       or:
         - equal: [<< pipeline.trigger_source >>, "webhook"]
         - and:
-          - equal: [true, << pipeline.parameters.devnet-metrics-collect >>]
-          - equal: [<< pipeline.trigger_source >>, "api"]
+            - equal: [true, << pipeline.parameters.devnet-metrics-collect >>]
+            - equal: [<< pipeline.trigger_source >>, "api"]
     jobs:
       - devnet-metrics-collect-authorship:
           context:
