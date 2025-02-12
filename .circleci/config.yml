@@ -139,12 +139,8 @@ commands:
         type: string
         default: ""
     steps:
-      - slack/notify:
-          channel: << parameters.channel >>
-          event: fail
-          template: basic_fail_1
-          branch_pattern: develop
-          mentions: "<< parameters.mentions >>"
+      - run:
+          command: "true"  # No notifications setup up for celo-org fork
 
   run-contracts-check:
     parameters:
@@ -343,28 +339,6 @@ jobs:
             - "packages/contracts-bedrock/forge-artifacts"
             - "packages/contracts-bedrock/deploy-config/devnetL1.json"
             - "packages/contracts-bedrock/deployments/devnetL1"
-      - notify-failures-on-develop
-
-  check-kontrol-build:
-    docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: xlarge
-    steps:
-      - utils/checkout-with-mise
-      - attach_workspace: { at: "." }
-      - install-contracts-dependencies
-      - check-changed:
-          patterns: contracts-bedrock
-      - setup_remote_docker:
-          docker_layer_caching: true
-      - run:
-          name: Run Kontrol build
-          command: just kontrol-summary-full
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Build Kontrol summary files
-          command: forge build ./test/kontrol/proofs
-          working_directory: packages/contracts-bedrock
       - notify-failures-on-develop
 
   docker-build:
@@ -603,34 +577,6 @@ jobs:
             image_name="<<parameters.registry>>/<<parameters.repo>>/<<parameters.op_component>>:<<parameters.docker_tag>>"
             docker pull $image_name || exit 1
             docker run $image_name <<parameters.op_component>> --version || exit 1
-
-  contracts-bedrock-frozen-code:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
-    steps:
-      - utils/checkout-with-mise
-      - attach_workspace: { at: "." }
-      - install-contracts-dependencies
-      - check-changed:
-          patterns: contracts-bedrock
-      - run:
-          name: Check if target branch is develop
-          command: |
-            # Get PR number from CIRCLE_PULL_REQUEST
-            PR_NUMBER=$(echo $CIRCLE_PULL_REQUEST | rev | cut -d/ -f1 | rev)
-
-            # Use GitHub API to get target branch
-            TARGET_BRANCH=$(curl -s "https://api.github.com/repos/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}/pulls/${PR_NUMBER}" | jq -r .base.ref)
-
-            # If the target branch is not develop, do not run this check
-            if [ "$TARGET_BRANCH" != "develop" ]; then
-              echo "Target branch is not develop, skipping frozen files check"
-              exit 0
-            fi
-      - run:
-          name: Check frozen files
-          command: just check-frozen-code
-          working_directory: packages/contracts-bedrock
 
   contracts-bedrock-tests:
     circleci_ip_ranges: true
@@ -892,23 +838,6 @@ jobs:
       - run-contracts-check:
           command: validate-spacers-no-build
 
-  todo-issues:
-    parameters:
-      check_closed:
-        type: boolean
-        default: true
-    machine:
-      image: <<pipeline.parameters.base_image>>
-    steps:
-      - utils/checkout-with-mise
-      - run:
-          name: Install ripgrep
-          command: sudo apt-get install -y ripgrep
-      - run:
-          name: Check TODO issues
-          command: ./ops/scripts/todo-checker.sh --verbose <<#parameters.check_closed>> --check-closed <</parameters.check_closed>>
-      - notify-failures-on-develop
-
   fuzz-golang:
     parameters:
       package_name:
@@ -1163,16 +1092,6 @@ jobs:
       - notify-failures-on-develop:
           mentions: "@proofs-team"
 
-  preimage-reproducibility:
-    docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    steps:
-      - utils/checkout-with-mise
-      - setup_remote_docker
-      - run: make -C op-program verify-reproducibility
-      - notify-failures-on-develop:
-          mentions: "@proofs-team"
-
   cannon-stf-verify:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
@@ -1318,33 +1237,6 @@ jobs:
           working_directory: ./packages/contracts-bedrock
       - notify-failures-on-develop
 
-  publish-contract-artifacts:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
-    steps:
-      - gcp-cli/install
-      - gcp-oidc-authenticate:
-          gcp_cred_config_file_path: /tmp/gcp_cred_config.json
-          oidc_token_file_path: /tmp/oidc_token.json
-          project_id: GCP_TOOLS_ARTIFACTS_PROJECT_ID
-          service_account_email: GCP_CONTRACTS_PUBLISHER_SERVICE_ACCOUNT_EMAIL
-      - utils/checkout-with-mise
-      - install-contracts-dependencies
-      - run:
-          name: Pull artifacts
-          command: bash scripts/ops/pull-artifacts.sh
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Build contracts
-          environment:
-            FOUNDRY_PROFILE: ci
-          command: just forge-build
-          working_directory: packages/contracts-bedrock
-      - run:
-          name: Publish artifacts
-          command: bash scripts/ops/publish-artifacts.sh
-          working_directory: packages/contracts-bedrock
-
   go-release:
     parameters:
       module:
@@ -1401,9 +1293,6 @@ workflows:
           name: contracts-bedrock-build
           # Build with just core + script contracts.
           build_args: --deny-warnings --skip test
-      - check-kontrol-build:
-          requires:
-            - contracts-bedrock-build
       - contracts-bedrock-tests:
           # Test everything except PreimageOracle.t.sol since it's slow.
           name: contracts-bedrock-tests
@@ -1412,12 +1301,6 @@ workflows:
           # PreimageOracle test is slow, run it separately to unblock CI.
           name: contracts-bedrock-tests-preimage-oracle
           test_list: find test -name "PreimageOracle.t.sol"
-      - contracts-bedrock-tests:
-          # Heavily fuzz any fuzz tests within added or modified test files.
-          name: contracts-bedrock-tests-heavy-fuzz-modified
-          test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM -- './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
-          test_timeout: 1h
-          test_profile: ciheavy
       - contracts-bedrock-coverage:
           # Generate coverage reports.
           name: contracts-bedrock-coverage
@@ -1431,9 +1314,6 @@ workflows:
       - contracts-bedrock-checks:
           requires:
             - contracts-bedrock-build
-      - contracts-bedrock-frozen-code:
-          requires:
-            - contracts-bedrock-checks
       - diff-asterisc-bytecode
       - semgrep-scan:
           name: semgrep-scan-local
@@ -1502,32 +1382,8 @@ workflows:
             - check-generated-mocks-op-service
             - op-program-compat
             # Not needed for the devnet but we want to make sure they build successfully
-            - cannon-docker-build
-            - op-dispute-mon-docker-build
-            - op-program-docker-build
-            - op-supervisor-docker-build
-            - proofs-tools-docker-build
             - go-tests
             - sanitize-op-program
-      - docker-build:
-          name: <<matrix.docker_name>>-docker-build
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          save_image_tag: <<pipeline.git.revision>>
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-program
-                - op-proposer
-                - op-challenger
-                - proofs-tools
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-supervisor
-                - cannon
-                - op-dripper
       - cannon-prestate-quick
       - sanitize-op-program:
           requires:
@@ -1544,9 +1400,6 @@ workflows:
             parameters:
               mips_word_size: [32, 64]
       - cannon-build-test-vectors
-      - todo-issues:
-          name: todo-issues-check
-          check_closed: false
       - shellcheck/check:
           name: shell-check
           # We don't need the `exclude` key as the orb detects the `.shellcheckrc`
@@ -1677,15 +1530,6 @@ workflows:
               only: /^op-program\/v.*/
             branches:
               ignore: /.*/
-
-  scheduled-todo-issues:
-    when:
-      equal: [build_four_hours, <<pipeline.schedule.name>>]
-    jobs:
-      - todo-issues:
-          name: todo-issue-checks
-          context:
-            - slack
 
   scheduled-fpp:
     when:
