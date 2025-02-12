@@ -11,17 +11,13 @@ import {
 import { setupDevnet, teardownDevnet } from "./devnet.ts";
 import { type ContractAddresses, makeChainConfigs } from "@celo-test/viem";
 
-const addressesFilePath = ".devnet/addresses.json";
-const celoTestSeedPhrase =
-  "test test test test test test test test test test test celery";
-
 export async function setup(
   _: Deno.TestContext,
   config: Config,
 ): Promise<Context> {
   await setupDevnet(config);
   const addressesJson = Deno.readTextFileSync(
-    join(config.MonorepoPath, addressesFilePath),
+    join(config.ContractAddressesFilePath),
   );
   const addresses: ContractAddresses = JSON.parse(addressesJson);
   const chains = makeChainConfigs(
@@ -35,7 +31,11 @@ export async function setup(
   // the num accounts will be reset later, when we know
   // how many concurrently sending accounts we need.
   // For now, we don't even use the wallet clients.
-  const clients = new ClientAccountManager(chains, celoTestSeedPhrase, 1);
+  const clients = new ClientAccountManager(
+    chains,
+    config.AccountsSeedPhrase,
+    1,
+  );
   const publicClient = clients.public();
   //TODO: this should check the configuration
   // against what's running on the devnet.

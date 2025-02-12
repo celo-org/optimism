@@ -17,6 +17,8 @@ export type Config = {
 
   TestDirPath: string;
   MonorepoPath: string;
+  ContractAddressesFilePath: string;
+  AccountsSeedPhrase: string;
 };
 
 export type TestFuncAsync = (

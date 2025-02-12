@@ -62,8 +62,10 @@ export function parseConfigWithPrefixFromEnv(
     UseAltDA: getEnvValueBool("USE_ALTDA"),
     UseFaultproofSystem: getEnvValueBool("USE_FAULTPROOFS"),
     FunderPrivateKey: getEnvValueHex("FUNDER_PRIVATEKEY"),
-    MonorepoPath: resolve(getEnvValueString("MONOREPOPATH")),
+    ContractAddressesFilePath: resolve(getEnvValueString("ADDRESSES_FILEPATH")),
+    AccountsSeedPhrase: resolve(getEnvValueString("ACCOUNTS_SEEDPHRASE")),
     TestDirPath: resolve(getEnvValueString("TESTDIRPATH")),
+    MonorepoPath: resolve(getEnvValueString("MONOREPOPATH")),
   };
 }
 
