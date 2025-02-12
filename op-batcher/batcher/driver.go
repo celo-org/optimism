@@ -903,7 +903,7 @@ func (l *BatchSubmitter) recordFailedDARequest(id txID, err error) {
 	defer l.channelMgrMutex.Unlock()
 	failover := errors.Is(err, altda.ErrAltDADown)
 	if err != nil {
-		l.Log.Warn("DA request failed", append([]interface{}{"failoverToEthDA", failover}, logFields(id, err))...)
+		l.Log.Warn("DA request failed", append([]interface{}{"failoverToEthDA", failover}, logFields(id, err)...)...)
 	}
 	l.channelMgr.TxFailed(id, failover)
 }
