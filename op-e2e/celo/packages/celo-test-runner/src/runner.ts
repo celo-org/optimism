@@ -11,7 +11,6 @@ export async function run(config: Config) {
   const tests = await getTests(config.TestDirPath);
   Deno.test({
     name: "celo-test runner",
-    permissions: { read: true, net: ["localhost", "127.0.0.1"], run: true },
     sanitizeOps: false,
     sanitizeResources: false,
     sanitizeExit: false,
