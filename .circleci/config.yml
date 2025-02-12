@@ -930,6 +930,9 @@ jobs:
       - attach_workspace:
           at: "."
       - run:
+          name: do mise install (did not work otherwise for unknown reason)
+          command: /home/circleci/.local/bin/mise install
+      - run:
           name: build op-program-client
           command: make op-program-client
           working_directory: op-program
