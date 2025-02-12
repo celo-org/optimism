@@ -1,3 +1,4 @@
 *-user.json
 fileserver/upload-content/*
 cmd/__debug_bin*
+eigenda-secrets.json
