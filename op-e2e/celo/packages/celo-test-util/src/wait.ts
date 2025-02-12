@@ -8,13 +8,17 @@ export async function pollFunction<T>(
   fn: () => Promise<T>,
   until: (value: T | null, err: Error | null) => boolean | undefined,
   pollInterval: number,
-  timeout: number,
+  timeout: number | undefined,
 ): Promise<T | null> {
   const start = Date.now();
   let err: Error | null = null;
   let result: T | null = null;
 
-  while (Date.now() - start < timeout) {
+  if (typeof until !== "function") {
+    throw Error("passed in `until` parameter is not a function");
+  }
+
+  while (timeout === undefined || Date.now() - start < timeout) {
     err = null;
     result = null;
     try {
@@ -28,17 +32,17 @@ export async function pollFunction<T>(
     }
     //FIXME: like this the function will never
     // throw an error before the timeout... is that desired?
-    if (typeof until === "function") {
-      if (until(result, err) === true) {
-        return result;
-      }
+    if (until(result, err) === true) {
+      return result;
     }
     await sleep(pollInterval);
   }
   if (err) {
-    throw err;
+    throw new Error(`timeout reached polling function: ${err.message}`, {
+      cause: err,
+    });
   }
-  return null;
+  throw new Error(`timeout reached polling function`);
 }
 
 export async function waitClientReachable(
