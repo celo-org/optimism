@@ -139,6 +139,9 @@ func (c *DAClient) setInput(ctx context.Context, img []byte) (CommitmentData, er
 	if resp.StatusCode == http.StatusServiceUnavailable {
 		return nil, ErrAltDADown
 	}
+	if resp.StatusCode >= 500 && resp.StatusCode < 600 {
+		return nil, ErrAltDADown
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to store data: %v", resp.StatusCode)
 	}

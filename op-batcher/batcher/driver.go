@@ -792,7 +792,7 @@ func (l *BatchSubmitter) publishToAltDAAndL1(txdata txData, queue *txmgr.Queue[t
 			// Don't log context cancelled events because they are expected,
 			// and can happen after tests complete which causes a panic.
 			if errors.Is(err, context.Canceled) {
-				l.recordFailedDARequest(txdata.ID(), nil)
+				l.recordFailedDARequest(txdata.ID(), altda.ErrAltDADown)
 			} else {
 				l.Log.Error("Failed to post input to Alt DA", "error", err)
 				// requeue frame if we fail to post to the DA Provider so it can be retried
@@ -901,7 +901,8 @@ func (l *BatchSubmitter) handleReceipt(r txmgr.TxReceipt[txRef]) {
 func (l *BatchSubmitter) recordFailedDARequest(id txID, err error) {
 	l.channelMgrMutex.Lock()
 	defer l.channelMgrMutex.Unlock()
-	failover := errors.Is(err, altda.ErrAltDADown)
+	// errors.Is(err, altda.ErrAltDADown)
+	failover := err != nil
 	if err != nil {
 		l.Log.Warn("DA request failed", append([]interface{}{"failoverToEthDA", failover}, logFields(id, err)...)...)
 	}
