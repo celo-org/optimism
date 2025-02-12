@@ -137,6 +137,7 @@ func (s *FakeDAServer) HandlePut(w http.ResponseWriter, r *http.Request) {
 	if s.failoverCount > 0 {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		s.failoverCount--
+		return
 	}
 	s.DAServer.HandlePut(w, r)
 }
