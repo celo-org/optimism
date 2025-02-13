@@ -326,7 +326,7 @@
         "type": "address"
       },
       {
-        "internalType": "contract ISuperchainConfig",
+        "internalType": "contract ICeloSuperchainConfig",
         "name": "_superchainConfig",
         "type": "address"
       },
@@ -666,7 +666,7 @@
     "name": "superchainConfig",
     "outputs": [
       {
-        "internalType": "contract ISuperchainConfig",
+        "internalType": "contract ICeloSuperchainConfig",
         "name": "",
         "type": "address"
       }
