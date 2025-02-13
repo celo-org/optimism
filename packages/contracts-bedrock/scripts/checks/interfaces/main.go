@@ -305,8 +305,6 @@ func compareABIs(abi1, abi2 json.RawMessage) (bool, error) {
 	// Compare using go-cmp
 	diff := cmp.Diff(data1, data2)
 	if diff != "" {
-		log.Printf("data1 %s", data1)
-		log.Printf("data2 %s", data2)
 		log.Printf("ABI diff: %s", diff)
 		return false, nil
 	}
