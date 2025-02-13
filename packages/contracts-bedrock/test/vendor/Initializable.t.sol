@@ -402,10 +402,7 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "CeloSuperchainConfig",
                 target: address(celoSuperchainConfig),
-                initCalldata: abi.encodeWithSignature(
-                    "initialize(address,bool,address)",
-                    address(0), false, address(0)
-                )
+                initCalldata: abi.encodeWithSignature("initialize(address,bool,address)", address(0), false, address(0))
             })
         );
         // CeloSuperchainConfigProxy
@@ -413,10 +410,7 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "CeloSuperchainConfigProxy",
                 target: address(celoSuperchainConfig),
-                initCalldata: abi.encodeWithSignature(
-                    "initialize(address,bool,address)",
-                    address(0), false, address(0)
-                )
+                initCalldata: abi.encodeWithSignature("initialize(address,bool,address)", address(0), false, address(0))
             })
         );
 
