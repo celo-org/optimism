@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 // Testing
 import { VmSafe } from "forge-std/Vm.sol";
-import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
 import { AlphabetVM } from "test/mocks/AlphabetVM.sol";
@@ -21,7 +20,6 @@ import { Chains } from "scripts/libraries/Chains.sol";
 import { Config } from "scripts/libraries/Config.sol";
 import { LibStateDiff } from "scripts/libraries/LibStateDiff.sol";
 import { Process } from "scripts/libraries/Process.sol";
-import { ForgeArtifacts } from "scripts/libraries/ForgeArtifacts.sol";
 import { ChainAssertions } from "scripts/deploy/ChainAssertions.sol";
 
 // Contracts
@@ -38,14 +36,12 @@ import { StorageSetter } from "src/universal/StorageSetter.sol";
 
 // Libraries
 import { Constants } from "src/libraries/Constants.sol";
-import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Types } from "scripts/libraries/Types.sol";
 import "src/dispute/lib/Types.sol";
 
 // Interfaces
 import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
 import { IOptimismPortal2 } from "src/L1/interfaces/IOptimismPortal2.sol";
-import { IOptimismPortalInterop } from "src/L1/interfaces/IOptimismPortalInterop.sol";
 import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMessenger.sol";
 import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMessenger.sol";
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
@@ -67,7 +63,6 @@ import { IOptimismMintableERC20Factory } from "src/universal/interfaces/IOptimis
 import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IAddressManager } from "src/legacy/interfaces/IAddressManager.sol";
-// import { Multicall3 } from "@multicall/Multicall3.sol";
 
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.

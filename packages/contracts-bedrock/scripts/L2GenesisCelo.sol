@@ -14,7 +14,6 @@ import { UniswapFeeHandlerSeller } from "src/celo/UniswapFeeHandlerSeller.sol";
 import { SortedOracles } from "src/celo/stability/SortedOracles.sol";
 import { FeeCurrencyDirectory } from "src/celo/FeeCurrencyDirectory.sol";
 import { FeeCurrency } from "src/celo/testing/FeeCurrency.sol";
-import { AddressSortedLinkedListWithMedian } from "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol";
 import { StableTokenV2 } from "src/celo/StableTokenV2.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";

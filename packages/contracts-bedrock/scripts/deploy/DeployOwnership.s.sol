@@ -4,13 +4,8 @@ pragma solidity ^0.8.0;
 import { console2 as console } from "forge-std/console2.sol";
 
 import { GnosisSafe as Safe } from "safe-contracts/GnosisSafe.sol";
-import { GnosisSafeProxyFactory as SafeProxyFactory } from "safe-contracts/proxies/GnosisSafeProxyFactory.sol";
-import { OwnerManager } from "safe-contracts/base/OwnerManager.sol";
 import { ModuleManager } from "safe-contracts/base/ModuleManager.sol";
 import { GuardManager } from "safe-contracts/base/GuardManager.sol";
-import { Enum as SafeOps } from "safe-contracts/common/Enum.sol";
-
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Deployer } from "scripts/deploy/Deployer.sol";
 
 import { LivenessGuard } from "src/safe/LivenessGuard.sol";
