@@ -752,7 +752,7 @@ jobs:
         type: boolean
         default: false
     docker:
-      - image: <<pipeline.parameters.ci_builder_image>>
+      - image: cimg/base:2024.01
     steps:
       - checkout
       - check-changed:
