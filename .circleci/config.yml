@@ -752,7 +752,7 @@ jobs:
         type: boolean
         default: false
     docker:
-      - image: cimg/base:2024.01
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - check-changed:
@@ -760,6 +760,12 @@ jobs:
       - attach_workspace:
           at: "."
           if: ${{ uses_artifacts }}
+      - run:
+          name: Install dependencies
+          command: |
+            apt update
+            apt install -y parallel
+          working_directory: .
       - run:
           name: Fuzz
           command: make fuzz
