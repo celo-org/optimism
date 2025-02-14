@@ -548,16 +548,14 @@ func TestBatchSubmitter_SendTransactionInvariants(t *testing.T) {
 			expectErr: "unexpected number of frames in calldata tx: 2",
 		},
 		{
-			name:      "AltDAMultipleFrames",
-			useAltDA:  true,
-			txdata:    txData{frames: twoFrames},
-			expectErr: "unexpected number of frames in calldata tx: 2",
+			name:      "AltDAWithoutAltDAEnabled",
+			txdata:    txData{frames: twoFrames, daType: DaTypeAltDA},
+			expectErr: "received AltDA type txdata without AltDA being enabled",
 		},
 		{
-			name:      "AltDABlob",
-			useAltDA:  true,
-			txdata:    txData{frames: twoFrames[:1], asBlob: true},
-			expectErr: "unexpected blob txdata with AltDA enabled",
+			name:      "UnknownDaType",
+			txdata:    txData{frames: twoFrames[:1], daType: DaType(99)},
+			expectErr: "unknown DA type: 99",
 		},
 	}
 	for _, tt := range tests {

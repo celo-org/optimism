@@ -930,18 +930,6 @@ func (l *BatchSubmitter) cancelBlockingTx(queue *txmgr.Queue[txRef], receiptsCh 
 // publishToAltDAAndL1 posts the txdata to the DA Provider and then sends the commitment to L1.
 // It returns an error, after starting the batcher's shutdown, if txdata violates a sanity check.
 func (l *BatchSubmitter) publishToAltDAAndL1(txdata txData, queue *txmgr.Queue[txRef], receiptsCh chan txmgr.TxReceipt[txRef], daGroup *errgroup.Group) error {
-	// sanity checks
-	if nf := len(txdata.frames); nf != 1 {
-		err := fmt.Errorf("unexpected number of frames in calldata tx: %d", nf)
-		l.shutdownOnCriticalError(err)
-		return err
-	}
-	if txdata.asBlob {
-		err := errors.New("unexpected blob txdata with AltDA enabled")
-		l.shutdownOnCriticalError(err)
-		return err
-	}
-
 	// when posting txdata to an external DA Provider, we use a goroutine to avoid blocking the main loop
 	// since it may take a while for the request to return.
 	goroutineSpawned := daGroup.TryGo(func() error {
@@ -982,16 +970,19 @@ func (l *BatchSubmitter) publishToAltDAAndL1(txdata txData, queue *txmgr.Queue[t
 // The method will block if the queue's MaxPendingTransactions is exceeded.
 func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef], receiptsCh chan txmgr.TxReceipt[txRef], daGroup *errgroup.Group) error {
 	var err error
-
-	// if Alt DA is enabled we post the txdata to the DA Provider and replace it with the commitment.
-	if l.Config.UseAltDA {
+	var candidate *txmgr.TxCandidate
+	switch txdata.daType {
+	case DaTypeAltDA:
+		if !l.Config.UseAltDA {
+			err := errors.New("received AltDA type txdata without AltDA being enabled")
+			l.shutdownOnCriticalError(err)
+			return err
+		}
+		// if Alt DA is enabled we post the txdata to the DA Provider and replace it with the commitment.
 		// A nil error lets publishStateToL1 keep processing the next txdata while the
 		// DA request is in flight.
 		return l.publishToAltDAAndL1(txdata, queue, receiptsCh, daGroup)
-	}
-
-	var candidate *txmgr.TxCandidate
-	if txdata.asBlob {
+	case DaTypeBlob:
 		if candidate, err = l.blobTxCandidate(txdata); err != nil {
 			// We could potentially fall through and try a calldata tx instead, but this would
 			// likely result in the chain spending more in gas fees than it is tuned for, so best
@@ -999,7 +990,7 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 			// or configuration issue.
 			return fmt.Errorf("could not create blob tx candidate: %w", err)
 		}
-	} else {
+	case DaTypeCalldata:
 		// sanity check
 		if nf := len(txdata.frames); nf != 1 {
 			err := fmt.Errorf("unexpected number of frames in calldata tx: %d", nf)
@@ -1007,6 +998,10 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 			return err
 		}
 		candidate = l.calldataTxCandidate(txdata.CallData())
+	default:
+		err := fmt.Errorf("unknown DA type: %d", txdata.daType)
+		l.shutdownOnCriticalError(err)
+		return err
 	}
 
 	l.sendTx(txdata, false, candidate, queue, receiptsCh)
@@ -1028,7 +1023,7 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		candidate.GasLimit = gasLimit
 	}
 
-	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.asBlob}, *candidate, receiptsCh)
+	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob}, *candidate, receiptsCh)
 }
 
 const (

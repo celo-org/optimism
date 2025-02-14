@@ -32,7 +32,7 @@ func (l *TestBatchSubmitter) JamTxPool(ctx context.Context) error {
 	}
 	var candidate *txmgr.TxCandidate
 	cc := l.channelMgr.cfgProvider.ChannelConfig(false, isAmsterdamHeader(l1Tip))
-	if cc.UseBlobs {
+	if cc.UseBlobs() {
 		candidate = l.calldataTxCandidate([]byte{})
 	} else if candidate, err = l.blobTxCandidate(emptyTxData); err != nil {
 		return err
