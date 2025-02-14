@@ -245,6 +245,11 @@ contract DeployConfig is Script {
         fundDevAccounts = _fundDevAccounts;
     }
 
+    /// @notice Allow the `fundDevAccounts` config to be overridden.
+    function setDeployCeloContracts(bool _deployCeloContracts) public {
+        deployCeloContracts = _deployCeloContracts;
+    }
+
     /// @notice Allow the `useCustomGasToken` config to be overridden in testing environments
     function setUseCustomGasToken(address _token) public {
         useCustomGasToken = true;
