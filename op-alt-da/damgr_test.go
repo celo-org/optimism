@@ -53,12 +53,12 @@ func TestFinalization(t *testing.T) {
 	require.NoError(t, state.ExpireCommitments(bID(8)))
 	require.Empty(t, state.commitments)
 
-	state.Prune(bID(bn1))
-	require.Equal(t, eth.L1BlockRef{}, state.lastPrunedCommitment)
-	state.Prune(bID(7))
-	require.Equal(t, eth.L1BlockRef{}, state.lastPrunedCommitment)
-	state.Prune(bID(8))
-	require.Equal(t, l1Ref(bn1), state.lastPrunedCommitment)
+	lastPrunedCommitment := state.Prune(bID(bn1))
+	require.Equal(t, eth.L1BlockRef{}, lastPrunedCommitment)
+	lastPrunedCommitment = state.Prune(bID(7))
+	require.Equal(t, eth.L1BlockRef{}, lastPrunedCommitment)
+	lastPrunedCommitment = state.Prune(bID(8))
+	require.Equal(t, l1Ref(bn1), lastPrunedCommitment)
 
 	// Track a commitment, challenge it, & then resolve it
 	c2 := RandomCommitment(rng)
@@ -83,12 +83,12 @@ func TestFinalization(t *testing.T) {
 	require.Empty(t, state.challenges)
 
 	// Now finalize everything
-	state.Prune(bID(20))
-	require.Equal(t, l1Ref(bn1), state.lastPrunedCommitment)
-	state.Prune(bID(28))
-	require.Equal(t, l1Ref(bn1), state.lastPrunedCommitment)
-	state.Prune(bID(32))
-	require.Equal(t, l1Ref(bn2), state.lastPrunedCommitment)
+	lastPrunedCommitment = state.Prune(bID(20))
+	require.Equal(t, eth.L1BlockRef{}, lastPrunedCommitment)
+	lastPrunedCommitment = state.Prune(bID(28))
+	require.Equal(t, eth.L1BlockRef{}, lastPrunedCommitment)
+	lastPrunedCommitment = state.Prune(bID(32))
+	require.Equal(t, l1Ref(bn2), lastPrunedCommitment)
 }
 
 // TestExpireChallenges expires challenges and prunes the state for longer windows
@@ -175,8 +175,8 @@ func TestDAChallengeDetached(t *testing.T) {
 	require.ErrorIs(t, err, ErrReorgRequired)
 
 	// pruning finalized block is safe. It should not prune any commitments yet.
-	state.Prune(bID(1))
-	require.Equal(t, eth.L1BlockRef{}, state.lastPrunedCommitment)
+	lastPrunedCommitment := state.Prune(bID(1))
+	require.Equal(t, eth.L1BlockRef{}, lastPrunedCommitment)
 
 	// Perform reorg back to bn2
 	state.ClearCommitments()
@@ -270,10 +270,10 @@ func TestUpdateFinalizedHead(t *testing.T) {
 		bn1 := uint64(10)
 		state.TrackCommitment(c1, l1Ref(bn1))
 		require.NoError(t, state.ExpireCommitments(bID(bn1+cfg.ChallengeWindow)))
-		state.Prune(bID(bn1 + cfg.ChallengeWindow))
+		lastPrunedCommitment := state.Prune(bID(bn1 + cfg.ChallengeWindow))
 
 		// Verify lastPrunedCommitment is set and no more commitments
-		require.Equal(t, l1Ref(bn1), state.lastPrunedCommitment)
+		require.Equal(t, l1Ref(bn1), lastPrunedCommitment)
 		require.True(t, state.NoCommitments())
 
 		// Simulate updateFinalizedFromL1 having set the finalizedHead
@@ -294,12 +294,11 @@ func TestUpdateFinalizedHead(t *testing.T) {
 		storage := NewMockDAClient(logger)
 		da := NewAltDAWithState(logger, cfg, storage, &NoopMetrics{}, state)
 
-		// Track a commitment that will be pruned
+		// Track a commitment that will be expired and pruned by Finalize
 		c1 := RandomCommitment(rng)
 		bn1 := uint64(10)
 		state.TrackCommitment(c1, l1Ref(bn1))
 		require.NoError(t, state.ExpireCommitments(bID(bn1+cfg.ChallengeWindow)))
-		state.Prune(bID(bn1 + cfg.ChallengeWindow))
 
 		// Track another commitment that won't be expired/pruned
 		c2 := RandomCommitment(rng)
@@ -308,13 +307,13 @@ func TestUpdateFinalizedHead(t *testing.T) {
 
 		// Verify state has pending commitments
 		require.False(t, state.NoCommitments())
-		require.Equal(t, l1Ref(bn1), state.lastPrunedCommitment)
 
-		// Call Finalize with l1Finalized higher than lastPrunedCommitment
+		// Call Finalize with l1Finalized higher than c1's challenge window end
+		// This should prune c1 but not c2
 		l1Finalized := l1Ref(100)
 		da.Finalize(l1Finalized)
 
-		// finalizedHead should be lastPrunedCommitment because there are pending commitments
+		// finalizedHead should be c1's inclusion block because c2 is still pending
 		require.Equal(t, l1Ref(bn1), da.finalizedHead)
 	})
 
