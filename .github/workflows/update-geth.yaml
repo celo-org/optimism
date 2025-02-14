@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  OP_GETH_BASE_BRANCH: "celo12"
+  OP_GETH_BASE_BRANCH: "celo-rebase-12"
 
 jobs:
   job_id:
@@ -31,8 +31,13 @@ jobs:
       - name: Run the update-geth script
         id: geth-update-script
         run: |
-          GETH_COMMIT=$(bash ./ops/celo/update-geth.sh "$OP_GETH_BASE_BRANCH")
+          GETH_COMMIT=$(git ls-remote https://github.com/celo-org/op-geth/ "$OP_GETH_BASE_BRANCH" | awk '{print $1}')
+          if [ -z "$GETH_COMMIT" ]; then
+            echo "Could not find branch '$OP_GETH_BASE_BRANCH' in 'celo-org/op-geth'" >&2
+            exit 1
+          fi
           echo "GETH_COMMIT=${GETH_COMMIT}" >> $GITHUB_OUTPUT
+          python3 ops/scripts/celo-update-op-geth.py "$OP_GETH_BASE_BRANCH"
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
         env:
@@ -46,7 +51,6 @@ jobs:
           add-paths: |
             go.mod
             go.sum
-            ops-bedrock/*.Dockerfile
           commit-message: |
             ${{ env.TITLE }}
 
