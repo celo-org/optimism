@@ -268,4 +268,46 @@ contract CeloSuperchainConfig_CheckAndPauseIfSuperchainPaused_Test is CeloSuperc
         paused = celoSuperchainConfig.paused();
         assertTrue(paused);
     }
+
+    /// @dev Tests that `checkAndPauseIfSuperchainPaused` works even if Superchain is not set.
+    function test_checkAndPauseIfSuperchainPaused_whenSuperchainNotSet() external {
+        IProxy newProxy = IProxy(
+            DeployUtils.create1({
+                _name: "Proxy",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxy.__constructor__, (alice)))
+            })
+        );
+        ICeloSuperchainConfig newImpl = ICeloSuperchainConfig(
+            DeployUtils.create1({
+                _name: "CeloSuperchainConfig",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloSuperchainConfig.__constructor__, ()))
+            })
+        );
+
+        vm.startPrank(alice);
+        newProxy.upgradeToAndCall(
+            address(newImpl),
+            abi.encodeWithSignature("initialize(address,bool,address)", celoGuardian, false, address(0))
+        );
+        vm.stopPrank();
+
+        ICeloSuperchainConfig newCeloSuperchainConfig = ICeloSuperchainConfig(address(newProxy));
+
+        bool paused = newCeloSuperchainConfig.checkAndPauseIfSuperchainPaused();
+        assertFalse(paused);
+
+        vm.prank(newCeloSuperchainConfig.guardian());
+        newCeloSuperchainConfig.pause("identifier");
+        assertTrue(newCeloSuperchainConfig.paused());
+
+        paused = newCeloSuperchainConfig.checkAndPauseIfSuperchainPaused();
+        assertTrue(paused);
+
+        vm.prank(newCeloSuperchainConfig.guardian());
+        newCeloSuperchainConfig.unpause();
+        assertFalse(newCeloSuperchainConfig.paused());
+
+        paused = newCeloSuperchainConfig.paused();
+        assertFalse(paused);
+    }
 }

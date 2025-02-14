@@ -53,7 +53,8 @@ contract CeloSuperchainConfig is SuperchainConfig {
     ///         propagating the paused value from Superchain to Celo if
     ///         necessary.
     function checkAndPauseIfSuperchainPaused() public returns (bool paused_) {
-        if (ISuperchainConfig(superchainConfig()).paused()) {
+        address superchainConfig_ = superchainConfig();
+        if (superchainConfig_ != address(0) && ISuperchainConfig(superchainConfig_).paused()) {
             _pause("Superchain paused");
             return true;
         }
