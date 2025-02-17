@@ -11,7 +11,7 @@ import { Deployer } from "scripts/deploy/Deployer.sol";
 import { LivenessGuard } from "src/safe/LivenessGuard.sol";
 import { LivenessModule } from "src/safe/LivenessModule.sol";
 import { DeputyGuardianModule } from "src/safe/DeputyGuardianModule.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 
 import { Deploy } from "./Deploy.s.sol";
 
@@ -38,7 +38,7 @@ struct SecurityCouncilConfig {
 /// @notice Configuration for the Deputy Guardian Module
 struct DeputyGuardianModuleConfig {
     address deputyGuardian;
-    ISuperchainConfig superchainConfig;
+    ICeloSuperchainConfig superchainConfig;
 }
 
 /// @notice Configuration for the Guardian Safe.
@@ -56,8 +56,8 @@ contract DeployOwnership is Deploy {
     /// @notice Internal function containing the deploy logic.
     function _run() internal override {
         console.log("start of Ownership Deployment");
-        // The SuperchainConfig is needed as a constructor argument to the Deputy Guardian Module
-        deploySuperchainConfig();
+        // The CeloSuperchainConfig is needed as a constructor argument to the Deputy Guardian Module
+        deployCeloSuperchainConfig();
 
         deployFoundationOperationsSafe();
         deployFoundationUpgradeSafe();
@@ -86,7 +86,7 @@ contract DeployOwnership is Deploy {
             safeConfig: SafeConfig({ threshold: 1, owners: exampleGuardianOwners }),
             deputyGuardianModuleConfig: DeputyGuardianModuleConfig({
                 deputyGuardian: mustGetAddress("FoundationOperationsSafe"),
-                superchainConfig: ISuperchainConfig(mustGetAddress("SuperchainConfig"))
+                superchainConfig: ICeloSuperchainConfig(mustGetAddress("CeloSuperchainConfig"))
             })
         });
     }

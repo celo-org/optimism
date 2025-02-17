@@ -927,11 +927,11 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("SUPERCHAIN_CONFIG_SLOT()") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("guardian()") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("superchainConfig()") });
-        _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("initialize(address,bool)") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("initialize(address,bool,address)") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("pause(string)") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("checkAndPauseIfSuperchainPaused()") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("paused()") });
+        _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("celoPaused()") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("unpause()") });
         _addSpec({ _name: "CeloSuperchainConfig", _sel: _getSel("version()") });
     }
