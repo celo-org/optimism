@@ -44,6 +44,7 @@ import { CeloRegistry } from "src/celo/CeloRegistry.sol";
 import { FeeHandler } from "src/celo/FeeHandler.sol";
 import { MentoFeeHandlerSeller } from "src/celo/MentoFeeHandlerSeller.sol";
 import { UniswapFeeHandlerSeller } from "src/celo/UniswapFeeHandlerSeller.sol";
+import { ICeloProxy } from "src/celo/ICeloProxy.sol";
 import { SortedOracles } from "src/celo/stability/SortedOracles.sol";
 import { FeeCurrencyDirectory } from "src/celo/FeeCurrencyDirectory.sol";
 import { FeeCurrency } from "src/celo/testing/FeeCurrency.sol";
@@ -53,6 +54,8 @@ import { StableTokenV2 } from "src/celo/StableTokenV2.sol";
 interface IInitializable {
     function initialize(address _addr) external;
 }
+
+
 
 struct L1Dependencies {
     address payable l1CrossDomainMessengerProxy;
@@ -71,9 +74,10 @@ contract L2Genesis is Deployer {
     using ForkUtils for Fork;
     using OutputModeUtils for OutputMode;
 
+    address constant defaultOwner = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266; // TODO this is DEV_ACCOUNT_FUND_AMT
     uint256 public constant PRECOMPILE_COUNT = 256;
 
-    uint80 internal constant DEV_ACCOUNT_FUND_AMT = 10_000 ether;
+    uint80 internal constant DEV_ACCOUNT_FUND_AMT = 70_000 ether;
 
     /// @notice Default Anvil dev accounts. Only funded if `cfg.fundDevAccounts == true`.
     /// Also known as "test test test test test test test test test test test junk" mnemonic accounts,
@@ -675,6 +679,8 @@ contract L2Genesis is Deployer {
             console.log("Funding dev account %s with %s ETH", devAccounts[i], DEV_ACCOUNT_FUND_AMT / 1e18);
             vm.deal(devAccounts[i], DEV_ACCOUNT_FUND_AMT);
         }
+        // fund an address that'd then be used to fund the celoUnreleasedTreasury
+        vm.deal(devAccounts[1], 400_000_000 ether);
     }
 
     ///@notice Sets all proxies and implementations for Celo contracts
@@ -683,6 +689,7 @@ contract L2Genesis is Deployer {
 
         setCeloRegistry();
         setCeloGoldToken();
+        setCeloTreasury();
         setCeloFeeHandler();
         setCeloMentoFeeHandlerSeller();
         setCeloUniswapFeeHandlerSeller();
@@ -690,71 +697,106 @@ contract L2Genesis is Deployer {
         setFeeCurrencyDirectory();
     }
 
+
     /// @notice Sets up a proxy for the given impl address
     function _setupProxy(address addr, address impl) internal returns (address) {
-        bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
+        // bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
+        bytes memory code = vm.getDeployedCode("CeloProxy.sol:CeloProxy");
         vm.etch(addr, code);
-        EIP1967Helper.setAdmin(addr, Predeploys.PROXY_ADMIN);
+
+        console.log("Owner of Celo proxy is:", ICeloProxy(addr)._getOwner());
+        vm.startPrank(ICeloProxy(addr)._getOwner());
+        ICeloProxy(addr)._transferOwnership(defaultOwner);
+
+        vm.stopPrank();
+        // EIP1967Helper.setAdmin(addr, Predeploys.PROXY_ADMIN);
 
         console.log("Setting proxy %s with implementation: %s", addr, impl);
-        EIP1967Helper.setImplementation(addr, impl);
 
         return addr;
     }
 
     function setCeloRegistry() internal {
-        CeloRegistry kontract = new CeloRegistry({ test: false });
+        // deployCodeTo("CeloRegistry.sol", abi.encode(false), REGISTRY_ADDRESS);
+
+        // address  REGISTRY_ADDRESS = address(0x000000000000000000000000000000000000CE11);
+        // bytes memory code = vm.getDeployedCode("CeloRegistry.sol:CeloRegistry");
+        // vm.etch(REGISTRY_ADDRESS, code);
+
+        // CeloRegistry contract_ = new CeloRegistry({ test: false });
 
         address precompile = CeloPredeploys.CELO_REGISTRY;
-        string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
 
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
+        string memory cname = CeloPredeploys.getName(precompile);
+        // console.log("Deploying %s implementation at: %s", cname, address(contract_));
+
+        // vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(0));
+
+        // CeloRegistry registry = CeloRegistry(precompile);
+        // address celoOwner = registry.owner();
+        // vm.startPrank(address(celoOwner));
+        //     registry._transferOwnership(defaultOwner);
+        // vm.stopPrank();
+
+        // console.log("CeloRegistry owner: %s", celoOwner);
+        // revert("vert on puporse");
+
     }
 
     function setCeloGoldToken() internal {
-        GoldToken kontract = new GoldToken({ test: false });
+        GoldToken contract_ = new GoldToken({ test: false });
 
         address precompile = CeloPredeploys.GOLD_TOKEN;
         string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
+        console.log("Deploying %s implementation at: %s", cname, address(contract_));
 
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
+        vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(contract_));
+    }
+
+     function setCeloTreasury() internal {
+        // GoldToken contract_ = new GoldToken({ test: false });
+
+        address precompile = CeloPredeploys.TREASURY;
+        string memory cname = CeloPredeploys.getName(precompile);
+        console.log("Deploying %s implementation at: %s", cname, address(0));
+
+        // vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(0));
     }
 
     function setCeloFeeHandler() internal {
-        FeeHandler kontract = new FeeHandler({ test: false });
+        FeeHandler contract_ = new FeeHandler({ test: false });
 
         address precompile = CeloPredeploys.FEE_HANDLER;
         string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
+        console.log("Deploying %s implementation at: %s", cname, address(contract_));
 
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
+        vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(contract_));
     }
 
     function setCeloMentoFeeHandlerSeller() internal {
-        MentoFeeHandlerSeller kontract = new MentoFeeHandlerSeller({ test: false });
+        MentoFeeHandlerSeller contract_ = new MentoFeeHandlerSeller({ test: false });
 
         address precompile = CeloPredeploys.MENTO_FEE_HANDLER_SELLER;
         string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
+        console.log("Deploying %s implementation at: %s", cname, address(contract_));
 
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
+        vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(contract_));
     }
 
     function setCeloUniswapFeeHandlerSeller() internal {
-        UniswapFeeHandlerSeller kontract = new UniswapFeeHandlerSeller({ test: false });
+        UniswapFeeHandlerSeller contract_ = new UniswapFeeHandlerSeller({ test: false });
 
         address precompile = CeloPredeploys.UNISWAP_FEE_HANDLER_SELLER;
         string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
+        console.log("Deploying %s implementation at: %s", cname, address(contract_));
 
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
+        vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(contract_));
     }
 
     function setFeeCurrencyDirectory() internal {
@@ -767,17 +809,17 @@ contract L2Genesis is Deployer {
         vm.resetNonce(address(feeCurrencyDirectory));
         _setupProxy(precompile, address(feeCurrencyDirectory));
 
-        vm.startPrank(devAccounts[0]);
-        FeeCurrencyDirectory(precompile).initialize();
-        vm.stopPrank();
+        // vm.startPrank(devAccounts[0]);
+        // FeeCurrencyDirectory(precompile).initialize();
+        // vm.stopPrank();
     }
 
     function setCeloFeeCurrency() internal {
-        FeeCurrency kontract = new FeeCurrency({ name_: "Test", symbol_: "TST" });
+        FeeCurrency contract_ = new FeeCurrency({ name_: "Test", symbol_: "TST" });
         address precompile = CeloPredeploys.FEE_CURRENCY;
         string memory cname = CeloPredeploys.getName(precompile);
-        console.log("Deploying %s implementation at: %s", cname, address(kontract));
-        vm.resetNonce(address(kontract));
-        _setupProxy(precompile, address(kontract));
+        console.log("Deploying %s implementation at: %s", cname, address(contract_));
+        vm.resetNonce(address(contract_));
+        _setupProxy(precompile, address(contract_));
     }
 }
