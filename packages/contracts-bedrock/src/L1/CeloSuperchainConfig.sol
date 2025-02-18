@@ -32,7 +32,6 @@ contract CeloSuperchainConfig is Initializable, ISemver {
     ///         It can only be modified by an upgrade.
     bytes32 public constant SUPERCHAIN_CONFIG_SLOT =
         bytes32(uint256(keccak256("celoSuperchainConfig.superchainConfig")) - 1);
-
     /// @notice Emitted when the pause is triggered.
     /// @param identifier A string helping to identify provenance of the pause transaction.
     event Paused(string identifier);
