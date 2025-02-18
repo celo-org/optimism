@@ -18,7 +18,6 @@ import "scripts/deploy/Deployer.sol";
 // Interfaces
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
 import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ProtocolVersion } from "src/L1/interfaces/IProtocolVersions.sol";
 import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistry.sol";
@@ -112,7 +111,7 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "DelayedWETH",
                 target: deploy.mustGetAddress("DelayedWETH"),
-                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ISuperchainConfig(address(0))))
+                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ICeloSuperchainConfig(address(0))))
             })
         );
         // DelayedWETHProxy
@@ -120,7 +119,7 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "DelayedWETHProxy",
                 target: address(delayedWeth),
-                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ISuperchainConfig(address(0))))
+                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ICeloSuperchainConfig(address(0))))
             })
         );
         // L2OutputOracleImpl
