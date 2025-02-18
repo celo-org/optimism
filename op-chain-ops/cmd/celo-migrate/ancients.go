@@ -228,15 +228,23 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error) {
 	defer timer("getStrayAncientBlocks")()
 
-	db, err := openDB(dbPath, true)
+	ancientDB, err := NewChainFreezer(filepath.Join(dbPath, "ancient"), "", true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open ancient db: %w", err)
+	}
+	defer func() {
+		err = errors.Join(err, ancientDB.Close())
+	}()
+
+	db, err := openDBWithoutFreezer(dbPath, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open non-ancient database: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, db.Close())
 	}()
 
-	numAncients, err := db.Ancients()
+	numAncients, err := ancientDB.Ancients()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get number of ancients in database: %w", err)
 	}
