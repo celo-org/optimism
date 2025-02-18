@@ -323,7 +323,7 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 				return fmt.Errorf("account exists and is not allowed, account: %s, nonce: %d, code: %d", k.Hex(), db.GetNonce(k), db.GetCode(k))
 			}
 
-			// This means that the account just has balance, in that case we wan to copy over the account
+			// This means that the account just has balance, in that case we want to copy over the account
 			if db.GetCodeSize(k) == 0 && db.GetNonce(k) == 0 {
 				writeCode = true
 				writeNonceAndStorage = true
@@ -341,6 +341,8 @@ func applyAllocsToState(db vm.StateDB, allocs types.GenesisAlloc, allowlist map[
 					}
 				}
 				log.Info("Overwrote account", "address", k.Hex(), "writeNonceAndStorage", writeNonceAndStorage)
+			} else {
+				log.Info("Account already exists, and is not overwritten", "address", k.Hex())
 			}
 			continue
 		}
