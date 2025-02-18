@@ -22,7 +22,7 @@ contract CeloSuperchainConfig is SuperchainConfig {
     /// @notice The address of the global OP Superchain SuperchainConfig contract.
     ///         It can only be modified by an upgrade.
     bytes32 public constant SUPERCHAIN_CONFIG_SLOT =
-        bytes32(uint256(keccak256("superchainConfig.superchainConfig")) - 1);
+        bytes32(uint256(keccak256("celoSuperchainConfig.superchainConfig")) - 1);
 
     /// @notice Emitted when configuration of the Celo-specific portion of the
     ///         config is updated.
@@ -53,7 +53,8 @@ contract CeloSuperchainConfig is SuperchainConfig {
     ///         propagating the paused value from Superchain to Celo if
     ///         necessary.
     function checkAndPauseIfSuperchainPaused() public returns (bool paused_) {
-        if (ISuperchainConfig(superchainConfig()).paused()) {
+        address superchainConfig_ = superchainConfig();
+        if (superchainConfig_ != address(0) && ISuperchainConfig(superchainConfig_).paused()) {
             _pause("Superchain paused");
             return true;
         }
