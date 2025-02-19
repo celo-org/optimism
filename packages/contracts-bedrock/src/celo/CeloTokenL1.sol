@@ -8,7 +8,6 @@ string constant SYMBOL = "CELO";
 uint256 constant TOTAL_MARKET_CAP = 1000000000e18; // 1 billion CELO
 
 contract CeloTokenL1 is ERC20Upgradeable {
-
     constructor() {
         _disableInitializers();
     }
