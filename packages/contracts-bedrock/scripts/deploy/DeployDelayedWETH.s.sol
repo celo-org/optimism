@@ -14,7 +14,7 @@ import { LibString } from "@solady/utils/LibString.sol";
 // Interfaces
 import { IProxy } from "src/universal/interfaces/IProxy.sol";
 import { IDelayedWETH } from "src/dispute/interfaces/IDelayedWETH.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 
 /// @title DeployDelayedWETH
 contract DeployDelayedWETHInput is BaseDeployIO {
@@ -22,7 +22,7 @@ contract DeployDelayedWETHInput is BaseDeployIO {
     string internal _release;
     string internal _standardVersionsToml;
     address public _proxyAdmin;
-    ISuperchainConfig public _superchainConfigProxy;
+    ICeloSuperchainConfig public _superchainConfigProxy;
     address public _delayedWethOwner;
     uint256 public _delayedWethDelay;
 
@@ -41,7 +41,7 @@ contract DeployDelayedWETHInput is BaseDeployIO {
             _proxyAdmin = _value;
         } else if (_sel == this.superchainConfigProxy.selector) {
             require(_value != address(0), "DeployDelayedWETH: superchainConfigProxy cannot be zero address");
-            _superchainConfigProxy = ISuperchainConfig(_value);
+            _superchainConfigProxy = ICeloSuperchainConfig(_value);
         } else if (_sel == this.delayedWethOwner.selector) {
             require(_value != address(0), "DeployDelayedWETH: delayedWethOwner cannot be zero address");
             _delayedWethOwner = _value;
@@ -77,7 +77,7 @@ contract DeployDelayedWETHInput is BaseDeployIO {
         return _proxyAdmin;
     }
 
-    function superchainConfigProxy() public view returns (ISuperchainConfig) {
+    function superchainConfigProxy() public view returns (ICeloSuperchainConfig) {
         require(address(_superchainConfigProxy) != address(0), "DeployDisputeGame: superchainConfigProxy not set");
         return _superchainConfigProxy;
     }

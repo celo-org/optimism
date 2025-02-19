@@ -13,7 +13,7 @@ import { Claim, GameTypes, Duration } from "src/dispute/lib/Types.sol";
 
 // Interfaces
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IProxy } from "src/universal/interfaces/IProxy.sol";
 import {
     IFaultDisputeGame,
@@ -96,7 +96,7 @@ contract DeployUpgrade is Deployer {
         public
     {
         prankDeployment("ProxyAdmin", _proxyAdmin);
-        prankDeployment("SuperchainConfig", _superchainConfig);
+        prankDeployment("CeloSuperchainConfig", _superchainConfig);
         if (_systemConfigImpl != address(0)) prankDeployment("SystemConfig", _systemConfigImpl);
         if (_mipsImpl != address(0)) prankDeployment("MIPS", _mipsImpl);
         if (_delayedWETH != address(0)) prankDeployment("DelayedWETH", _delayedWETH);
@@ -285,7 +285,7 @@ contract DeployUpgrade is Deployer {
         address delayedWethOwner = cfg.finalSystemOwner();
         address proxyAdmin = mustGetAddress("ProxyAdmin");
         address impl = mustGetAddress("DelayedWETH");
-        ISuperchainConfig superchainConfig = ISuperchainConfig(mustGetAddress("SuperchainConfig"));
+        ICeloSuperchainConfig superchainConfig = ICeloSuperchainConfig(mustGetAddress("CeloSuperchainConfig"));
         string memory finalName = string.concat("DelayedWETHProxy", _variant);
 
         // Deploy the implementation and proxy contracts.
@@ -318,7 +318,7 @@ contract DeployUpgrade is Deployer {
             delayedWeth.delay() == cfg.faultGameWithdrawalDelay(), "DeployHoloceneUpgrade: invalid DelayedWETH delay"
         );
         require(
-            delayedWeth.config() == ISuperchainConfig(mustGetAddress("SuperchainConfig")),
+            delayedWeth.config() == ICeloSuperchainConfig(mustGetAddress("CeloSuperchainConfig")),
             "DeployHoloceneUpgrade: invalid DelayedWETH config"
         );
 

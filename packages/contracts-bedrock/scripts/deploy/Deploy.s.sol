@@ -1081,12 +1081,14 @@ contract Deploy is Deployer {
         console.log("Upgrading and initializing DelayedWETH proxy");
         address delayedWETHProxy = mustGetAddress("DelayedWETHProxy");
         address delayedWETH = mustGetAddress("DelayedWETH");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address celoSuperchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(delayedWETHProxy),
             _implementation: delayedWETH,
-            _innerCallData: abi.encodeCall(IDelayedWETH.initialize, (msg.sender, ISuperchainConfig(superchainConfigProxy)))
+            _innerCallData: abi.encodeCall(
+                IDelayedWETH.initialize, (msg.sender, ICeloSuperchainConfig(celoSuperchainConfigProxy))
+            )
         });
 
         string memory version = IDelayedWETH(payable(delayedWETHProxy)).version();
@@ -1104,12 +1106,14 @@ contract Deploy is Deployer {
         console.log("Upgrading and initializing permissioned DelayedWETH proxy");
         address delayedWETHProxy = mustGetAddress("PermissionedDelayedWETHProxy");
         address delayedWETH = mustGetAddress("DelayedWETH");
-        address superchainConfigProxy = mustGetAddress("SuperchainConfigProxy");
+        address celoSuperchainConfigProxy = mustGetAddress("CeloSuperchainConfigProxy");
 
         _upgradeAndCallViaSafe({
             _proxy: payable(delayedWETHProxy),
             _implementation: delayedWETH,
-            _innerCallData: abi.encodeCall(IDelayedWETH.initialize, (msg.sender, ISuperchainConfig(superchainConfigProxy)))
+            _innerCallData: abi.encodeCall(
+                IDelayedWETH.initialize, (msg.sender, ICeloSuperchainConfig(celoSuperchainConfigProxy))
+            )
         });
 
         string memory version = IDelayedWETH(payable(delayedWETHProxy)).version();
