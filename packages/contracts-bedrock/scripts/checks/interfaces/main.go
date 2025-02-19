@@ -23,7 +23,7 @@ var excludeContracts = []string{
 	"ERC777TokensRecipient", "Guard", "IProxy", "Vm", "VmSafe", "IMulticall3",
 	"IERC721TokenReceiver", "IProxyCreationCallback", "IBeacon",
 	"IERC20Errors", "IERC20Permit", "IERC1155Errors", "IERC5267", "IERC721Errors",
-	"IEIP712",
+	"IEIP712", "IERC20Metadata",
 
 	// EAS
 	"IEAS", "ISchemaResolver", "ISchemaRegistry",
