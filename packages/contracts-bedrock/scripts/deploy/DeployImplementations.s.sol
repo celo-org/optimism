@@ -349,7 +349,7 @@ contract DeployImplementationsOutput is BaseDeployIO {
 
         require(delayedWETH.owner() == address(0), "DW-10");
         require(delayedWETH.delay() == _dii.withdrawalDelaySeconds(), "DW-20");
-        require(delayedWETH.config() == ISuperchainConfig(address(0)), "DW-30");
+        require(address(delayedWETH.config()) == address(ISuperchainConfig(address(0))), "DW-30");
     }
 
     function assertValidPreimageOracleSingleton(DeployImplementationsInput _dii) internal view {

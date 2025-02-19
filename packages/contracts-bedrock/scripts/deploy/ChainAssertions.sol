@@ -213,7 +213,7 @@ library ChainAssertions {
         if (_isProxy) {
             require(weth.owner() == _expectedOwner);
             require(weth.delay() == _cfg.faultGameWithdrawalDelay());
-            require(weth.config() == ISuperchainConfig(_contracts.CeloSuperchainConfig));
+            require(address(weth.config()) == address(ISuperchainConfig(_contracts.CeloSuperchainConfig)));
         } else {
             require(weth.owner() == _expectedOwner);
             require(weth.delay() == _cfg.faultGameWithdrawalDelay());
@@ -239,7 +239,7 @@ library ChainAssertions {
         if (_isProxy) {
             require(weth.owner() == _expectedOwner);
             require(weth.delay() == _cfg.faultGameWithdrawalDelay());
-            require(weth.config() == ISuperchainConfig(_contracts.CeloSuperchainConfig));
+            require(address(weth.config()) == address(ISuperchainConfig(_contracts.CeloSuperchainConfig)));
         } else {
             require(weth.owner() == _expectedOwner);
             require(weth.delay() == _cfg.faultGameWithdrawalDelay());
