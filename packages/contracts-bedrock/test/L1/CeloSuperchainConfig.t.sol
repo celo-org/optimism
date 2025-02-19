@@ -98,7 +98,7 @@ contract CeloSuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup 
         assertFalse(celoSuperchainConfig.paused());
 
         assertTrue(celoSuperchainConfig.guardian() != alice);
-        vm.expectRevert("SuperchainConfig: only guardian can pause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can pause");
         vm.prank(alice);
         celoSuperchainConfig.pause("identifier");
 
@@ -116,7 +116,7 @@ contract CeloSuperchainConfig_Pause_TestFail is CeloSuperchainConfig_Test_Setup 
             vm.skip(true);
         }
 
-        vm.expectRevert("SuperchainConfig: only guardian can pause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can pause");
         vm.prank(superchainConfigGuardian);
         celoSuperchainConfig.pause("identifier");
 
@@ -147,7 +147,7 @@ contract CeloSuperchainConfig_Unpause_TestFail is CeloSuperchainConfig_Test_Setu
         assertEq(celoSuperchainConfig.paused(), true);
 
         assertTrue(celoSuperchainConfig.guardian() != alice);
-        vm.expectRevert("SuperchainConfig: only guardian can unpause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can unpause");
         vm.prank(alice);
         celoSuperchainConfig.unpause();
 
