@@ -9,9 +9,6 @@ import { CommonTest } from "test/setup/CommonTest.sol";
 import { NextImpl } from "test/mocks/NextImpl.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 
-// Contracts
-import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
-
 // Libraries
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
@@ -108,7 +105,7 @@ contract OptimismPortal2_Test is CommonTest {
         assertEq(optimismPortal2.paused(), false);
 
         assertTrue(optimismPortal2.guardian() != alice);
-        vm.expectRevert("SuperchainConfig: only guardian can pause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can pause");
         vm.prank(alice);
         celoSuperchainConfig.pause("identifier");
 
@@ -141,7 +138,7 @@ contract OptimismPortal2_Test is CommonTest {
         assertEq(optimismPortal2.paused(), true);
 
         assertTrue(optimismPortal2.guardian() != alice);
-        vm.expectRevert("SuperchainConfig: only guardian can unpause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can unpause");
         vm.prank(alice);
         celoSuperchainConfig.unpause();
 

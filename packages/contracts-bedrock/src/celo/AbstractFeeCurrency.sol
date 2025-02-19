@@ -14,7 +14,7 @@ abstract contract AbstractFeeCurrency is ERC20 {
     }
 
     // New function signature, will be used when all fee currencies have migrated
-    function creditGasFees(address[] calldata recipients, uint256[] calldata amounts) public onlyVm {
+    function creditGasFees(address[] calldata recipients, uint256[] calldata amounts) external onlyVm {
         require(recipients.length == amounts.length, "Recipients and amounts must be the same length.");
 
         for (uint256 i = 0; i < recipients.length; i++) {
@@ -33,7 +33,7 @@ abstract contract AbstractFeeCurrency is ERC20 {
         uint256, // gatewayFee, unused
         uint256 baseTxFee
     )
-        public
+        external
         onlyVm
     {
         // Calling the new creditGasFees would make sense here, but that is not
