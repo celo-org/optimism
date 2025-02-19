@@ -343,7 +343,7 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		}
 		// Scanning for stray ancient blocks is slow, so we do it as soon as we can after the lock on oldDB is released by migrateAncientsDb
 		// Doing this in parallel with copyDbExceptAncients still saves time if ancients have already been pre-migrated
-		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath); err != nil {
+		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath, numAncientsNewAfter); err != nil {
 			return fmt.Errorf("failed to get stray ancient blocks: %w", err)
 		}
 		return nil
