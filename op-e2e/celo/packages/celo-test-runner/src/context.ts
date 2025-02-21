@@ -1,7 +1,7 @@
 import { ClientAccountManager } from "@celo-test/viem";
 import type {
   Chains,
-  ContractAddresses,
+  ContractAddressesL1,
   PublicClients,
   WalletClients,
 } from "@celo-test/viem";
@@ -12,7 +12,7 @@ import { toHex } from "viem";
 export class Context {
   concurrent: boolean;
   config: Config;
-  contracts: ContractAddresses;
+  contracts: ContractAddressesL1;
   clientManager: ClientAccountManager;
   parent: Context | null;
   chains: Chains;
@@ -25,7 +25,7 @@ export class Context {
     config: Config,
     parent: Context | undefined,
     concurrent: boolean,
-    contracts: ContractAddresses,
+    contracts: ContractAddressesL1,
   ) {
     this.contracts = contracts;
     this.clientManager = clientManager;

@@ -1,7 +1,6 @@
 import { chainConfig as l2ChainConfig } from "viem/op-stack";
 import { defineChain } from "viem";
-import { optimism } from "viem/chains";
-import type { Address, Chain } from "viem";
+import type { Address, Chain, ChainContract, Prettify } from "viem";
 
 export type L2Chain = Chain<typeof l2ChainConfig.formatters>;
 export type Chains = {
@@ -9,7 +8,17 @@ export type Chains = {
   l2: L2Chain;
 };
 
-export interface ContractAddresses {
+export type ChainContractsCeloL2 = Prettify<
+  {
+    [key: string]: ChainContract | undefined;
+  } & {
+    goldToken?: ChainContract | undefined;
+    registry?: ChainContract | undefined;
+    feeCurrencyDirectory?: ChainContract | undefined;
+  }
+>;
+
+export interface ContractAddressesL1 {
   AddressManager: Address;
   AnchorStateRegistry: Address;
   AnchorStateRegistryProxy: Address;
@@ -55,7 +64,8 @@ export function makeChainConfigs(
   l2ChainID: number,
   rpcUrlL1: string,
   rpcUrlL2: string,
-  contractAddresses: ContractAddresses,
+  contractAddressesL1: ContractAddressesL1,
+  contractAddressesL2Celo: ChainContractsCeloL2,
 ): Chains {
   return {
     l2: defineChain({
@@ -79,29 +89,30 @@ export function makeChainConfigs(
       },
       contracts: {
         ...l2ChainConfig.contracts,
+        ...contractAddressesL2Celo,
         customGasToken: {
           [l1ChainID]: {
-            address: contractAddresses.CustomGasTokenProxy,
+            address: contractAddressesL1.CustomGasTokenProxy,
           },
         },
         l2OutputOracle: {
           [l1ChainID]: {
-            address: contractAddresses.L2OutputOracleProxy,
+            address: contractAddressesL1.L2OutputOracleProxy,
           },
         },
         disputeGameFactory: {
           [l1ChainID]: {
-            address: contractAddresses.DisputeGameFactoryProxy,
+            address: contractAddressesL1.DisputeGameFactoryProxy,
           },
         },
         portal: {
           [l1ChainID]: {
-            address: contractAddresses.OptimismPortalProxy,
+            address: contractAddressesL1.OptimismPortalProxy,
           },
         },
         l1StandardBridge: {
           [l1ChainID]: {
-            address: contractAddresses.L1StandardBridgeProxy,
+            address: contractAddressesL1.L1StandardBridgeProxy,
           },
         },
       },
@@ -123,10 +134,10 @@ export function makeChainConfigs(
       },
       contracts: {
         customGasToken: {
-          address: contractAddresses.CustomGasTokenProxy,
+          address: contractAddressesL1.CustomGasTokenProxy,
         },
         multicall3: {
-          address: contractAddresses.Multicall3,
+          address: contractAddressesL1.Multicall3,
         },
       },
     }),

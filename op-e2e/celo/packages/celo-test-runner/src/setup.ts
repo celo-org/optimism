@@ -3,13 +3,63 @@ import { ClientAccountManager } from "@celo-test/viem";
 import type { Config } from "./types.ts";
 import { Context } from "./context.ts";
 import {
+  waitAtLeastTwoGames,
   waitClientNotSyncing,
   waitClientReturnsBlockNum,
-  waitInitialGame,
   waitInitialL2OracleOutput,
 } from "@celo-test/util";
 import { setupDevnet, teardownDevnet } from "./devnet.ts";
-import { type ContractAddresses, makeChainConfigs } from "@celo-test/viem";
+import { makeChainConfigs } from "@celo-test/viem";
+import { isHex } from "viem";
+import { getPortalVersion } from "viem/op-stack";
+import type {
+  ChainContractsCeloL2,
+  ContractAddressesL1,
+} from "@celo-test/viem";
+
+type CeloCLIContractInfo = {
+  contract: string;
+  proxy: string;
+  implementation: string;
+  version: string;
+};
+
+type CeloCLIContractsList = CeloCLIContractInfo[];
+
+// uses the celocli "network:contracts" --json formatted
+// contract spec and converts it into something
+// that can be injected into viem's "Chain" config.
+function readCeloCLIAddresses(config: Config): ChainContractsCeloL2 {
+  if (config.ContractAddressesL2FilePath === undefined) {
+    return {};
+  }
+  const addressesJson = Deno.readTextFileSync(
+    join(config.ContractAddressesL2FilePath),
+  );
+
+  const addresses: CeloCLIContractsList = JSON.parse(addressesJson);
+  const contractAddressesL2Celo = addresses.reduce(
+    (acc: ChainContractsCeloL2, contract: CeloCLIContractInfo) => {
+      let contractName = contract.contract;
+      if (!contractName) {
+        return acc;
+      }
+      // lower-case the first char of the contract name,
+      // since this is how it is standard in viem
+      contractName =
+        contractName.charAt(0).toLowerCase() + contractName.slice(1);
+      if (!isHex(contract.proxy)) {
+        throw Error(
+          `provided Celo contract proxy address of contract '${contract.contract}' is not Hex formatted: ${contract.proxy}`,
+        );
+      }
+      acc[contractName] = { address: contract.proxy };
+      return acc;
+    },
+    {},
+  );
+  return contractAddressesL2Celo;
+}
 
 export async function setup(
   _: Deno.TestContext,
@@ -17,15 +67,18 @@ export async function setup(
 ): Promise<Context> {
   await setupDevnet(config);
   const addressesJson = Deno.readTextFileSync(
-    join(config.ContractAddressesFilePath),
+    join(config.ContractAddressesL1FilePath),
   );
-  const addresses: ContractAddresses = JSON.parse(addressesJson);
+  const addressesL1: ContractAddressesL1 = JSON.parse(addressesJson);
+  const addressesL2Celo = readCeloCLIAddresses(config);
+
   const chains = makeChainConfigs(
     config.L1.ChainID,
     config.L2.ChainID,
     config.L1.RPCURL.toString(),
     config.L2.RPCURL.toString(),
-    addresses,
+    addressesL1,
+    addressesL2Celo,
   );
 
   // the num accounts will be reset later, when we know
@@ -37,30 +90,40 @@ export async function setup(
     1,
   );
   const publicClient = clients.public();
-  //TODO: this should check the configuration
-  // against what's running on the devnet.
-  // Because when the devnet is not spawned by the
-  // setup(), we can run into a misconfiguration
-  // between test and network...
-  if (!config.UseFaultproofSystem) {
-    console.log("fault-proofs disabled, using L2OO");
+  console.log("waiting for chain networks to stabilize");
+  {
+    const success = await Promise.all([
+      waitClientReturnsBlockNum(publicClient.l1, 20),
+      waitClientReturnsBlockNum(publicClient.l2, 20),
+      waitClientNotSyncing(publicClient.l1, 15),
+      waitClientNotSyncing(publicClient.l2, 15),
+    ]);
+    if (!success.every((v) => v === null)) {
+      throw new Error("l1 and l2 clients not reachable within the deadline");
+    }
   }
-  console.log("waiting for devnet to stabilize");
-  const success = await Promise.all([
-    waitClientReturnsBlockNum(publicClient.l1, 20),
-    waitClientReturnsBlockNum(publicClient.l2, 20),
-    waitClientNotSyncing(publicClient.l1, 15),
-    waitClientNotSyncing(publicClient.l2, 15),
-    config.UseFaultproofSystem
-      ? waitInitialGame(publicClient, 120)
-      : waitInitialL2OracleOutput(publicClient, 120),
-  ]);
-  console.log("devnet stable");
-  const ctx = new Context(clients, config, undefined, false, addresses);
-  if (success.every((v) => v === null)) {
-    return ctx;
+  const portalVersion = await getPortalVersion(clients.public().l1, {
+    //TODO: use proper types
+    // deno-lint-ignore no-explicit-any
+    targetChain: clients.public().l2.chain as any,
+  });
+  //XXX: is that enough to decide between faultproofs/l2oo?
+  const chainUsesFaultProofs = portalVersion.major >= 3;
+  if (chainUsesFaultProofs !== config.UseFaultproofSystem) {
+    // mismatch, but only relevant when devnet was started
   }
-  throw new Error("l1 and l2 clients not reachable within the deadline");
+  if (chainUsesFaultProofs) {
+    console.log("L2 chain uses fault-proofs, waiting for initial game");
+    // viem needs at least two games to infer the
+    // time to next game, otherwise the function
+    // returns NaN
+    await waitAtLeastTwoGames(publicClient, 120);
+  } else {
+    console.log("L2 chain uses output-oracle, waiting for initial oracle");
+    await waitInitialL2OracleOutput(publicClient, 120);
+  }
+  console.log("chain networks stable");
+  return new Context(clients, config, undefined, false, addressesL1);
 }
 
 export async function teardown(_: Deno.TestContext, config: Config) {

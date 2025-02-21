@@ -100,20 +100,20 @@ export class ClientAccountManager {
     });
   }
   async fundAccountsFrom(privkey: Hex): Promise<void> {
-    const leaderAccount = privateKeyToAccount(privkey);
-    const leader = createWalletClients(
+    const funderAccount = privateKeyToAccount(privkey);
+    const funder = createWalletClients(
       this.chains,
-      leaderAccount,
-      leaderAccount,
+      funderAccount,
+      funderAccount,
     );
     const pub = this.public();
     const res = await Promise.allSettled([
       this._fundAccountsForChainFrom(
-        leader.l1 as ViemWalletClient<HttpTransport, Chain, Account>,
+        funder.l1 as ViemWalletClient<HttpTransport, Chain, Account>,
         pub.l1 as ViemPublicClient<HttpTransport, Chain>,
       ),
       this._fundAccountsForChainFrom(
-        leader.l2 as ViemWalletClient<HttpTransport, Chain, Account>,
+        funder.l2 as ViemWalletClient<HttpTransport, Chain, Account>,
         pub.l2 as ViemPublicClient<HttpTransport, Chain>,
       ),
     ]);
@@ -127,9 +127,9 @@ export class ClientAccountManager {
     const balance = await publicClient.getBalance({
       address: leader.account.address,
     });
-    //TODO: floor, and also factor in the sending cost (roughly, current gascost *21000 * numAccounts)
+    // We need some funds for gas to distribute to the test accounts.
     //HACK: for now overestimate the split accounts but then use the actual number
-    // this means that "1 times" a split account's balance is reserved for distribution tx cost
+    // this means that "1 times" a split account's balance is reserved for distribution tx gas-cost
     const sendBalance = (balance as bigint) / BigInt(this.numAccounts + 1);
     if (sendBalance == BigInt(0)) {
       throw Error("leader account insufficient funds");
@@ -156,16 +156,16 @@ export class ClientAccountManager {
     this.l2Iterator = this.iterFundedAccounts(this.chains.l2, this.numAccounts);
   }
 
+  //TODO: in all 3 methods below:
+  // what if iterator exhausted
+  // error or return undefined?
   nextFundedL1Account(): HDAccount {
-    //TODO: what if iterator exhausted
     return this.l1Iterator.next().value;
   }
   nextFundedL2Account(): HDAccount {
-    //TODO: what if iterator exhausted
     return this.l2Iterator.next().value;
   }
   private *iterFundedAccounts(chain: Chain, num: number): Generator<HDAccount> {
-    //TODO: throw if chain not known
     for (let i = 0; i < num; i++) {
       yield this.getFundedAccount(chain, i);
     }

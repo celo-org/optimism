@@ -1,4 +1,5 @@
 import type { Context } from "./context.ts";
+import type { TestMetadata } from "./metadata.ts";
 import type { Hex } from "viem";
 import "jsr:@std/dotenv/load";
 
@@ -17,10 +18,12 @@ export type Config = {
 
   TestDirPath: string;
   MonorepoPath: string;
-  ContractAddressesFilePath: string;
+  ContractAddressesL1FilePath: string;
+  ContractAddressesL2FilePath: string | undefined;
   AccountsSeedPhrase: string;
 };
 
+export type TestFunc = TestFuncAsync | TestFuncSync;
 export type TestFuncAsync = (
   t: Deno.TestContext,
   ctx: Context,
@@ -30,8 +33,7 @@ export type TestFuncSync = (t: Deno.TestContext, ctx: Context) => boolean;
 
 export type TestCase = {
   File: string;
-  Name: string;
-  ExecuteConcurrent: boolean;
+  Metadata: TestMetadata;
   Func: TestFuncSync | TestFuncAsync;
 };
 
@@ -41,5 +43,5 @@ export type TestDefinitionsPerFile = {
   name: string;
   step: Deno.TestStepDefinition | null;
   concurrent: boolean;
-  numChildContexts: number;
+  numActiveTestSteps: number;
 };

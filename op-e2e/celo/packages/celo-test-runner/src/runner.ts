@@ -1,14 +1,19 @@
-import { Context } from "./context.ts";
-import type { Config, TestCases, TestDefinitionsPerFile } from "./types.ts";
+import type { Context } from "./context.ts";
+import type {
+  Config,
+  TestCase,
+  TestCases,
+  TestDefinitionsPerFile,
+} from "./types.ts";
 import {
-  getTests,
   implementsTestCaseAsync,
   implementsTestCaseSync,
-} from "./testload.ts";
+  importTestsForDirectory,
+} from "./testimport.ts";
 import { setup, teardown } from "./setup.ts";
 
 export async function run(config: Config) {
-  const tests = await getTests(config.TestDirPath);
+  const tests = await importTestsForDirectory(config.TestDirPath);
   Deno.test({
     name: "celo-test runner",
     sanitizeOps: false,
@@ -20,26 +25,39 @@ export async function run(config: Config) {
   });
 }
 
+function countSkippedTests(testCases: TestCases, config: Config): number {
+  return testCases.reduce(
+    (count, item) => count + (skipTest(item, config) ? 1 : 0),
+    0,
+  );
+}
 function filterConcurrentTests(testCases: TestCases): TestCases {
   return testCases.filter(
     (testCase) =>
       implementsTestCaseAsync(testCase.Func) &&
-      testCase.ExecuteConcurrent === true,
+      testCase.Metadata.Concurrent === true,
   );
 }
 function filterSerialAsyncTests(testCases: TestCases): TestCases {
   return testCases.filter(
     (testCase) =>
       implementsTestCaseAsync(testCase.Func) &&
-      testCase.ExecuteConcurrent === false,
+      testCase.Metadata.Concurrent === false,
   );
 }
 function filterSyncTests(testCases: TestCases): TestCases {
   return testCases.filter(
     (testCase) =>
       implementsTestCaseSync(testCase.Func) &&
-      testCase.ExecuteConcurrent === false,
+      testCase.Metadata.Concurrent === false,
   );
+}
+function skipTest(test: TestCase, config: Config): boolean {
+  if (test.Metadata.OnlyRunOnL2ChainIDs === undefined) {
+    return false;
+  }
+  const allowedIDs = new Set(test.Metadata.OnlyRunOnL2ChainIDs);
+  return !allowedIDs.has(config.L2.ChainID);
 }
 
 function serialTestDefinitionsForFile(
@@ -54,9 +72,11 @@ function serialTestDefinitionsForFile(
       name: fileName,
       step: null,
       concurrent: false,
-      numChildContexts: 0,
+      numActiveTestSteps: 0,
     };
   }
+  let numSkippedTests = countSkippedTests(syncTests, parentCtx.config);
+  numSkippedTests += countSkippedTests(asyncTests, parentCtx.config);
   const step = {
     name: fileName,
     sanitizeOps: false,
@@ -66,8 +86,9 @@ function serialTestDefinitionsForFile(
       for (const [_, test] of asyncTests.entries()) {
         const ctx = parentCtx.child(false);
         await t.step({
-          name: `${test.Name} (serial async)`,
+          name: `${test.Metadata.Name} (execution=serial)`,
           sanitizeOps: false,
+          ignore: skipTest(test, ctx.config),
           sanitizeResources: false,
           sanitizeExit: false,
           fn: async (t) => {
@@ -78,9 +99,10 @@ function serialTestDefinitionsForFile(
       for (const [_, test] of syncTests.entries()) {
         const ctx = parentCtx.child(false);
         await t.step({
-          name: `${test.Name} (serial sync)`,
+          name: `${test.Metadata.Name} (execution=serial)`,
           sanitizeOps: false,
           sanitizeResources: false,
+          ignore: skipTest(test, ctx.config),
           sanitizeExit: false,
           fn: (t) => {
             test.Func(t, ctx);
@@ -93,7 +115,8 @@ function serialTestDefinitionsForFile(
     name: fileName,
     step: step,
     concurrent: false,
-    numChildContexts: filterSyncTests.length + filterSerialAsyncTests.length,
+    numActiveTestSteps: filterSyncTests.length + filterSerialAsyncTests.length -
+      numSkippedTests,
   };
 }
 
@@ -108,9 +131,10 @@ function concurrentTestDefinitionsForFile(
       name: fileName,
       step: null,
       concurrent: true,
-      numChildContexts: 0,
+      numActiveTestSteps: 0,
     };
   }
+  const numSkippedTests = countSkippedTests(tests, parentCtx.config);
   const step = {
     name: fileName,
     sanitizeOps: false,
@@ -122,8 +146,9 @@ function concurrentTestDefinitionsForFile(
         const ctx = parentCtx.child(true);
         testPromises.push(
           t.step({
-            name: `${test.Name} (concurrent)`,
+            name: `${test.Metadata.Name} (execution=concurrent)`,
             sanitizeOps: false,
+            ignore: skipTest(test, ctx.config),
             sanitizeResources: false,
             sanitizeExit: false,
             fn: async (t) => {
@@ -132,7 +157,6 @@ function concurrentTestDefinitionsForFile(
           }),
         );
       }
-
       await Promise.allSettled(testPromises);
     },
   };
@@ -140,7 +164,7 @@ function concurrentTestDefinitionsForFile(
     name: fileName,
     step: step,
     concurrent: true,
-    numChildContexts: filterConcurrentTests.length,
+    numActiveTestSteps: filterConcurrentTests.length - numSkippedTests,
   };
 }
 async function runAllTests(
@@ -176,7 +200,9 @@ async function runAllTests(
       );
       if (concurrentDefs.step !== null) {
         concurrentTests.push(concurrentDefs.step);
-        totalConcurrentChildContexts += concurrentDefs.numChildContexts;
+        // we need a new account per each concurrently executed test
+        // to avoid nonce overlap
+        totalConcurrentChildContexts += concurrentDefs.numActiveTestSteps;
       }
       const serialDefs = serialTestDefinitionsForFile(
         rootCtx,
@@ -188,11 +214,12 @@ async function runAllTests(
       }
     }
     if (serialTests.length > 0) {
-      // we only need one account for the serial defs
+      // we only need one account for the serially executed tests
       totalConcurrentChildContexts++;
     }
     const success = await t.step({
-      name: `distribute funds to ${totalConcurrentChildContexts} test-acccounts`,
+      name:
+        `distribute funds to ${totalConcurrentChildContexts} test-acccounts`,
       fn: async (_) => {
         if (rootCtx === undefined) {
           throw Error("context is undefined");
@@ -204,7 +231,6 @@ async function runAllTests(
       },
     });
     if (!success) {
-      // don't continue to run the tests
       throw Error("couldn't distribute test acccount funds");
     }
 

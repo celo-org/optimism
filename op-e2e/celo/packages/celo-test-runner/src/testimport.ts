@@ -4,6 +4,7 @@ import type {
   TestFuncAsync,
   TestFuncSync,
 } from "./types.ts";
+import { getTestOptions } from "./metadata.ts";
 
 // Utility function to check if a function matches the TestCase interface.
 // Note that TS is lacking runtime checks for type definitions, and
@@ -25,11 +26,8 @@ export function implementsTestCaseSync(func: unknown): func is TestFuncSync {
 export function implementsTestCaseAsync(func: unknown): func is TestFuncAsync {
   return implementsTestCase(func, false);
 }
-function shouldExecuteConcurrent(name: string): boolean {
-  return name.endsWith("Concurrent");
-}
 
-export async function getTests(
+export async function importTestsForDirectory(
   directory: string,
 ): Promise<Record<string, TestCases>> {
   const testCasesPerFile: Record<string, TestCases> = {};
@@ -43,12 +41,12 @@ export async function getTests(
       const absolutePath = await Deno.realPath(`${directory}/${entry.name}`); // Resolve to an absolute path
       const module = await import(absolutePath);
       // Filter and merge functions that implement the TestCase interface
-      Object.entries(module).forEach(([key, value]) => {
+      Object.entries(module).forEach(([_, value]) => {
         if (implementsTestCaseAsync(value) || implementsTestCaseSync(value)) {
+          const metadata = getTestOptions(value);
           const testCase: TestCase = {
-            Name: key,
             File: entry.name,
-            ExecuteConcurrent: shouldExecuteConcurrent(key),
+            Metadata: metadata,
             Func: value,
           };
           testCases.push(testCase);

@@ -1,7 +1,32 @@
 import { getGames, getL2Output } from "viem/op-stack";
 
-export async function sleep(time: number): Promise<void> {
-  await new Promise((r) => setTimeout(r, time));
+const sleepMaxWaitTimeMs = 1000;
+
+export function sleep(milliseconds: number): Promise<void> {
+  return sleepUntil(Date.now() + milliseconds);
+}
+export function sleepSeconds(seconds: number): Promise<void> {
+  return sleep(seconds * 1000);
+}
+
+export function sleepUntil(targetTime: Date | number): Promise<void> {
+  const target =
+    typeof targetTime === "number" ? targetTime : targetTime.getTime();
+
+  return new Promise((resolve) => {
+    const check = () => {
+      const now = Date.now();
+      if (now >= target) {
+        resolve();
+      } else {
+        // calculate remaining time, but cap the delay to a maximum value
+        const delay = Math.min(target - now, sleepMaxWaitTimeMs);
+        // recursively call the time-checking with a timeout
+        setTimeout(check, delay);
+      }
+    };
+    check();
+  });
 }
 
 export async function pollFunction<T>(
@@ -30,8 +55,12 @@ export async function pollFunction<T>(
         console.log("caught unknown error type", err);
       }
     }
-    //FIXME: like this the function will never
-    // throw an error before the timeout... is that desired?
+    //NOTE: the function will never
+    // throw an error before the timeout, or never throw an error at all
+    // when no timeout is given.
+    // That means that the 'until' function
+    // has to throw or return true if the poll-loop
+    // should get canceled
     if (until(result, err) === true) {
       return result;
     }
@@ -109,7 +138,7 @@ export async function waitInitialL2OracleOutput(
   return null;
 }
 
-export async function waitInitialGame(publicClients: any, timeout: number) {
+export async function waitAtLeastTwoGames(publicClients: any, timeout: number) {
   const fn = async () => {
     // @ts-ignore: allow anonymous type passing until the celo-e2e package
     // is ported to TS
@@ -121,7 +150,7 @@ export async function waitInitialGame(publicClients: any, timeout: number) {
   await pollFunction(
     fn,
     (games: Array<any> | null, _err: Error | null) =>
-      games !== null ? games.length > 0 : false,
+      games !== null ? games.length >= 2 : false,
     500,
     timeout * 1000,
   );
