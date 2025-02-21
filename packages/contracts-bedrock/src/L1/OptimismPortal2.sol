@@ -178,7 +178,7 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
 
     /// @notice Reverts when paused.
     modifier whenNotPaused() {
-        if (superchainConfig.checkAndPauseIfSuperchainPaused()) revert CallPaused();
+        if (paused()) revert CallPaused();
         _;
     }
 
