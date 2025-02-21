@@ -17,7 +17,7 @@ import type {
 } from "viem/op-stack";
 import { getPortalVersion } from "viem/op-stack";
 import { parseAbi } from "viem";
-import { pollFunction, sleep } from "@celo-test/util";
+import { pollFunction, sleepSeconds } from "@celo-test/util";
 
 // partial ABI, only the used functions and errors are defined here
 const portal2Abi = parseAbi([
@@ -55,22 +55,41 @@ export async function withdraw(
   const receipt = await publicClients.l2.waitForTransactionReceipt({
     hash: initiateHash,
   });
+  console.log("initiateWithdrawal receipt (l2)", receipt);
 
-  const l2GasPayment = receipt.gasUsed * receipt.effectiveGasPrice +
-    (receipt.l1Fee ?? 0n);
+  const l2GasPayment =
+    receipt.gasUsed * receipt.effectiveGasPrice + (receipt.l1Fee ?? 0n);
 
-  // NOTE: this function requires the mulitcall3 contract to be deployed
+  // first wait with our wait function, because it is target-time based
+  // and considers CPU suspend and hibernate:
+  // NOTE: viem only returns a time here when more than 2 fault-games
+  // can be found from the DisputeGameFactory
+  const timeToProve = await publicClients.l1.getTimeToProve({
+    receipt,
+    // deno-lint-ignore no-explicit-any
+    targetChain: publicClients.l2.chain as any,
+  });
+  if (!timeToProve.seconds) {
+    throw Error("couldn't calculate time to prove");
+  }
+  console.log("waiting for time to prove (in s):", timeToProve.seconds);
+  await sleepSeconds(timeToProve.seconds);
+
+  // Only now call the waitToProve, which now will immediately
+  // try to call the L1 contracts.
+  // NOTE: for the L2OO system,
+  // this function requires the mulitcall3 contract to be deployed
   // on the L1 chain.
+  //
+  console.log("call wait to prove");
   const { output, game, withdrawal } = await publicClients.l1.waitToProve({
     receipt,
-    //TODO: use proper types
     // deno-lint-ignore no-explicit-any
     targetChain: publicClients.l2.chain as any,
   });
 
   const portalVersion = await getPortalVersion(publicClients.l1, {
     // deno-lint-ignore no-explicit-any
-    //TODO: use proper types
     targetChain: publicClients.l2.chain as any,
   });
   const usesL2OO = portalVersion.major < 3;
@@ -93,15 +112,20 @@ export async function withdraw(
   const proveWithdrawalArgs = await publicClients.l2.buildProveWithdrawal(
     proveWithdrawalParams,
   );
+  console.log(
+    "built prove-withdrawal args, to be posted on l1",
+    proveWithdrawalArgs,
+  );
   const proveHash = await walletClients.l1.proveWithdrawal(
-    //TODO: use proper type
     // deno-lint-ignore no-explicit-any
     proveWithdrawalArgs as any,
   );
 
+  console.log("wait for prove-withdrawal tx hash (l1):)", proveHash);
   const proveReceipt = await publicClients.l1.waitForTransactionReceipt({
     hash: proveHash,
   });
+  console.log("proveWithdrawal tx-hash (l1)", proveReceipt.transactionHash);
 
   if (proveReceipt.status != "success") {
     return {
@@ -112,18 +136,22 @@ export async function withdraw(
 
   const waitToFinalizeParams = {
     withdrawalHash: withdrawal.withdrawalHash,
-    //TODO: use the proper type definition
     // deno-lint-ignore no-explicit-any
     targetChain: publicClients.l2.chain satisfies Chain as any,
   };
-  const timeToFinalize = await publicClients.l1.getTimeToFinalize(
-    waitToFinalizeParams,
-  );
-  await sleep(timeToFinalize.seconds * 1000);
+  const timeToFinalize =
+    await publicClients.l1.getTimeToFinalize(waitToFinalizeParams);
+
+  console.log("waiting for time to finalize (in s):", timeToFinalize.seconds);
+  await sleepSeconds(timeToFinalize.seconds);
   if (usesL2OO) {
-    // NOTE: actually wait until the block timestamp has reached
+    // the getTimeToFinalize calculates the expected time to finalization
+    // based on some contract parameters in wall-time.
+    // This could be imprecise, either due to lagging l1 progress (?),
+    // or because the time has not been inferred correctly with an incorrect
+    // replication of the contracts businesss logic.
+    // That's why we actually wait until the block timestamp has reached
     // the calculated finalization time.
-    // the necessity for this might be caused by a too slow progressing l1 (?)
     await pollFunction(
       async (): Promise<GetBlockReturnType> =>
         await publicClients.l1.getBlock(),
@@ -137,15 +165,23 @@ export async function withdraw(
         }
       },
       1000,
-      180_000,
+      undefined,
     );
+    // XXX: is this enough to be certain of a successful finalization for the L2OO system
+    // or do we also need to poll a contract call similarly to the Fault-Proof system?
+    // (see else case below)
   } else {
+    // We waited the inferred "time-to-finalize" that viem gave us.
+    // Now we actually simulate a call to the contract until it
+    // lets us finalize.
+    // This is necessary because viem's inferrence of the wait
+    // time is not correct and underestimates e.g. the additional air-gap
+    // time.
     await pollCheckWithdrawal(publicClients.l1, waitToFinalizeParams);
   }
 
   const finalizeHash = await walletClients.l1.finalizeWithdrawal({
     withdrawal: withdrawal,
-    //TODO: use the proper type definition
     // deno-lint-ignore no-explicit-any
     targetChain: publicClients.l2.chain satisfies Chain as any,
   });
@@ -153,6 +189,10 @@ export async function withdraw(
   const finalizeReceipt = await publicClients.l1.waitForTransactionReceipt({
     hash: finalizeHash,
   });
+  console.log(
+    "finalizeWithdrawal tx-hash (l1)",
+    finalizeReceipt.transactionHash,
+  );
 
   return {
     success: finalizeReceipt.status == "success",
@@ -212,6 +252,6 @@ export async function pollCheckWithdrawal<
       return false;
     },
     1000,
-    180_000,
+    undefined,
   );
 }

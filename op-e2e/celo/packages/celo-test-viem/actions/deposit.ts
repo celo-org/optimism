@@ -84,12 +84,14 @@ export async function deposit(
   const receipt = await publicClients.l1.waitForTransactionReceipt({
     hash: hash,
   });
+  console.log("deposit custom-gas tx-hash (l1)", receipt.transactionHash);
   //
   spentGas += receipt.gasUsed * receipt.effectiveGasPrice;
   const [l2Hash] = getL2TransactionHashes(receipt);
   const l2Receipt = await publicClients.l2.waitForTransactionReceipt({
     hash: l2Hash,
   });
+  console.log("deposit custom-gas tx-hash (l2)", l2Receipt.transactionHash);
   return {
     success: l2Receipt.status == "success",
     l1GasPayment: spentGas,
