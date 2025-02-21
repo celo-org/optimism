@@ -9,7 +9,7 @@
 - Since we are using the Custom Gas Token feature with a preexisting balance, we use a storage setter design pattern (deploying a different implementation to the OptimismPortal proxy during the transition period), which allows us to set a specific storage slot to the desired value.
 
 ## L2 Deploy Script Notes (`L2Genesis.s.sol`)
-- The required Celo core contracts were added to `Deploy.s.sol` for devnet deployment. For mainnet, this step is skipped, and we instead rely on the blockchain migration tool for the entire blockchain state.
+- The required Celo core contracts were added to `L2Genesis.s.sol` for devnet deployment. For mainnet, this step is skipped, and we instead rely on the blockchain migration tool for the entire blockchain state.
 
 ## CeloSuperchainConfig
 - The Superchain has the power to pause/unpause the Celo network. To enable us to unpause the network when necessary, we introduced `CeloSuperchainConfig`, which adds a Guardian account with the same permissions as the Superchain. This allows us to pause/unpause the network in case of an emergency.
