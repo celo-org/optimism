@@ -1,13 +1,14 @@
 import { deposit, withdraw, type WithdrawReturnType } from "@celo-test/viem";
-import { Context } from "@celo-test/runner";
+import { addTestOptions, Context } from "@celo-test/runner";
 import { parseEther } from "viem";
 import type { BaseERC20, ERC20, ERC20Amount } from "reverse-mirage";
 import { expect } from "jsr:@std/expect";
 
-export async function withdrawDepositConcurrent(
-  t: Deno.TestContext,
-  ctx: Context,
-) {
+export const withdrawDeposit = addTestOptions({
+  Concurrent: true,
+  Name: "test-withdraw-and-deposit-back",
+  OnlyRunOnL2ChainIDs: undefined,
+})(async function (t: Deno.TestContext, ctx: Context): Promise<boolean> {
   const bridgingAmount = parseEther("1");
 
   let initialBalanceL1: ERC20Amount<BaseERC20>;
@@ -33,7 +34,7 @@ export async function withdrawDepositConcurrent(
       });
     }))
   ) {
-    return;
+    return false;
   }
   if (
     !(await t.step("withdraw", async () => {
@@ -62,7 +63,7 @@ export async function withdrawDepositConcurrent(
       );
     }))
   ) {
-    return;
+    return false;
   }
 
   if (
@@ -91,6 +92,7 @@ export async function withdrawDepositConcurrent(
       );
     }))
   ) {
-    return;
+    return false;
   }
-}
+  return true;
+});
