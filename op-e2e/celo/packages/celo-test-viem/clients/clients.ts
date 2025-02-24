@@ -91,10 +91,9 @@ export class ClientAccountManager {
     return createWalletClients(this.chains, l1Account, l2Account);
   }
 
-  private getFundedAccount(chain: Chain, index: number): HDAccount {
+  private deriveAccount(chain: Chain, index: number): HDAccount {
     return mnemonicToAccount(this.seedPhrase, {
       // changeIndex: chain.id, //NOTE: for now use same accounts on different chains
-      changeIndex: 0,
       // maps to the last number in the path:
       addressIndex: index,
     });
@@ -117,7 +116,31 @@ export class ClientAccountManager {
         pub.l2 as ViemPublicClient<HttpTransport, Chain>,
       ),
     ]);
-    //TODO: flatten res and check for all success receipts
+    // Flatten the results and check for success
+    const successes = res
+      .filter((result) => result.status === "fulfilled")
+      .map(
+        (result) =>
+          (result as PromiseFulfilledResult<Array<TransactionReceipt>>).value,
+      );
+
+    const errors = res
+      .filter((result) => result.status === "rejected")
+      .map((result) => (result as PromiseRejectedResult).reason);
+
+    if (errors.length > 0) {
+      throw new Error(`funding accounts failed: ${JSON.stringify(errors)}`);
+    }
+    successes.forEach((receipts) => {
+      receipts.forEach((receipt) => {
+        if (receipt.status !== "success") {
+          throw new Error(
+            `funding accounts failed with 'reverted' transaction, ` +
+              `tx-hash: ${receipt.transactionHash}`,
+          );
+        }
+      });
+    });
   }
   private async _fundAccountsForChainFrom(
     leader: ViemWalletClient<HttpTransport, Chain, Account>,
@@ -127,10 +150,10 @@ export class ClientAccountManager {
     const balance = await publicClient.getBalance({
       address: leader.account.address,
     });
+    const gasPrice = await publicClient.getGasPrice();
+    const estPricePerTx = (gasPrice * BigInt(21000) * BigInt(12)) / BigInt(10);
     // We need some funds for gas to distribute to the test accounts.
-    //HACK: for now overestimate the split accounts but then use the actual number
-    // this means that "1 times" a split account's balance is reserved for distribution tx gas-cost
-    const sendBalance = (balance as bigint) / BigInt(this.numAccounts + 1);
+    const sendBalance = (balance as bigint) - estPricePerTx;
     if (sendBalance == BigInt(0)) {
       throw Error("leader account insufficient funds");
     }
@@ -167,7 +190,7 @@ export class ClientAccountManager {
   }
   private *iterFundedAccounts(chain: Chain, num: number): Generator<HDAccount> {
     for (let i = 0; i < num; i++) {
-      yield this.getFundedAccount(chain, i);
+      yield this.deriveAccount(chain, i);
     }
   }
 }
