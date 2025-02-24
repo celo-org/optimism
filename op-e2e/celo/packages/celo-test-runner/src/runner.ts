@@ -115,8 +115,7 @@ function serialTestDefinitionsForFile(
     name: fileName,
     step: step,
     concurrent: false,
-    numActiveTestSteps: filterSyncTests.length + filterSerialAsyncTests.length -
-      numSkippedTests,
+    numActiveTestSteps: syncTests.length + asyncTests.length - numSkippedTests,
   };
 }
 
@@ -164,7 +163,7 @@ function concurrentTestDefinitionsForFile(
     name: fileName,
     step: step,
     concurrent: true,
-    numActiveTestSteps: filterConcurrentTests.length - numSkippedTests,
+    numActiveTestSteps: tests.length - numSkippedTests,
   };
 }
 async function runAllTests(
@@ -218,13 +217,12 @@ async function runAllTests(
       totalConcurrentChildContexts++;
     }
     const success = await t.step({
-      name:
-        `distribute funds to ${totalConcurrentChildContexts} test-acccounts`,
+      name: `distribute funds to ${totalConcurrentChildContexts} test-acccounts`,
       fn: async (_) => {
         if (rootCtx === undefined) {
           throw Error("context is undefined");
         }
-        rootCtx.clientManager.reset(totalConcurrentChildContexts);
+        rootCtx.resetClients(totalConcurrentChildContexts);
         await rootCtx.clientManager.fundAccountsFrom(
           rootCtx.config.FunderPrivateKey,
         );
