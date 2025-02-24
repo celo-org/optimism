@@ -3,10 +3,10 @@ import { ClientAccountManager } from "@celo-test/viem";
 import type { Config } from "./types.ts";
 import { Context } from "./context.ts";
 import {
-  waitAtLeastTwoGames,
   waitClientNotSyncing,
   waitClientReturnsBlockNum,
   waitInitialL2OracleOutput,
+  waitUntilTwoGames,
 } from "@celo-test/util";
 import { setupDevnet, teardownDevnet } from "./devnet.ts";
 import { makeChainConfigs } from "@celo-test/viem";
@@ -107,17 +107,19 @@ export async function setup(
     // deno-lint-ignore no-explicit-any
     targetChain: clients.public().l2.chain as any,
   });
-  //XXX: is that enough to decide between faultproofs/l2oo?
   const chainUsesFaultProofs = portalVersion.major >= 3;
   if (chainUsesFaultProofs !== config.UseFaultproofSystem) {
-    // mismatch, but only relevant when devnet was started
+    console.log(
+      `'UseFaultproofSystem' is set to ${config.UseFaultproofSystem}, ` +
+        `but the chain contracts do not reflect that`,
+    );
   }
   if (chainUsesFaultProofs) {
-    console.log("L2 chain uses fault-proofs, waiting for initial game");
-    // viem needs at least two games to infer the
+    console.log("L2 chain uses fault-proofs, wait until two games available");
+    // NOTE: viem needs at least two games to infer the
     // time to next game, otherwise the function
     // returns NaN
-    await waitAtLeastTwoGames(publicClient, 120);
+    await waitUntilTwoGames(publicClient, 120);
   } else {
     console.log("L2 chain uses output-oracle, waiting for initial oracle");
     await waitInitialL2OracleOutput(publicClient, 120);

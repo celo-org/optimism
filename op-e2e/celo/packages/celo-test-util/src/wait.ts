@@ -138,7 +138,7 @@ export async function waitInitialL2OracleOutput(
   return null;
 }
 
-export async function waitAtLeastTwoGames(publicClients: any, timeout: number) {
+export async function waitUntilTwoGames(publicClients: any, timeout: number) {
   const fn = async () => {
     // @ts-ignore: allow anonymous type passing until the celo-e2e package
     // is ported to TS
