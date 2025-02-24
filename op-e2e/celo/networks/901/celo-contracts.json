@@ -1,0 +1,20 @@
+[
+  {
+    "contract": "GoldToken",
+    "proxy": "0x471ece3750da237f93b8e339c536989b8978a438",
+    "implementation": "0x471ece3750da237f93b8e339c536989b8978a438",
+    "version": "NONE"
+  },
+  {
+    "contract": "Registry",
+    "proxy": "0x000000000000000000000000000000000000ce10",
+    "implementation": "0x000000000000000000000000000000000000ce10",
+    "version": "NONE"
+  },
+  {
+    "contract": "FeeCurrencyDirectory",
+    "proxy": "0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF",
+    "implementation": "0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF",
+    "version": "NONE"
+  }
+]
