@@ -75,11 +75,9 @@ export function parseConfigWithPrefixFromEnv(
     ContractAddressesL1FilePath: resolve(
       getEnvValueString("ADDRESSES_L1_FILEPATH", false),
     ),
-    ContractAddressesL2FilePath: l2ContractAddressesPath &&
-      resolve(l2ContractAddressesPath),
-    AccountsSeedPhrase: resolve(
-      getEnvValueString("ACCOUNTS_SEEDPHRASE", false),
-    ),
+    ContractAddressesL2FilePath:
+      l2ContractAddressesPath && resolve(l2ContractAddressesPath),
+    AccountsSeedPhrase: getEnvValueString("ACCOUNTS_SEEDPHRASE", false),
     TestDirPath: resolve(getEnvValueString("TESTDIRPATH", false)),
     MonorepoPath: resolve(getEnvValueString("MONOREPOPATH", false)),
   };
