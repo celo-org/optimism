@@ -7,10 +7,7 @@ export const tokenduality = addTestOptions({
   Concurrent: true,
   Name: "test-tokenduality",
   OnlyRunOnL2ChainIDs: [901],
-})(async function tokendualityConcurrent(
-  _: Deno.TestContext,
-  ctx: Context,
-): Promise<boolean> {
+})(async function (_: Deno.TestContext, ctx: Context): Promise<boolean> {
   const l2Contracts: ChainContractsCeloL2 = ctx.public().l2.chain!
     .contracts as ChainContractsCeloL2;
   const goldTokenAddress = l2Contracts?.goldToken?.address;
