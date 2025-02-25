@@ -1,10 +1,12 @@
 package batcher
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	_ "net/http/pprof"
 	"sync"
@@ -851,9 +853,13 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 	return nil
 }
 
+type TxSender[T any] interface {
+	Send(id T, candidate txmgr.TxCandidate, receiptCh chan txmgr.TxReceipt[T])
+}
+
 // sendTx uses the txmgr queue to send the given transaction candidate after setting its
 // gaslimit. It will block if the txmgr queue has reached its MaxPendingTransactions limit.
-func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue *txmgr.Queue[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
+func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
 	intrinsicGas, err := core.IntrinsicGas(candidate.TxData, nil, nil, false, true, true, false, nil, nil)
 	if err != nil {
 		// we log instead of return an error here because txmgr can do its own gas estimation
@@ -862,7 +868,35 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		candidate.GasLimit = intrinsicGas
 	}
 
+	floorDataGas, err := floorDataGas(candidate.TxData)
+	if err != nil {
+		l.Log.Warn("Failed to compute FloorDataGas: %v, continuing with intrinsic gas.")
+	} else if floorDataGas > candidate.GasLimit {
+		l.Log.Debug("Bumping gas limit to floor data gas", "intrinsic_gas", intrinsicGas, "floor_data_gas", floorDataGas)
+		candidate.GasLimit = floorDataGas
+	}
+
 	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob}, *candidate, receiptsCh)
+}
+
+// Copypaste from upstream geth
+// TODO remove in #14500
+func floorDataGas(data []byte) (uint64, error) {
+	TxTokenPerNonZeroByte := uint64(4)
+	TxGas := uint64(21000)
+	TxCostFloorPerToken := uint64(10)
+
+	var (
+		z      = uint64(bytes.Count(data, []byte{0}))
+		nz     = uint64(len(data)) - z
+		tokens = nz*TxTokenPerNonZeroByte + z
+	)
+	// Check for overflow
+	if (math.MaxUint64-TxGas)/TxCostFloorPerToken < tokens {
+		return 0, core.ErrGasUintOverflow
+	}
+	// Minimum gas required for a transaction based on its data tokens (EIP-7623).
+	return TxGas + tokens*TxCostFloorPerToken, nil
 }
 
 func (l *BatchSubmitter) blobTxCandidate(data txData) (*txmgr.TxCandidate, error) {
