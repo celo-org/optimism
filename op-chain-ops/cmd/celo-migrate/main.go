@@ -451,6 +451,8 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	if l1StartBlock == nil {
 		return fmt.Errorf("no starting L1 block")
 	}
+	l1startingBlockHash := l1StartBlock.Hash()
+	config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1startingBlockHash}
 
 	// Sanity check the config. Do this after filling in the L1StartingBlockTag
 	// if it is not defined.
