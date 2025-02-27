@@ -160,6 +160,7 @@ func NewL1EndpointConfig(ctx *cli.Context) *node.L1EndpointConfig {
 		BatchSize:        ctx.Int(flags.L1RPCMaxBatchSize.Name),
 		HttpPollInterval: ctx.Duration(flags.L1HTTPPollInterval.Name),
 		MaxConcurrency:   ctx.Int(flags.L1RPCMaxConcurrency.Name),
+		CacheSize:        ctx.Uint(flags.L1CacheSize.Name),
 	}
 }
 
@@ -170,9 +171,11 @@ func NewL2EndpointConfig(ctx *cli.Context, logger log.Logger) (*node.L2EndpointC
 	if err != nil {
 		return nil, err
 	}
+	l2RpcTimeout := ctx.Duration(flags.L2EngineRpcTimeout.Name)
 	return &node.L2EndpointConfig{
-		L2EngineAddr:      l2Addr,
-		L2EngineJWTSecret: secret,
+		L2EngineAddr:        l2Addr,
+		L2EngineJWTSecret:   secret,
+		L2EngineCallTimeout: l2RpcTimeout,
 	}, nil
 }
 
@@ -186,11 +189,12 @@ func NewConfigPersistence(ctx *cli.Context) node.ConfigPersistence {
 
 func NewDriverConfig(ctx *cli.Context) *driver.Config {
 	return &driver.Config{
-		VerifierConfDepth:   ctx.Uint64(flags.VerifierL1Confs.Name),
-		SequencerConfDepth:  ctx.Uint64(flags.SequencerL1Confs.Name),
-		SequencerEnabled:    ctx.Bool(flags.SequencerEnabledFlag.Name),
-		SequencerStopped:    ctx.Bool(flags.SequencerStoppedFlag.Name),
-		SequencerMaxSafeLag: ctx.Uint64(flags.SequencerMaxSafeLagFlag.Name),
+		VerifierConfDepth:     ctx.Uint64(flags.VerifierL1Confs.Name),
+		SequencerConfDepth:    ctx.Uint64(flags.SequencerL1Confs.Name),
+		SequencerEnabled:      ctx.Bool(flags.SequencerEnabledFlag.Name),
+		SequencerStopped:      ctx.Bool(flags.SequencerStoppedFlag.Name),
+		SequencerMaxSafeLag:   ctx.Uint64(flags.SequencerMaxSafeLagFlag.Name),
+		SequencerUseFinalized: ctx.Bool(flags.SequencerUseFinalizedL1Flag.Name),
 	}
 }
 

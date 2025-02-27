@@ -46,14 +46,17 @@ type ChannelConfig struct {
 	// BatchType indicates whether the channel uses SingularBatch or SpanBatch.
 	BatchType uint
 
-	// UseBlobs indicates that this channel should be sent as a multi-blob
-	// transaction with one blob per frame.
-	UseBlobs bool
+	// DaType indicates how the frames in this channel should be sent to the L1.
+	DaType DaType
+}
+
+func (cc ChannelConfig) UseBlobs() bool {
+	return cc.DaType == DaTypeBlob
 }
 
 // ChannelConfig returns a copy of the receiver.
 // This allows the receiver to be a static ChannelConfigProvider of itself.
-func (cc ChannelConfig) ChannelConfig() ChannelConfig {
+func (cc ChannelConfig) ChannelConfig(isPectra bool) ChannelConfig {
 	return cc
 }
 
@@ -93,7 +96,7 @@ func (cc *ChannelConfig) ReinitCompressorConfig() {
 }
 
 func (cc *ChannelConfig) MaxFramesPerTx() int {
-	if !cc.UseBlobs {
+	if cc.DaType == DaTypeCalldata {
 		return 1
 	}
 	return cc.TargetNumFrames

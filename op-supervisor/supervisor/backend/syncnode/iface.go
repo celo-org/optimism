@@ -2,6 +2,7 @@ package syncnode
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -24,7 +25,10 @@ type SyncNodeSetup interface {
 type SyncSource interface {
 	BlockRefByNumber(ctx context.Context, number uint64) (eth.BlockRef, error)
 	FetchReceipts(ctx context.Context, blockHash common.Hash) (gethtypes.Receipts, error)
-	ChainID(ctx context.Context) (types.ChainID, error)
+	ChainID(ctx context.Context) (eth.ChainID, error)
+	OutputV0AtTimestamp(ctx context.Context, timestamp uint64) (*eth.OutputV0, error)
+	PendingOutputV0AtTimestamp(ctx context.Context, timestamp uint64) (*eth.OutputV0, error)
+	L2BlockRefByTimestamp(ctx context.Context, timestamp uint64) (eth.L2BlockRef, error)
 	// String identifies the sync source
 	String() string
 }
@@ -37,9 +41,13 @@ type SyncControl interface {
 	UpdateCrossSafe(ctx context.Context, derived eth.BlockID, derivedFrom eth.BlockID) error
 	UpdateFinalized(ctx context.Context, id eth.BlockID) error
 
+	InvalidateBlock(ctx context.Context, seal types.BlockSeal) error
+
 	Reset(ctx context.Context, unsafe, safe, finalized eth.BlockID) error
 	ProvideL1(ctx context.Context, nextL1 eth.BlockRef) error
 	AnchorPoint(ctx context.Context) (types.DerivedBlockRefPair, error)
+
+	fmt.Stringer
 }
 
 type SyncNode interface {
@@ -49,8 +57,4 @@ type SyncNode interface {
 
 type Node interface {
 	PullEvents(ctx context.Context) (pulledAny bool, err error)
-
-	AwaitSentCrossUnsafeUpdate(ctx context.Context, minNum uint64) error
-	AwaitSentCrossSafeUpdate(ctx context.Context, minNum uint64) error
-	AwaitSentFinalizedUpdate(ctx context.Context, minNum uint64) error
 }

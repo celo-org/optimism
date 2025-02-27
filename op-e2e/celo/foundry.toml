@@ -1,0 +1,19 @@
+[profile.default]
+
+# Compilation settings
+src = '../../packages/contracts-bedrock/src/celo/'
+out = 'forge-artifacts'
+remappings = [
+  '@openzeppelin/contracts-upgradeable/=../../packages/contracts-bedrock/lib/openzeppelin-contracts-upgradeable/contracts',
+  '@openzeppelin/contracts/=../../packages/contracts-bedrock/lib/openzeppelin-contracts/contracts',
+  'forge-std/=../../packages/contracts-bedrock/lib/forge-std/src',
+]
+allow_paths = ["../../packages/contracts-bedrock/"]
+extra_output = ['abi']
+bytecode_hash = 'none'
+evm_version = "cancun"
+fs_permissions = [
+  { access='read', path='../../packages/contracts-bedrock/' },
+]
+libs = ["lib"]
+

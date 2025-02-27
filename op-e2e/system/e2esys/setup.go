@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
 	"os"
@@ -87,6 +88,7 @@ var (
 
 type SystemConfigOpts struct {
 	AllocType config.AllocType
+	LogLevel  slog.Level
 }
 
 type SystemConfigOpt func(s *SystemConfigOpts)
@@ -97,9 +99,16 @@ func WithAllocType(allocType config.AllocType) SystemConfigOpt {
 	}
 }
 
+func WithLogLevel(level slog.Level) SystemConfigOpt {
+	return func(s *SystemConfigOpts) {
+		s.LogLevel = level
+	}
+}
+
 func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 	sco := &SystemConfigOpts{
 		AllocType: config.DefaultAllocType,
+		LogLevel:  slog.LevelInfo,
 	}
 	for _, opt := range opts {
 		opt(sco)
@@ -110,7 +119,7 @@ func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 	deployConfig := config.DeployConfig(sco.AllocType)
 	deployConfig.L1GenesisBlockTimestamp = hexutil.Uint64(time.Now().Unix())
 	e2eutils.ApplyDeployConfigForks(deployConfig)
-	require.NoError(t, deployConfig.Check(testlog.Logger(t, log.LevelInfo)),
+	require.NoError(t, deployConfig.Check(testlog.Logger(t, sco.LogLevel).New("role", "config-check")),
 		"Deploy config is invalid, do you need to run make devnet-allocs?")
 	l1Deployments := config.L1Deployments(sco.AllocType)
 	require.NoError(t, l1Deployments.Check(deployConfig))
@@ -172,11 +181,12 @@ func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 			},
 		},
 		Loggers: map[string]log.Logger{
-			RoleVerif:   testlog.Logger(t, log.LevelInfo).New("role", RoleVerif),
-			RoleSeq:     testlog.Logger(t, log.LevelInfo).New("role", RoleSeq),
-			"batcher":   testlog.Logger(t, log.LevelInfo).New("role", "batcher"),
-			"proposer":  testlog.Logger(t, log.LevelInfo).New("role", "proposer"),
-			"da-server": testlog.Logger(t, log.LevelInfo).New("role", "da-server"),
+			RoleVerif:      testlog.Logger(t, sco.LogLevel).New("role", RoleVerif),
+			RoleSeq:        testlog.Logger(t, sco.LogLevel).New("role", RoleSeq),
+			"batcher":      testlog.Logger(t, sco.LogLevel).New("role", "batcher"),
+			"proposer":     testlog.Logger(t, sco.LogLevel).New("role", "proposer"),
+			"da-server":    testlog.Logger(t, sco.LogLevel).New("role", "da-server"),
+			"config-check": testlog.Logger(t, sco.LogLevel).New("role", "config-check"),
 		},
 		GethOptions:                   map[string][]geth.GethOption{},
 		P2PTopology:                   nil, // no P2P connectivity by default
@@ -196,6 +206,7 @@ func RegolithSystemConfig(t *testing.T, regolithTimeOffset *hexutil.Uint64, opts
 	cfg.DeployConfig.L2GenesisFjordTimeOffset = nil
 	cfg.DeployConfig.L2GenesisGraniteTimeOffset = nil
 	cfg.DeployConfig.L2GenesisHoloceneTimeOffset = nil
+	cfg.DeployConfig.L2GenesisIsthmusTimeOffset = nil
 	// ADD NEW FORKS HERE!
 	return cfg
 }
@@ -238,6 +249,13 @@ func HoloceneSystemConfig(t *testing.T, holoceneTimeOffset *hexutil.Uint64, opts
 	return cfg
 }
 
+func IsthmusSystemConfig(t *testing.T, isthmusTimeOffset *hexutil.Uint64, opts ...SystemConfigOpt) SystemConfig {
+	cfg := HoloceneSystemConfig(t, &genesisTime, opts...)
+	cfg.DeployConfig.L1PragueTimeOffset = isthmusTimeOffset
+	cfg.DeployConfig.L2GenesisIsthmusTimeOffset = isthmusTimeOffset
+	return cfg
+}
+
 func writeDefaultJWT(t testing.TB) string {
 	// Sadly the geth node config cannot load JWT secret from memory, it has to be a file
 	jwtPath := path.Join(t.TempDir(), "jwt_secret")
@@ -267,12 +285,10 @@ type SystemConfig struct {
 	// L1FinalizedDistance is the distance from the L1 head that L1 blocks will be artificially finalized on.
 	L1FinalizedDistance uint64
 
-	Premine        map[common.Address]*big.Int
-	Nodes          map[string]*rollupNode.Config // Per node config. Don't use populate rollup.Config
-	Loggers        map[string]log.Logger
-	GethOptions    map[string][]geth.GethOption
-	ProposerLogger log.Logger
-	BatcherLogger  log.Logger
+	Premine     map[common.Address]*big.Int
+	Nodes       map[string]*rollupNode.Config // Per node config. Don't use populate rollup.Config
+	Loggers     map[string]log.Logger
+	GethOptions map[string][]geth.GethOption
 
 	ExternalL2Shim string
 
@@ -543,7 +559,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		c = sys.TimeTravelClock
 	}
 
-	if err := cfg.DeployConfig.Check(testlog.Logger(t, log.LevelInfo)); err != nil {
+	if err := cfg.DeployConfig.Check(cfg.Loggers["config-check"]); err != nil {
 		return nil, err
 	}
 
@@ -638,9 +654,16 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 			FjordTime:               cfg.DeployConfig.FjordTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			GraniteTime:             cfg.DeployConfig.GraniteTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			HoloceneTime:            cfg.DeployConfig.HoloceneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			IsthmusTime:             cfg.DeployConfig.IsthmusTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			InteropTime:             cfg.DeployConfig.InteropTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			Cel2Time:                cfg.DeployConfig.RegolithTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
 			ProtocolVersionsAddress: cfg.L1Deployments.ProtocolVersionsProxy,
 			AltDAConfig:             rollupAltDAConfig,
+			ChainOpConfig: &params.OptimismConfig{
+				EIP1559Elasticity:        cfg.DeployConfig.EIP1559Elasticity,
+				EIP1559Denominator:       cfg.DeployConfig.EIP1559Denominator,
+				EIP1559DenominatorCanyon: &cfg.DeployConfig.EIP1559DenominatorCanyon,
+			},
 		}
 	}
 	defaultConfig := makeRollupConfig()

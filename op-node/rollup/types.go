@@ -95,6 +95,7 @@ type Config struct {
 	// "Regolith" is the loose deposited rock that sits on top of Bedrock.
 	// Active if RegolithTime != nil && L2 block timestamp >= *RegolithTime, inactive otherwise.
 	RegolithTime *uint64 `json:"regolith_time,omitempty"`
+	Cel2Time     *uint64 `json:"cel2_time,omitempty"`
 
 	// CanyonTime sets the activation time of the Canyon network upgrade.
 	// Active if CanyonTime != nil && L2 block timestamp >= *CanyonTime, inactive otherwise.
@@ -143,6 +144,12 @@ type Config struct {
 
 	// AltDAConfig. We are in the process of migrating to the AltDAConfig from these legacy top level values
 	AltDAConfig *AltDAConfig `json:"alt_da,omitempty"`
+
+	// ChainOpConfig is the OptimismConfig of the execution layer ChainConfig.
+	// It is used during safe chain consolidation to translate zero SystemConfig EIP1559
+	// parameters to the protocol values, like the execution layer does.
+	// If missing, it is loaded by the op-node from the embedded superchain config at startup.
+	ChainOpConfig *params.OptimismConfig `json:"chain_op_config,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -332,6 +339,9 @@ func (cfg *Config) Check() error {
 	if err := checkFork(cfg.GraniteTime, cfg.HoloceneTime, Granite, Holocene); err != nil {
 		return err
 	}
+	if err := checkFork(cfg.HoloceneTime, cfg.IsthmusTime, Holocene, Isthmus); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -420,6 +430,10 @@ func (c *Config) IsIsthmus(timestamp uint64) bool {
 // IsInterop returns true if the Interop hardfork is active at or past the given timestamp.
 func (c *Config) IsInterop(timestamp uint64) bool {
 	return c.InteropTime != nil && timestamp >= *c.InteropTime
+}
+
+func (c *Config) IsCel2(timestamp uint64) bool {
+	return c.Cel2Time != nil && timestamp >= *c.Cel2Time
 }
 
 func (c *Config) IsRegolithActivationBlock(l2BlockTime uint64) bool {
@@ -556,7 +570,9 @@ func (c *Config) ForkchoiceUpdatedVersion(attr *eth.PayloadAttributes) eth.Engin
 
 // NewPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
 func (c *Config) NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
-	if c.IsEcotone(timestamp) {
+	if c.IsIsthmus(timestamp) {
+		return eth.NewPayloadV4
+	} else if c.IsEcotone(timestamp) {
 		// Cancun
 		return eth.NewPayloadV3
 	} else {
@@ -566,7 +582,9 @@ func (c *Config) NewPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
 
 // GetPayloadVersion returns the EngineAPIMethod suitable for the chain hard fork version.
 func (c *Config) GetPayloadVersion(timestamp uint64) eth.EngineAPIMethod {
-	if c.IsEcotone(timestamp) {
+	if c.IsIsthmus(timestamp) {
+		return eth.GetPayloadV4
+	} else if c.IsEcotone(timestamp) {
 		// Cancun
 		return eth.GetPayloadV3
 	} else {
@@ -685,6 +703,7 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 		"isthmus_time", fmtForkTimeOrUnset(c.IsthmusTime),
 		"interop_time", fmtForkTimeOrUnset(c.InteropTime),
 		"alt_da", c.AltDAConfig != nil,
+		"cel2_time", fmtForkTimeOrUnset(c.Cel2Time),
 	)
 }
 

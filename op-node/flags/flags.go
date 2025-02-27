@@ -36,6 +36,17 @@ func init() {
 	cli.VersionFlag.(*cli.BoolFlag).Category = MiscCategory
 }
 
+func init() {
+	DeprecatedFlags = append(DeprecatedFlags, deprecatedP2PFlags(EnvVarPrefix)...)
+	optionalFlags = append(optionalFlags, P2PFlags(EnvVarPrefix)...)
+	optionalFlags = append(optionalFlags, oplog.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
+	optionalFlags = append(optionalFlags, oppprof.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
+	optionalFlags = append(optionalFlags, DeprecatedFlags...)
+	optionalFlags = append(optionalFlags, opflags.CLIFlags(EnvVarPrefix, RollupCategory)...)
+	optionalFlags = append(optionalFlags, altda.CLIFlags(EnvVarPrefix, AltDACategory)...)
+	Flags = append(requiredFlags, optionalFlags...)
+}
+
 func prefixEnvVars(names ...string) []string {
 	envs := make([]string, 0, len(names))
 	for _, name := range names {
@@ -85,7 +96,7 @@ var (
 	BeaconFallbackAddrs = &cli.StringSliceFlag{
 		Name:     "l1.beacon-fallbacks",
 		Aliases:  []string{"l1.beacon-archiver"},
-		Usage:    "Addresses of L1 Beacon-API compatible HTTP fallback endpoints. Used to fetch blob sidecars not availalbe at the l1.beacon (e.g. expired blobs).",
+		Usage:    "Addresses of L1 Beacon-API compatible HTTP fallback endpoints. Used to fetch blob sidecars not available at the l1.beacon (e.g. expired blobs).",
 		EnvVars:  prefixEnvVars("L1_BEACON_FALLBACKS", "L1_BEACON_ARCHIVER"),
 		Category: L1RPCCategory,
 	}
@@ -179,6 +190,18 @@ var (
 		Value:    20,
 		Category: L1RPCCategory,
 	}
+	L1CacheSize = &cli.UintFlag{
+		Name: "l1.cache-size",
+		Usage: "Cache size for blocks, receipts and transactions. " +
+			"If this flag is set to 0, 2/3 of the sequencing window size is used (usually 2400). " +
+			"The default value of 900 (~3h of L1 blocks) is good for (high-throughput) networks that see frequent safe head increments. " +
+			"On (low-throughput) networks with infrequent safe head increments, it is recommended to set this value to 0, " +
+			"or a value that well covers the typical span between safe head increments. " +
+			"Note that higher values will cause significantly increased memory usage.",
+		EnvVars:  prefixEnvVars("L1_CACHE_SIZE"),
+		Value:    900, // ~3h of L1 blocks
+		Category: L1RPCCategory,
+	}
 	L1HTTPPollInterval = &cli.DurationFlag{
 		Name:     "l1.http-poll-interval",
 		Usage:    "Polling interval for latest-block subscription when using an HTTP RPC provider. Ignored for other types of RPC endpoints.",
@@ -195,6 +218,13 @@ var (
 			out := engine.Geth
 			return &out
 		}(),
+		Category: RollupCategory,
+	}
+	L2EngineRpcTimeout = &cli.DurationFlag{
+		Name:     "l2.engine-rpc-timeout",
+		Usage:    "L2 engine client rpc timeout",
+		EnvVars:  prefixEnvVars("L2_ENGINE_RPC_TIMEOUT"),
+		Value:    time.Second * 10,
 		Category: RollupCategory,
 	}
 	VerifierL1Confs = &cli.Uint64Flag{
@@ -228,6 +258,13 @@ var (
 		Usage:    "Number of L1 blocks to keep distance from the L1 head as a sequencer for picking an L1 origin.",
 		EnvVars:  prefixEnvVars("SEQUENCER_L1_CONFS"),
 		Value:    4,
+		Category: SequencerCategory,
+	}
+	SequencerUseFinalizedL1Flag = &cli.BoolFlag{
+		Name:     "sequencer.use-finalized",
+		Usage:    "Enable use of only finalized L1 blocks as L1 origin. Overwrites the value of 'sequencer.l1-confs'.",
+		EnvVars:  prefixEnvVars("SEQUENCER_USE_FINALIZED"),
+		Value:    false,
 		Category: SequencerCategory,
 	}
 	L1EpochPollIntervalFlag = &cli.DurationFlag{
@@ -423,6 +460,8 @@ var optionalFlags = []cli.Flag{
 	L1RPCMaxBatchSize,
 	L1RPCMaxConcurrency,
 	L1HTTPPollInterval,
+	L1CacheSize,
+	SequencerUseFinalizedL1Flag,
 	VerifierL1Confs,
 	SequencerEnabledFlag,
 	SequencerStoppedFlag,
@@ -446,6 +485,7 @@ var optionalFlags = []cli.Flag{
 	ConductorRpcTimeoutFlag,
 	SafeDBPath,
 	L2EngineKind,
+	L2EngineRpcTimeout,
 	InteropSupervisor,
 	InteropRPCAddr,
 	InteropRPCPort,
@@ -463,17 +503,6 @@ var DeprecatedFlags = []cli.Flag{
 
 // Flags contains the list of configuration options available to the binary.
 var Flags []cli.Flag
-
-func init() {
-	DeprecatedFlags = append(DeprecatedFlags, deprecatedP2PFlags(EnvVarPrefix)...)
-	optionalFlags = append(optionalFlags, P2PFlags(EnvVarPrefix)...)
-	optionalFlags = append(optionalFlags, oplog.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
-	optionalFlags = append(optionalFlags, oppprof.CLIFlagsWithCategory(EnvVarPrefix, OperationsCategory)...)
-	optionalFlags = append(optionalFlags, DeprecatedFlags...)
-	optionalFlags = append(optionalFlags, opflags.CLIFlags(EnvVarPrefix, RollupCategory)...)
-	optionalFlags = append(optionalFlags, altda.CLIFlags(EnvVarPrefix, AltDACategory)...)
-	Flags = append(requiredFlags, optionalFlags...)
-}
 
 func CheckRequired(ctx *cli.Context) error {
 	for _, f := range requiredFlags {

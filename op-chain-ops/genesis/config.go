@@ -271,9 +271,11 @@ var _ ConfigChecker = (*GasTokenDeployConfig)(nil)
 
 func (d *GasTokenDeployConfig) Check(log log.Logger) error {
 	if d.UseCustomGasToken {
-		if d.CustomGasTokenAddress == (common.Address{}) {
-			return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
-		}
+		// NOTE: we are using the address(0) as an instruction to deploy the L1 token,
+		//       so this deploy-config validation has to be disabled
+		// if d.CustomGasTokenAddress == (common.Address{}) {
+		//      return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
+		// }
 		log.Info("Using custom gas token", "address", d.CustomGasTokenAddress)
 	}
 	return nil
@@ -308,6 +310,8 @@ type EIP1559DeployConfig struct {
 	EIP1559Denominator uint64 `json:"eip1559Denominator"`
 	// EIP1559DenominatorCanyon is the denominator of EIP1559 base fee market when Canyon is active.
 	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+	// EIP1559BaseFeeFloor is the fixed floor for the EIP1559 base fee market.
+	EIP1559BaseFeeFloor uint64 `json:"eip1559BaseFeeFloor,omitempty"`
 }
 
 var _ ConfigChecker = (*EIP1559DeployConfig)(nil)
@@ -354,6 +358,8 @@ type UpgradeScheduleDeployConfig struct {
 
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
+	// When Prague activates. Relative to L1 genesis.
+	L1PragueTimeOffset *hexutil.Uint64 `json:"l1PragueTimeOffset,omitempty"`
 
 	// UseInterop is a flag that indicates if the system is using interop
 	UseInterop bool `json:"useInterop,omitempty"`
@@ -911,6 +917,9 @@ type DeployConfig struct {
 
 	// Legacy, ignored, here for strict-JSON decoding to be accepted.
 	LegacyDeployConfig `evm:"-"`
+
+	// DeployCeloContracts indicates whether to deploy Celo contracts.
+	DeployCeloContracts bool `json:"deployCeloContracts"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -974,6 +983,13 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 	if d.SystemConfigProxy == (common.Address{}) {
 		return nil, errors.New("SystemConfigProxy cannot be address(0)")
 	}
+
+	chainOpConfig := &params.OptimismConfig{
+		EIP1559Elasticity:        d.EIP1559Elasticity,
+		EIP1559Denominator:       d.EIP1559Denominator,
+		EIP1559DenominatorCanyon: &d.EIP1559DenominatorCanyon,
+	}
+
 	var altDA *rollup.AltDAConfig
 	if d.UseAltDA {
 		altDA = &rollup.AltDAConfig{
@@ -996,13 +1012,8 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 				Hash:   l2GenesisBlockHash,
 				Number: l2GenesisBlockNumber,
 			},
-			L2Time: l1StartBlock.Time,
-			SystemConfig: eth.SystemConfig{
-				BatcherAddr: d.BatchSenderAddress,
-				Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(d.GasPriceOracleOverhead))),
-				Scalar:      eth.Bytes32(d.FeeScalar()),
-				GasLimit:    uint64(d.L2GenesisBlockGasLimit),
-			},
+			L2Time:       l1StartBlock.Time,
+			SystemConfig: d.GenesisSystemConfig(),
 		},
 		BlockTime:               d.L2BlockTime,
 		MaxSequencerDrift:       d.MaxSequencerDrift,
@@ -1024,7 +1035,20 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 		InteropTime:             d.InteropTime(l1StartTime),
 		ProtocolVersionsAddress: d.ProtocolVersionsProxy,
 		AltDAConfig:             altDA,
+		ChainOpConfig:           chainOpConfig,
+		Cel2Time:                d.RegolithTime(l1StartTime),
 	}, nil
+}
+
+// GenesisSystemConfig converts a DeployConfig to a eth.SystemConfig. If Ecotone is active at genesis, the
+// Overhead value is considered a noop.
+func (d *DeployConfig) GenesisSystemConfig() eth.SystemConfig {
+	return eth.SystemConfig{
+		BatcherAddr: d.BatchSenderAddress,
+		Overhead:    eth.Bytes32(common.BigToHash(new(big.Int).SetUint64(d.GasPriceOracleOverhead))),
+		Scalar:      d.FeeScalar(),
+		GasLimit:    uint64(d.L2GenesisBlockGasLimit),
+	}
 }
 
 // NewDeployConfig reads a config file given a path on the filesystem.

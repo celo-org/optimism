@@ -5,9 +5,16 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/ethereum-optimism/superchain-registry/validation"
+
+	"github.com/ethereum/go-ethereum/superchain"
+
+	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	op_service "github.com/ethereum-optimism/optimism/op-service"
+
 	"github.com/BurntSushi/toml"
 
-	"github.com/ethereum-optimism/superchain-registry/superchain"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -15,7 +22,7 @@ const (
 	GasLimit                        uint64 = 60_000_000
 	BasefeeScalar                   uint32 = 1368
 	BlobBaseFeeScalar               uint32 = 801949
-	WithdrawalDelaySeconds          uint64 = 604800
+	WithdrawalDelaySeconds          uint64 = 302400
 	MinProposalSizeBytes            uint64 = 126000
 	ChallengePeriodSeconds          uint64 = 86400
 	ProofMaturityDelaySeconds       uint64 = 604800
@@ -31,6 +38,7 @@ const (
 	Eip1559Elasticity               uint64 = 6
 
 	ContractsV160Tag        = "op-contracts/v1.6.0"
+	ContractsV180Tag        = "op-contracts/v1.8.0-rc.4"
 	ContractsV170Beta1L2Tag = "op-contracts/v1.7.0-beta.1+l2-contracts"
 )
 
@@ -46,7 +54,7 @@ var L1VersionsSepolia L1Versions
 
 var L1VersionsMainnet L1Versions
 
-var DefaultL1ContractsTag = ContractsV160Tag
+var DefaultL1ContractsTag = ContractsV180Tag
 
 var DefaultL2ContractsTag = ContractsV170Beta1L2Tag
 
@@ -116,6 +124,16 @@ var opcmBlueprintsByVersion = map[string]OPCMBlueprintsByChain{
 		},
 	},
 	"op-contracts/v1.8.0-rc.4": {
+		Mainnet: &OPCMBlueprints{
+			AddressManager:           common.HexToAddress("0x29aA24714c06914d9689e933cae2293C569AfeEa"),
+			Proxy:                    common.HexToAddress("0x3626ebD458c7f34FD98789A373593fF2fc227bA0"),
+			ProxyAdmin:               common.HexToAddress("0x7170678A5CFFb6872606d251B3CcdB27De962631"),
+			L1ChugSplashProxy:        common.HexToAddress("0x538906C8B000D621fd11B7e8642f504dD8730837"),
+			ResolvedDelegateProxy:    common.HexToAddress("0xF12bD34d6a1d26d230240ECEA761f77e2013926E"),
+			AnchorStateRegistry:      common.HexToAddress("0xbA7Be2bEE016568274a4D1E6c852Bb9a99FaAB8B"),
+			PermissionedDisputeGame1: common.HexToAddress("0x596A4334a28056c7943c8bcEf220F38cA5B42dC5"), // updated
+			PermissionedDisputeGame2: common.HexToAddress("0x4E3E5C09B07AAA3fe482F5A1f82a19e91944Fffc"), // updated
+		},
 		Sepolia: &OPCMBlueprints{
 			AddressManager:           common.HexToAddress("0x3125a4cB2179E04203D3Eb2b5784aaef9FD64216"),
 			Proxy:                    common.HexToAddress("0xe650ADb86a0de96e2c434D0a52E7D5B70980D6f1"),
@@ -173,9 +191,9 @@ func L1VersionsFor(chainID uint64) (L1Versions, error) {
 func GuardianAddressFor(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.HexToAddress("0x09f7150D8c019BeF34450d6920f6B3608ceFdAf2"), nil
+		return common.Address(validation.StandardConfigRolesMainnet.Guardian), nil
 	case 11155111:
-		return common.HexToAddress("0x7a50f00e8D05b95F98fE38d8BeE366a7324dCf7E"), nil
+		return common.Address(validation.StandardConfigRolesSepolia.Guardian), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -184,44 +202,22 @@ func GuardianAddressFor(chainID uint64) (common.Address, error) {
 func ChallengerAddressFor(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.HexToAddress("0x9BA6e03D8B90dE867373Db8cF1A58d2F7F006b3A"), nil
+		return common.Address(validation.StandardConfigRolesMainnet.Challenger), nil
 	case 11155111:
-		return common.HexToAddress("0xfd1D2e729aE8eEe2E146c033bf4400fE75284301"), nil
+		return common.Address(validation.StandardConfigRolesSepolia.Challenger), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
 }
 
-func SuperchainFor(chainID uint64) (*superchain.Superchain, error) {
+func SuperchainFor(chainID uint64) (superchain.Superchain, error) {
 	switch chainID {
 	case 1:
-		return superchain.Superchains["mainnet"], nil
+		return superchain.GetSuperchain("mainnet")
 	case 11155111:
-		return superchain.Superchains["sepolia"], nil
+		return superchain.GetSuperchain("sepolia")
 	default:
-		return nil, fmt.Errorf("unsupported chain ID: %d", chainID)
-	}
-}
-
-func ChainNameFor(chainID uint64) (string, error) {
-	switch chainID {
-	case 1:
-		return "mainnet", nil
-	case 11155111:
-		return "sepolia", nil
-	default:
-		return "", fmt.Errorf("unrecognized l1 chain ID: %d", chainID)
-	}
-}
-
-func CommitForDeployTag(tag string) (string, error) {
-	switch tag {
-	case "op-contracts/v1.6.0":
-		return "33f06d2d5e4034125df02264a5ffe84571bd0359", nil
-	case "op-contracts/v1.7.0-beta.1+l2-contracts":
-		return "5e14a61547a45eef2ebeba677aee4a049f106ed8", nil
-	default:
-		return "", fmt.Errorf("unsupported tag: %s", tag)
+		return superchain.Superchain{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
 }
 
@@ -234,6 +230,11 @@ func ManagerImplementationAddrFor(chainID uint64, tag string) (common.Address, e
 			// Verified against compiled bytecode at:
 			// https://github.com/ethereum-optimism/optimism/releases/tag/op-contracts-v160-artifacts-opcm-redesign-backport
 			return common.HexToAddress("0x9BC0A1eD534BFb31a6Be69e5b767Cba332f14347"), nil
+		case "op-contracts/v1.8.0-rc.4":
+			// Generated using the bootstrap command on 01/23/2025.
+			// Verified against compiled bytecode at:
+			// https://github.com/ethereum-optimism/optimism/releases/tag/op-contracts-v180-blueprints-script
+			return common.HexToAddress("0x5269eed89b0d04d909a0973439e2587e815ba932"), nil
 		default:
 			return common.Address{}, fmt.Errorf("unsupported mainnet tag: %s", tag)
 		}
@@ -269,25 +270,23 @@ func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 	}
 }
 
-func SystemOwnerAddrFor(chainID uint64) (common.Address, error) {
+func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		// Set to owner of superchain proxy admin
-		return common.HexToAddress("0x5a0Aae59D09fccBdDb6C6CcEB07B7279367C3d2A"), nil
+		return common.Address(validation.StandardConfigRolesMainnet.L1ProxyAdminOwner), nil
 	case 11155111:
-		// Set to development multisig
-		return common.HexToAddress("0xDEe57160aAfCF04c34C887B5962D0a69676d3C8B"), nil
+		return common.Address(validation.StandardConfigRolesSepolia.L1ProxyAdminOwner), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
 }
 
-func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
+func ProtocolVersionsOwner(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.HexToAddress("0x5a0Aae59D09fccBdDb6C6CcEB07B7279367C3d2A"), nil
+		return common.Address(validation.StandardConfigRolesMainnet.ProtocolVersionsOwner), nil
 	case 11155111:
-		return common.HexToAddress("0x1Eb2fFc903729a0F03966B917003800b145F56E2"), nil
+		return common.Address(validation.StandardConfigRolesSepolia.ProtocolVersionsOwner), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -317,6 +316,30 @@ func ArtifactsHashForTag(tag string) (common.Hash, error) {
 	default:
 		return common.Hash{}, fmt.Errorf("unsupported tag: %s", tag)
 	}
+}
+
+// DefaultHardforkScheduleForTag is used to determine which hardforks should be activated by default given a
+// contract tag. For example, passing in v1.6.0 will return all hardforks up to and including Granite. This allows
+// OP Deployer to set sane defaults for hardforks. This is not an ideal solution, but it will have to work until we get
+// to MCP L2.
+func DefaultHardforkScheduleForTag(tag string) *genesis.UpgradeScheduleDeployConfig {
+	sched := &genesis.UpgradeScheduleDeployConfig{
+		L2GenesisRegolithTimeOffset: op_service.U64UtilPtr(0),
+		L2GenesisCanyonTimeOffset:   op_service.U64UtilPtr(0),
+		L2GenesisDeltaTimeOffset:    op_service.U64UtilPtr(0),
+		L2GenesisEcotoneTimeOffset:  op_service.U64UtilPtr(0),
+		L2GenesisFjordTimeOffset:    op_service.U64UtilPtr(0),
+		L2GenesisGraniteTimeOffset:  op_service.U64UtilPtr(0),
+	}
+
+	switch tag {
+	case ContractsV160Tag, ContractsV170Beta1L2Tag:
+		return sched
+	default:
+		sched.ActivateForkAtGenesis(rollup.Holocene)
+	}
+
+	return sched
 }
 
 func standardArtifactsURL(checksum string) string {

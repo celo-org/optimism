@@ -309,6 +309,20 @@ func (s *L2Batcher) ReadNextOutputFrame(t Testing) []byte {
 	return data.Bytes()
 }
 
+func (s *L2Batcher) ActAltDAFailoverToEthDA(t Testing) {
+	if !s.l2BatcherCfg.UseAltDA {
+		t.Fatalf("cannot failover to ethda when already using ethda")
+	}
+	s.l2BatcherCfg.UseAltDA = false
+}
+
+func (s *L2Batcher) ActAltDAFallbackToAltDA(t Testing) {
+	if s.l2BatcherCfg.UseAltDA {
+		t.Fatalf("cannot fallback to altDA when already using altDA")
+	}
+	s.l2BatcherCfg.UseAltDA = true
+}
+
 // ActL2BatchSubmit constructs a batch tx from previous buffered L2 blocks, and submits it to L1
 func (s *L2Batcher) ActL2BatchSubmit(t Testing, txOpts ...func(tx *types.DynamicFeeTx)) {
 	s.ActL2BatchSubmitRaw(t, s.ReadNextOutputFrame(t), txOpts...)
@@ -343,7 +357,7 @@ func (s *L2Batcher) ActL2BatchSubmitRaw(t Testing, payload []byte, txOpts ...fun
 			opt(rawTx)
 		}
 
-		gas, err := core.IntrinsicGas(rawTx.Data, nil, false, true, true, false)
+		gas, err := core.IntrinsicGas(rawTx.Data, nil, nil, false, true, true, false, nil, nil)
 		require.NoError(t, err, "need to compute intrinsic gas")
 		rawTx.Gas = gas
 		txData = rawTx

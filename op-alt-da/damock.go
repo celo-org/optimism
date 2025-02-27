@@ -48,6 +48,8 @@ func (c *MockDAClient) DeleteData(key []byte) error {
 	return c.store.Delete(key)
 }
 
+// DAErrFaker is a DA client that can be configured to return errors on GetInput
+// and SetInput calls.
 type DAErrFaker struct {
 	Client *MockDAClient
 
@@ -105,12 +107,20 @@ func (d *AltDADisabled) AdvanceL1Origin(ctx context.Context, l1 L1Fetcher, block
 }
 
 // FakeDAServer is a fake DA server for e2e tests.
-// It is a small wrapper around DAServer that allows for setting request latencies,
-// to mimic a DA service with slow responses (eg. eigenDA with 10 min batching interval).
+// It is a small wrapper around DAServer that allows for setting:
+//   - request latencies, to mimic a DA service with slow responses
+//     (eg. eigenDA with 10 min batching interval).
+//   - response status codes, to mimic a DA service that is down.
+//
+// We use this FakeDaServer as opposed to the DAErrFaker client in the op-e2e altda system tests
+// because the batcher service only has a constructor to build from CLI flags (no dependency injection),
+// meaning the da client is built from an rpc url config instead of being injected.
 type FakeDAServer struct {
 	*DAServer
 	putRequestLatency time.Duration
 	getRequestLatency time.Duration
+	// next failoverCount Put requests will return 503 status code for failover testing
+	failoverCount uint64
 }
 
 func NewFakeDAServer(host string, port int, log log.Logger) *FakeDAServer {
@@ -130,6 +140,11 @@ func (s *FakeDAServer) HandleGet(w http.ResponseWriter, r *http.Request) {
 
 func (s *FakeDAServer) HandlePut(w http.ResponseWriter, r *http.Request) {
 	time.Sleep(s.putRequestLatency)
+	if s.failoverCount > 0 {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		s.failoverCount--
+		return
+	}
 	s.DAServer.HandlePut(w, r)
 }
 
@@ -152,6 +167,11 @@ func (s *FakeDAServer) SetPutRequestLatency(latency time.Duration) {
 
 func (s *FakeDAServer) SetGetRequestLatency(latency time.Duration) {
 	s.getRequestLatency = latency
+}
+
+// SetResponseStatusForNRequests sets the next n Put requests to return 503 status code.
+func (s *FakeDAServer) SetPutFailoverForNRequests(n uint64) {
+	s.failoverCount = n
 }
 
 type MemStore struct {

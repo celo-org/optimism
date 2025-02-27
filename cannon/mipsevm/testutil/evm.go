@@ -106,10 +106,12 @@ func NewEVMEnv(contracts *ContractMetadata) (*vm.EVM, *state.StateDB) {
 	if err != nil {
 		panic(fmt.Errorf("failed to create memory state db: %w", err))
 	}
-	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state)
+
+	feeCurrencyContext := core.GetFeeCurrencyContext(header, chainCfg, state)
+	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state, feeCurrencyContext)
 	vmCfg := vm.Config{}
 
-	env := vm.NewEVM(blockContext, vm.TxContext{}, state, chainCfg, vmCfg)
+	env := vm.NewEVM(blockContext, state, chainCfg, vmCfg)
 	// pre-deploy the contracts
 	env.StateDB.SetCode(contracts.Addresses.Oracle, contracts.Artifacts.Oracle.DeployedBytecode.Object)
 

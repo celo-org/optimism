@@ -82,8 +82,10 @@ var (
 		EnvVars: prefixEnvVars("MAX_BLOCKS_PER_SPAN_BATCH"),
 	}
 	TargetNumFramesFlag = &cli.IntFlag{
-		Name:    "target-num-frames",
-		Usage:   "The target number of frames to create per channel. Controls number of blobs per blob tx, if using Blob DA.",
+		Name: "target-num-frames",
+		Usage: "The target number of frames to create per channel. " +
+			"Controls number of blobs per blob tx, if using Blob DA, " +
+			"or number of frames per blob, if using altDA.",
 		Value:   1,
 		EnvVars: prefixEnvVars("TARGET_NUM_FRAMES"),
 	}
@@ -138,8 +140,8 @@ var (
 	}
 	ActiveSequencerCheckDurationFlag = &cli.DurationFlag{
 		Name:    "active-sequencer-check-duration",
-		Usage:   "The duration between checks to determine the active sequencer endpoint. ",
-		Value:   2 * time.Minute,
+		Usage:   "The duration between checks to determine the active sequencer endpoint.",
+		Value:   5 * time.Second,
 		EnvVars: prefixEnvVars("ACTIVE_SEQUENCER_CHECK_DURATION"),
 	}
 	CheckRecentTxsDepthFlag = &cli.IntFlag{
