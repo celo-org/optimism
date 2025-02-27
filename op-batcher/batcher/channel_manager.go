@@ -112,6 +112,7 @@ func (s *channelManager) TxConfirmed(_id txID, inclusionBlock eth.BlockID) {
 	if channel, ok := s.txChannels[id]; ok {
 		delete(s.txChannels, id)
 		if timedOut := channel.TxConfirmed(id, inclusionBlock); timedOut {
+			s.log.Warn("channel timed out on chain", "channel_id", channel.ID(), "tx_id", id)
 			s.handleChannelInvalidated(channel)
 		}
 	} else {
@@ -497,22 +498,6 @@ func (s *channelManager) PendingDABytes() int64 {
 		return math.MinInt64
 	}
 	return int64(f)
-}
-
-// CheckExpectedProgress uses the supplied syncStatus to infer
-// whether the node providing the status has made the expected
-// safe head progress given fully submitted channels held in
-// state.
-func (m *channelManager) CheckExpectedProgress(syncStatus eth.SyncStatus) error {
-	for _, ch := range m.channelQueue {
-		if ch.isFullySubmitted() && // This implies a number of l1 confirmations has passed, depending on how the txmgr was configured
-			!ch.isTimedOut() &&
-			syncStatus.CurrentL1.Number > ch.maxInclusionBlock &&
-			syncStatus.SafeL2.Number < ch.LatestL2().Number {
-			return errors.New("safe head did not make expected progress")
-		}
-	}
-	return nil
 }
 
 func (m *channelManager) LastStoredBlock() eth.BlockID {
