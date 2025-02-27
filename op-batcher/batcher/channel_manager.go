@@ -127,11 +127,21 @@ func (s *channelManager) TxConfirmed(_id txID, inclusionBlock eth.BlockID) {
 // in the block queue and the blockCursor is ahead of it.
 // Panics if the block is not in state.
 func (s *channelManager) rewindToBlock(block eth.BlockID) {
+	initialCursor := s.blockCursor
 	idx := block.Number - s.blocks[0].Number().Uint64()
 	if s.blocks[idx].Hash() == block.Hash && idx < uint64(s.blockCursor) {
 		s.blockCursor = int(idx)
 	} else {
-		panic("tried to rewind to nonexistent block")
+		panic("rewindToBlock: tried to rewind to nonexistent block")
+	}
+
+	// Ensure metrics stay in sync by re-adding blocks which the cursor rewound over
+	for i := initialCursor - 1; i >= s.blockCursor; i-- {
+		block, ok := s.blocks.PeekN(i)
+		if !ok {
+			panic("rewindToBlock: block not found at index " + fmt.Sprint(i))
+		}
+		s.metr.RecordL2BlockInPendingQueue(block)
 	}
 }
 
@@ -146,21 +156,40 @@ func (s *channelManager) handleChannelInvalidated(c *channel) {
 		// In that case we end up with an empty frame (header only),
 		// and there are no blocks to requeue.
 		blockID := eth.ToBlockID(c.channelBuilder.blocks[0])
-		for _, block := range c.channelBuilder.blocks {
-			s.metr.RecordL2BlockInPendingQueue(block)
-		}
 		s.rewindToBlock(blockID)
 	} else {
 		s.log.Debug("channelManager.handleChannelInvalidated: channel had no blocks")
 	}
 
-	// Trim provided channel and any older channels:
+	// Trim provided channel and any newer channels:
+	invalidatedChannelIdx := 0
+
 	for i := range s.channelQueue {
 		if s.channelQueue[i] == c {
-			s.channelQueue = s.channelQueue[:i]
+			invalidatedChannelIdx = i
 			break
 		}
 	}
+
+	for i := invalidatedChannelIdx; i < len(s.channelQueue); i++ {
+		s.log.Warn("Dropped channel",
+			"id", s.channelQueue[i].ID(),
+			"none_submitted", s.channelQueue[i].NoneSubmitted(),
+			"fully_submitted", s.channelQueue[i].isFullySubmitted(),
+			"timed_out", s.channelQueue[i].isTimedOut(),
+			"full_reason", s.channelQueue[i].FullErr(),
+			"oldest_l2", s.channelQueue[i].OldestL2(),
+			"newest_l2", s.channelQueue[i].LatestL2(),
+		)
+		// Remove the channel from the txChannels map
+		for txID := range s.txChannels {
+			if s.txChannels[txID] == s.channelQueue[i] {
+				delete(s.txChannels, txID)
+			}
+		}
+	}
+	s.channelQueue = s.channelQueue[:invalidatedChannelIdx]
+
 	s.metr.RecordChannelQueueLength(len(s.channelQueue))
 
 	// We want to start writing to a new channel, so reset currentChannel.
