@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"path"
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -36,6 +35,8 @@ func NewBeaconClient() *beaconClient {
 func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint64) (common.Hash, error) {
 	// Find the epoch starting at or before the L2 start time.
 	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / 32
+
+	fmt.Printf("initial epoch number: %d\n", epochNumber)
 	// This epoch is not guaranted to be complete at L2 start time, so assuming it is not complete.
 	// The previous epoch is the most recent completed epoch.
 	// The one prior to that is the most recent justified epoch.
@@ -45,6 +46,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	var err error
 	names := [2]string{"completed", "justified"}
 
+	fmt.Printf("starting epochNumber %d\n", epochNumber)
 	// Check the most recent completed and justified epochs had a participation rate of at least 0.76.
 	for i := uint64(1); i <= 2; i++ {
 		epoch, err = c.Epoch(context.Background(), epochNumber-i)
@@ -58,6 +60,8 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	// Calculate the first slot of the most recent justified epoch.
 	mostRecentFinalizedSlot := (epochNumber - 2) * 32
 
+	fmt.Printf("most recent finalized slot %d\n", mostRecentFinalizedSlot)
+
 	// Find the most recent actual finalized block, slots can be empty so we search back if we encounter empty slots.
 	// We check up to 10 slots, if they are all empty something must be wrong.
 	var beaconBlock *BeaconBlock
@@ -65,6 +69,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 		beaconBlock, err = c.BeaconBlock(context.Background(), mostRecentFinalizedSlot-i)
 		if errors.Is(err, ethereum.NotFound) {
 			// If there is not block for this slot then skip to the next.
+			println("checking prev block")
 			continue
 		}
 		if err != nil {
@@ -73,6 +78,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 		if !beaconBlock.Finalized {
 			return common.Hash{}, fmt.Errorf("expecting beacon block at slot %d to be finalized", mostRecentFinalizedSlot)
 		}
+		break // We found a good block.
 	}
 	if beaconBlock == nil {
 		return common.Hash{}, fmt.Errorf("failed to find finalized block searching up to 10 slots back from the most recent finalized slot (%d) at the L2 fork time (%d)", mostRecentFinalizedSlot, l2StartTimeSeconds)
@@ -83,7 +89,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err error) {
 	headers := http.Header{}
 	headers.Add("Accept", "application/json")
-	resp, err := c.cl.Get(path.Join("https://beaconcha.in/api/v1/epoch/", fmt.Sprintf("%d", num)))
+	resp, err := c.cl.Get(fmt.Sprintf("https://beaconcha.in/api/v1/epoch/%d", num))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch epoch: %w", err)
 	}
@@ -93,6 +99,7 @@ func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to fetch epoch, http status %d", resp.StatusCode)
 	}
+	epoch = &Epoch{}
 	if err := json.NewDecoder(resp.Body).Decode(epoch); err != nil {
 		return nil, fmt.Errorf("failed to decode epoch: %w", err)
 	}
@@ -102,7 +109,7 @@ func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err
 func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *BeaconBlock, err error) {
 	headers := http.Header{}
 	headers.Add("Accept", "application/json")
-	resp, err := c.cl.Get(path.Join("https://eth-beacon-chain.drpc.org/rest/eth/v2/beacon/blocks", fmt.Sprintf("%d", slot)))
+	resp, err := c.cl.Get(fmt.Sprintf("https://eth-beacon-chain.drpc.org/rest/eth/v2/beacon/blocks/%d", slot))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch becon block: %w", err)
 	}
