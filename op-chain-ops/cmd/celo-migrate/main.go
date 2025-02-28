@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rpc"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -300,7 +298,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
-	if err = runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
+	if err = runStateMigration(head, opts.newDBPath, opts.stateMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run state migration: %w", err)
 	}
 
@@ -396,7 +394,7 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 	return nil
 }
 
-func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
+func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMigrationOptions) error {
 	defer timer("state migration")()
 
 	log.Info("State Migration Started", "newDBPath", newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
@@ -421,39 +419,30 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 	config.SetDeployments(deployments)
 
-	// Get latest block information from L1
+	if config.L1StartingBlockTag != nil {
+		log.Info(fmt.Sprintf("Ignoring l1StartingBlockTag set to %v, the l1StartingBlockTag all be selected by the migration script", config.L1StartingBlockTag))
+	}
+
+	// Find the L1 starting block, make the L2 fork block occur 1 minute after the last celo L1 block.
+	l2ForkBlockTime := celoL1Head.Time + 60
+	// Wait for the L2 start time before we calculate the L1 starting block.
+	tillL2Start := int64(l2ForkBlockTime) - time.Now().Unix()
+	if tillL2Start >= 0 {
+		time.Sleep(time.Duration(tillL2Start+1) * time.Second)
+	}
+	l1StartingBlockHash, err := NewBeaconClient().MostRecentFinalizedL1BlockAtTime(l2ForkBlockTime)
 	var l1StartBlock *types.Block
 	client, err := ethclient.Dial(opts.l1RPC)
 	if err != nil {
 		return fmt.Errorf("cannot dial %s: %w", opts.l1RPC, err)
 	}
-
-	if config.L1StartingBlockTag == nil {
-		l1StartBlock, err = client.BlockByNumber(context.Background(), nil)
-		if err != nil {
-			return fmt.Errorf("cannot fetch latest block: %w", err)
-		}
-		tag := rpc.BlockNumberOrHashWithHash(l1StartBlock.Hash(), true)
-		config.L1StartingBlockTag = (*genesis.MarshalableRPCBlockNumberOrHash)(&tag)
-	} else if config.L1StartingBlockTag.BlockHash != nil {
-		l1StartBlock, err = client.BlockByHash(context.Background(), *config.L1StartingBlockTag.BlockHash)
-		if err != nil {
-			return fmt.Errorf("cannot fetch block by hash: %w", err)
-		}
-	} else if config.L1StartingBlockTag.BlockNumber != nil {
-		l1StartBlock, err = client.BlockByNumber(context.Background(), big.NewInt(config.L1StartingBlockTag.BlockNumber.Int64()))
-		if err != nil {
-			return fmt.Errorf("cannot fetch block by number: %w", err)
-		}
+	l1StartBlock, err = client.BlockByHash(context.Background(), l1StartingBlockHash)
+	if err != nil {
+		return fmt.Errorf("failed to fetch l1startingBlock by hash (%v): %w", l1StartingBlockHash, err)
 	}
+	log.Info(fmt.Sprintf("Selected l1StartingBlock as block (%d), with hash (%v)", l1StartBlock.Number(), l1StartBlock.Hash()))
 
-	// Ensure that there is a starting L1 block
-	if l1StartBlock == nil {
-		return fmt.Errorf("no starting L1 block")
-	}
-	l1startingBlockHash := l1StartBlock.Hash()
-	config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1startingBlockHash}
-
+	config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartingBlockHash}
 	// Sanity check the config. Do this after filling in the L1StartingBlockTag
 	// if it is not defined.
 	if err := config.Check(log.New()); err != nil {
