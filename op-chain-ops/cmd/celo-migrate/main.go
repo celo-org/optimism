@@ -116,12 +116,12 @@ var (
 	}
 	l1BeaconRPCFlag = &cli.StringFlag{
 		Name:     "l1-beacon-rpc",
-		Usage:    "RPC URL for a node of the L1 beacon chain",
+		Usage:    "RPC URL for a node of the L1 beacon chain, required for mainnet migrations but not for alfajores or baklava",
 		Required: false,
 	}
 	l1BeaconchainURLFlag = &cli.StringFlag{
 		Name:     "l1-beaconcha.in-url",
-		Usage:    "API URL for beaconcha.in",
+		Usage:    "API URL for beaconcha.in, (https://beaconcha.in/api) required for mainnet migrations but not for alfajores or baklava",
 		Required: false,
 	}
 
@@ -143,6 +143,8 @@ var (
 		outfileGenesisFlag,
 		migrationBlockTimeFlag,
 		migrationBlockNumberFlag,
+		l1BeaconRPCFlag,
+		l1BeaconchainURLFlag,
 	)
 	dbCheckFlags = []cli.Flag{
 		dbCheckPathFlag,
