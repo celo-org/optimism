@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -70,8 +71,8 @@ var (
 	}
 	migrationBlockTimeFlag = &cli.Uint64Flag{
 		Name:     "migration-block-time",
-		Usage:    "Specifies a unix timestamp to use for the migration block. This should be set to the same timestamp as was used for the sequencer migration. If performing the sequencer migration, this should set to a time in the future around when the migration script is expected to complete.",
-		Required: true,
+		Usage:    "Specifies a unix timestamp to use for the migration block, a required parameter for alfajores(1727339320) and baklava(1740081460) migrations, but not required for the mainnet migration.",
+		Required: false,
 	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
@@ -286,6 +287,15 @@ func runFullMigration(opts fullMigrationOptions) error {
 		return fmt.Errorf("old-db head block number not synced to the block immediately before the migration block number: %d != %d", head.Number.Uint64(), opts.migrationBlockNumber-1)
 	}
 
+	// Check that either both migration block time and l1StartingBlockTag are set or unset.
+	config, err := genesis.NewDeployConfig(opts.deployConfig)
+	if err != nil {
+		return err
+	}
+	if (opts.migrationBlockTime != 0) != (config.L1StartingBlockTag != nil) {
+		return fmt.Errorf("if the migration-block-time flag is specified, the l1StartingBlockTag in the deploy config must also be specified and vice versa")
+	}
+
 	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
 
 	var numAncients uint64
@@ -419,30 +429,53 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 	}
 	config.SetDeployments(deployments)
 
-	if config.L1StartingBlockTag != nil {
-		log.Info(fmt.Sprintf("Ignoring l1StartingBlockTag set to %v, the l1StartingBlockTag all be selected by the migration script", config.L1StartingBlockTag))
-	}
-
-	// Find the L1 starting block, make the L2 fork block occur 1 minute after the last celo L1 block.
-	l2ForkBlockTime := celoL1Head.Time + 60
-	// Wait for the L2 start time before we calculate the L1 starting block.
-	tillL2Start := int64(l2ForkBlockTime) - time.Now().Unix()
-	if tillL2Start >= 0 {
-		time.Sleep(time.Duration(tillL2Start+1) * time.Second)
-	}
-	l1StartingBlockHash, err := NewBeaconClient().MostRecentFinalizedL1BlockAtTime(l2ForkBlockTime)
 	var l1StartBlock *types.Block
 	client, err := ethclient.Dial(opts.l1RPC)
 	if err != nil {
 		return fmt.Errorf("cannot dial %s: %w", opts.l1RPC, err)
 	}
-	l1StartBlock, err = client.BlockByHash(context.Background(), l1StartingBlockHash)
-	if err != nil {
-		return fmt.Errorf("failed to fetch l1startingBlock by hash (%v): %w", l1StartingBlockHash, err)
+	// If the L1 starting block tag is not set, we determine it dynamically by
+	// finding the most recent final L1 block at the time of the L2 fork block.
+	if config.L1StartingBlockTag == nil {
+		// Find the L1 starting block, the L2 fork block occurs 1 minute after the last celo L1 block.
+		opts.migrationBlockTime = celoL1Head.Time + 60
+		// Wait for the L2 start time before we calculate the L1 starting block.
+		tillL2Start := int64(opts.migrationBlockTime) - time.Now().Unix()
+		if tillL2Start >= 0 {
+			time.Sleep(time.Duration(tillL2Start+1) * time.Second)
+		}
+		l1StartingBlockHash, err := NewBeaconClient().MostRecentFinalizedL1BlockAtTime(opts.migrationBlockTime)
+		if err != nil {
+			return fmt.Errorf("failed to fetch l1startingBlock by time (%v): %w", opts.migrationBlockTime, err)
+		}
+		config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartingBlockHash}
 	}
-	log.Info(fmt.Sprintf("Selected l1StartingBlock as block (%d), with hash (%v)", l1StartBlock.Number(), l1StartBlock.Hash()))
 
-	config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartingBlockHash}
+	if config.L1StartingBlockTag.BlockHash != nil {
+		l1StartBlock, err = client.BlockByHash(context.Background(), *config.L1StartingBlockTag.BlockHash)
+		if err != nil {
+			return fmt.Errorf("failed to fetch l1startingBlock by hash (%v): %w", config.L1StartingBlockTag.BlockHash, err)
+		}
+	} else if config.L1StartingBlockTag.BlockNumber != nil {
+		l1StartBlock, err = client.BlockByNumber(context.Background(), big.NewInt(config.L1StartingBlockTag.BlockNumber.Int64()))
+		if err != nil {
+			return fmt.Errorf("failed to fetch l1startingBlock by number (%v): %w", config.L1StartingBlockTag.BlockNumber, err)
+		}
+	}
+
+	// We want to ensure that we have sufficient time to start the sequencer
+	// before it exceeds max sequencer drift which is currently 2892s ==
+	// 48.2mins. Devops need about 7 mins to get the sequencer started after the
+	// migration script is run. We give them a 10 minute buffer in case of any
+	// issues, but if we are outside of this range we will fail here.
+	if config.MaxSequencerDrift-(opts.migrationBlockTime-l1StartBlock.Time()) < 17*60 {
+		return fmt.Errorf(
+			"l1StartingBlock is too far in the past, too much chance that the first sequencer block will exceed max sequencer drift: %v",
+			l1StartBlock.Time(),
+		)
+	}
+
+	log.Info(fmt.Sprintf("Selected l1StartingBlock as block (%d), with hash (%v)", l1StartBlock.Number(), l1StartBlock.Hash()))
 	// Sanity check the config. Do this after filling in the L1StartingBlockTag
 	// if it is not defined.
 	if err := config.Check(log.New()); err != nil {
