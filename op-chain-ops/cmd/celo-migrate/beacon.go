@@ -38,7 +38,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / beaconSlotsPerEpoch
 
 	fmt.Printf("initial epoch number: %d\n", epochNumber)
-	// This epoch is not guaranted to be complete at L2 start time, so assuming it is not complete.
+	// This epoch is not guaranteed to be complete at L2 start time, so assuming it is not complete.
 	// The previous epoch is the most recent completed epoch.
 	// The one prior to that is the most recent justified epoch.
 	// And the first block of the justified epoch (the epoch boundary block) will be finalized.
