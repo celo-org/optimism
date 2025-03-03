@@ -471,7 +471,7 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		}
 		l1StartingBlockHash, err := NewBeaconClient(opts.l1BeaconRPC, opts.l1BeaconchainURL).MostRecentFinalizedL1BlockAtTime(opts.migrationBlockTime)
 		if err != nil {
-			return fmt.Errorf("failed to fetch l1startingBlock by time (%v): %w", opts.migrationBlockTime, err)
+			return fmt.Errorf("failed to fetch l1startingBlock based on L2 starting block time time (%v): %w", opts.migrationBlockTime, err)
 		}
 		config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartingBlockHash}
 	}
@@ -493,10 +493,11 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 	// 48.2mins. Devops need about 7 mins to get the sequencer started after the
 	// migration script is run. We give them a 10 minute buffer in case of any
 	// issues, but if we are outside of this range we will fail here.
-	if config.MaxSequencerDrift-(opts.migrationBlockTime-l1StartBlock.Time()) < 17*60 {
+	var maxSequencerDriftCelo uint64 = 2892 // Duplicate of the value defined at op-node/rollup.maxSequencerDriftCelo
+	if maxSequencerDriftCelo-(opts.migrationBlockTime-l1StartBlock.Time()) < 17*60 {
 		return fmt.Errorf(
-			"l1StartingBlock is too far in the past, too much chance that the first sequencer block will exceed max sequencer drift: %v",
-			l1StartBlock.Time(),
+			"l1StartingBlock time (%v) is too far before L2 start block time (%v), too much chance that the first sequencer block will exceed max sequencer drift (%v)",
+			l1StartBlock.Time(), opts.migrationBlockTime, maxSequencerDriftCelo,
 		)
 	}
 
