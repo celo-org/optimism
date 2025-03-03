@@ -114,6 +114,16 @@ var (
 		Usage: "Fail fast on the first error encountered. If set, the db check will stop on the first error encountered, otherwise it will continue to check all blocks and print out all errors at the end.",
 		Value: false,
 	}
+	l1BeaconRPCFlag = &cli.StringFlag{
+		Name:     "l1-beacon-rpc",
+		Usage:    "RPC URL for a node of the L1 beacon chain",
+		Required: false,
+	}
+	l1BeaconchainURLFlag = &cli.StringFlag{
+		Name:     "l1-beaconcha.in-url",
+		Usage:    "API URL for beaconcha.in",
+		Required: false,
+	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -158,6 +168,8 @@ type stateMigrationOptions struct {
 	outfileRollupConfig string
 	outfileGenesis      string
 	migrationBlockTime  uint64
+	l1BeaconRPC         string
+	l1BeaconchainURL    string
 }
 
 type fullMigrationOptions struct {
@@ -192,6 +204,8 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
 		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
 		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
+		l1BeaconRPC:         ctx.String(l1BeaconRPCFlag.Name),
+		l1BeaconchainURL:    ctx.String(l1BeaconchainURLFlag.Name),
 	}
 }
 
@@ -287,13 +301,20 @@ func runFullMigration(opts fullMigrationOptions) error {
 		return fmt.Errorf("old-db head block number not synced to the block immediately before the migration block number: %d != %d", head.Number.Uint64(), opts.migrationBlockNumber-1)
 	}
 
-	// Check that either both migration block time and l1StartingBlockTag are set or unset.
 	config, err := genesis.NewDeployConfig(opts.deployConfig)
 	if err != nil {
 		return err
 	}
-	if (opts.migrationBlockTime != 0) != (config.L1StartingBlockTag != nil) {
+	switch {
+	case (opts.migrationBlockTime != 0) != (config.L1StartingBlockTag != nil):
+		// Check that either both migration block time and l1StartingBlockTag are set or unset.
 		return fmt.Errorf("if the migration-block-time flag is specified, the l1StartingBlockTag in the deploy config must also be specified and vice versa")
+	case (opts.l1BeaconRPC != "") != (opts.l1BeaconchainURL != ""):
+		// Check that either both l1BeaconRPC and l1BeaconchainURL are set or unset.
+		return fmt.Errorf("if the l1-beacon-rpc flag is specified, the l1-beaconchain-url must also be specified and vice versa")
+	case (opts.migrationBlockTime == 0) != (opts.l1BeaconRPC == ""):
+		// Check that either the migration block time and l1StartingBlockTag pair or the l1BeaconRPC and l1BeaconchainURL pair is set but not both.
+		return fmt.Errorf("either (migration-block-time and l1StartingBlockTag) or (l1-beacon-rpc and l1-beaconchain-url) flags must be specified")
 	}
 
 	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
