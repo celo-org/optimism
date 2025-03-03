@@ -467,7 +467,7 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		if tillL2Start >= 0 {
 			time.Sleep(time.Duration(tillL2Start+1) * time.Second)
 		}
-		l1StartingBlockHash, err := NewBeaconClient().MostRecentFinalizedL1BlockAtTime(opts.migrationBlockTime)
+		l1StartingBlockHash, err := NewBeaconClient(opts.l1BeaconRPC, opts.l1BeaconchainURL).MostRecentFinalizedL1BlockAtTime(opts.migrationBlockTime)
 		if err != nil {
 			return fmt.Errorf("failed to fetch l1startingBlock by time (%v): %w", opts.migrationBlockTime, err)
 		}

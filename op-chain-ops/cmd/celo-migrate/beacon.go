@@ -22,11 +22,17 @@ const (
 
 type beaconClient struct {
 	cl *http.Client
+	// A beaconchain RPC API endpoint.
+	beaconRPC string
+	// A becaoncha.in api endpoint.
+	beaconchainURL string
 }
 
-func NewBeaconClient() *beaconClient {
+func NewBeaconClient(beaconRPC string, beaconchainURL string) *beaconClient {
 	return &beaconClient{
-		cl: &http.Client{},
+		beaconRPC:      beaconRPC,
+		beaconchainURL: beaconchainURL,
+		cl:             &http.Client{},
 	}
 }
 
@@ -89,7 +95,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err error) {
 	headers := http.Header{}
 	headers.Add("Accept", "application/json")
-	resp, err := c.cl.Get(fmt.Sprintf("https://beaconcha.in/api/v1/epoch/%d", num))
+	resp, err := c.cl.Get(fmt.Sprintf("%s/v1/epoch/%d", c.beaconchainURL, num))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch epoch: %w", err)
 	}
@@ -110,7 +116,7 @@ func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err
 func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *BeaconBlock, err error) {
 	headers := http.Header{}
 	headers.Add("Accept", "application/json")
-	resp, err := c.cl.Get(fmt.Sprintf("https://eth-beacon-chain.drpc.org/rest/eth/v2/beacon/blocks/%d", slot))
+	resp, err := c.cl.Get(fmt.Sprintf("%s/eth/v2/beacon/blocks/%d", c.beaconRPC, slot))
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch becon block: %w", err)
 	}
