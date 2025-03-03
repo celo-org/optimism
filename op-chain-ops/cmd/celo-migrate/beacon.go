@@ -16,6 +16,7 @@ import (
 const (
 	beaconChainGenesisTimeSeconds  = 1606824000
 	beaconChainSlotDurationSeconds = 12
+	beaconSlotsPerEpoch            = 32
 )
 
 type beaconClient struct {
