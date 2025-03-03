@@ -35,7 +35,7 @@ func NewBeaconClient() *beaconClient {
 // looks back from there to find the first finalized block.
 func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint64) (common.Hash, error) {
 	// Find the epoch starting at or before the L2 start time.
-	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / 32
+	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / beaconSlotsPerEpoch
 
 	fmt.Printf("initial epoch number: %d\n", epochNumber)
 	// This epoch is not guaranted to be complete at L2 start time, so assuming it is not complete.
@@ -48,7 +48,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	names := [2]string{"completed", "justified"}
 
 	fmt.Printf("starting epochNumber %d\n", epochNumber)
-	// Check the most recent completed and justified epochs had a participation rate of at least 0.76.
+	// Check the most recent completed and justified epochs had a participation rate of at least 0.67.
 	for i := uint64(1); i <= 2; i++ {
 		epoch, err = c.Epoch(context.Background(), epochNumber-i)
 		if err != nil {
@@ -59,7 +59,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 		}
 	}
 	// Calculate the first slot of the most recent justified epoch.
-	mostRecentFinalizedSlot := (epochNumber - 2) * 32
+	mostRecentFinalizedSlot := (epochNumber - 2) * beaconSlotsPerEpoch
 
 	fmt.Printf("most recent finalized slot %d\n", mostRecentFinalizedSlot)
 
@@ -131,12 +131,12 @@ func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 
 // Returns the start time of an epoch
 func EpochStartTime(epoch uint64) uint64 {
-	return beaconChainGenesisTimeSeconds + epoch*32*beaconChainSlotDurationSeconds
+	return beaconChainGenesisTimeSeconds + epoch*beaconSlotsPerEpoch*beaconChainSlotDurationSeconds
 }
 
 // Returns the number of the epoch starting at or before the given time.
 func EpochAtOrBefore(unixTime uint64) uint64 {
-	return SlotAtOrBefore(unixTime) / 32
+	return SlotAtOrBefore(unixTime) / beaconSlotsPerEpoch
 }
 
 func SlotAtOrBefore(unixTime uint64) uint64 {
