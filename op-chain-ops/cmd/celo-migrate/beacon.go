@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	// See - https://eth2book.info/capella/part3/containers/state/
 	beaconChainGenesisTimeSeconds  = 1606824000
 	beaconChainSlotDurationSeconds = 12
 	beaconSlotsPerEpoch            = 32
