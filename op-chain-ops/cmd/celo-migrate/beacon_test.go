@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"testing"
 	"time"
 
@@ -49,7 +48,6 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 }
 
 func checkFinalizedL1BlockSelection(t *testing.T, bc *beaconClient, targetTime, expectedSlot uint64, expectedBlockHash common.Hash) {
-	fmt.Printf("checking finalized L1 block selection for target time %d, expected slot %d, expected block hash %s\n", targetTime, expectedSlot, expectedBlockHash.String())
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
 	calculatedHash, err := bc.MostRecentFinalizedL1BlockAtTime(targetTime)

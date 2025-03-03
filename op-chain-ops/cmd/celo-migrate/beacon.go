@@ -38,7 +38,6 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	// Find the epoch starting at or before the L2 start time.
 	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / beaconSlotsPerEpoch
 
-	fmt.Printf("initial epoch number: %d\n", epochNumber)
 	// This epoch is not guaranteed to be complete at L2 start time, so assuming it is not complete.
 	// The previous epoch is the most recent completed epoch.
 	// The one prior to that is the most recent justified epoch.
@@ -48,7 +47,6 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	var err error
 	names := [2]string{"completed", "justified"}
 
-	fmt.Printf("starting epochNumber %d\n", epochNumber)
 	// Check the most recent completed and justified epochs had a participation rate of at least 0.67.
 	for i := uint64(1); i <= 2; i++ {
 		epoch, err = c.Epoch(context.Background(), epochNumber-i)
@@ -62,8 +60,6 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	// Calculate the first slot of the most recent justified epoch.
 	mostRecentFinalizedSlot := (epochNumber - 2) * beaconSlotsPerEpoch
 
-	fmt.Printf("most recent finalized slot %d\n", mostRecentFinalizedSlot)
-
 	// Find the most recent actual finalized block, slots can be empty so we search back if we encounter empty slots.
 	// We check up to 10 slots, if they are all empty something must be wrong.
 	var beaconBlock *BeaconBlock
@@ -71,7 +67,6 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 		beaconBlock, err = c.BeaconBlock(context.Background(), mostRecentFinalizedSlot-i)
 		if errors.Is(err, ethereum.NotFound) {
 			// If there is not block for this slot then skip to the next.
-			println("checking prev block")
 			continue
 		}
 		if err != nil {
