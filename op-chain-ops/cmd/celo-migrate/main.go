@@ -305,6 +305,8 @@ func runFullMigration(opts fullMigrationOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// Verify that (migration-block-time and l1StartingBlockTag) or (l1-beacon-rpc and l1-beaconchain-url) are set.
 	switch {
 	case (opts.migrationBlockTime != 0) != (config.L1StartingBlockTag != nil):
 		// Check that either both migration block time and l1StartingBlockTag are set or unset.
@@ -312,7 +314,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 	case (opts.l1BeaconRPC != "") != (opts.l1BeaconchainURL != ""):
 		// Check that either both l1BeaconRPC and l1BeaconchainURL are set or unset.
 		return fmt.Errorf("if the l1-beacon-rpc flag is specified, the l1-beaconchain-url must also be specified and vice versa")
-	case (opts.migrationBlockTime == 0) != (opts.l1BeaconRPC == ""):
+	case (opts.migrationBlockTime == 0) == (opts.l1BeaconRPC == ""):
 		// Check that either the migration block time and l1StartingBlockTag pair or the l1BeaconRPC and l1BeaconchainURL pair is set but not both.
 		return fmt.Errorf("either (migration-block-time and l1StartingBlockTag) or (l1-beacon-rpc and l1-beaconchain-url) flags must be specified")
 	}
