@@ -38,7 +38,8 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	// Find the epoch starting at or before the L2 start time.
 	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / beaconSlotsPerEpoch
 
-	// This epoch is not guaranteed to be complete at L2 start time, so assuming it is not complete.
+	// This epoch is guaranteed to not be complete at L2 start time (if the L2 start time falls in the last
+	// second of the epoch the epoch is still not complete, and if it was we'd be selecting the next epoch)
 	// The previous epoch is the most recent completed epoch.
 	// The one prior to that is the most recent justified epoch.
 	// And the first block of the justified epoch (the epoch boundary block) will be finalized.
@@ -60,8 +61,9 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	// Calculate the first slot of the most recent justified epoch.
 	mostRecentFinalizedSlot := (epochNumber - 2) * beaconSlotsPerEpoch
 
-	// Find the most recent actual finalized block, slots can be empty so we search back if we encounter empty slots.
-	// We check up to 10 slots, if they are all empty something must be wrong.
+	// Find the most recent actual finalized block, slots can be empty so we
+	// search back if we encounter empty slots. We check up to 10 slots, if they
+	// are all empty something serious is wrong with the L1 so we abort.
 	var beaconBlock *BeaconBlock
 	for i := uint64(0); i < 10; i++ {
 		beaconBlock, err = c.BeaconBlock(context.Background(), mostRecentFinalizedSlot-i)
@@ -83,6 +85,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), nil
 }
 
+// Gets the epoch from the beaconcha.in api
 func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err error) {
 	headers := http.Header{}
 	headers.Add("Accept", "application/json")
@@ -103,6 +106,7 @@ func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err
 	return epoch, nil
 }
 
+// Gets the beacon block from the beacon rpc api
 func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *BeaconBlock, err error) {
 	headers := http.Header{}
 	headers.Add("Accept", "application/json")
