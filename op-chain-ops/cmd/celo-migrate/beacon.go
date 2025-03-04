@@ -24,7 +24,7 @@ type beaconClient struct {
 	cl *http.Client
 	// A beaconchain RPC API endpoint.
 	beaconRPC string
-	// A becaoncha.in api endpoint.
+	// A beaconcha.in api endpoint.
 	beaconchainURL string
 }
 
