@@ -37,12 +37,12 @@ func NewBeaconClient(beaconRPC string, beaconchainURL string) *beaconClient {
 }
 
 // MostRecentFinalizedL1BlockAtTime returns the hash of the most recent
-// finalized L1 block at the L2 start time. It finds the epoch which started
-// most recently before the L2 start time (or on the L2 start time) and then
-// looks back from there to find the first finalized block.
-func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(ctx context.Context, l2StartTimeSeconds uint64) (common.Hash, error) {
+// finalized L1 block at the given point in time. It finds the epoch within which the
+// given time falls and then looks back from there to find the first finalized
+// block.
+func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(ctx context.Context, pointInTime uint64) (common.Hash, error) {
 	// Find the epoch starting at or before the L2 start time.
-	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / beaconSlotsPerEpoch
+	epochNumber := ContainingSlot(pointInTime) / beaconSlotsPerEpoch
 
 	// This epoch is guaranteed to not be complete at L2 start time (if the L2 start time falls in the last
 	// second of the epoch the epoch is still not complete, and if it was we'd be selecting the next epoch)
@@ -61,7 +61,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(ctx context.Context, l2S
 			return common.Hash{}, fmt.Errorf("error fetching epoch %d: %w", epochNumber-i, err)
 		}
 		if epoch.Data.Globalparticipationrate < 0.67 {
-			return common.Hash{}, fmt.Errorf("most recent %s epoch before the L2 start time (%d) has less than 0.67 participation rate (%.2f)", names[i-1], l2StartTimeSeconds, epoch.Data.Globalparticipationrate)
+			return common.Hash{}, fmt.Errorf("most recent %s epoch before the L2 start time (%d) has less than 0.67 participation rate (%.2f)", names[i-1], pointInTime, epoch.Data.Globalparticipationrate)
 		}
 	}
 	// Calculate the first slot of the most recent justified epoch.
@@ -86,7 +86,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(ctx context.Context, l2S
 		break // We found a good block.
 	}
 	if beaconBlock == nil {
-		return common.Hash{}, fmt.Errorf("failed to find finalized block searching up to 10 slots back from the most recent finalized slot (%d) at the L2 fork time (%d)", mostRecentFinalizedSlot, l2StartTimeSeconds)
+		return common.Hash{}, fmt.Errorf("failed to find finalized block searching up to 10 slots back from the most recent finalized slot (%d) at the L2 fork time (%d)", mostRecentFinalizedSlot, pointInTime)
 	}
 	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), nil
 }
@@ -144,13 +144,13 @@ func EpochStartTime(epoch uint64) uint64 {
 	return beaconChainGenesisTimeSeconds + (epoch * beaconSlotsPerEpoch * beaconChainSlotDurationSeconds)
 }
 
-// EpochAtOrBefore returns the number of the epoch starting at or before the given time.
-func EpochAtOrBefore(unixTime uint64) uint64 {
-	return SlotAtOrBefore(unixTime) / beaconSlotsPerEpoch
+// ContainingEpoch returns the number of the epoch whithin which the given time falls.
+func ContainingEpoch(unixTime uint64) uint64 {
+	return ContainingSlot(unixTime) / beaconSlotsPerEpoch
 }
 
-// SlotAtOrBefore returns the slot at or before the given time.
-func SlotAtOrBefore(unixTime uint64) uint64 {
+// ContainingSlot returns the slot within which the given time falls.
+func ContainingSlot(unixTime uint64) uint64 {
 	// Get the slot at or before the given time.
 	// Slot = (start - genesis) / slotDuration
 	return (unixTime - beaconChainGenesisTimeSeconds) / beaconChainSlotDurationSeconds

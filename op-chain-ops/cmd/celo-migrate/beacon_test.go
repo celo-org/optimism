@@ -28,7 +28,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 		checkFinalizedL1BlockSelection(t, bc, targetTime+beaconChainSlotDurationSeconds/2, expectedSlot, expectedL1BlockHash)
 	})
 
-	epochFirstSlotTime := EpochStartTime(EpochAtOrBefore(targetTime))
+	epochFirstSlotTime := EpochStartTime(ContainingEpoch(targetTime))
 	t.Run("StartEpochSlot", func(t *testing.T) {
 		checkFinalizedL1BlockSelection(t, bc, epochFirstSlotTime, expectedSlot, expectedL1BlockHash)
 	})
