@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
+import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
+import { LibString } from "@solady/utils/LibString.sol";
 import { Executables } from "scripts/libraries/Executables.sol";
 import { Process } from "scripts/libraries/Process.sol";
 import { Config, Fork, ForkUtils } from "scripts/libraries/Config.sol";
@@ -94,6 +96,8 @@ contract DeployConfig is Script {
 
     bool public deployCeloContracts;
 
+    string public l2ProxyAdminOwnerVerification;
+
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
         try vm.readFile(_path) returns (string memory data_) {
@@ -181,6 +185,40 @@ contract DeployConfig is Script {
         useInterop = _readOr(_json, "$.useInterop", false);
 
         deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
+
+        l2ProxyAdminOwnerVerification = stdJson.readString(_json, "$.l2ProxyAdminOwnerVerification");
+
+        verifyProxyAdminOwners();
+    }
+
+
+    /// @notice Performs a check on the ProxyAdmin owner addresses accross L1 and L2, based on the
+    /// `l2ProxyAdminOwnerVerification` parameter of the config.
+    /// Specifically:
+    /// - `finalSystemOwner` is the L1 ProxyAdmin owner address (used in Deploy.s.sol).
+    /// - `proxyAdminOwner` is the L2 ProxyAdmin owner address (used in L2Genesis.s.sol).
+    /// - `l2ProxyAdminOwnerVerification` can have one of three values:
+    ///   - `"no-check"`: No verification is performed, the addresses are taken as they are.
+    ///   - `"aliased"`: Verify that the L2 address is the aliased version of the L1 address. This
+    ///   should be used when both the L1 and L2 systems are owned by the same L1 contract address.
+    ///   - `"equal"`: Verify that both the addresses are equal. This should be used when both
+    ///   systems are owned by the same EOA address.
+    ///   See the following docs for details on address aliasing:
+    ///   https://docs.optimism.io/stack/differences#address-aliasing
+    function verifyProxyAdminOwners() public  {
+        if (LibString.eq(l2ProxyAdminOwnerVerification, "equal")) {
+            require(
+                finalSystemOwner == proxyAdminOwner,
+                "Expected finalSystemOwner and proxyAdminOwner to be equal"
+            );
+        } else if (LibString.eq(l2ProxyAdminOwnerVerification, "aliased")) {
+            address expectedAlias = AddressAliasHelper.applyL1ToL2Alias(finalSystemOwner);
+            require(expectedAlias == proxyAdminOwner, "Expected aliased address");
+        } else if (LibString.eq(l2ProxyAdminOwnerVerification, "no-check")) {
+            // no-op
+        } else {
+            require(false, "Incorrect value for l2ProxyAdminOwnerVerification");
+        }
     }
 
     function fork() public view returns (Fork fork_) {
@@ -254,6 +292,14 @@ contract DeployConfig is Script {
     function setUseCustomGasToken(address _token) public {
         useCustomGasToken = true;
         customGasTokenAddress = _token;
+    }
+
+    /// @notice Allow the ProxyAdmin owner configs (`finalSystemOwner`, `proxyAdminOwner`, and
+    /// `l2ProxyAdminOwnerVerification`) to be overriden in testing environments.
+    function setProxyAdminOwnerSettings(address l1Owner, address l2Owner, string calldata verification) public {
+        finalSystemOwner = l1Owner;
+        proxyAdminOwner = l2Owner;
+        l2ProxyAdminOwnerVerification = verification;
     }
 
     function latestGenesisFork() internal view returns (Fork) {
