@@ -141,7 +141,7 @@ func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 
 // EpochStartTime returns the start time of an epoch.
 func EpochStartTime(epoch uint64) uint64 {
-	return beaconChainGenesisTimeSeconds + epoch*beaconSlotsPerEpoch*beaconChainSlotDurationSeconds
+	return beaconChainGenesisTimeSeconds + (epoch * beaconSlotsPerEpoch * beaconChainSlotDurationSeconds)
 }
 
 // EpochAtOrBefore returns the number of the epoch starting at or before the given time.
