@@ -89,6 +89,7 @@ var (
 	unreleasedTreasuryAddressMap = map[uint64]common.Address{
 		AlfajoresNetworkID: common.HexToAddress("0x07bf0b2461A0cb608D5CF9a82ba97dAbA850F79F"),
 		BaklavaNetworkID:   common.HexToAddress("0x022c5d5837E177B6d145761feb4C5574e5b48F5e"),
+		MainnetNetworkID:   common.HexToAddress("0x7A8c7a833565fc428cdFBa20FE03fAfb178A434f"),
 	}
 )
 
