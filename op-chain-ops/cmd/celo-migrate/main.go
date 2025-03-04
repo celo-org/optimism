@@ -303,6 +303,8 @@ func runFullMigration(opts fullMigrationOptions) error {
 		return fmt.Errorf("old-db head block number not synced to the block immediately before the migration block number: %d != %d", head.Number.Uint64(), opts.migrationBlockNumber-1)
 	}
 
+	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
+
 	config, err := genesis.NewDeployConfig(opts.deployConfig)
 	if err != nil {
 		return err
@@ -320,8 +322,6 @@ func runFullMigration(opts fullMigrationOptions) error {
 		// Check that either the migration block time and l1StartingBlockTag pair or the l1BeaconRPC and l1BeaconchainURL pair is set but not both.
 		return fmt.Errorf("either (migration-block-time and l1StartingBlockTag) or (l1-beacon-rpc and l1-beaconchain-url) flags must be specified")
 	}
-
-	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
 
 	var numAncients uint64
 	var strayAncientBlocks []*rawdb.NumberHash
