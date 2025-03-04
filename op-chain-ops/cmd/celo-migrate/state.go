@@ -91,9 +91,7 @@ var (
 			// so we overwrite the existing contract during migration
 			common.HexToAddress("0x13b0d85ccb8bf860b6b79af3029fca081ae9bef2"): true,
 			// Permit2
-			// Has different values in the bytecode for the `_chainID` and `domainSeparator`,
-			// which both are dependend on the network's chain-id.
-			common.HexToAddress("0x000000000022d473030f116ddee9f6b43ac78ba3"): true,
+			common.HexToAddress("0x000000000022d473030f116ddee9f6b43ac78ba3"): false,
 			// EntryPoint_v070
 			common.HexToAddress("0x0000000071727de22e5e9d8baf0edac6f37da032"): false,
 			// DeterministicDeploymentProxy
