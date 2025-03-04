@@ -40,7 +40,7 @@ func NewBeaconClient(beaconRPC string, beaconchainURL string) *beaconClient {
 // finalized L1 block at the L2 start time. It finds the epoch which started
 // most recently before the L2 start time (or on the L2 start time) and then
 // looks back from there to find the first finalized block.
-func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint64) (common.Hash, error) {
+func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(ctx context.Context, l2StartTimeSeconds uint64) (common.Hash, error) {
 	// Find the epoch starting at or before the L2 start time.
 	epochNumber := SlotAtOrBefore(l2StartTimeSeconds) / beaconSlotsPerEpoch
 
@@ -56,7 +56,7 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 
 	// Check the most recent completed and justified epochs had a participation rate of at least 0.67.
 	for i := uint64(1); i <= 2; i++ {
-		epoch, err = c.Epoch(context.Background(), epochNumber-i)
+		epoch, err = c.Epoch(ctx, epochNumber-i)
 		if err != nil {
 			return common.Hash{}, fmt.Errorf("error fetching epoch %d: %w", epochNumber-i, err)
 		}
@@ -71,8 +71,8 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	// search back if we encounter empty slots. We check up to 10 slots, if they
 	// are all empty something serious is wrong with the L1 so we abort.
 	var beaconBlock *BeaconBlock
-	for i := uint64(0); i < 10; i++ {
-		beaconBlock, err = c.BeaconBlock(context.Background(), mostRecentFinalizedSlot-i)
+	for i := range uint64(10) {
+		beaconBlock, err = c.BeaconBlock(ctx, mostRecentFinalizedSlot-i)
 		if errors.Is(err, ethereum.NotFound) {
 			// If there is not block for this slot then skip to the next.
 			continue
@@ -91,11 +91,13 @@ func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(l2StartTimeSeconds uint6
 	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), nil
 }
 
-// Gets the epoch from the beaconcha.in api
+// Epoch gets the requested epoch from the beaconcha.in api.
 func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err error) {
-	headers := http.Header{}
-	headers.Add("Accept", "application/json")
-	resp, err := c.cl.Get(fmt.Sprintf("%s/v1/epoch/%d", c.beaconchainURL, num))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/v1/epoch/%d", c.beaconchainURL, num), nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request to get epoch: %w", err)
+	}
+	resp, err := c.cl.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch epoch: %w", err)
 	}
@@ -112,13 +114,15 @@ func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err
 	return epoch, nil
 }
 
-// Gets the beacon block from the beacon rpc api
+// BeaconBlock gets the beacon block from the beacon rpc api.
 func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *BeaconBlock, err error) {
-	headers := http.Header{}
-	headers.Add("Accept", "application/json")
-	resp, err := c.cl.Get(fmt.Sprintf("%s/eth/v2/beacon/blocks/%d", c.beaconRPC, slot))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/beacon/blocks/%d", c.beaconRPC, slot), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch becon block: %w", err)
+		return nil, fmt.Errorf("failed to create request to get beacon block: %w", err)
+	}
+	resp, err := c.cl.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch beacon block: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, resp.Body.Close())
@@ -135,16 +139,17 @@ func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 	return block, nil
 }
 
-// Returns the start time of an epoch
+// EpochStartTime returns the start time of an epoch.
 func EpochStartTime(epoch uint64) uint64 {
 	return beaconChainGenesisTimeSeconds + epoch*beaconSlotsPerEpoch*beaconChainSlotDurationSeconds
 }
 
-// Returns the number of the epoch starting at or before the given time.
+// EpochAtOrBefore returns the number of the epoch starting at or before the given time.
 func EpochAtOrBefore(unixTime uint64) uint64 {
 	return SlotAtOrBefore(unixTime) / beaconSlotsPerEpoch
 }
 
+// SlotAtOrBefore returns the slot at or before the given time.
 func SlotAtOrBefore(unixTime uint64) uint64 {
 	// Get the slot at or before the given time.
 	// Slot = (start - genesis) / slotDuration

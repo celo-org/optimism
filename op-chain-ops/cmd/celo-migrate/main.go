@@ -469,9 +469,12 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		if tillL2Start >= 0 {
 			time.Sleep(time.Duration(tillL2Start+1) * time.Second)
 		}
-		l1StartingBlockHash, err := NewBeaconClient(opts.l1BeaconRPC, opts.l1BeaconchainURL).MostRecentFinalizedL1BlockAtTime(opts.migrationBlockTime)
+		// MostRecentFinalizedL1BlockAtTime can a few seconds so we provide a suitably long context.
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		l1StartingBlockHash, err := NewBeaconClient(opts.l1BeaconRPC, opts.l1BeaconchainURL).MostRecentFinalizedL1BlockAtTime(ctx, opts.migrationBlockTime)
 		if err != nil {
-			return fmt.Errorf("failed to fetch l1startingBlock based on L2 starting block time time (%v): %w", opts.migrationBlockTime, err)
+			return fmt.Errorf("failed to fetch l1startingBlock based on L2 starting block time (%v): %w", opts.migrationBlockTime, err)
 		}
 		config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartingBlockHash}
 	}
