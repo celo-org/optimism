@@ -6,6 +6,7 @@ toolchain go1.24.10
 
 require (
 	github.com/BurntSushi/toml v1.5.0
+	github.com/Layr-Labs/eigenda-proxy/clients v1.0.1
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/andybalholm/brotli v1.1.0
 	github.com/base/go-bip39 v1.1.0
