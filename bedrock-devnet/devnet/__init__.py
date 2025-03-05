@@ -13,6 +13,7 @@ import concurrent.futures
 from collections import namedtuple
 # This import is necessary for devnet logs to be shown.
 from . import log_setup
+# Celo imports
 from copy import deepcopy
 
 pjoin = os.path.join
@@ -182,7 +183,7 @@ def devnet_l2_allocs(paths):
         shutil.move(src=input_path, dst=output_path)
         log.info("Generated L2 allocs: "+output_path)
 
-def merge_celo_state_into_genesis(state_dump_file, genesis_file, output_file):
+def merge_celo_state_into_genesis(state_dump_file, genesis_file, rollup_file, output_file):
     with open(state_dump_file, 'r') as f:
         state_dump = json.load(f)
 
@@ -212,6 +213,12 @@ def merge_celo_state_into_genesis(state_dump_file, genesis_file, output_file):
 
     with open(output_file, 'w') as f:
         json.dump(genesis, f, indent=2)
+
+    with open(rollup_file, 'r') as f:
+        rollup = json.load(f)
+    rollup['genesis']['l2']['hash'] = '0xde0411716a6fb51a8466ea2d3104e4e15e2d3c6df08a3bcb3f8bde57709f1fec'
+    with open(rollup_file, 'w') as f:
+        json.dump(rollup, f, indent=2)
 
     log.info(f"Merged state into genesis and saved to {output_file}")
 
@@ -277,7 +284,7 @@ def devnet_deploy(paths):
             '--outfile.rollup', paths.rollup_config_path
         ], cwd=paths.op_node_dir)
 
-    merge_celo_state_into_genesis(paths.celo_state_path, paths.genesis_l2_path, paths.genesis_l2_path)
+    merge_celo_state_into_genesis(paths.celo_state_path, paths.genesis_l2_path, paths.rollup_config_path, paths.genesis_l2_path)
     rollup_config = read_json(paths.rollup_config_path)
     addresses = read_json(paths.addresses_json_path)
 

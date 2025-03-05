@@ -184,6 +184,11 @@ devnet-up: pre-devnet ## Starts the local devnet
 	./ops/scripts/newer-file.sh .devnet/allocs-l1.json ./packages/contracts-bedrock \
 		|| make devnet-allocs
 	PYTHONPATH=./bedrock-devnet $(PYTHON) ./bedrock-devnet/main.py --monorepo-dir=.
+	sleep 15
+	@state_root=$$(docker logs ops-bedrock-op-node-1 2>/dev/null | grep 'expected L2 genesis hash to match L2 block at genesis block number 0' | tail -n1 | cut -d':' -f8 | cut -d'<' -f1 | tr -d ' ') && \
+	echo "State root: $$state_root" && \
+	jq --arg state_root "$$state_root" '.genesis.l2.hash = $$state_root' .devnet/rollup.json > tmp.json && mv -f tmp.json .devnet/rollup.json
+	docker restart ops-bedrock-op-challenger-1 ops-bedrock-op-batcher-1 ops-bedrock-op-proposer-1 ops-bedrock-op-node-1
 .PHONY: devnet-up
 
 devnet-test: pre-devnet ## Runs tests on the local devnet
