@@ -13,7 +13,7 @@ import concurrent.futures
 from collections import namedtuple
 # This import is necessary for devnet logs to be shown.
 from . import log_setup
-
+from copy import deepcopy
 
 pjoin = os.path.join
 
@@ -66,6 +66,7 @@ def main():
     contracts_bedrock_dir = pjoin(monorepo_dir, 'packages', 'contracts-bedrock')
     deployment_dir = pjoin(contracts_bedrock_dir, 'deployments', 'devnetL1')
     forge_l1_dump_path = pjoin(contracts_bedrock_dir, 'state-dump-900.json')
+    celo_state_path = pjoin(contracts_bedrock_dir, 'celo-devnet-state-dump.json')
     op_node_dir = pjoin(args.monorepo_dir, 'op-node')
     ops_bedrock_dir = pjoin(monorepo_dir, 'ops-bedrock')
     deploy_config_dir = pjoin(contracts_bedrock_dir, 'deploy-config')
@@ -87,6 +88,7 @@ def main():
       ops_bedrock_dir=ops_bedrock_dir,
       ops_chain_ops=ops_chain_ops,
       genesis_l1_path=pjoin(devnet_dir, 'genesis-l1.json'),
+      celo_state_path=celo_state_path,
       genesis_l2_path=pjoin(devnet_dir, 'genesis-l2.json'),
       allocs_l1_path=pjoin(devnet_dir, 'allocs-l1.json'),
       addresses_json_path=pjoin(devnet_dir, 'addresses.json'),
@@ -180,6 +182,38 @@ def devnet_l2_allocs(paths):
         shutil.move(src=input_path, dst=output_path)
         log.info("Generated L2 allocs: "+output_path)
 
+def merge_celo_state_into_genesis(state_dump_file, genesis_file, output_file):
+    with open(state_dump_file, 'r') as f:
+        state_dump = json.load(f)
+
+    with open(genesis_file, 'r') as f:
+        genesis = json.load(f)
+
+    genesis_alloc = genesis.get('alloc', {})
+    state_accounts = state_dump.get('accounts', {})
+
+    state_alloc = {}
+    for address, data in state_accounts.items():
+        addr = data.get('address', address).lower()
+        alloc_entry = {
+            'balance': data.get('balance', '0x0')
+        }
+        if 'code' in data and data['code'] and data['code'] != '0x':
+            alloc_entry['code'] = data['code']
+        if 'storage' in data and data['storage']:
+            alloc_entry['storage'] = data['storage']
+        state_alloc[addr] = alloc_entry
+
+    merged_alloc = deepcopy(genesis_alloc)  # Start with genesis alloc
+    for address, state_data in state_alloc.items():
+        merged_alloc[address] = state_data
+
+    genesis['alloc'] = merged_alloc
+
+    with open(output_file, 'w') as f:
+        json.dump(genesis, f, indent=2)
+
+    log.info(f"Merged state into genesis and saved to {output_file}")
 
 # Bring up the devnet where the contracts are deployed to L1
 def devnet_deploy(paths):
@@ -243,6 +277,7 @@ def devnet_deploy(paths):
             '--outfile.rollup', paths.rollup_config_path
         ], cwd=paths.op_node_dir)
 
+    merge_celo_state_into_genesis(paths.celo_state_path, paths.genesis_l2_path, paths.genesis_l2_path)
     rollup_config = read_json(paths.rollup_config_path)
     addresses = read_json(paths.addresses_json_path)
 
