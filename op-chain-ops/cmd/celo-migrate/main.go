@@ -25,6 +25,8 @@ import (
 
 	"github.com/urfave/cli/v2"
 
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -119,11 +121,6 @@ var (
 		Usage:    "RPC URL for a node of the L1 beacon chain, required for mainnet migrations but not for alfajores or baklava",
 		Required: false,
 	}
-	l1BeaconchainURLFlag = &cli.StringFlag{
-		Name:     "l1-beaconcha.in-url",
-		Usage:    "API URL for beaconcha.in, (https://beaconcha.in/api) required for mainnet migrations but not for alfajores or baklava",
-		Required: false,
-	}
 
 	preMigrationFlags = []cli.Flag{
 		oldDBPathFlag,
@@ -144,7 +141,6 @@ var (
 		migrationBlockTimeFlag,
 		migrationBlockNumberFlag,
 		l1BeaconRPCFlag,
-		l1BeaconchainURLFlag,
 	)
 	dbCheckFlags = []cli.Flag{
 		dbCheckPathFlag,
@@ -171,7 +167,6 @@ type stateMigrationOptions struct {
 	outfileGenesis      string
 	migrationBlockTime  uint64
 	l1BeaconRPC         string
-	l1BeaconchainURL    string
 }
 
 type fullMigrationOptions struct {
@@ -207,7 +202,6 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
 		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
 		l1BeaconRPC:         ctx.String(l1BeaconRPCFlag.Name),
-		l1BeaconchainURL:    ctx.String(l1BeaconchainURLFlag.Name),
 	}
 }
 
@@ -310,17 +304,14 @@ func runFullMigration(opts fullMigrationOptions) error {
 		return err
 	}
 
-	// Verify that (migration-block-time and l1StartingBlockTag) or (l1-beacon-rpc and l1-beaconchain-url) are set.
+	// Verify that either (migration-block-time and l1StartingBlockTag) are set or l1-beacon-rpc is set.
 	switch {
 	case (opts.migrationBlockTime != 0) != (config.L1StartingBlockTag != nil):
 		// Check that either both migration block time and l1StartingBlockTag are set or unset.
 		return fmt.Errorf("if the migration-block-time flag is specified, the l1StartingBlockTag in the deploy config must also be specified and vice versa")
-	case (opts.l1BeaconRPC != "") != (opts.l1BeaconchainURL != ""):
-		// Check that either both l1BeaconRPC and l1BeaconchainURL are set or unset.
-		return fmt.Errorf("if the l1-beacon-rpc flag is specified, the l1-beaconchain-url must also be specified and vice versa")
-	case (opts.migrationBlockTime == 0) == (opts.l1BeaconRPC == ""):
-		// Check that either the migration block time and l1StartingBlockTag pair or the l1BeaconRPC and l1BeaconchainURL pair is set but not both.
-		return fmt.Errorf("either (migration-block-time and l1StartingBlockTag) or (l1-beacon-rpc and l1-beaconchain-url) flags must be specified")
+	case opts.l1BeaconRPC != "" && opts.migrationBlockTime != 0:
+		// Check that l1BeaconRPC is not set with migrationBlockTime and l1StartingBlockTag.
+		return fmt.Errorf("if the l1-beacon-rpc flag is specified, the migration-block-time flag and l1StartingBlockTag in the deploy config must be unset")
 	}
 
 	var numAncients uint64
@@ -459,24 +450,81 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 	if err != nil {
 		return fmt.Errorf("cannot dial %s: %w", opts.l1RPC, err)
 	}
+
+	// Used to check block validity, duplicate of the
+	// value defined at op-node/rollup.maxSequencerDriftCelo.
+	var maxSequencerDriftCelo uint64 = 2892
+	var blockTime uint64 = 1
+
 	// If the L1 starting block tag is not set, we determine it dynamically by
 	// finding the most recent final L1 block at the time of the L2 fork block.
+	// If we don't find a block in that slot we consider previous slots, until
+	// we can look no further before the time between the L1 starting block
+	// and the L2 fork block exceeds maxSequencerDrift. Once that point is
+	// reached we look forwards to see if future epochs may finalise a block.
 	if config.L1StartingBlockTag == nil {
 		// Find the L1 starting block, the L2 fork block occurs 1 minute after the last celo L1 block.
 		opts.migrationBlockTime = celoL1Head.Time + 60
 		// Wait for the L2 start time before we calculate the L1 starting block.
-		tillL2Start := int64(opts.migrationBlockTime) - time.Now().Unix()
-		if tillL2Start >= 0 {
-			time.Sleep(time.Duration(tillL2Start+1) * time.Second)
+		epoch := ContainingEpoch(opts.migrationBlockTime)
+
+		bc := NewBeaconClient(opts.l1BeaconRPC)
+
+		var l1StartBlockHash common.Hash
+		var l1StartBlockTime uint64
+		for {
+			slot, err := bc.MostRecentFinalizedSlotAtEpoch(epoch)
+			if err != nil {
+				return fmt.Errorf("failed fetching most recent finalized slot at epoch (%v): %w", epoch, err)
+			}
+
+			l1StartBlockHash, l1StartBlockTime, err = bc.FindBlockForSlot(slot, 10)
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					// If we couldn't find a block we skip an epoch back and see what we can find.
+					epoch--
+					continue
+				}
+				return fmt.Errorf("failed fetching L1 block for slot (%v): %w", slot, err)
+			}
+			// We want to ensure that the L2 fork block is not more than maxSequencerDrift after the L1 starting block.
+			if opts.migrationBlockTime+blockTime-l1StartBlockTime > maxSequencerDriftCelo {
+				// This block is too old to use with the L2 fork block. Nullify the hash
+				// to signify that no suitable block was yet found.
+				l1StartBlockHash = common.Hash{}
+			}
+			break
 		}
-		// MostRecentFinalizedL1BlockAtTime can a few seconds so we provide a suitably long context.
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-		defer cancel()
-		l1StartingBlockHash, err := NewBeaconClient(opts.l1BeaconRPC, opts.l1BeaconchainURL).MostRecentFinalizedL1BlockAtTime(ctx, opts.migrationBlockTime)
-		if err != nil {
-			return fmt.Errorf("failed to fetch l1startingBlock based on L2 starting block time (%v): %w", opts.migrationBlockTime, err)
+
+		// If no block found start looking to future epochs.
+		if l1StartBlockHash == (common.Hash{}) {
+			epoch = ContainingEpoch(opts.migrationBlockTime)
+			for {
+				epoch++
+				slot, err := bc.MostRecentFinalizedSlotAtEpoch(epoch)
+				if err != nil {
+					return fmt.Errorf("failed fetching most recent finalized slot at epoch (%v): %w", epoch, err)
+				}
+
+				l1StartBlockHash, l1StartBlockTime, err = bc.FindBlockForSlot(slot, 10)
+				if err != nil {
+					if errors.Is(err, ethereum.NotFound) {
+						// If we couldn't find a block we skip an epoch back and see what we can find.
+						epoch--
+						continue
+					}
+					return fmt.Errorf("failed fetching L1 block for slot (%v): %w", slot, err)
+				}
+
+				// Check to see if the block time exceeds the migration block time, in which case it will not be valid.
+				if l1StartBlockTime > opts.migrationBlockTime {
+					return fmt.Errorf("failed to find Finalized L1 block between unix timestamps %d-%d", opts.migrationBlockTime+blockTime-maxSequencerDriftCelo, opts.migrationBlockTime)
+				}
+				break
+			}
 		}
-		config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartingBlockHash}
+
+		config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartBlockHash}
 	}
 
 	if config.L1StartingBlockTag.BlockHash != nil {
@@ -489,19 +537,6 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		if err != nil {
 			return fmt.Errorf("failed to fetch l1startingBlock by number (%v): %w", config.L1StartingBlockTag.BlockNumber, err)
 		}
-	}
-
-	// We want to ensure that we have sufficient time to start the sequencer
-	// before it exceeds max sequencer drift which is currently 2892s ==
-	// 48.2mins. Devops need about 7 mins to get the sequencer started after the
-	// migration script is run. We give them a 10 minute buffer in case of any
-	// issues, but if we are outside of this range we will fail here.
-	var maxSequencerDriftCelo uint64 = 2892 // Duplicate of the value defined at op-node/rollup.maxSequencerDriftCelo
-	if maxSequencerDriftCelo-(opts.migrationBlockTime-l1StartBlock.Time()) < 17*60 {
-		return fmt.Errorf(
-			"l1StartingBlock time (%v) is too far before L2 start block time (%v), too much chance that the first sequencer block will exceed max sequencer drift (%v)",
-			l1StartBlock.Time(), opts.migrationBlockTime, maxSequencerDriftCelo,
-		)
 	}
 
 	log.Info(fmt.Sprintf("Selected l1StartingBlock as block (%d), with hash (%v)", l1StartBlock.Number(), l1StartBlock.Hash()))

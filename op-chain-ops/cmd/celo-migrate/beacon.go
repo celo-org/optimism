@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 const (
@@ -24,94 +25,99 @@ type beaconClient struct {
 	cl *http.Client
 	// A beaconchain RPC API endpoint.
 	beaconRPC string
-	// A beaconcha.in api endpoint.
-	beaconchainURL string
 }
 
-func NewBeaconClient(beaconRPC string, beaconchainURL string) *beaconClient {
+func NewBeaconClient(beaconRPC string) *beaconClient {
 	return &beaconClient{
-		beaconRPC:      beaconRPC,
-		beaconchainURL: beaconchainURL,
-		cl:             &http.Client{},
+		beaconRPC: beaconRPC,
+		cl:        &http.Client{},
 	}
 }
 
 // MostRecentFinalizedL1BlockAtTime returns the hash of the most recent
-// finalized L1 block at the given point in time. It finds the epoch within which the
-// given time falls and then looks back from there to find the first finalized
-// block.
-func (c *beaconClient) MostRecentFinalizedL1BlockAtTime(ctx context.Context, pointInTime uint64) (common.Hash, error) {
-	// Find the epoch starting at or before the L2 start time.
-	epochNumber := ContainingSlot(pointInTime) / beaconSlotsPerEpoch
+// finalized L1 block during the execution of the given epoch.
+func (c *beaconClient) MostRecentFinalizedSlotAtEpoch(currentEpoch uint64) (uint64, error) {
+	start := EpochStartTime(currentEpoch)
 
-	// This epoch is guaranteed to not be complete at L2 start time (if the L2 start time falls in the last
-	// second of the epoch the epoch is still not complete, and if it was we'd be selecting the next epoch)
+	// Wait till the beginning of the epoch in which our point in time falls. We wait an extra 10 seconds to be sure that
+	// the network has had time to update.
+	waitTimeSeconds := int64(start) - time.Now().Unix() + 10
+	if waitTimeSeconds > 0 {
+		log.Info("Waiting %v + additional 10 seconds for start of epoch %d, to check for finalized slot at that time", waitTimeSeconds-10, currentEpoch)
+		time.Sleep(time.Duration(waitTimeSeconds) * time.Second)
+	}
+
+	// Get the finality checkpoint for the first slot of the containing epoch.
+	firstSlot := currentEpoch * beaconSlotsPerEpoch
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	finalityCheckpoints, err := c.FinalityCheckpoints(ctx, firstSlot)
+	if err != nil {
+		return 0, fmt.Errorf("error fetching finality checkpoint for slot %d: %w", firstSlot, err)
+	}
+
+	// containingEpoch is guaranteed to not be complete at pointInTime (if pointInTime falls in the last
+	// second of the epoch the epoch is still not complete, and if it was a second later we'd be selecting the next epoch)
 	// The previous epoch is the most recent completed epoch.
 	// The one prior to that is the most recent justified epoch.
 	// And the first block of the justified epoch (the epoch boundary block) will be finalized.
 	// This is assuming that there was at least 2/3 participation in the completed and justified epochs.
-	var epoch *Epoch
-	var err error
-	names := [2]string{"completed", "justified"}
 
-	// Check the most recent completed and justified epochs had a participation rate of at least 0.67.
-	for i := uint64(1); i <= 2; i++ {
-		epoch, err = c.Epoch(ctx, epochNumber-i)
-		if err != nil {
-			return common.Hash{}, fmt.Errorf("error fetching epoch %d: %w", epochNumber-i, err)
-		}
-		if epoch.Data.Globalparticipationrate < 0.67 {
-			return common.Hash{}, fmt.Errorf("most recent %s epoch before the L2 start time (%d) has less than 0.67 participation rate (%.2f)", names[i-1], pointInTime, epoch.Data.Globalparticipationrate)
-		}
-	}
 	// Calculate the first slot of the most recent justified epoch.
-	mostRecentFinalizedSlot := (epochNumber - 2) * beaconSlotsPerEpoch
+	finalizedSlot := uint64(finalityCheckpoints.Data.CurrentJustified.Epoch) * beaconSlotsPerEpoch
+	return finalizedSlot, nil
+}
 
+// FindBlockForSlot returns the hash and timestamp of the block at the given slot,
+// looking up to 'tries' slots back if only empty slots are encountered.
+func (c *beaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash common.Hash, blockTime uint64, err error) {
 	// Find the most recent actual finalized block, slots can be empty so we
 	// search back if we encounter empty slots. We check up to 10 slots, if they
 	// are all empty something serious is wrong with the L1 so we abort.
 	var beaconBlock *BeaconBlock
 	for i := range uint64(10) {
-		beaconBlock, err = c.BeaconBlock(ctx, mostRecentFinalizedSlot-i)
+		targetSlot := slot - i
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		beaconBlock, err := c.BeaconBlock(ctx, targetSlot)
 		if errors.Is(err, ethereum.NotFound) {
 			// If there is not block for this slot then skip to the next.
 			continue
 		}
 		if err != nil {
-			return common.Hash{}, fmt.Errorf("error fetching beacon block at slot %d: %w", mostRecentFinalizedSlot, err)
+			return common.Hash{}, 0, fmt.Errorf("error fetching beacon block at slot %d: %w", targetSlot, err)
 		}
 		if !beaconBlock.Finalized {
-			return common.Hash{}, fmt.Errorf("expecting beacon block at slot %d to be finalized", mostRecentFinalizedSlot)
+			return common.Hash{}, 0, fmt.Errorf("expecting beacon block at slot %d to be finalized", targetSlot)
 		}
 		break // We found a good block.
 	}
 	if beaconBlock == nil {
-		return common.Hash{}, fmt.Errorf("failed to find finalized block searching up to 10 slots back from the most recent finalized slot (%d) at the L2 fork time (%d)", mostRecentFinalizedSlot, pointInTime)
+		return common.Hash{}, 0, fmt.Errorf("finalized block %w searching up to 10 slots back from slot (%d)", ethereum.NotFound, slot)
 	}
-	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), nil
+	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), uint64(beaconBlock.Data.Message.Body.ExecutionPayload.Timestamp), nil
 }
 
-// Epoch gets the requested epoch from the beaconcha.in api.
-func (c *beaconClient) Epoch(ctx context.Context, num uint64) (epoch *Epoch, err error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/v1/epoch/%d", c.beaconchainURL, num), nil)
+func (c *beaconClient) FinalityCheckpoints(ctx context.Context, slot uint64) (checkpoints *FinalityCheckpoints, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v1/beacon/states/%d/finality_checkpoints", c.beaconRPC, slot), nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create request to get epoch: %w", err)
+		return nil, fmt.Errorf("failed to create request to get finality checkpoints for slot %d: %w", slot, err)
 	}
 	resp, err := c.cl.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch epoch: %w", err)
+		return nil, fmt.Errorf("failed to fetch finality checkpoints for slot %d: %w", slot, err)
 	}
 	defer func() {
 		err = errors.Join(err, resp.Body.Close())
 	}()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("failed to fetch epoch, http status %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to fetch finality checkpoints for slot %d, http status %d: %w", slot, resp.StatusCode, err)
 	}
-	epoch = &Epoch{}
-	if err := json.NewDecoder(resp.Body).Decode(epoch); err != nil {
-		return nil, fmt.Errorf("failed to decode epoch: %w", err)
+
+	if err := json.NewDecoder(resp.Body).Decode(checkpoints); err != nil {
+		return nil, fmt.Errorf("failed to decode finality checkpoints: %w", err)
 	}
-	return epoch, nil
+	return checkpoints, nil
 }
 
 // BeaconBlock gets the beacon block from the beacon rpc api.
@@ -142,6 +148,10 @@ func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 // EpochStartTime returns the start time of an epoch.
 func EpochStartTime(epoch uint64) uint64 {
 	return beaconChainGenesisTimeSeconds + (epoch * beaconSlotsPerEpoch * beaconChainSlotDurationSeconds)
+}
+
+func SlotTime(slot uint64) uint64 {
+	return beaconChainGenesisTimeSeconds + (slot * beaconChainSlotDurationSeconds)
 }
 
 // ContainingEpoch returns the number of the epoch whithin which the given time falls.
@@ -231,29 +241,21 @@ type BeaconBlock struct {
 	} `json:"data"`
 }
 
-type Epoch struct {
-	Status string `json:"status"`
-	Data   struct {
-		Attestationscount       int       `json:"attestationscount"`
-		Attesterslashingscount  int       `json:"attesterslashingscount"`
-		Averagevalidatorbalance int64     `json:"averagevalidatorbalance"`
-		Blockscount             int       `json:"blockscount"`
-		Depositscount           int       `json:"depositscount"`
-		Eligibleether           int64     `json:"eligibleether"`
-		Epoch                   int       `json:"epoch"`
-		Finalized               bool      `json:"finalized"`
-		Globalparticipationrate float64   `json:"globalparticipationrate"`
-		Missedblocks            int       `json:"missedblocks"`
-		Orphanedblocks          int       `json:"orphanedblocks"`
-		Proposedblocks          int       `json:"proposedblocks"`
-		Proposerslashingscount  int       `json:"proposerslashingscount"`
-		RewardsExported         bool      `json:"rewards_exported"`
-		Scheduledblocks         int       `json:"scheduledblocks"`
-		Totalvalidatorbalance   int64     `json:"totalvalidatorbalance"`
-		Ts                      time.Time `json:"ts"`
-		Validatorscount         int       `json:"validatorscount"`
-		Voluntaryexitscount     int       `json:"voluntaryexitscount"`
-		Votedether              int64     `json:"votedether"`
-		Withdrawalcount         int       `json:"withdrawalcount"`
+type FinalityCheckpoints struct {
+	ExecutionOptimistic bool `json:"execution_optimistic"`
+	Finalized           bool `json:"finalized"`
+	Data                struct {
+		PreviousJustified struct {
+			Epoch eth.Uint64String `json:"epoch"`
+			Root  string           `json:"root"`
+		} `json:"previous_justified"`
+		CurrentJustified struct {
+			Epoch eth.Uint64String `json:"epoch"`
+			Root  string           `json:"root"`
+		} `json:"current_justified"`
+		Finalized struct {
+			Epoch eth.Uint64String `json:"epoch"`
+			Root  string           `json:"root"`
+		} `json:"finalized"`
 	} `json:"data"`
 }
