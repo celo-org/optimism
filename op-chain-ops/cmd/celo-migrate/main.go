@@ -110,6 +110,11 @@ var (
 		Usage:    "Path to the db to perform a continuity check on",
 		Required: true,
 	}
+	dbCheckStartFlag = &cli.Uint64Flag{
+		Name:  "start",
+		Usage: "Block number to start the db check from. If not set, the db check will start from block 0.",
+		Value: 0,
+	}
 	dbCheckFailFastFlag = &cli.BoolFlag{
 		Name:  "fail-fast",
 		Usage: "Fail fast on the first error encountered. If set, the db check will stop on the first error encountered, otherwise it will continue to check all blocks and print out all errors at the end.",
@@ -169,6 +174,7 @@ type fullMigrationOptions struct {
 
 type dbCheckOptions struct {
 	dbPath    string
+	start     uint64
 	batchSize uint64
 	failFast  bool
 }
@@ -209,6 +215,7 @@ func parseDBCheckOptions(ctx *cli.Context) dbCheckOptions {
 		dbPath:    ctx.String(dbCheckPathFlag.Name),
 		batchSize: ctx.Uint64(batchSizeFlag.Name),
 		failFast:  ctx.Bool(dbCheckFailFastFlag.Name),
+		start:     ctx.Uint64(dbCheckStartFlag.Name),
 	}
 }
 
@@ -331,6 +338,11 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
 			return nil, 0, fmt.Errorf("failed to cleanup non-ancient db: %w", err)
 		}
+	}
+
+	err = runDBCheckFromLastMigrated(opts)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to run db check from last migrated block: %w", err)
 	}
 
 	var numAncientsNewBefore uint64
@@ -618,7 +630,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	}
 
 	log.Info("Checking continuity of ancient blocks", "start", 0, "end", lastAncientNumber, "count", lastAncientNumber+1)
-	if err := checkContinuity(0, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
+	if err := checkContinuity(opts.start, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
 		return loadAncientRange(ancientDB, start, count)
 	}); err != nil {
 		return err
@@ -639,6 +651,35 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	}
 
 	log.Info("DB Continuity Check Finished", "dbPath", opts.dbPath)
+
+	return nil
+}
+
+func runDBCheckFromLastMigrated(opts preMigrationOptions) (err error) {
+	newFreezer, err := NewChainFreezer(filepath.Join(opts.newDBPath, "ancient"), "", false)
+	if err != nil {
+		return fmt.Errorf("failed to open new freezer: %w", err)
+	}
+	numAncientsInNewDB, err := newFreezer.Ancients()
+	if err != nil {
+		return fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
+	}
+	err = newFreezer.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close new freezer: %w", err)
+	}
+
+	var start uint64
+	if numAncientsInNewDB == 0 {
+		start = 0
+	} else {
+		start = numAncientsInNewDB - 1
+	}
+
+	err = runDBCheck(dbCheckOptions{dbPath: opts.oldDBPath, start: start, batchSize: opts.batchSize, failFast: true})
+	if err != nil {
+		return fmt.Errorf("failed to run db continuity check: %w", err)
+	}
 
 	return nil
 }
