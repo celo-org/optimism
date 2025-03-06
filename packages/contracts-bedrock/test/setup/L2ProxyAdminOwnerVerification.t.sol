@@ -18,18 +18,13 @@ contract L2ProxyAdminOwnerVerification_Test is CommonTest {
         cfg = deploy.cfg();
     }
 
-    function test_noCheck_succeeds() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, anotherOwner, "no-check");
-        cfg.verifyProxyAdminOwners();
-    }
-
     function test_aliased_succeeds() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, aliasedOwner, "aliased");
+        cfg.setProxyAdminOwnerSettings(anOwner, aliasedOwner, true);
         cfg.verifyProxyAdminOwners();
     }
 
     function test_equal_succeeds() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, anOwner, "equal");
+        cfg.setProxyAdminOwnerSettings(anOwner, anOwner, false);
         cfg.verifyProxyAdminOwners();
     }
 }
@@ -48,32 +43,26 @@ contract L2ProxyAdminOwnerVerification_TestFail is CommonTest {
     }
 
     function test_aliased_whenSameAddress_fails() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, anOwner, "aliased");
-        vm.expectRevert("Expected aliased address");
+        cfg.setProxyAdminOwnerSettings(anOwner, anOwner, true);
+        vm.expectRevert("Expected proxyAdminOwner to be aliased finalSystemOwner");
         cfg.verifyProxyAdminOwners();
     }
 
     function test_aliased_whenIncorrectAlias_fails() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, offByOneOwner, "aliased");
-        vm.expectRevert("Expected aliased address");
+        cfg.setProxyAdminOwnerSettings(anOwner, offByOneOwner, true);
+        vm.expectRevert("Expected proxyAdminOwner to be aliased finalSystemOwner");
         cfg.verifyProxyAdminOwners();
     }
 
     function test_equal_whenAliased_fails() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, aliasedOwner, "equal");
+        cfg.setProxyAdminOwnerSettings(anOwner, aliasedOwner, false);
         vm.expectRevert("Expected finalSystemOwner and proxyAdminOwner to be equal");
         cfg.verifyProxyAdminOwners();
     }
 
     function test_equal_whenOffBy1_fails() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, offByOneOwner, "equal");
+        cfg.setProxyAdminOwnerSettings(anOwner, offByOneOwner, false);
         vm.expectRevert("Expected finalSystemOwner and proxyAdminOwner to be equal");
-        cfg.verifyProxyAdminOwners();
-    }
-
-    function test_badConfig_fails() public {
-        cfg.setProxyAdminOwnerSettings(anOwner, anOwner, "bad-option");
-        vm.expectRevert("Incorrect value for l2ProxyAdminOwnerVerification");
         cfg.verifyProxyAdminOwners();
     }
 }

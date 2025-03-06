@@ -96,7 +96,7 @@ contract DeployConfig is Script {
 
     bool public deployCeloContracts;
 
-    string public l2ProxyAdminOwnerVerification;
+    bool public proxyAdminOwnerIsMultisig;
 
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
@@ -186,38 +186,33 @@ contract DeployConfig is Script {
 
         deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
 
-        l2ProxyAdminOwnerVerification = stdJson.readString(_json, "$.l2ProxyAdminOwnerVerification");
+        proxyAdminOwnerIsMultisig = stdJson.readBool(_json, "$.proxyAdminOwnerIsMultisig");
 
         verifyProxyAdminOwners();
     }
 
 
     /// @notice Performs a check on the ProxyAdmin owner addresses accross L1 and L2, based on the
-    /// `l2ProxyAdminOwnerVerification` parameter of the config.
+    /// `proxyAdminOwnerIsMultisig` parameter of the config.
     /// Specifically:
     /// - `finalSystemOwner` is the L1 ProxyAdmin owner address (used in Deploy.s.sol).
     /// - `proxyAdminOwner` is the L2 ProxyAdmin owner address (used in L2Genesis.s.sol).
-    /// - `l2ProxyAdminOwnerVerification` can have one of three values:
-    ///   - `"no-check"`: No verification is performed, the addresses are taken as they are.
-    ///   - `"aliased"`: Verify that the L2 address is the aliased version of the L1 address. This
-    ///   should be used when both the L1 and L2 systems are owned by the same L1 contract address.
-    ///   - `"equal"`: Verify that both the addresses are equal. This should be used when both
-    ///   systems are owned by the same EOA address.
+    /// - If `proxyAdminOwnerIsMultisig` is true, assumes that both systems are owned by the same L1
+    ///   smart contract multisig, so the L2 owner should be the aliased verision of the L1 owner
+    ///   address.
+    /// - If `proxyAdminOwnerIsMultisig` is false, assumes that both systems are owned by the same
+    ///   EOA, so both owner addresses should be equal.
     ///   See the following docs for details on address aliasing:
     ///   https://docs.optimism.io/stack/differences#address-aliasing
-    function verifyProxyAdminOwners() public  {
-        if (LibString.eq(l2ProxyAdminOwnerVerification, "equal")) {
+    function verifyProxyAdminOwners() public view {
+        if (proxyAdminOwnerIsMultisig) {
+            address expectedAlias = AddressAliasHelper.applyL1ToL2Alias(finalSystemOwner);
+            require(expectedAlias == proxyAdminOwner, "Expected proxyAdminOwner to be aliased finalSystemOwner");
+        } else {
             require(
                 finalSystemOwner == proxyAdminOwner,
                 "Expected finalSystemOwner and proxyAdminOwner to be equal"
             );
-        } else if (LibString.eq(l2ProxyAdminOwnerVerification, "aliased")) {
-            address expectedAlias = AddressAliasHelper.applyL1ToL2Alias(finalSystemOwner);
-            require(expectedAlias == proxyAdminOwner, "Expected aliased address");
-        } else if (LibString.eq(l2ProxyAdminOwnerVerification, "no-check")) {
-            // no-op
-        } else {
-            require(false, "Incorrect value for l2ProxyAdminOwnerVerification");
         }
     }
 
@@ -296,10 +291,10 @@ contract DeployConfig is Script {
 
     /// @notice Allow the ProxyAdmin owner configs (`finalSystemOwner`, `proxyAdminOwner`, and
     /// `l2ProxyAdminOwnerVerification`) to be overriden in testing environments.
-    function setProxyAdminOwnerSettings(address l1Owner, address l2Owner, string calldata verification) public {
+    function setProxyAdminOwnerSettings(address l1Owner, address l2Owner, bool isMultisig) public {
         finalSystemOwner = l1Owner;
         proxyAdminOwner = l2Owner;
-        l2ProxyAdminOwnerVerification = verification;
+        proxyAdminOwnerIsMultisig = isMultisig;
     }
 
     function latestGenesisFork() internal view returns (Fork) {
