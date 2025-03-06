@@ -629,7 +629,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 		return nil
 	}
 
-	log.Info("Checking continuity of ancient blocks", "start", 0, "end", lastAncientNumber, "count", lastAncientNumber+1)
+	log.Info("Checking continuity of ancient blocks", "start", opts.start, "end", lastAncientNumber, "count", lastAncientNumber-opts.start+1)
 	if err := checkContinuity(opts.start, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
 		return loadAncientRange(ancientDB, start, count)
 	}); err != nil {
