@@ -26,8 +26,10 @@ import (
 	"github.com/urfave/cli/v2"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
@@ -346,6 +348,11 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 	if opts.resetNonAncients {
 		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
 			return nil, 0, fmt.Errorf("failed to cleanup non-ancient db: %w", err)
+		}
+	} else {
+		// TODO(Alec) add feature flag
+		if err = pruneState(opts.oldDBPath); err != nil {
+			return nil, 0, fmt.Errorf("failed to prune state in old db: %w", err)
 		}
 	}
 
@@ -696,6 +703,80 @@ func runDBCheckFromLastMigrated(opts preMigrationOptions) (err error) {
 
 	return nil
 }
+
+func pruneState(chaindataPath string) error {
+	log.Info("Opening LevelDB for pruning", "path", chaindataPath)
+	db, err := leveldb.New(chaindataPath, DBCache, DBHandles, "", false)
+	if err != nil {
+		return fmt.Errorf("failed to open leveldb: %w", err)
+	}
+	chaindb := rawdb.NewDatabase(db)
+	defer chaindb.Close()
+
+	// TODO(Alec) why was this getting hit?
+	// if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+	// 	log.Crit("Offline pruning is not required for path scheme")
+	// }
+	prunerconfig := pruner.Config{
+		Datadir:   chaindataPath,
+		BloomSize: 2048,
+	}
+
+	headHeader := rawdb.ReadHeadHeader(chaindb)
+	if headHeader == nil {
+		return errors.New("failed to read head header")
+	}
+
+	log.Info("Running in-process state pruning...")
+	p, err := pruner.NewPruner(chaindb, prunerconfig)
+	if err != nil {
+		return fmt.Errorf("failed to open snapshot tree: %w", err)
+	}
+	if err := p.Prune(headHeader.Root); err != nil {
+		return fmt.Errorf("state pruning failed: %w", err)
+	}
+
+	log.Info("State pruning completed successfully.")
+	return nil
+}
+
+// func pruneState(ctx *cli.Context) error {
+// 	stack, _ := makeConfigNode(ctx)
+// 	defer stack.Close()
+
+// 	chaindb := utils.MakeChainDatabase(ctx, stack, false)
+// 	defer chaindb.Close()
+
+// 	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+// 		log.Crit("Offline pruning is not required for path scheme")
+// 	}
+// 	prunerconfig := pruner.Config{
+// 		Datadir:   stack.ResolvePath(""),
+// 		BloomSize: ctx.Uint64(utils.BloomFilterSizeFlag.Name),
+// 	}
+// 	pruner, err := pruner.NewPruner(chaindb, prunerconfig)
+// 	if err != nil {
+// 		log.Error("Failed to open snapshot tree", "err", err)
+// 		return err
+// 	}
+// 	if ctx.NArg() > 1 {
+// 		log.Error("Too many arguments given")
+// 		return errors.New("too many arguments")
+// 	}
+// 	var targetRoot common.Hash
+// 	if ctx.NArg() == 1 {
+// 		targetRoot, err = parseRoot(ctx.Args().First())
+// 		if err != nil {
+// 			log.Error("Failed to resolve state root", "err", err)
+// 			return err
+// 		}
+// 	}
+// 	if err = pruner.Prune(targetRoot); err != nil {
+// 		log.Error("Failed to prune state", "err", err)
+// 		return err
+// 	}
+// 	return nil
+// }
 
 func timer(name string) func() {
 	start := time.Now()
