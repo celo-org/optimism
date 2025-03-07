@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.15;
 
+import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { stdJson } from "forge-std/StdJson.sol";
+import { LibString } from "@solady/utils/LibString.sol";
 import { Executables } from "scripts/libraries/Executables.sol";
 import { Process } from "scripts/libraries/Process.sol";
 import { Config, Fork, ForkUtils } from "scripts/libraries/Config.sol";
@@ -94,6 +96,8 @@ contract DeployConfig is Script {
 
     bool public deployCeloContracts;
 
+    bool public proxyAdminOwnerIsMultisig;
+
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
         try vm.readFile(_path) returns (string memory data_) {
@@ -181,6 +185,31 @@ contract DeployConfig is Script {
         useInterop = _readOr(_json, "$.useInterop", false);
 
         deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
+
+        proxyAdminOwnerIsMultisig = stdJson.readBool(_json, "$.proxyAdminOwnerIsMultisig");
+
+        verifyProxyAdminOwners();
+    }
+
+    /// @notice Performs a check on the ProxyAdmin owner addresses accross L1 and L2, based on the
+    /// `proxyAdminOwnerIsMultisig` parameter of the config.
+    /// Specifically:
+    /// - `finalSystemOwner` is the L1 ProxyAdmin owner address (used in Deploy.s.sol).
+    /// - `proxyAdminOwner` is the L2 ProxyAdmin owner address (used in L2Genesis.s.sol).
+    /// - If `proxyAdminOwnerIsMultisig` is true, assumes that both systems are owned by the same L1
+    ///   smart contract multisig, so the L2 owner should be the aliased verision of the L1 owner
+    ///   address.
+    /// - If `proxyAdminOwnerIsMultisig` is false, assumes that both systems are owned by the same
+    ///   EOA, so both owner addresses should be equal.
+    ///   See the following docs for details on address aliasing:
+    ///   https://docs.optimism.io/stack/differences#address-aliasing
+    function verifyProxyAdminOwners() public view {
+        if (proxyAdminOwnerIsMultisig) {
+            address expectedAlias = AddressAliasHelper.applyL1ToL2Alias(finalSystemOwner);
+            require(expectedAlias == proxyAdminOwner, "Expected proxyAdminOwner to be aliased finalSystemOwner");
+        } else {
+            require(finalSystemOwner == proxyAdminOwner, "Expected finalSystemOwner and proxyAdminOwner to be equal");
+        }
     }
 
     function fork() public view returns (Fork fork_) {
@@ -254,6 +283,14 @@ contract DeployConfig is Script {
     function setUseCustomGasToken(address _token) public {
         useCustomGasToken = true;
         customGasTokenAddress = _token;
+    }
+
+    /// @notice Allow the ProxyAdmin owner configs (`finalSystemOwner`, `proxyAdminOwner`, and
+    /// `l2ProxyAdminOwnerVerification`) to be overriden in testing environments.
+    function setProxyAdminOwnerSettings(address l1Owner, address l2Owner, bool isMultisig) public {
+        finalSystemOwner = l1Owner;
+        proxyAdminOwner = l2Owner;
+        proxyAdminOwnerIsMultisig = isMultisig;
     }
 
     function latestGenesisFork() internal view returns (Fork) {
