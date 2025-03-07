@@ -567,7 +567,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	// First, check continuity between ancients and non-ancients.
 	// Gaps in data will often halt the freezing process, so attempting to load the first non-ancient block
 	// will most likely fail if there is a gap.
-	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncientNumber+1, 1)
+	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncientNumber+1, 1, false)
 	if err != nil {
 		if opts.failFast {
 			return fmt.Errorf("failed to load first non-ancient block: %w", err)
@@ -644,13 +644,13 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 
 	log.Info("Checking continuity of ancient blocks", "start", opts.start, "end", lastAncientNumber, "count", lastAncientNumber-opts.start+1)
 	if err := checkContinuity(opts.start, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
-		return loadAncientRange(ancientDB, start, count)
+		return loadAncientRange(ancientDB, start, count, false)
 	}); err != nil {
 		return err
 	}
 	log.Info("Checking continuity of non-ancient blocks", "start", lastAncientNumber+1, "end", lastBlockNumber, "count", lastBlockNumber-lastAncientNumber)
 	if err := checkContinuity(lastAncientNumber+1, lastBlockNumber, func(start, count uint64) (*RLPBlockRange, error) {
-		return loadNonAncientRange(nonAncientDB, start, count)
+		return loadNonAncientRange(nonAncientDB, start, count, false)
 	}); err != nil {
 		return err
 	}
