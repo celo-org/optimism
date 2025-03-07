@@ -191,7 +191,6 @@ contract DeployConfig is Script {
         verifyProxyAdminOwners();
     }
 
-
     /// @notice Performs a check on the ProxyAdmin owner addresses accross L1 and L2, based on the
     /// `proxyAdminOwnerIsMultisig` parameter of the config.
     /// Specifically:
@@ -209,10 +208,7 @@ contract DeployConfig is Script {
             address expectedAlias = AddressAliasHelper.applyL1ToL2Alias(finalSystemOwner);
             require(expectedAlias == proxyAdminOwner, "Expected proxyAdminOwner to be aliased finalSystemOwner");
         } else {
-            require(
-                finalSystemOwner == proxyAdminOwner,
-                "Expected finalSystemOwner and proxyAdminOwner to be equal"
-            );
+            require(finalSystemOwner == proxyAdminOwner, "Expected finalSystemOwner and proxyAdminOwner to be equal");
         }
     }
 
