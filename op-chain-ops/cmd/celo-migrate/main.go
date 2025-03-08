@@ -110,6 +110,11 @@ var (
 		Usage:    "Path to the db to perform a continuity check on",
 		Required: true,
 	}
+	dbCheckStartFlag = &cli.Uint64Flag{
+		Name:  "start",
+		Usage: "Block number to start the db check from. If not set, the db check will start from block 0.",
+		Value: 0,
+	}
 	dbCheckFailFastFlag = &cli.BoolFlag{
 		Name:  "fail-fast",
 		Usage: "Fail fast on the first error encountered. If set, the db check will stop on the first error encountered, otherwise it will continue to check all blocks and print out all errors at the end.",
@@ -169,6 +174,7 @@ type fullMigrationOptions struct {
 
 type dbCheckOptions struct {
 	dbPath    string
+	start     uint64
 	batchSize uint64
 	failFast  bool
 }
@@ -209,6 +215,7 @@ func parseDBCheckOptions(ctx *cli.Context) dbCheckOptions {
 		dbPath:    ctx.String(dbCheckPathFlag.Name),
 		batchSize: ctx.Uint64(batchSizeFlag.Name),
 		failFast:  ctx.Bool(dbCheckFailFastFlag.Name),
+		start:     ctx.Uint64(dbCheckStartFlag.Name),
 	}
 }
 
@@ -333,6 +340,11 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		}
 	}
 
+	err = runDBCheckFromLastMigrated(opts)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to run db check from last migrated block: %w", err)
+	}
+
 	var numAncientsNewBefore uint64
 	var numAncientsNewAfter uint64
 	var strayAncientBlocks []*rawdb.NumberHash
@@ -343,7 +355,7 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		}
 		// Scanning for stray ancient blocks is slow, so we do it as soon as we can after the lock on oldDB is released by migrateAncientsDb
 		// Doing this in parallel with copyDbExceptAncients still saves time if ancients have already been pre-migrated
-		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath); err != nil {
+		if strayAncientBlocks, err = getStrayAncientBlocks(opts.oldDBPath, numAncientsNewAfter); err != nil {
 			return fmt.Errorf("failed to get stray ancient blocks: %w", err)
 		}
 		return nil
@@ -501,20 +513,21 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 
 	log.Info("DB Continuity Check Started", "dbPath", opts.dbPath)
 
-	// We want to open the db in readonly mode to take advantage of concurrency, but opening in readonly
+	// We want to open the ancient db in readonly mode to take advantage of concurrency, but opening in readonly
 	// mode will fail if the db is missing some files suffixed by ".meta". Our legacy celo db does not have
 	// ".meta" files, so opening in readonly mode will fail. Opening the db in readwrite mode will create the
 	// ".meta" files if they don't exist. So, we can open the db in readwrite mode and then close it so
 	// that the ".meta" files are created. We then reopen the db in readonly mode to run the actual script.
-	db, err := openDB(opts.dbPath, false)
+	ancientDB, err := NewChainFreezer(filepath.Join(opts.dbPath, "ancient"), "", false)
 	if err != nil {
-		return fmt.Errorf("failed to open db in readwrite mode: %w", err)
+		return fmt.Errorf("failed to open ancient db: %w", err)
 	}
-	if err = db.Close(); err != nil {
-		return fmt.Errorf("failed to close db in readwrite mode: %w", err)
+	err = ancientDB.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close ancient db: %w", err)
 	}
 
-	ancientDB, err := NewChainFreezer(filepath.Join(opts.dbPath, "ancient"), "", true)
+	ancientDB, err = NewChainFreezer(filepath.Join(opts.dbPath, "ancient"), "", true)
 	if err != nil {
 		return fmt.Errorf("failed to open ancient db: %w", err)
 	}
@@ -616,8 +629,8 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 		return nil
 	}
 
-	log.Info("Checking continuity of ancient blocks", "start", 0, "end", lastAncientNumber, "count", lastAncientNumber+1)
-	if err := checkContinuity(0, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
+	log.Info("Checking continuity of ancient blocks", "start", opts.start, "end", lastAncientNumber, "count", lastAncientNumber-opts.start+1)
+	if err := checkContinuity(opts.start, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
 		return loadAncientRange(ancientDB, start, count)
 	}); err != nil {
 		return err
@@ -638,6 +651,35 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	}
 
 	log.Info("DB Continuity Check Finished", "dbPath", opts.dbPath)
+
+	return nil
+}
+
+func runDBCheckFromLastMigrated(opts preMigrationOptions) (err error) {
+	newFreezer, err := NewChainFreezer(filepath.Join(opts.newDBPath, "ancient"), "", false)
+	if err != nil {
+		return fmt.Errorf("failed to open new freezer: %w", err)
+	}
+	numAncientsInNewDB, err := newFreezer.Ancients()
+	if err != nil {
+		return fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
+	}
+	err = newFreezer.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close new freezer: %w", err)
+	}
+
+	var start uint64
+	if numAncientsInNewDB == 0 {
+		start = 0
+	} else {
+		start = numAncientsInNewDB - 1
+	}
+
+	err = runDBCheck(dbCheckOptions{dbPath: opts.oldDBPath, start: start, batchSize: opts.batchSize, failFast: true})
+	if err != nil {
+		return fmt.Errorf("failed to run db continuity check: %w", err)
+	}
 
 	return nil
 }

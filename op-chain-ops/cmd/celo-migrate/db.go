@@ -68,25 +68,6 @@ func blockReceiptsKey(number uint64, hash common.Hash) []byte {
 	return append(append(blockReceiptsPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
 }
 
-// Opens a database with access to AncientsDb
-func openDB(chaindataPath string, readOnly bool) (ethdb.Database, error) {
-	// Will throw an error if the chaindataPath does not exist
-	if _, err := os.Stat(chaindataPath); err != nil {
-		return nil, err
-	}
-
-	kvs, err := leveldb.New(chaindataPath, 1024, 60, "", readOnly)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open leveldb: %w", err)
-	}
-	db, err := rawdb.NewDatabaseWithFreezer(kvs, filepath.Join(chaindataPath, "ancient"), "", false)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open db with freezer: %w", err)
-	}
-
-	return db, nil
-}
-
 // Opens a database without access to AncientsDb
 func openDBWithoutFreezer(chaindataPath string, readOnly bool) (ethdb.Database, error) {
 	if _, err := os.Stat(chaindataPath); err != nil {

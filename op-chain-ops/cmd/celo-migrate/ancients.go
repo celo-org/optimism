@@ -225,21 +225,16 @@ func writeAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, in <-chan R
 }
 
 // getStrayAncientBlocks returns a list of ancient block numbers / hashes that somehow were not removed from leveldb
-func getStrayAncientBlocks(dbPath string) (blocks []*rawdb.NumberHash, err error) {
+func getStrayAncientBlocks(dbPath string, numAncients uint64) (blocks []*rawdb.NumberHash, err error) {
 	defer timer("getStrayAncientBlocks")()
 
-	db, err := openDB(dbPath, true)
+	db, err := openDBWithoutFreezer(dbPath, true)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open database: %w", err)
+		return nil, fmt.Errorf("failed to open non-ancient database: %w", err)
 	}
 	defer func() {
 		err = errors.Join(err, db.Close())
 	}()
-
-	numAncients, err := db.Ancients()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get number of ancients in database: %w", err)
-	}
 
 	return rawdb.ReadAllHashesInRange(db, 1, numAncients-1), nil
 }
