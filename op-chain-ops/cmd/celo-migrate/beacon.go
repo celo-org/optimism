@@ -22,14 +22,14 @@ const (
 	beaconSlotsPerEpoch            = 32
 )
 
-type beaconClient struct {
+type BeaconClient struct {
 	cl *http.Client
 	// A beaconchain RPC API endpoint.
 	beaconRPC string
 }
 
-func NewBeaconClient(beaconRPC string) *beaconClient {
-	return &beaconClient{
+func NewBeaconClient(beaconRPC string) *BeaconClient {
+	return &BeaconClient{
 		beaconRPC: beaconRPC,
 		cl:        &http.Client{},
 	}
@@ -53,7 +53,7 @@ func AwaitEpoch(epoch uint64) {
 // looking back from the epoch containing the given time, but if no finalized
 // block is found it will consider future epochs that may have finalized a block
 // ocurring before the given time.
-func (c *beaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.Hash, error) {
+func (c *BeaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.Hash, error) {
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
 	// This loop looks back for a finalized L1 block that is up to maxSequencerDrift before the L2 fork block.
@@ -135,7 +135,7 @@ func withinMaxSequencerDrift(l1StartingBlockTime, l2StartBlockTime uint64) bool 
 
 // FindFinalityCheckpointForSlot returns the finality checkpoints for 'slot'
 // searching up to 'tries' slots back if only empty slots are encountered.
-func (c *beaconClient) FindFinalityCheckpointsForSlot(slot uint64, tries uint64) (*FinalityCheckpoints, error) {
+func (c *BeaconClient) FindFinalityCheckpointsForSlot(slot uint64, tries uint64) (*FinalityCheckpoints, error) {
 	var finalityCheckpoints *FinalityCheckpoints
 	var err error
 	for i := range tries {
@@ -157,7 +157,7 @@ func (c *beaconClient) FindFinalityCheckpointsForSlot(slot uint64, tries uint64)
 
 // FindBlockForSlot returns the hash and timestamp of the block at the given slot,
 // looking up to 'tries' slots back if only empty slots are encountered.
-func (c *beaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash common.Hash, blockTime uint64, err error) {
+func (c *BeaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash common.Hash, blockTime uint64, err error) {
 	// Find the most recent actual finalized block, slots can be empty so we
 	// search back if we encounter empty slots. We check up to 10 slots, if they
 	// are all empty something serious is wrong with the L1 so we abort.
@@ -185,7 +185,7 @@ func (c *beaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash co
 	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), uint64(beaconBlock.Data.Message.Body.ExecutionPayload.Timestamp), nil
 }
 
-func (c *beaconClient) FinalityCheckpoints(ctx context.Context, slot uint64) (checkpoints *FinalityCheckpoints, err error) {
+func (c *BeaconClient) FinalityCheckpoints(ctx context.Context, slot uint64) (checkpoints *FinalityCheckpoints, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v1/beacon/states/%d/finality_checkpoints", c.beaconRPC, slot), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request to get finality checkpoints for slot %d: %w", slot, err)
@@ -212,7 +212,7 @@ func (c *beaconClient) FinalityCheckpoints(ctx context.Context, slot uint64) (ch
 }
 
 // BeaconBlock gets the beacon block from the beacon rpc api.
-func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *BeaconBlock, err error) {
+func (c *BeaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *BeaconBlock, err error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("%s/eth/v2/beacon/blocks/%d", c.beaconRPC, slot), nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request to get beacon block: %w", err)

@@ -51,7 +51,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 	})
 }
 
-func checkFinalizedL1BlockSelection(t *testing.T, bc *beaconClient, targetTime, expectedSlot uint64, expectedBlockHash common.Hash) {
+func checkFinalizedL1BlockSelection(t *testing.T, bc *BeaconClient, targetTime, expectedSlot uint64, expectedBlockHash common.Hash) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
 	calculatedHash, err := bc.MostRecentFinalizedBlockAtTime(targetTime)
