@@ -1,6 +1,7 @@
 package addresses
 
 import (
+	"github.com/ethereum-optimism/optimism/op-node/chaincfg"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/params"
@@ -19,6 +20,13 @@ var chainAddressMap = map[uint64]*CeloAddresses{
 		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
 	},
 	params.CeloBaklavaChainID: {
+		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
+	},
+	// for op-program tests
+	params.OPMainnetChainID: {
+		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
+	},
+	chaincfg.OPSepolia().L2ChainID.Uint64(): {
 		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
 	},
 }
