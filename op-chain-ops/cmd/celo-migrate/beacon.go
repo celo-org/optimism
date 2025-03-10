@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"net/http"
 	"time"
 
@@ -15,11 +16,19 @@ import (
 )
 
 const (
-	// See - https://eth2book.info/capella/part3/containers/state/
-	// TODO get values for holesky and sepolia here.
-	beaconChainGenesisTimeSeconds  = 1606824023
 	beaconChainSlotDurationSeconds = 12
 	beaconSlotsPerEpoch            = 32
+)
+
+var (
+	Mainnet                        = big.NewInt(1)
+	Holesky                        = big.NewInt(17000)
+	Sepolia                        = big.NewInt(11155111)
+	beaconChainGenesisTimesSeconds = map[*big.Int]uint64{
+		Mainnet: 1606824023,
+		Holesky: 1695902400,
+		Sepolia: 1655733600,
+	}
 )
 
 type BeaconClient struct {
@@ -36,8 +45,8 @@ func NewBeaconClient(beaconRPC string) *BeaconClient {
 }
 
 // Waits for the given epoch start time plus an extra 10 seconds just to ensure that infrastructure has had time to update.
-func AwaitEpoch(epoch uint64) {
-	start := EpochStartTime(epoch)
+func AwaitEpoch(chainID *big.Int, epoch uint64) {
+	start := EpochStartTime(chainID, epoch)
 
 	// Wait till the beginning of the epoch in which our point in time falls. We wait an extra 10 seconds to be sure that
 	// the network has had time to update.
@@ -53,12 +62,12 @@ func AwaitEpoch(epoch uint64) {
 // looking back from the epoch containing the given time, but if no finalized
 // block is found it will consider future epochs that may have finalized a block
 // ocurring before the given time.
-func (c *BeaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.Hash, error) {
+func (c *BeaconClient) MostRecentFinalizedBlockAtTime(chainID *big.Int, unixTime uint64) (common.Hash, error) {
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
 	// This loop looks back for a finalized L1 block that is up to maxSequencerDrift before the L2 fork block.
-	for epoch := ContainingEpoch(unixTime); ; epoch-- {
-		AwaitEpoch(epoch)
+	for epoch := ContainingEpoch(chainID, unixTime); ; epoch-- {
+		AwaitEpoch(chainID, epoch)
 		slot := FirstSlotOfEpoch(epoch)
 		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
 		if err != nil {
@@ -68,7 +77,7 @@ func (c *BeaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.H
 			return common.Hash{}, fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
 		}
 		justifiedEpoch := uint64(finalityCheckpoints.Data.Finalized.Epoch)
-		if !withinMaxSequencerDrift(EpochStartTime(justifiedEpoch), unixTime) {
+		if !withinMaxSequencerDrift(EpochStartTime(chainID, justifiedEpoch), unixTime) {
 			// We've gone too far back and not found a suitable block, so break.
 			break
 		}
@@ -94,8 +103,8 @@ func (c *BeaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.H
 	// If no block found start looking to future epochs, failing if we
 	// cannot find a finalized block ocurring before the L2 fork block.
 	if l1StartBlockHash == (common.Hash{}) {
-		for epoch := ContainingEpoch(unixTime) + 1; ; epoch++ {
-			AwaitEpoch(epoch)
+		for epoch := ContainingEpoch(chainID, unixTime) + 1; ; epoch++ {
+			AwaitEpoch(chainID, epoch)
 			slot := FirstSlotOfEpoch(epoch)
 			finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
 			if err != nil {
@@ -237,12 +246,12 @@ func (c *BeaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 }
 
 // EpochStartTime returns the start time of an epoch.
-func EpochStartTime(epoch uint64) uint64 {
-	return beaconChainGenesisTimeSeconds + (FirstSlotOfEpoch(epoch) * beaconChainSlotDurationSeconds)
+func EpochStartTime(chainID *big.Int, epoch uint64) uint64 {
+	return beaconChainGenesisTimesSeconds[chainID] + (FirstSlotOfEpoch(epoch) * beaconChainSlotDurationSeconds)
 }
 
-func SlotTime(slot uint64) uint64 {
-	return beaconChainGenesisTimeSeconds + (slot * beaconChainSlotDurationSeconds)
+func SlotTime(chainID *big.Int, slot uint64) uint64 {
+	return beaconChainGenesisTimesSeconds[chainID] + (slot * beaconChainSlotDurationSeconds)
 }
 
 // FirstSlotOfEpoch returns the number of the first slot of an epoch.
@@ -251,15 +260,15 @@ func FirstSlotOfEpoch(epoch uint64) uint64 {
 }
 
 // ContainingEpoch returns the number of the epoch whithin which the given time falls.
-func ContainingEpoch(unixTime uint64) uint64 {
-	return ContainingSlot(unixTime) / beaconSlotsPerEpoch
+func ContainingEpoch(chainID *big.Int, unixTime uint64) uint64 {
+	return ContainingSlot(chainID, unixTime) / beaconSlotsPerEpoch
 }
 
 // ContainingSlot returns the slot within which the given time falls.
-func ContainingSlot(unixTime uint64) uint64 {
+func ContainingSlot(chainID *big.Int, unixTime uint64) uint64 {
 	// Get the slot at or before the given time.
 	// Slot = (start - genesis) / slotDuration
-	return (unixTime - beaconChainGenesisTimeSeconds) / beaconChainSlotDurationSeconds
+	return (unixTime - beaconChainGenesisTimesSeconds[chainID]) / beaconChainSlotDurationSeconds
 }
 
 type BeaconBlock struct {

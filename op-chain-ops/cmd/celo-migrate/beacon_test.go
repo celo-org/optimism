@@ -28,7 +28,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 		checkFinalizedL1BlockSelection(t, bc, targetTime+beaconChainSlotDurationSeconds/2, expectedSlot, expectedL1BlockHash)
 	})
 
-	epochFirstSlotTime := EpochStartTime(ContainingEpoch(targetTime))
+	epochFirstSlotTime := EpochStartTime(Mainnet, ContainingEpoch(Mainnet, targetTime))
 	t.Run("StartEpochSlot", func(t *testing.T) {
 		checkFinalizedL1BlockSelection(t, bc, epochFirstSlotTime, expectedSlot, expectedL1BlockHash)
 	})
@@ -54,7 +54,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 func checkFinalizedL1BlockSelection(t *testing.T, bc *BeaconClient, targetTime, expectedSlot uint64, expectedBlockHash common.Hash) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	calculatedHash, err := bc.MostRecentFinalizedBlockAtTime(targetTime)
+	calculatedHash, err := bc.MostRecentFinalizedBlockAtTime(Mainnet, targetTime)
 	require.NoError(t, err)
 	assert.Equal(t, expectedBlockHash, calculatedHash)
 	// Double check that we are targeting the correct slot

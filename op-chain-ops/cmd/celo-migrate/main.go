@@ -449,6 +449,11 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		return fmt.Errorf("cannot dial %s: %w", opts.l1RPC, err)
 	}
 
+	chainID, err := client.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("cannot get L1 chain ID: %w", err)
+	}
+
 	// If the L1 starting block tag is not set, we determine it dynamically by
 	// finding the most recent final L1 block at the time of the L2 fork block.
 	if config.L1StartingBlockTag == nil {
@@ -456,7 +461,7 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		opts.migrationBlockTime = celoL1Head.Time + 60
 		bc := NewBeaconClient(opts.l1BeaconRPC)
 
-		l1StartBlockHash, err := bc.MostRecentFinalizedBlockAtTime(opts.migrationBlockTime)
+		l1StartBlockHash, err := bc.MostRecentFinalizedBlockAtTime(chainID, opts.migrationBlockTime)
 		if err != nil {
 			return fmt.Errorf("failed to find finalized L1 starting block: %w", err)
 		}
