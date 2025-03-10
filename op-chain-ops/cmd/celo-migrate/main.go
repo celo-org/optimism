@@ -451,74 +451,77 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		return fmt.Errorf("cannot dial %s: %w", opts.l1RPC, err)
 	}
 
-	// Used to check block validity, duplicate of the
-	// value defined at op-node/rollup.maxSequencerDriftCelo.
-	var maxSequencerDriftCelo uint64 = 2892
-	var blockTime uint64 = 1
-
 	// If the L1 starting block tag is not set, we determine it dynamically by
 	// finding the most recent final L1 block at the time of the L2 fork block.
-	// If we don't find a block in that slot we consider previous slots, until
-	// we can look no further before the time between the L1 starting block
-	// and the L2 fork block exceeds maxSequencerDrift. Once that point is
-	// reached we look forwards to see if future epochs may finalise a block.
 	if config.L1StartingBlockTag == nil {
 		// Find the L1 starting block, the L2 fork block occurs 1 minute after the last celo L1 block.
 		opts.migrationBlockTime = celoL1Head.Time + 60
-		// Wait for the L2 start time before we calculate the L1 starting block.
-		epoch := ContainingEpoch(opts.migrationBlockTime)
-
 		bc := NewBeaconClient(opts.l1BeaconRPC)
 
 		var l1StartBlockHash common.Hash
 		var l1StartBlockTime uint64
-		for {
-			slot, err := bc.MostRecentFinalizedSlotAtEpoch(epoch)
-			if err != nil {
-				return fmt.Errorf("failed fetching most recent finalized slot at epoch (%v): %w", epoch, err)
-			}
 
-			l1StartBlockHash, l1StartBlockTime, err = bc.FindBlockForSlot(slot, 10)
+		// This loop looks back for a finalized L1 block that is up to maxSequencerDrift before the L2 fork block.
+		for epoch := ContainingEpoch(opts.migrationBlockTime); ; epoch-- {
+			AwaitEpoch(epoch)
+			slot := FirstSlotOfEpoch(epoch)
+			finalityCheckpoints, err := bc.FindFinalityCheckpointsForSlot(slot, 10)
 			if err != nil {
 				if errors.Is(err, ethereum.NotFound) {
-					// If we couldn't find a block we skip an epoch back and see what we can find.
-					epoch--
 					continue
 				}
-				return fmt.Errorf("failed fetching L1 block for slot (%v): %w", slot, err)
+				return fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
 			}
-			// We want to ensure that the L2 fork block is not more than maxSequencerDrift after the L1 starting block.
-			if opts.migrationBlockTime+blockTime-l1StartBlockTime > maxSequencerDriftCelo {
+			justifiedEpoch := uint64(finalityCheckpoints.Data.CurrentJustified.Epoch)
+			if !withinMaxSequencerDrift(opts.migrationBlockTime, EpochStartTime(justifiedEpoch)) {
+				// We've gone too far back and not found a suitable block, so break.
+				break
+			}
+
+			finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
+			l1StartBlockHash, l1StartBlockTime, err = bc.FindBlockForSlot(finalizedSlot, 10)
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					continue
+				}
+				return fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
+			}
+			if !withinMaxSequencerDrift(opts.migrationBlockTime, l1StartBlockTime) {
 				// This block is too old to use with the L2 fork block. Nullify the hash
 				// to signify that no suitable block was yet found.
 				l1StartBlockHash = common.Hash{}
+			} else {
+				log.Info(fmt.Sprintf("Found finalized L1 slot at %d", finalizedSlot))
 			}
 			break
 		}
 
-		// If no block found start looking to future epochs.
+		// If no block found start looking to future epochs, failing if we
+		// cannot find a finalized block ocurring before the L2 fork block.
 		if l1StartBlockHash == (common.Hash{}) {
-			epoch = ContainingEpoch(opts.migrationBlockTime)
-			for {
-				epoch++
-				slot, err := bc.MostRecentFinalizedSlotAtEpoch(epoch)
-				if err != nil {
-					return fmt.Errorf("failed fetching most recent finalized slot at epoch (%v): %w", epoch, err)
-				}
-
-				l1StartBlockHash, l1StartBlockTime, err = bc.FindBlockForSlot(slot, 10)
+			for epoch := ContainingEpoch(opts.migrationBlockTime) + 1; ; epoch++ {
+				slot := FirstSlotOfEpoch(epoch)
+				finalityCheckpoints, err := bc.FindFinalityCheckpointsForSlot(slot, 10)
 				if err != nil {
 					if errors.Is(err, ethereum.NotFound) {
-						// If we couldn't find a block we skip an epoch back and see what we can find.
-						epoch--
 						continue
 					}
-					return fmt.Errorf("failed fetching L1 block for slot (%v): %w", slot, err)
+					return fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
 				}
-
-				// Check to see if the block time exceeds the migration block time, in which case it will not be valid.
-				if l1StartBlockTime > opts.migrationBlockTime {
-					return fmt.Errorf("failed to find Finalized L1 block between unix timestamps %d-%d", opts.migrationBlockTime+blockTime-maxSequencerDriftCelo, opts.migrationBlockTime)
+				justifiedEpoch := uint64(finalityCheckpoints.Data.CurrentJustified.Epoch)
+				finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
+				l1StartBlockHash, l1StartBlockTime, err = bc.FindBlockForSlot(finalizedSlot, 10)
+				if err != nil {
+					if errors.Is(err, ethereum.NotFound) {
+						continue
+					}
+					return fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
+				}
+				if l1StartBlockTime >= opts.migrationBlockTime {
+					// We've gone too far forward and not found a suitable block, so nullify the hash and break.
+					l1StartBlockHash = common.Hash{}
+				} else {
+					log.Info(fmt.Sprintf("Found finalized L1 slot at %d", finalizedSlot))
 				}
 				break
 			}
@@ -582,6 +585,13 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 	log.Info("State Migration Completed")
 
 	return nil
+}
+
+func withinMaxSequencerDrift(l1StartingBlockTime, l2StartBlockTime uint64) bool {
+	// Used to check block validity, duplicate of the
+	// value defined at op-node/rollup.maxSequencerDriftCelo.
+	var maxSequencerDriftCelo uint64 = 2892
+	return l2StartBlockTime-l1StartingBlockTime <= maxSequencerDriftCelo
 }
 
 func runDBCheck(opts dbCheckOptions) (err error) {

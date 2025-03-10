@@ -16,6 +16,7 @@ import (
 
 const (
 	// See - https://eth2book.info/capella/part3/containers/state/
+	// TODO get values for holesky and sepolia here.
 	beaconChainGenesisTimeSeconds  = 1606824000
 	beaconChainSlotDurationSeconds = 12
 	beaconSlotsPerEpoch            = 32
@@ -34,38 +35,38 @@ func NewBeaconClient(beaconRPC string) *beaconClient {
 	}
 }
 
-// MostRecentFinalizedSlotAtEpoch returns the slot of the most recent
-// finalized block during the execution of the given epoch.
-func (c *beaconClient) MostRecentFinalizedSlotAtEpoch(currentEpoch uint64) (uint64, error) {
-	start := EpochStartTime(currentEpoch)
+func AwaitEpoch(epoch uint64) {
+	start := EpochStartTime(epoch)
 
 	// Wait till the beginning of the epoch in which our point in time falls. We wait an extra 10 seconds to be sure that
 	// the network has had time to update.
 	waitTimeSeconds := int64(start) - time.Now().Unix() + 10
 	if waitTimeSeconds > 0 {
-		log.Info("Waiting %v + additional 10 seconds for start of epoch %d, to check for finalized slot at that time", waitTimeSeconds-10, currentEpoch)
+		log.Info("Waiting %v + additional 10 seconds for start of epoch %d, to check for finalized slot at that time", waitTimeSeconds-10, epoch)
 		time.Sleep(time.Duration(waitTimeSeconds) * time.Second)
 	}
+}
 
-	// Get the finality checkpoint for the first slot of the containing epoch.
-	firstSlot := currentEpoch * beaconSlotsPerEpoch
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	finalityCheckpoints, err := c.FinalityCheckpoints(ctx, firstSlot)
-	if err != nil {
-		return 0, fmt.Errorf("error fetching finality checkpoint for slot %d: %w", firstSlot, err)
+// FindFinalityCheckpointForSlot returns the finality checkpoints for 'slot'
+// searching up to 'tries' slots back if only empty slots are encountered.
+func (c *beaconClient) FindFinalityCheckpointsForSlot(slot uint64, tries uint64) (*FinalityCheckpoints, error) {
+	var finalityCheckpoints *FinalityCheckpoints
+	var err error
+	for i := range uint64(tries) {
+		targetSlot := slot - i
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		finalityCheckpoints, err = c.FinalityCheckpoints(ctx, targetSlot)
+		if errors.Is(err, ethereum.NotFound) {
+			// If there is no checkpoint at this slot, skip to the previous slot.
+			continue
+		}
+		if err != nil {
+			return nil, fmt.Errorf("error fetching finality checkpoints for slot %d: %w", targetSlot, err)
+		}
+		return finalityCheckpoints, nil
 	}
-
-	// containingEpoch is guaranteed to not be complete at pointInTime (if pointInTime falls in the last
-	// second of the epoch the epoch is still not complete, and if it was a second later we'd be selecting the next epoch)
-	// The previous epoch is the most recent completed epoch.
-	// The one prior to that is the most recent justified epoch.
-	// And the first block of the justified epoch (the epoch boundary block) will be finalized.
-	// This is assuming that there was at least 2/3 participation in the completed and justified epochs.
-
-	// Calculate the first slot of the most recent justified epoch.
-	finalizedSlot := uint64(finalityCheckpoints.Data.CurrentJustified.Epoch) * beaconSlotsPerEpoch
-	return finalizedSlot, nil
+	return nil, fmt.Errorf("finality_checkpoints %w searching up to %d slots back from slot (%d)", ethereum.NotFound, tries, slot)
 }
 
 // FindBlockForSlot returns the hash and timestamp of the block at the given slot,
@@ -77,7 +78,7 @@ func (c *beaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash co
 	var beaconBlock *BeaconBlock
 	for i := range uint64(10) {
 		targetSlot := slot - i
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		beaconBlock, err := c.BeaconBlock(ctx, targetSlot)
 		if errors.Is(err, ethereum.NotFound) {
@@ -93,7 +94,7 @@ func (c *beaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash co
 		break // We found a good block.
 	}
 	if beaconBlock == nil {
-		return common.Hash{}, 0, fmt.Errorf("finalized block %w searching up to 10 slots back from slot (%d)", ethereum.NotFound, slot)
+		return common.Hash{}, 0, fmt.Errorf("finalized block %w searching up to %d slots back from slot (%d)", ethereum.NotFound, tries, slot)
 	}
 	return common.HexToHash(beaconBlock.Data.Message.Body.ExecutionPayload.BlockHash), uint64(beaconBlock.Data.Message.Body.ExecutionPayload.Timestamp), nil
 }
@@ -147,11 +148,16 @@ func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 
 // EpochStartTime returns the start time of an epoch.
 func EpochStartTime(epoch uint64) uint64 {
-	return beaconChainGenesisTimeSeconds + (epoch * beaconSlotsPerEpoch * beaconChainSlotDurationSeconds)
+	return beaconChainGenesisTimeSeconds + (FirstSlotOfEpoch(epoch) * beaconChainSlotDurationSeconds)
 }
 
 func SlotTime(slot uint64) uint64 {
 	return beaconChainGenesisTimeSeconds + (slot * beaconChainSlotDurationSeconds)
+}
+
+// FirstSlotOfEpoch returns the number of the first slot of an epoch.
+func FirstSlotOfEpoch(epoch uint64) uint64 {
+	return epoch * beaconSlotsPerEpoch
 }
 
 // ContainingEpoch returns the number of the epoch whithin which the given time falls.
