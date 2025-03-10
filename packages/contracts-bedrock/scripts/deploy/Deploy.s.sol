@@ -298,6 +298,24 @@ contract Deploy is Deployer {
         _run(true, false);
     }
 
+    /// @notice Deploy L1 contracts for the Celo OP system.
+    /// @param _superchainConfigProxy The external SuperchainConfig address (Celo uses a custom
+    ///        CeloSuperchainConfig, which calls to the official SuperchainConfig).
+    function runCeloWithSuperchain(address payable _superchainConfigProxy) public {
+        require(_superchainConfigProxy != address(0), "must specify address for superchain config proxy");
+        console.log("Deploying a fresh OP Stack with existing SuperchainConfig");
+
+        Proxy scProxy = Proxy(_superchainConfigProxy);
+        save("SuperchainConfig", scProxy.implementation());
+        save("SuperchainConfigProxy", _superchainConfigProxy);
+
+        // The Celo system does not use a ProtocolVersions contract.
+        save("ProtocolVersions", address(0));
+        save("ProtocolVersionsProxy", address(0));
+
+        _run(false, false);
+    }
+
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
     /// @param _superchainConfigProxy Address of the existing SuperchainConfig proxy
     /// @param _protocolVersionsProxy Address of the existing ProtocolVersions proxy
