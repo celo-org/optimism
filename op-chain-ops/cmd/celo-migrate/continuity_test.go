@@ -69,7 +69,7 @@ func TestCheckContinuity(t *testing.T) {
 			blockRange:     makeRange(1, bodies[1:], receipts[1:], tds[1:], hashes[1:], headers[1:]),
 			prevElement:    &RLPBlockElement{decodedHeader: decodedHeaders[0], hash: hashes[0]},
 			expectedLength: 4,
-			expectErrorMsg: "Unexpected number of hashes for block range: expected 4, actual 3\nUnexpected number of bodies for block range: expected 4, actual 3\nUnexpected number of headers for block range: expected 4, actual 3\nUnexpected number of receipts for block range: expected 4, actual 3\nUnexpected number of total difficulties for block range: expected 4, actual 3",
+			expectErrorMsg: "Unexpected number of hashes for block range: expected 4, actual 3\nUnexpected number of headers for block range: expected 4, actual 3\nUnexpected number of bodies for block range: expected 4, actual 3\nUnexpected number of receipts for block range: expected 4, actual 3\nUnexpected number of total difficulties for block range: expected 4, actual 3",
 		},
 		{
 			name:           "Length mismatch in hashes",
