@@ -11,7 +11,7 @@ import (
 )
 
 func TestFinalizedL1BlockSelection(t *testing.T) {
-	bc := NewBeaconClient("https://eth-beacon-chain.drpc.org/rest", "https://beaconcha.in/api")
+	bc := NewBeaconClient("https://ethereum-beacon-api.publicnode.com")
 	var targetTime uint64 = 1740759647 // this is the timestamp of slot 11161302 https://beaconcha.in/slot/11161302
 	var expectedSlot uint64 = 11161216 // this is the beginning slot of the epoch 2 before https://beaconcha.in/slot/11161216
 	expectedL1BlockHash := common.HexToHash("0x6c71e110fc83faa393017681ab97b26621cda68d12e31d24917e210d169d7be5")
@@ -54,7 +54,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 func checkFinalizedL1BlockSelection(t *testing.T, bc *beaconClient, targetTime, expectedSlot uint64, expectedBlockHash common.Hash) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	t.Cleanup(cancel)
-	calculatedHash, err := bc.MostRecentFinalizedL1BlockAtTime(ctx, targetTime)
+	calculatedHash, err := bc.MostRecentFinalizedBlockAtTime(targetTime)
 	require.NoError(t, err)
 	assert.Equal(t, expectedBlockHash, calculatedHash)
 	// Double check that we are targeting the correct slot

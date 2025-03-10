@@ -17,7 +17,7 @@ import (
 const (
 	// See - https://eth2book.info/capella/part3/containers/state/
 	// TODO get values for holesky and sepolia here.
-	beaconChainGenesisTimeSeconds  = 1606824000
+	beaconChainGenesisTimeSeconds  = 1606824023
 	beaconChainSlotDurationSeconds = 12
 	beaconSlotsPerEpoch            = 32
 )
@@ -47,12 +47,91 @@ func AwaitEpoch(epoch uint64) {
 	}
 }
 
+func (c *beaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.Hash, error) {
+	var l1StartBlockHash common.Hash
+	var l1StartBlockTime uint64
+	// This loop looks back for a finalized L1 block that is up to maxSequencerDrift before the L2 fork block.
+	for epoch := ContainingEpoch(unixTime); ; epoch-- {
+		AwaitEpoch(epoch)
+		slot := FirstSlotOfEpoch(epoch)
+		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
+		if err != nil {
+			if errors.Is(err, ethereum.NotFound) {
+				continue
+			}
+			return common.Hash{}, fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
+		}
+		justifiedEpoch := uint64(finalityCheckpoints.Data.Finalized.Epoch)
+		if !withinMaxSequencerDrift(EpochStartTime(justifiedEpoch), unixTime) {
+			// We've gone too far back and not found a suitable block, so break.
+			break
+		}
+
+		finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
+		l1StartBlockHash, l1StartBlockTime, err = c.FindBlockForSlot(finalizedSlot, 10)
+		if err != nil {
+			if errors.Is(err, ethereum.NotFound) {
+				continue
+			}
+			return common.Hash{}, fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
+		}
+		if !withinMaxSequencerDrift(l1StartBlockTime, unixTime) {
+			// This block is too old to use with the L2 fork block. Nullify the hash
+			// to signify that no suitable block was yet found.
+			l1StartBlockHash = common.Hash{}
+		} else {
+			log.Info(fmt.Sprintf("Found finalized L1 slot at %d", finalizedSlot))
+		}
+		break
+	}
+
+	// If no block found start looking to future epochs, failing if we
+	// cannot find a finalized block ocurring before the L2 fork block.
+	if l1StartBlockHash == (common.Hash{}) {
+		for epoch := ContainingEpoch(unixTime) + 1; ; epoch++ {
+			slot := FirstSlotOfEpoch(epoch)
+			finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					continue
+				}
+				return common.Hash{}, fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
+			}
+			justifiedEpoch := uint64(finalityCheckpoints.Data.Finalized.Epoch)
+			finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
+			l1StartBlockHash, l1StartBlockTime, err = c.FindBlockForSlot(finalizedSlot, 10)
+			if err != nil {
+				if errors.Is(err, ethereum.NotFound) {
+					continue
+				}
+				return common.Hash{}, fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
+			}
+			if l1StartBlockTime >= unixTime {
+				// We've gone too far forward and not found a suitable block, so nullify the hash and break.
+				l1StartBlockHash = common.Hash{}
+			} else {
+				log.Info(fmt.Sprintf("Found finalized L1 slot at %d", finalizedSlot))
+			}
+			break
+		}
+	}
+
+	return l1StartBlockHash, nil
+}
+
+func withinMaxSequencerDrift(l1StartingBlockTime, l2StartBlockTime uint64) bool {
+	// Used to check block validity, duplicate of the
+	// value defined at op-node/rollup.maxSequencerDriftCelo.
+	var maxSequencerDriftCelo uint64 = 2892
+	return l2StartBlockTime-l1StartingBlockTime <= maxSequencerDriftCelo
+}
+
 // FindFinalityCheckpointForSlot returns the finality checkpoints for 'slot'
 // searching up to 'tries' slots back if only empty slots are encountered.
 func (c *beaconClient) FindFinalityCheckpointsForSlot(slot uint64, tries uint64) (*FinalityCheckpoints, error) {
 	var finalityCheckpoints *FinalityCheckpoints
 	var err error
-	for i := range uint64(tries) {
+	for i := range tries {
 		targetSlot := slot - i
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -76,11 +155,11 @@ func (c *beaconClient) FindBlockForSlot(slot uint64, tries uint64) (blockHash co
 	// search back if we encounter empty slots. We check up to 10 slots, if they
 	// are all empty something serious is wrong with the L1 so we abort.
 	var beaconBlock *BeaconBlock
-	for i := range uint64(10) {
+	for i := range tries {
 		targetSlot := slot - i
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		beaconBlock, err := c.BeaconBlock(ctx, targetSlot)
+		beaconBlock, err = c.BeaconBlock(ctx, targetSlot)
 		if errors.Is(err, ethereum.NotFound) {
 			// If there is not block for this slot then skip to the next.
 			continue
@@ -115,6 +194,7 @@ func (c *beaconClient) FinalityCheckpoints(ctx context.Context, slot uint64) (ch
 		return nil, fmt.Errorf("failed to fetch finality checkpoints for slot %d, http status %d: %w", slot, resp.StatusCode, err)
 	}
 
+	checkpoints = &FinalityCheckpoints{}
 	if err := json.NewDecoder(resp.Body).Decode(checkpoints); err != nil {
 		return nil, fmt.Errorf("failed to decode finality checkpoints: %w", err)
 	}
