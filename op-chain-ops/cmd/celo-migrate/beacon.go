@@ -34,8 +34,8 @@ func NewBeaconClient(beaconRPC string) *beaconClient {
 	}
 }
 
-// MostRecentFinalizedL1BlockAtTime returns the hash of the most recent
-// finalized L1 block during the execution of the given epoch.
+// MostRecentFinalizedSlotAtEpoch returns the slot of the most recent
+// finalized block during the execution of the given epoch.
 func (c *beaconClient) MostRecentFinalizedSlotAtEpoch(currentEpoch uint64) (uint64, error) {
 	start := EpochStartTime(currentEpoch)
 
