@@ -130,13 +130,17 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 
 func loadNonAncientRange(db ethdb.Database, start, count uint64, loadAllData bool) (*RLPBlockRange, error) {
 	blockRange := &RLPBlockRange{
-		start:    start,
-		hashes:   make([][]byte, count),
-		headers:  make([][]byte, count),
-		bodies:   make([][]byte, count),
-		receipts: make([][]byte, count),
-		tds:      make([][]byte, count),
+		start:   start,
+		hashes:  make([][]byte, count),
+		headers: make([][]byte, count),
 	}
+
+	if loadAllData {
+		blockRange.bodies = make([][]byte, count)
+		blockRange.receipts = make([][]byte, count)
+		blockRange.tds = make([][]byte, count)
+	}
+
 	end := start + count - 1
 	log.Info("Loading non-ancient block range", "start", start, "end", end, "count", count)
 	numberHashes := rawdb.ReadAllHashesInRange(db, start, end)

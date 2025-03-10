@@ -118,12 +118,15 @@ func loadAncientRange(freezer *rawdb.Freezer, start, count uint64, loadAllData b
 	log.Info("Loading ancient block range", "start", start, "end", start+count-1, "count", count)
 
 	blockRange := &RLPBlockRange{
-		start:    start,
-		hashes:   make([][]byte, count),
-		headers:  make([][]byte, count),
-		bodies:   make([][]byte, count),
-		receipts: make([][]byte, count),
-		tds:      make([][]byte, count),
+		start:   start,
+		hashes:  make([][]byte, count),
+		headers: make([][]byte, count),
+	}
+
+	if loadAllData {
+		blockRange.bodies = make([][]byte, count)
+		blockRange.receipts = make([][]byte, count)
+		blockRange.tds = make([][]byte, count)
 	}
 
 	var err error
@@ -173,6 +176,9 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 	defer close(out)
 
 	for blockRange := range in {
+		if blockRange.bodies == nil || blockRange.receipts == nil || blockRange.tds == nil || blockRange.headers == nil || blockRange.hashes == nil {
+			return fmt.Errorf("block range is missing data")
+		}
 		for i := range blockRange.hashes {
 			blockNumber := blockRange.start + uint64(i)
 
