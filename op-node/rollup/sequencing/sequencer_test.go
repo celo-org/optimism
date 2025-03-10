@@ -52,7 +52,7 @@ func (m *FakeAttributesBuilder) PreparePayloadAttributes(ctx context.Context,
 	attrs = &eth.PayloadAttributes{
 		Timestamp:             eth.Uint64Quantity(l2Parent.Time + m.cfg.BlockTime),
 		PrevRandao:            eth.Bytes32(testutils.RandomHash(m.rng)),
-		SuggestedFeeRecipient: addresses.GetAddressesOrDefault(m.cfg.L2ChainID, addresses.MainnetAddresses).SuggestedFeeRecipient,
+		SuggestedFeeRecipient: addresses.GetAddressesOrDefault(0).SuggestedFeeRecipient,
 		Withdrawals:           nil,
 		ParentBeaconBlockRoot: nil,
 		Transactions:          []eth.Data{encodeID(epoch)}, // simplified replacement for L1-info tx.

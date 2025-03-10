@@ -69,7 +69,7 @@ func TestAttributesQueue(t *testing.T) {
 	rollupCfg := rollup.Config{}
 	l1InfoTx, err := L1InfoDepositBytes(&rollupCfg, expectedL1Cfg, safeHead.SequenceNumber+1, l1Info, 0)
 	require.NoError(t, err)
-	suggestedFeeRecipient := addresses.GetAddressesOrDefault(cfg.L2ChainID, addresses.MainnetAddresses).SuggestedFeeRecipient
+	suggestedFeeRecipient := addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient
 	attrs := eth.PayloadAttributes{
 		Timestamp:             eth.Uint64Quantity(safeHead.Time + cfg.BlockTime),
 		PrevRandao:            eth.Bytes32(l1Info.InfoMixDigest),

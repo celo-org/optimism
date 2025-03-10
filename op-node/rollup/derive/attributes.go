@@ -166,7 +166,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	}
 
 	// Celo does not utilize SequencerFeeVault contract as the fee recipient address by default.
-	suggestedFeeRecipient := addresses.GetAddressesOrDefault(ba.rollupCfg.L2ChainID, addresses.MainnetAddresses).SuggestedFeeRecipient
+	suggestedFeeRecipient := addresses.GetAddressesOrDefault(ba.rollupCfg.L2ChainID.Uint64()).SuggestedFeeRecipient
 	r := &eth.PayloadAttributes{
 		Timestamp:             hexutil.Uint64(nextL2Time),
 		PrevRandao:            eth.Bytes32(l1Info.MixDigest()),

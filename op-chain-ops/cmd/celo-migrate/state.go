@@ -237,7 +237,7 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		gasLimit = 30e6
 	}
 	// Create the header for the Cel2 transition block.
-	suggestedFeeRecipient := rollupAddr.GetAddressesOrDefault(new(big.Int).SetUint64(config.L2ChainID), rollupAddr.MainnetAddresses).SuggestedFeeRecipient
+	suggestedFeeRecipient := rollupAddr.GetAddressesOrDefault(config.L2ChainID).SuggestedFeeRecipient
 	cel2Header := &types.Header{
 		ParentHash:  header.Hash(),
 		UncleHash:   types.EmptyUncleHash,

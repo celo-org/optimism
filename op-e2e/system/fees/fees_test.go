@@ -148,7 +148,7 @@ func testFees(t *testing.T, cfg e2esys.SystemConfig) {
 	l1FeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.L1FeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	require.Nil(t, err)
 
-	suggestedFeeRecipient := rollupAddr.GetAddressesOrDefault(cfg.L2ChainIDBig(), rollupAddr.MainnetAddresses).SuggestedFeeRecipient
+	suggestedFeeRecipient := rollupAddr.GetAddressesOrDefault(cfg.L2ChainIDBig().Uint64()).SuggestedFeeRecipient
 	suggestedFeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), suggestedFeeRecipient, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	require.Nil(t, err)
 
