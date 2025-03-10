@@ -35,6 +35,7 @@ func NewBeaconClient(beaconRPC string) *beaconClient {
 	}
 }
 
+// Waits for the given epoch start time plus an extra 10 seconds just to ensure that infrastructure has had time to update.
 func AwaitEpoch(epoch uint64) {
 	start := EpochStartTime(epoch)
 
@@ -47,6 +48,11 @@ func AwaitEpoch(epoch uint64) {
 	}
 }
 
+// MostRecentFinalizedBlockAtTime returns the hash of the most recent finalized
+// block that is up to maxSequencerDrift before the L2 fork block. It starts by
+// looking back from the epoch containing the given time, but if no finalized
+// block is found it will consider future epochs that may have finalized a block
+// ocurring before the given time.
 func (c *beaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.Hash, error) {
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
@@ -89,6 +95,7 @@ func (c *beaconClient) MostRecentFinalizedBlockAtTime(unixTime uint64) (common.H
 	// cannot find a finalized block ocurring before the L2 fork block.
 	if l1StartBlockHash == (common.Hash{}) {
 		for epoch := ContainingEpoch(unixTime) + 1; ; epoch++ {
+			AwaitEpoch(epoch)
 			slot := FirstSlotOfEpoch(epoch)
 			finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
 			if err != nil {
@@ -191,6 +198,9 @@ func (c *beaconClient) FinalityCheckpoints(ctx context.Context, slot uint64) (ch
 		err = errors.Join(err, resp.Body.Close())
 	}()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusNotFound {
+			return nil, fmt.Errorf("finality checkpoints for slot %d %w", slot, ethereum.NotFound)
+		}
 		return nil, fmt.Errorf("failed to fetch finality checkpoints for slot %d, http status %d: %w", slot, resp.StatusCode, err)
 	}
 
@@ -216,7 +226,7 @@ func (c *beaconClient) BeaconBlock(ctx context.Context, slot uint64) (block *Bea
 	}()
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusNotFound {
-			return nil, fmt.Errorf("failed to fetch beacon block at slot %d: %w", slot, ethereum.NotFound)
+			return nil, fmt.Errorf("beacon block at slot %d %w", slot, ethereum.NotFound)
 		}
 		return nil, fmt.Errorf("failed to fetch beacon block at slot %d, http status %d", slot, resp.StatusCode)
 	}
