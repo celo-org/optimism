@@ -310,8 +310,10 @@ contract Deploy is Deployer {
         save("SuperchainConfigProxy", _superchainConfigProxy);
 
         // The Celo system does not use a ProtocolVersions contract.
-        save("ProtocolVersions", address(0));
-        save("ProtocolVersionsProxy", address(0));
+        // Set to a non-0 dummy address such that `mustGetAddress` does not revert (e.g. when
+        // _proxies() is called).
+        save("ProtocolVersions", address(1));
+        save("ProtocolVersionsProxy", address(1));
 
         _run(false, false);
     }
