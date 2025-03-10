@@ -8,9 +8,9 @@ import (
 	"os"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/genesis"
+	rollupAddr "github.com/ethereum-optimism/optimism/op-node/rollup/addresses"
 	"github.com/ethereum-optimism/optimism/op-service/ioutil"
 	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
-	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/contracts/addresses"
@@ -237,10 +237,11 @@ func applyStateMigrationChanges(config *genesis.DeployConfig, l2Allocs types.Gen
 		gasLimit = 30e6
 	}
 	// Create the header for the Cel2 transition block.
+	suggestedFeeRecipient := rollupAddr.GetAddressesOrDefault(new(big.Int).SetUint64(config.L2ChainID), rollupAddr.MainnetAddresses).SuggestedFeeRecipient
 	cel2Header := &types.Header{
 		ParentHash:  header.Hash(),
 		UncleHash:   types.EmptyUncleHash,
-		Coinbase:    predeploys.SequencerFeeVaultAddr,
+		Coinbase:    suggestedFeeRecipient,
 		Root:        newRoot,
 		TxHash:      types.EmptyTxsHash,
 		ReceiptHash: types.EmptyReceiptsHash,
