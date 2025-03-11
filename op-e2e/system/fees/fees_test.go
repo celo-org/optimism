@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
+	rollupAddr "github.com/ethereum-optimism/optimism/op-node/rollup/addresses"
 	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -147,7 +148,8 @@ func testFees(t *testing.T, cfg e2esys.SystemConfig) {
 	l1FeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.L1FeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	require.Nil(t, err)
 
-	sequencerFeeVaultStartBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.SequencerFeeVaultAddr, big.NewInt(rpc.EarliestBlockNumber.Int64()))
+	suggestedFeeRecipient := rollupAddr.GetAddressesOrDefault(cfg.L2ChainIDBig().Uint64()).SuggestedFeeRecipient
+	suggestedFeeRecipientStartBalance, err := l2Seq.BalanceAt(context.Background(), suggestedFeeRecipient, big.NewInt(rpc.EarliestBlockNumber.Int64()))
 	require.Nil(t, err)
 
 	genesisBlock, err := l2Seq.BlockByNumber(context.Background(), big.NewInt(rpc.EarliestBlockNumber.Int64()))
@@ -192,20 +194,20 @@ func testFees(t *testing.T, cfg e2esys.SystemConfig) {
 	l1FeeRecipientEndBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.L1FeeVaultAddr, header.Number)
 	require.Nil(t, err)
 
-	sequencerFeeVaultEndBalance, err := l2Seq.BalanceAt(context.Background(), predeploys.SequencerFeeVaultAddr, header.Number)
+	suggestedFeeRecipientEndBalance, err := l2Seq.BalanceAt(context.Background(), suggestedFeeRecipient, header.Number)
 	require.Nil(t, err)
 
 	// Diff fee recipient + coinbase balances
 	baseFeeRecipientDiff := new(big.Int).Sub(baseFeeRecipientEndBalance, baseFeeRecipientStartBalance)
 	l1FeeRecipientDiff := new(big.Int).Sub(l1FeeRecipientEndBalance, l1FeeRecipientStartBalance)
-	sequencerFeeVaultDiff := new(big.Int).Sub(sequencerFeeVaultEndBalance, sequencerFeeVaultStartBalance)
+	suggestedFeeRecipientDiff := new(big.Int).Sub(suggestedFeeRecipientEndBalance, suggestedFeeRecipientStartBalance)
 	coinbaseDiff := new(big.Int).Sub(coinbaseEndBalance, coinbaseStartBalance)
 
 	// Tally L2 Fee
 	l2Fee := gasTip.Mul(gasTip, new(big.Int).SetUint64(receipt.GasUsed))
-	require.Equal(t, sequencerFeeVaultDiff, coinbaseDiff, "coinbase is always sequencer fee vault")
+	require.Equal(t, suggestedFeeRecipientDiff, coinbaseDiff, "coinbase is always suggested fee recipient")
 	require.Equal(t, l2Fee, coinbaseDiff, "l2 fee mismatch")
-	require.Equal(t, l2Fee, sequencerFeeVaultDiff)
+	require.Equal(t, l2Fee, suggestedFeeRecipientDiff)
 
 	// Tally BaseFee
 	baseFee := new(big.Int).Mul(header.BaseFee, new(big.Int).SetUint64(receipt.GasUsed))
