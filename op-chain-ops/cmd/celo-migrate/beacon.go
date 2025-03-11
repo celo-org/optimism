@@ -159,6 +159,10 @@ func (c *BeaconClient) FindFinalityCheckpointsForSlot(slot uint64, tries uint64)
 		if err != nil {
 			return nil, fmt.Errorf("error fetching finality checkpoints for slot %d: %w", targetSlot, err)
 		}
+		if finalityCheckpoints.Data.Finalized.Epoch == 0 {
+			// In the case that finality has not yet been achieved, skip to the previous slot.
+			continue
+		}
 		return finalityCheckpoints, nil
 	}
 	return nil, fmt.Errorf("finality_checkpoints %w searching up to %d slots back from slot (%d)", ethereum.NotFound, tries, slot)
