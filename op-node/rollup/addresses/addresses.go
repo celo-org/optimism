@@ -14,7 +14,7 @@ type CeloAddresses struct {
 // Map chainIDs to their respective addresses
 var chainAddressMap = map[uint64]*CeloAddresses{
 	params.CeloMainnetChainID: {
-		SuggestedFeeRecipient: common.HexToAddress("0xaa"), // TODO: replace it with the actual one
+		SuggestedFeeRecipient: common.HexToAddress("0x7A1E98FC9a008107DbD1f430a05Ace8cf6f3FE19"),
 	},
 	params.CeloAlfajoresChainID: {
 		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
