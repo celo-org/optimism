@@ -69,11 +69,6 @@ var (
 		Usage:    "Specifies the migration block number. If the source db is not synced exactly to the block immediately before this number (i.e. migration-block-number - 1), the migration will fail.",
 		Required: true,
 	}
-	migrationBlockTimeFlag = &cli.Uint64Flag{
-		Name:     "migration-block-time",
-		Usage:    "Specifies a unix timestamp to use for the migration block, a required parameter for alfajores(1727339320) and baklava(1740081460) migrations, but not required for the mainnet migration.",
-		Required: false,
-	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
 		Usage:    "Path to the old Celo chaindata dir, can be found at '<datadir>/celo/chaindata'",
@@ -136,7 +131,6 @@ var (
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
 		outfileGenesisFlag,
-		migrationBlockTimeFlag,
 		migrationBlockNumberFlag,
 		l1BeaconRPCFlag,
 	)
@@ -198,7 +192,6 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
 		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
-		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
 		l1BeaconRPC:         ctx.String(l1BeaconRPCFlag.Name),
 	}
 }
@@ -301,15 +294,17 @@ func runFullMigration(opts fullMigrationOptions) error {
 	if err != nil {
 		return err
 	}
-
-	// Verify that either (migration-block-time and l1StartingBlockTag) are set or l1-beacon-rpc is set.
-	switch {
-	case (opts.migrationBlockTime != 0) != (config.L1StartingBlockTag != nil):
-		// Check that either both migration block time and l1StartingBlockTag are set or unset.
-		return fmt.Errorf("if the migration-block-time flag is specified, the l1StartingBlockTag in the deploy config must also be specified and vice versa")
-	case opts.l1BeaconRPC != "" && opts.migrationBlockTime != 0:
-		// Check that l1BeaconRPC is not set with migrationBlockTime and l1StartingBlockTag.
-		return fmt.Errorf("if the l1-beacon-rpc flag is specified, the migration-block-time flag and l1StartingBlockTag in the deploy config must be unset")
+	switch config.L2ChainID {
+	case 62320: // baklava
+		opts.migrationBlockTime = 1740081460
+	case 44787: // alfajores
+		opts.migrationBlockTime = 1727339320
+	default:
+		opts.migrationBlockTime = head.Time + 60
+	}
+	// Verify that one of l1StartingBlockTag or l1BeaconRPC is set, but not both.
+	if !((config.L1StartingBlockTag != nil) != (opts.l1BeaconRPC != "")) {
+		return fmt.Errorf("exactly one of l1StartingBlockTag or l1BeaconRPC must be set")
 	}
 
 	var numAncients uint64
