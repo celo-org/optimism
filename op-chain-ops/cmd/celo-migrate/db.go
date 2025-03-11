@@ -85,6 +85,9 @@ func checkForPrevFullMigration(newDBPath string) (bool, error) {
 
 	newDB, err := openDBWithoutFreezer(newDBPath, true)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
 		return false, fmt.Errorf("failed to open new database: %w", err)
 	}
 	defer newDB.Close()
