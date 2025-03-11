@@ -53,20 +53,48 @@ func (e *RLPBlockElement) Number() uint64 {
 	return e.Header().Number.Uint64()
 }
 
+func (e *RLPBlockElement) Body() ([]byte, error) {
+	if e.body == nil {
+		return nil, fmt.Errorf("block element body is nil for block %d", e.Number())
+	}
+	return e.body, nil
+}
+
+func (e *RLPBlockElement) Receipts() ([]byte, error) {
+	if e.receipts == nil {
+		return nil, fmt.Errorf("block element receipts are nil for block %d", e.Number())
+	}
+	return e.receipts, nil
+}
+
+func (e *RLPBlockElement) TD() ([]byte, error) {
+	if e.td == nil {
+		return nil, fmt.Errorf("block element total difficulty is nil for block %d", e.Number())
+	}
+	return e.td, nil
+}
+
 func (r *RLPBlockRange) Element(i uint64) (*RLPBlockElement, error) {
 	header := types.Header{}
 	err := rlp.DecodeBytes(r.headers[i], &header)
 	if err != nil {
 		return nil, fmt.Errorf("can't decode header: %w", err)
 	}
-	return &RLPBlockElement{
+	element := &RLPBlockElement{
 		decodedHeader: &header,
 		hash:          r.hashes[i],
 		header:        r.headers[i],
-		body:          r.bodies[i],
-		receipts:      r.receipts[i],
-		td:            r.tds[i],
-	}, nil
+	}
+	if r.bodies != nil {
+		element.body = r.bodies[i]
+	}
+	if r.receipts != nil {
+		element.receipts = r.receipts[i]
+	}
+	if r.tds != nil {
+		element.td = r.tds[i]
+	}
+	return element, nil
 }
 
 // CheckContinuity checks if the block data in the range is continuous
@@ -115,16 +143,16 @@ func (r *RLPBlockRange) CheckLengths(expectedLength uint64) error {
 	if uint64(len(r.hashes)) != expectedLength {
 		err = fmt.Errorf("Unexpected number of hashes for block range: expected %d, actual %d", expectedLength, len(r.hashes))
 	}
-	if uint64(len(r.bodies)) != expectedLength {
-		err = errors.Join(err, fmt.Errorf("Unexpected number of bodies for block range: expected %d, actual %d", expectedLength, len(r.bodies)))
-	}
 	if uint64(len(r.headers)) != expectedLength {
 		err = errors.Join(err, fmt.Errorf("Unexpected number of headers for block range: expected %d, actual %d", expectedLength, len(r.headers)))
 	}
-	if uint64(len(r.receipts)) != expectedLength {
+	if r.bodies != nil && uint64(len(r.bodies)) != expectedLength {
+		err = errors.Join(err, fmt.Errorf("Unexpected number of bodies for block range: expected %d, actual %d", expectedLength, len(r.bodies)))
+	}
+	if r.receipts != nil && uint64(len(r.receipts)) != expectedLength {
 		err = errors.Join(err, fmt.Errorf("Unexpected number of receipts for block range: expected %d, actual %d", expectedLength, len(r.receipts)))
 	}
-	if uint64(len(r.tds)) != expectedLength {
+	if r.tds != nil && uint64(len(r.tds)) != expectedLength {
 		err = errors.Join(err, fmt.Errorf("Unexpected number of total difficulties for block range: expected %d, actual %d", expectedLength, len(r.tds)))
 	}
 	return err

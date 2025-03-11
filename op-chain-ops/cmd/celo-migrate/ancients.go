@@ -98,7 +98,7 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 		count := min(batchSize, endBlock-i)
 		start := i
 
-		blockRange, err := loadAncientRange(freezer, start, count)
+		blockRange, err := loadAncientRange(freezer, start, count, true)
 		if err != nil {
 			return fmt.Errorf("Failed to load ancient block range: %w", err)
 		}
@@ -114,16 +114,19 @@ func readAncientBlocks(ctx context.Context, freezer *rawdb.Freezer, startBlock, 
 	return nil
 }
 
-func loadAncientRange(freezer *rawdb.Freezer, start, count uint64) (*RLPBlockRange, error) {
+func loadAncientRange(freezer *rawdb.Freezer, start, count uint64, loadAllData bool) (*RLPBlockRange, error) {
 	log.Info("Loading ancient block range", "start", start, "end", start+count-1, "count", count)
 
 	blockRange := &RLPBlockRange{
-		start:    start,
-		hashes:   make([][]byte, count),
-		headers:  make([][]byte, count),
-		bodies:   make([][]byte, count),
-		receipts: make([][]byte, count),
-		tds:      make([][]byte, count),
+		start:   start,
+		hashes:  make([][]byte, count),
+		headers: make([][]byte, count),
+	}
+
+	if loadAllData {
+		blockRange.bodies = make([][]byte, count)
+		blockRange.receipts = make([][]byte, count)
+		blockRange.tds = make([][]byte, count)
 	}
 
 	var err error
@@ -135,17 +138,34 @@ func loadAncientRange(freezer *rawdb.Freezer, start, count uint64) (*RLPBlockRan
 	if err != nil {
 		return nil, fmt.Errorf("failed to read headers from freezer: %w", err)
 	}
-	blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read bodies from freezer: %w", err)
-	}
-	blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read receipts from freezer: %w", err)
-	}
-	blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read tds from freezer: %w", err)
+	if loadAllData {
+		blockRange.bodies, err = freezer.AncientRange(rawdb.ChainFreezerBodiesTable, start, count, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read bodies from freezer: %w", err)
+		}
+		blockRange.receipts, err = freezer.AncientRange(rawdb.ChainFreezerReceiptTable, start, count, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read receipts from freezer: %w", err)
+		}
+		blockRange.tds, err = freezer.AncientRange(rawdb.ChainFreezerDifficultyTable, start, count, 0)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read tds from freezer: %w", err)
+		}
+	} else {
+		for i := start; i < start+count; i++ {
+			bodyExists, err := freezer.HasAncient(rawdb.ChainFreezerBodiesTable, i)
+			if err != nil || !bodyExists {
+				return nil, fmt.Errorf("failed to read bodies from freezer")
+			}
+			receiptExists, err := freezer.HasAncient(rawdb.ChainFreezerReceiptTable, i)
+			if err != nil || !receiptExists {
+				return nil, fmt.Errorf("failed to read receipts from freezer")
+			}
+			tdExists, err := freezer.HasAncient(rawdb.ChainFreezerDifficultyTable, i)
+			if err != nil || !tdExists {
+				return nil, fmt.Errorf("failed to read tds from freezer")
+			}
+		}
 	}
 
 	return blockRange, nil
@@ -156,6 +176,9 @@ func transformBlocks(ctx context.Context, in <-chan RLPBlockRange, out chan<- RL
 	defer close(out)
 
 	for blockRange := range in {
+		if blockRange.bodies == nil || blockRange.receipts == nil || blockRange.tds == nil || blockRange.headers == nil || blockRange.hashes == nil {
+			return fmt.Errorf("block range is missing data")
+		}
 		for i := range blockRange.hashes {
 			blockNumber := blockRange.start + uint64(i)
 
@@ -245,7 +268,7 @@ func loadLastAncient(freezer *rawdb.Freezer) (*RLPBlockElement, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get number of ancients in freezer: %w", err)
 	}
-	blockRange, err := loadAncientRange(freezer, numAncients-1, 1)
+	blockRange, err := loadAncientRange(freezer, numAncients-1, 1, false)
 	if err != nil {
 		return nil, err
 	}

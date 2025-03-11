@@ -128,15 +128,19 @@ func migrateNonAncientBlock(number uint64, hash common.Hash, newDB ethdb.Databas
 	return nil
 }
 
-func loadNonAncientRange(db ethdb.Database, start, count uint64) (*RLPBlockRange, error) {
+func loadNonAncientRange(db ethdb.Database, start, count uint64, loadAllData bool) (*RLPBlockRange, error) {
 	blockRange := &RLPBlockRange{
-		start:    start,
-		hashes:   make([][]byte, count),
-		headers:  make([][]byte, count),
-		bodies:   make([][]byte, count),
-		receipts: make([][]byte, count),
-		tds:      make([][]byte, count),
+		start:   start,
+		hashes:  make([][]byte, count),
+		headers: make([][]byte, count),
 	}
+
+	if loadAllData {
+		blockRange.bodies = make([][]byte, count)
+		blockRange.receipts = make([][]byte, count)
+		blockRange.tds = make([][]byte, count)
+	}
+
 	end := start + count - 1
 	log.Info("Loading non-ancient block range", "start", start, "end", end, "count", count)
 	numberHashes := rawdb.ReadAllHashesInRange(db, start, end)
@@ -156,17 +160,32 @@ func loadNonAncientRange(db ethdb.Database, start, count uint64) (*RLPBlockRange
 		if err != nil {
 			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find header in db for non-ancient block %d - %x: %w", number, hash, err))
 		}
-		blockRange.bodies[i], err = db.Get(blockBodyKey(number, hash))
-		if err != nil {
-			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find body in db for non-ancient block %d - %x: %w", number, hash, err))
-		}
-		blockRange.receipts[i], err = db.Get(blockReceiptsKey(number, hash))
-		if err != nil {
-			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find receipts in db for non-ancient block %d - %x: %w", number, hash, err))
-		}
-		blockRange.tds[i], err = db.Get(headerTDKey(number, hash))
-		if err != nil {
-			combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find total difficulty in db for non-ancient block %d - %x: %w", number, hash, err))
+		if loadAllData {
+			blockRange.bodies[i], err = db.Get(blockBodyKey(number, hash))
+			if err != nil {
+				combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find body in db for non-ancient block %d - %x: %w", number, hash, err))
+			}
+			blockRange.receipts[i], err = db.Get(blockReceiptsKey(number, hash))
+			if err != nil {
+				combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find receipts in db for non-ancient block %d - %x: %w", number, hash, err))
+			}
+			blockRange.tds[i], err = db.Get(headerTDKey(number, hash))
+			if err != nil {
+				combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find total difficulty in db for non-ancient block %d - %x: %w", number, hash, err))
+			}
+		} else {
+			bodyExists, err := db.Has(blockBodyKey(number, hash))
+			if err != nil || !bodyExists {
+				combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find body in db for non-ancient block %d - %x", number, hash))
+			}
+			receiptExists, err := db.Has(blockReceiptsKey(number, hash))
+			if err != nil || !receiptExists {
+				combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find receipts in db for non-ancient block %d - %x", number, hash))
+			}
+			tdExists, err := db.Has(headerTDKey(number, hash))
+			if err != nil || !tdExists {
+				combinedErr = errors.Join(combinedErr, fmt.Errorf("failed to find total difficulty in db for non-ancient block %d - %x", number, hash))
+			}
 		}
 	}
 
