@@ -114,6 +114,8 @@ contract Setup {
     IOptimismSuperchainERC20Factory l2OptimismSuperchainERC20Factory =
         IOptimismSuperchainERC20Factory(Predeploys.OPTIMISM_SUPERCHAIN_ERC20_FACTORY);
 
+    bool needsSuperchain = true;
+
     /// @dev Deploys the Deploy contract without including its bytecode in the bytecode
     ///      of this contract by fetching the bytecode dynamically using `vm.getCode()`.
     ///      If the Deploy bytecode is included in this contract, then it will double
@@ -143,7 +145,7 @@ contract Setup {
             hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
         );
 
-        deploy.run();
+        deploy.run(needsSuperchain);
         console.log("Setup: completed L1 deployment, registering addresses now");
 
         optimismPortal = IOptimismPortal(deploy.mustGetAddress("OptimismPortalProxy"));
@@ -268,5 +270,9 @@ contract Setup {
 
     function labelPreinstall(address _addr) internal {
         vm.label(_addr, Preinstalls.getName(_addr));
+    }
+
+    function withoutSuperchain() internal {
+        needsSuperchain = false;
     }
 }

@@ -289,13 +289,22 @@ contract Deploy is Deployer {
 
     /// @notice Deploy all of the L1 contracts necessary for a full Superchain with a single Op Chain.
     ///         The two parameters correspond to:
-    ///         1. Whether or not the Superchain contracts need to be deployed. Set to deploy a new Superchain contracts
+    ///         1. Whether or not the Superchain contracts need to be deployed. We do not deploy a
+    ///            SuperchainConfig, instead the address of the external one should be provided in
+    ///            the deployment config.
     ///         2. Whether or not the fault games need to be initialized. Set to false, and execute latter
     /// `setupFaultGames()` to initialize
     ///            when the config `faultGameGenesisOutputRoot` is known
     function runCelo() public {
-        console.log("Deploying a fresh OP Stack including SuperchainConfig");
-        _run(true, false);
+        console.log(
+            "Deploying a fresh OP Stack, without SuperchainConfig (address should be provided in `externalSuperchainConfig` parameter of the deploy JSON)"
+        );
+        _run(false, false);
+    }
+
+    /// @notice For testing purposes.
+    function run(bool _needsSuperchain) public {
+        _run(_needsSuperchain);
     }
 
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
@@ -369,6 +378,18 @@ contract Deploy is Deployer {
         if (_needsSuperchain) {
             setupSuperchain();
             console.log("set up superchain!");
+        } else {
+            require(
+                cfg.externalSuperchainConfig() != address(0), "Need to provide the external SuperchainConfig address!"
+            );
+            // Inject the external SuperchainConfig address into Artifacts, so it can be retrieved
+            // by contracts that depend on it (e.g. CeloSuperchainConfig).
+            save("SuperchainConfigProxy", cfg.externalSuperchainConfig());
+
+            // Still need a ProtocolVersions deployment.
+            deployERC1967Proxy("ProtocolVersionsProxy");
+            deployProtocolVersions();
+            initializeProtocolVersions();
         }
 
         setupCeloSuperchainConfig();

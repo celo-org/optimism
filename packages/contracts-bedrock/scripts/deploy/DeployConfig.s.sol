@@ -95,6 +95,7 @@ contract DeployConfig is Script {
     bool public useInterop;
 
     bool public deployCeloContracts;
+    address public externalSuperchainConfig;
 
     bool public proxyAdminOwnerIsMultisig;
 
@@ -185,6 +186,7 @@ contract DeployConfig is Script {
         useInterop = _readOr(_json, "$.useInterop", false);
 
         deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
+        externalSuperchainConfig = _readOr(_json, "$.externalSuperchainConfig", address(0));
 
         proxyAdminOwnerIsMultisig = stdJson.readBool(_json, "$.proxyAdminOwnerIsMultisig");
 
@@ -283,6 +285,11 @@ contract DeployConfig is Script {
     function setUseCustomGasToken(address _token) public {
         useCustomGasToken = true;
         customGasTokenAddress = _token;
+    }
+
+    /// @notice Allow the `externalSuperchainConfig` config to be overridden in testing environments
+    function setExternalSuperchainConfig(address _externalSuperchainConfig) public {
+        externalSuperchainConfig = _externalSuperchainConfig;
     }
 
     /// @notice Allow the ProxyAdmin owner configs (`finalSystemOwner`, `proxyAdminOwner`, and
