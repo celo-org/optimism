@@ -57,18 +57,15 @@ func AwaitEpoch(chainID *big.Int, epoch uint64) {
 	}
 }
 
-// MostRecentFinalizedBlockAtTime returns the hash of the most recent finalized
-// block that is up to maxSequencerDrift before the L2 fork block. It starts by
-// looking back from the epoch containing the given time, but if no finalized
-// block is found it will consider future epochs that may have finalized a block
-// ocurring before the given time.
-func (c *BeaconClient) MostRecentFinalizedBlockAtTime(chainID *big.Int, unixTime uint64) (common.Hash, error) {
+// findL1StartingBlock looks back or forward (depending on the epochIncrement)
+// for a finalized L1 block that is up to maxSequencerDrift before the L2 fork
+// block.
+func (c *BeaconClient) findL1StartingBlock(chainID *big.Int, unixTime uint64, epochIncrement int64) (common.Hash, error) {
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
-	// This loop looks back for a finalized L1 block that is up to maxSequencerDrift before the L2 fork block.
-	for epoch := ContainingEpoch(chainID, unixTime); ; epoch-- {
-		AwaitEpoch(chainID, epoch)
-		slot := FirstSlotOfEpoch(epoch)
+	for epoch := int64(ContainingEpoch(chainID, unixTime)); ; epoch += epochIncrement {
+		AwaitEpoch(chainID, uint64(epoch))
+		slot := FirstSlotOfEpoch(uint64(epoch))
 		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
 		if err != nil {
 			if errors.Is(err, ethereum.NotFound) {
@@ -81,7 +78,6 @@ func (c *BeaconClient) MostRecentFinalizedBlockAtTime(chainID *big.Int, unixTime
 			// We've gone too far back and not found a suitable block, so break.
 			break
 		}
-
 		finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
 		l1StartBlockHash, l1StartBlockTime, err = c.FindBlockForSlot(finalizedSlot, 10)
 		if err != nil {
@@ -90,49 +86,40 @@ func (c *BeaconClient) MostRecentFinalizedBlockAtTime(chainID *big.Int, unixTime
 			}
 			return common.Hash{}, fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
 		}
-		if !withinMaxSequencerDrift(l1StartBlockTime, unixTime) {
+		switch {
+		case !withinMaxSequencerDrift(l1StartBlockTime, unixTime):
 			// This block is too old to use with the L2 fork block. Nullify the hash
 			// to signify that no suitable block was yet found.
 			l1StartBlockHash = common.Hash{}
-		} else {
+		case l1StartBlockTime >= unixTime:
+			// We've gone too far forward and not found a suitable block, so nullify the hash and break.
+			l1StartBlockHash = common.Hash{}
+		default:
 			log.Info(fmt.Sprintf("Found finalized L1 slot at %d", finalizedSlot))
 		}
 		break
 	}
+	return l1StartBlockHash, nil
+}
 
-	// If no block found start looking to future epochs, failing if we
-	// cannot find a finalized block ocurring before the L2 fork block.
-	if l1StartBlockHash == (common.Hash{}) {
-		for epoch := ContainingEpoch(chainID, unixTime) + 1; ; epoch++ {
-			AwaitEpoch(chainID, epoch)
-			slot := FirstSlotOfEpoch(epoch)
-			finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
-			if err != nil {
-				if errors.Is(err, ethereum.NotFound) {
-					continue
-				}
-				return common.Hash{}, fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
-			}
-			justifiedEpoch := uint64(finalityCheckpoints.Data.Finalized.Epoch)
-			finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
-			l1StartBlockHash, l1StartBlockTime, err = c.FindBlockForSlot(finalizedSlot, 10)
-			if err != nil {
-				if errors.Is(err, ethereum.NotFound) {
-					continue
-				}
-				return common.Hash{}, fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
-			}
-			if l1StartBlockTime >= unixTime {
-				// We've gone too far forward and not found a suitable block, so nullify the hash and break.
-				l1StartBlockHash = common.Hash{}
-			} else {
-				log.Info(fmt.Sprintf("Found finalized L1 slot at %d", finalizedSlot))
-			}
-			break
+// MostRecentFinalizedBlockAtTime returns the hash of the most recent finalized
+// block that is up to maxSequencerDrift before the L2 fork block. It starts by
+// looking back from the epoch containing the given time, but if no finalized
+// block is found it will consider future epochs that may have finalized a block
+// ocurring before the given time.
+func (c *BeaconClient) MostRecentFinalizedBlockAtTime(chainID *big.Int, unixTime uint64) (common.Hash, error) {
+	hash, err := c.findL1StartingBlock(chainID, unixTime, -1)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	if hash == (common.Hash{}) {
+		// Try searching forward
+		hash, err = c.findL1StartingBlock(chainID, unixTime, 1)
+		if err != nil {
+			return common.Hash{}, err
 		}
 	}
-
-	return l1StartBlockHash, nil
+	return hash, nil
 }
 
 func withinMaxSequencerDrift(l1StartingBlockTime, l2StartBlockTime uint64) bool {
