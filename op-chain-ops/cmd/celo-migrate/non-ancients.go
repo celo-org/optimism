@@ -29,7 +29,7 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 	// Convert output to string
 	outputStr := string(output)
 
-	opts := []string{"-v", "-a", "--exclude=ancient", "--checksum", "--delete"}
+	opts := []string{"-v", "-a", "--exclude=ancient", "--delete"}
 
 	// Check for supported options
 	// Prefer --info=progress2 over --progress
@@ -50,10 +50,8 @@ func copyDbExceptAncients(oldDbPath, newDbPath string) error {
 	// '-a' archive mode; equals -rlptgoD. It is a quick way of saying you want recursion and want to preserve almost everything, including timestamps, ownerships, permissions, etc.
 	// Timestamps are important here because they are used to determine which files are newer and should be copied over.
 	//
-	// '--whole-file' This is the default when both the source and destination are specified as local paths, which they are here (oldDbPath and newDbPath).
+	// (default) '--whole-file' This is the default when both the source and destination are specified as local paths, which they are here (oldDbPath and newDbPath).
 	// This option disables rsync’s delta-transfer algorithm, which causes all transferred files to be sent whole. The delta-transfer algorithm is normally used when the destination is a remote system.
-	//
-	// '--checksum' This forces rsync to compare the checksums of all files to determine if they are the same. This is slows down the transfer but ensures that source and destination directories end up with the same contents (excluding /ancients).
 
 	log.Info("Running rsync command", "command", cmd.String())
 	cmd.Stdout = os.Stdout

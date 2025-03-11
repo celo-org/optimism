@@ -360,12 +360,6 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return nil, 0, fmt.Errorf("failed to create new db path: %w", err)
 	}
 
-	if opts.resetNonAncients {
-		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
-			return nil, 0, fmt.Errorf("failed to cleanup non-ancient db: %w", err)
-		}
-	}
-
 	if !opts.skipDbCheck {
 		err = runDBCheckFromLastMigrated(opts)
 		if err != nil {
@@ -391,7 +385,26 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return nil
 	})
 	g.Go(func() error {
-		// By doing this once during the premigration, we get a speedup when we run it again in a full migration.
+		// Check if we should reset the non-ancient db. This is necessary if a full migration has been run before.
+		// The script can also be forced to reset non-ancients by passing the --reset flag.
+		shouldReset := opts.resetNonAncients
+		if !shouldReset {
+			prevFullMigration, err := checkForPrevFullMigration(opts.newDBPath)
+			if err != nil {
+				return fmt.Errorf("failed to check for previous full migration: %w", err)
+			}
+			if prevFullMigration {
+				log.Info("Previous full migration detected", "process", "pre-migration")
+			}
+			shouldReset = prevFullMigration
+		}
+		if shouldReset {
+			log.Info("Resetting non-ancient db", "process", "pre-migration")
+			if err := cleanupNonAncientDb(opts.newDBPath); err != nil {
+				return fmt.Errorf("failed to cleanup non-ancient db: %w", err)
+			}
+		}
+		// By doing this copy once during the premigration, we get a speedup when we run it again in a full migration.
 		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
 	})
 
@@ -421,6 +434,11 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 	lastAncient := numAncients - 1
 
 	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
+
+	log.Info("Writing full migration marker", "process", "non-ancients")
+	if err := writeFullMigrationMarker(newDB); err != nil {
+		return fmt.Errorf("failed to write full migration marker: %w", err)
+	}
 
 	var numNonAncients uint64
 	if numNonAncients, err = migrateNonAncientsDb(newDB, lastBlock, numAncients, batchSize); err != nil {
