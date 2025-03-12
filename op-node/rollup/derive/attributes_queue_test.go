@@ -12,8 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/addresses"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
@@ -69,11 +69,10 @@ func TestAttributesQueue(t *testing.T) {
 	rollupCfg := rollup.Config{}
 	l1InfoTx, err := L1InfoDepositBytes(&rollupCfg, expectedL1Cfg, safeHead.SequenceNumber+1, l1Info, 0)
 	require.NoError(t, err)
-	suggestedFeeRecipient := addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient
 	attrs := eth.PayloadAttributes{
 		Timestamp:             eth.Uint64Quantity(safeHead.Time + cfg.BlockTime),
 		PrevRandao:            eth.Bytes32(l1Info.InfoMixDigest),
-		SuggestedFeeRecipient: suggestedFeeRecipient,
+		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
 		Transactions:          []eth.Data{l1InfoTx, eth.Data("foobar"), eth.Data("example")},
 		NoTxPool:              true,
 		GasLimit:              (*eth.Uint64Quantity)(&expectedL1Cfg.GasLimit),
