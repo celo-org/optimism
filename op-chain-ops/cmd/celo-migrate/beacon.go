@@ -80,14 +80,22 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 			return common.Hash{}, fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
 		}
 		justifiedEpoch := uint64(finalityCheckpoints.Data.Finalized.Epoch)
+
 		if !withinMaxSequencerDrift(EpochStartTime(chainID, justifiedEpoch), unixTime) {
-			log.Info(fmt.Sprintf(
-				"Searched too far back, justified epoch %d with start time %d more than maxSequencerDrift before %d",
-				justifiedEpoch, EpochStartTime(chainID, justifiedEpoch), unixTime,
-			))
-			// We've gone too far back and not found a suitable block, so break.
-			break
+			if epochIncrement < 0 {
+				// Searching backwards we exit if we've gone too far.
+				log.Info(fmt.Sprintf(
+					"Searched too far back, justified epoch %d with start time %d more than maxSequencerDrift before %d",
+					justifiedEpoch, EpochStartTime(chainID, justifiedEpoch), unixTime,
+				))
+				// We've gone too far back and not found a suitable block, so break.
+				break
+			} else {
+				// Searching forwards, if the justified epoch is too old we go to the next.
+				continue
+			}
 		}
+
 		finalizedSlot := FirstSlotOfEpoch(justifiedEpoch)
 		l1StartBlockHash, l1StartBlockTime, err = c.FindBlockForSlot(finalizedSlot, 10)
 		if err != nil {
@@ -98,12 +106,17 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 		}
 		switch {
 		case !withinMaxSequencerDrift(l1StartBlockTime, unixTime):
-			// This block is too old to use with the L2 fork block. Nullify the hash
-			// to signify that no suitable block was yet found.
-			log.Info(fmt.Sprintf(
-				"Found a finalized block (%s) at time (%d) but it is more than maxSequencerDrift before %d", l1StartBlockHash, l1StartBlockTime, unixTime,
-			))
-			l1StartBlockHash = common.Hash{}
+			if epochIncrement < 0 {
+				// Searching backwards we exit if we've gone too far. Nullify the hash
+				// to signify that no suitable block was yet found.
+				log.Info(fmt.Sprintf(
+					"Found a finalized block (%s) at time (%d) but it is more than maxSequencerDrift before %d", l1StartBlockHash, l1StartBlockTime, unixTime,
+				))
+				l1StartBlockHash = common.Hash{}
+			} else {
+				// Searching forwards, if the block is too old then try the next epoch.
+				continue
+			}
 		case l1StartBlockTime >= unixTime:
 			log.Info(fmt.Sprintf(
 				"Found a finalized block (%s) at time (%d) but it is too new it falls after %d", l1StartBlockHash, l1StartBlockTime, unixTime,
