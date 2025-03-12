@@ -69,7 +69,7 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 		unixTime, chainID, beaconChainGenesisTimesSeconds[chainID], epoch, EpochStartTime(chainID, uint64(epoch))))
 
 	for ; ; epoch += epochIncrement {
-		log.Info(fmt.Sprintf("Checking epoch %d"))
+		log.Info(fmt.Sprintf("Checking epoch %d", epoch))
 		AwaitEpoch(chainID, uint64(epoch))
 		slot := FirstSlotOfEpoch(uint64(epoch))
 		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
@@ -106,7 +106,7 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 			l1StartBlockHash = common.Hash{}
 		case l1StartBlockTime >= unixTime:
 			log.Info(fmt.Sprintf(
-				"Found a finalized block (%s) at time (%d) but it is too new it falls after %d", l1StartBlockHash, l1StartBlockTime,
+				"Found a finalized block (%s) at time (%d) but it is too new it falls after %d", l1StartBlockHash, l1StartBlockTime, unixTime,
 			))
 			// We've gone too far forward and not found a suitable block, so nullify the hash and break.
 			l1StartBlockHash = common.Hash{}
