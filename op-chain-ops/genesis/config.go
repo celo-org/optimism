@@ -911,6 +911,9 @@ type DeployConfig struct {
 	// DeployCeloContracts indicates whether to deploy Celo contracts.
 	DeployCeloContracts bool `json:"deployCeloContracts"`
 
+	// Address of the external SuperchainConfig that CeloSuperchainConfig should point to.
+	ExternalSuperchainConfig common.Address `json:"externalSuperchainConfig"`
+
 	// Used to validate the ProxyAdmin owner address.
 	ProxyAdminOwnerIsMultisig bool `json:"proxyAdminOwnerIsMultisig"`
 }
