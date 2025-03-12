@@ -75,6 +75,7 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
 		if err != nil {
 			if errors.Is(err, ethereum.NotFound) {
+				log.Info(fmt.Sprintf("No finality checkpoints found in slots (%d-%d]", slot-10, slot))
 				continue
 			}
 			return common.Hash{}, fmt.Errorf("failed fetching finality checkpoints for slot %d: %w", slot, err)
@@ -100,6 +101,7 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 		l1StartBlockHash, l1StartBlockTime, err = c.FindBlockForSlot(finalizedSlot, 10)
 		if err != nil {
 			if errors.Is(err, ethereum.NotFound) {
+				log.Info(fmt.Sprintf("No finalized block found in slots (%d-%d]", finalizedSlot-10, finalizedSlot))
 				continue
 			}
 			return common.Hash{}, fmt.Errorf("failed fetching L1 block for slot (%v): %w", finalizedSlot, err)
