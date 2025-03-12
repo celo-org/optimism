@@ -14,13 +14,13 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-node/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/addresses"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/conductor"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/engine"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/event"
 	"github.com/ethereum-optimism/optimism/op-service/clock"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
@@ -52,7 +52,7 @@ func (m *FakeAttributesBuilder) PreparePayloadAttributes(ctx context.Context,
 	attrs = &eth.PayloadAttributes{
 		Timestamp:             eth.Uint64Quantity(l2Parent.Time + m.cfg.BlockTime),
 		PrevRandao:            eth.Bytes32(testutils.RandomHash(m.rng)),
-		SuggestedFeeRecipient: addresses.GetAddressesOrDefault(0).SuggestedFeeRecipient,
+		SuggestedFeeRecipient: predeploys.SequencerFeeVaultAddr,
 		Withdrawals:           nil,
 		ParentBeaconBlockRoot: nil,
 		Transactions:          []eth.Data{encodeID(epoch)}, // simplified replacement for L1-info tx.
