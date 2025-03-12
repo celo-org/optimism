@@ -62,7 +62,13 @@ func AwaitEpoch(chainID uint64, epoch uint64) {
 func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epochIncrement int64) (common.Hash, error) {
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
-	for epoch := int64(ContainingEpoch(chainID, unixTime)); ; epoch += epochIncrement {
+
+	epoch := int64(ContainingEpoch(chainID, unixTime))
+	log.Info(fmt.Sprintf(
+		"Searching for finalized block at time %d, chain (%d) beacon genesis time %d, containing epoch %d, epoch start time %d",
+		unixTime, chainID, beaconChainGenesisTimesSeconds[chainID], epoch, EpochStartTime(chainID, uint64(epoch))))
+
+	for ; ; epoch += epochIncrement {
 		AwaitEpoch(chainID, uint64(epoch))
 		slot := FirstSlotOfEpoch(uint64(epoch))
 		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
