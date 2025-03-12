@@ -93,6 +93,10 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 				break
 			} else {
 				// Searching forwards, if the justified epoch is too old we go to the next.
+				log.Info(fmt.Sprintf(
+					"Justified epoch %d with start time %d more than maxSequencerDrift before %d, going to next epoch",
+					justifiedEpoch, EpochStartTime(chainID, justifiedEpoch), unixTime,
+				))
 				continue
 			}
 		}
@@ -117,6 +121,10 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 				l1StartBlockHash = common.Hash{}
 			} else {
 				// Searching forwards, if the block is too old then try the next epoch.
+				log.Info(fmt.Sprintf(
+					"Block (%s) with time %d more than maxSequencerDrift before %d, going to next epoch",
+					l1StartBlockHash, l1StartBlockTime, unixTime,
+				))
 				continue
 			}
 		case l1StartBlockTime >= unixTime:
