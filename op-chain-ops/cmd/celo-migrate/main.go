@@ -499,7 +499,7 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 		opts.migrationBlockTime = celoL1Head.Time + 60
 		bc := NewBeaconClient(opts.l1BeaconRPC)
 
-		l1StartBlockHash, err := bc.MostRecentFinalizedBlockAtTime(chainID, opts.migrationBlockTime)
+		l1StartBlockHash, err := bc.MostRecentFinalizedBlockAtTime(chainID.Uint64(), opts.migrationBlockTime)
 		if err != nil {
 			return fmt.Errorf("failed to find finalized L1 starting block: %w", err)
 		}
