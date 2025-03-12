@@ -34,6 +34,7 @@ contract CeloSuperchainConfig is Initializable, ISemver {
         bytes32(uint256(keccak256("celoSuperchainConfig.superchainConfig")) - 1);
     /// @notice Emitted when the pause is triggered.
     /// @param identifier A string helping to identify provenance of the pause transaction.
+
     event Paused(string identifier);
 
     /// @notice Emitted when the pause is lifted.

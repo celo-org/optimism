@@ -60,7 +60,7 @@ contract SuperchainConfig is Initializable, ISemver {
     }
 
     /// @notice Getter for the current paused status.
-    function paused() public view virtual returns (bool paused_) {
+    function paused() public view returns (bool paused_) {
         paused_ = Storage.getBool(PAUSED_SLOT);
     }
 

@@ -19,8 +19,8 @@ import { ISemver } from "src/universal/interfaces/ISemver.sol";
 
 /// @title DeputyGuardianModule
 /// @notice This module is intended to be enabled on the Security Council Safe, which will own the Guardian role in the
-///         CeloSuperchainConfig contract. The DeputyGuardianModule should allow a Deputy Guardian to administer any of the
-///         actions that the Guardian is authorized to take. The security council can revoke the Deputy Guardian's
+///         CeloSuperchainConfig contract. The DeputyGuardianModule should allow a Deputy Guardian to administer any of
+///         the actions that the Guardian is authorized to take. The security council can revoke the Deputy Guardian's
 ///         authorization at any time by disabling this module.
 contract DeputyGuardianModule is ISemver {
     /// @notice Error message for failed transaction execution
