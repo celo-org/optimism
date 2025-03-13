@@ -63,13 +63,28 @@ func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epoc
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
 
-	epoch := int64(ContainingEpoch(chainID, unixTime))
+	containingEpoch := int64(ContainingEpoch(chainID, unixTime))
 	log.Info(fmt.Sprintf(
 		"Searching for finalized block at time %d, chain (%d) beacon genesis time %d, containing epoch %d, epoch start time %d",
-		unixTime, chainID, beaconChainGenesisTimesSeconds[chainID], epoch, EpochStartTime(chainID, uint64(epoch))))
+		unixTime, chainID, beaconChainGenesisTimesSeconds[chainID], containingEpoch, EpochStartTime(chainID, uint64(containingEpoch))))
 
-	for ; ; epoch += epochIncrement {
+	for epoch := containingEpoch; ; epoch += epochIncrement {
 		log.Info(fmt.Sprintf("Checking epoch %d", epoch))
+		if epochIncrement < 0 && !withinMaxSequencerDrift(EpochStartTime(chainID, uint64(epoch)), unixTime) {
+			// We've gone too far back and not found a suitable block, so break.
+			log.Info(fmt.Sprintf(
+				"Searched too far back, epoch %d with start time %d more than maxSequencerDrift before %d",
+				epoch, EpochStartTime(chainID, uint64(epoch)), unixTime,
+			))
+			break
+		} else if epochIncrement > 0 && epoch > containingEpoch+3 {
+			// We've looked too far forward we will never find a finalized block
+			log.Info(fmt.Sprintf(
+				"Searched too far forward, epoch %d could not finalize a block in epoch %d or earlier",
+				epoch, containingEpoch,
+			))
+			break
+		}
 		AwaitEpoch(chainID, uint64(epoch))
 		slot := FirstSlotOfEpoch(uint64(epoch))
 		finalityCheckpoints, err := c.FindFinalityCheckpointsForSlot(slot, 10)
