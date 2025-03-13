@@ -60,6 +60,9 @@ func AwaitEpoch(chainID uint64, epoch uint64) {
 // for a finalized L1 block that is up to maxSequencerDrift before the L2 fork
 // block.
 func (c *BeaconClient) findL1StartingBlock(chainID uint64, unixTime uint64, epochIncrement int64) (common.Hash, error) {
+	if epochIncrement == 0 {
+		return common.Hash{}, fmt.Errorf("epoch increment must be non-zero")
+	}
 	var l1StartBlockHash common.Hash
 	var l1StartBlockTime uint64
 
