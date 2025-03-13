@@ -545,7 +545,7 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 	}
 	log.Info("Updated Cel2 state")
 
-	rollupConfig, err := config.RollupConfig(l1StartBlock.Header(), cel2Header.Hash(), cel2Header.Number.Uint64())
+	rollupConfig, err := config.RollupConfig(l1StartBlock.Header(), cel2Header.Hash(), cel2Header.Number.Uint64(), cel2Header.Time)
 	if err != nil {
 		return err
 	}
