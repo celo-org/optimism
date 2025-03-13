@@ -82,7 +82,7 @@ var (
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
 		Usage: "Batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
-		Value: 50000,
+		Value: 5000,
 	}
 	bufferSizeFlag = &cli.Uint64Flag{
 		Name:  "buffer-size",
