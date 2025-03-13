@@ -59,7 +59,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 		t.Skip("Holesky public node does not support old historical queries for finality_checkpoints, so this test does not work any more")
 		// celo l1 migraiton block 30819350
 		// Timestamp for the last block of the l1 (one prior to the migration block) 1741771293
-		// Timestamp targetted by the migration script for l2 block start 1741771353  (last block of celo l1 + one minute)
+		// Timestamp targeted by the migration script for l2 block start 1741771353  (last block of celo l1 + one minute)
 		bc := NewBeaconClient("https://ethereum-holesky-beacon-api.publicnode.com")
 		var targetTime uint64 = 1741771353
 		var expectedSlot uint64 = 3822400
@@ -73,7 +73,7 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 	t.Run("CeloMainnetDryRun1Mainnet", func(t *testing.T) {
 		// celo l1 migraiton block 30824250
 		// Timestamp for the last block of the l1 (one prior to the migration block) 1741771293
-		// Timestamp targetted by the migration script for l2 block start 1741795853 (last block of celo l1 + one minute)
+		// Timestamp targeted by the migration script for l2 block start 1741795853 (last block of celo l1 + one minute)
 		bc := NewBeaconClient("https://ethereum-beacon-api.publicnode.com")
 		var targetTime uint64 = 1741795853
 		var expectedSlot uint64 = 11247584
