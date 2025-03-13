@@ -2,18 +2,17 @@ package main
 
 import (
 	"context"
-	"os"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFinalizedL1BlockSelection(t *testing.T) {
-
+	// Uncomment to see log output during tests
+	// log.SetDefault(log.NewLogger(log.NewTerminalHandler(os.Stdout, false)))
 	t.Run("DefaultTest", func(t *testing.T) {
 		bc := NewBeaconClient("https://ethereum-beacon-api.publicnode.com")
 		var chainID uint64 = Mainnet
@@ -61,7 +60,6 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 		// celo l1 migraiton block 30819350
 		// Timestamp for the last block of the l1 (one prior to the migration block) 1741771293
 		// Timestamp targetted by the migration script for l2 block start 1741771353  (last block of celo l1 + one minute)
-		log.SetDefault(log.NewLogger(log.NewTerminalHandler(os.Stdout, false)))
 		bc := NewBeaconClient("https://ethereum-holesky-beacon-api.publicnode.com")
 		var targetTime uint64 = 1741771353
 		var expectedSlot uint64 = 3822400
@@ -76,7 +74,6 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 		// celo l1 migraiton block 30824250
 		// Timestamp for the last block of the l1 (one prior to the migration block) 1741771293
 		// Timestamp targetted by the migration script for l2 block start 1741795853 (last block of celo l1 + one minute)
-		log.SetDefault(log.NewLogger(log.NewTerminalHandler(os.Stdout, false)))
 		bc := NewBeaconClient("https://ethereum-beacon-api.publicnode.com")
 		var targetTime uint64 = 1741795853
 		var expectedSlot uint64 = 11247584
@@ -84,8 +81,6 @@ func TestFinalizedL1BlockSelection(t *testing.T) {
 		checkFinalizedL1BlockSelection(t, bc, Mainnet, targetTime, expectedSlot, expectedL1BlockHash)
 
 	})
-
-	// log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stdout, log.TerminalFormat(true))))
 }
 
 func checkFinalizedL1BlockSelection(t *testing.T, bc *BeaconClient, chainID, targetTime, expectedSlot uint64, expectedBlockHash common.Hash) {
