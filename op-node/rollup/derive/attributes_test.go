@@ -14,8 +14,8 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/addresses"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
 
@@ -123,7 +123,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		require.Nil(t, attrs.EIP1559Params) // should be nil prior to Holocene
 		require.Equal(t, l2Parent.Time+cfg.BlockTime, uint64(attrs.Timestamp))
 		require.Equal(t, eth.Bytes32(l1Info.InfoMixDigest), attrs.PrevRandao)
-		require.Equal(t, addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient, attrs.SuggestedFeeRecipient)
+		require.Equal(t, predeploys.SequencerFeeVaultAddr, attrs.SuggestedFeeRecipient)
 		require.Equal(t, 1, len(attrs.Transactions))
 		require.Equal(t, l1InfoTx, []byte(attrs.Transactions[0]))
 		require.True(t, attrs.NoTxPool)
@@ -163,7 +163,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		require.NotNil(t, attrs)
 		require.Equal(t, l2Parent.Time+cfg.BlockTime, uint64(attrs.Timestamp))
 		require.Equal(t, eth.Bytes32(l1Info.InfoMixDigest), attrs.PrevRandao)
-		require.Equal(t, addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient, attrs.SuggestedFeeRecipient)
+		require.Equal(t, predeploys.SequencerFeeVaultAddr, attrs.SuggestedFeeRecipient)
 		require.Equal(t, len(l2Txs), len(attrs.Transactions), "Expected txs to equal l1 info tx + user deposit txs")
 		require.Equal(t, l2Txs, attrs.Transactions)
 		require.True(t, attrs.NoTxPool)
@@ -191,7 +191,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		require.NotNil(t, attrs)
 		require.Equal(t, l2Parent.Time+cfg.BlockTime, uint64(attrs.Timestamp))
 		require.Equal(t, eth.Bytes32(l1Info.InfoMixDigest), attrs.PrevRandao)
-		require.Equal(t, addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient, attrs.SuggestedFeeRecipient)
+		require.Equal(t, predeploys.SequencerFeeVaultAddr, attrs.SuggestedFeeRecipient)
 		require.Equal(t, 1, len(attrs.Transactions))
 		require.Equal(t, l1InfoTx, []byte(attrs.Transactions[0]))
 		require.True(t, attrs.NoTxPool)
@@ -241,7 +241,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		require.NotNil(t, attrs)
 		require.Equal(t, l2Parent.Time+cfg.BlockTime, uint64(attrs.Timestamp))
 		require.Equal(t, eth.Bytes32(l1Info.InfoMixDigest), attrs.PrevRandao)
-		require.Equal(t, addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient, attrs.SuggestedFeeRecipient)
+		require.Equal(t, predeploys.SequencerFeeVaultAddr, attrs.SuggestedFeeRecipient)
 		require.Equal(t, len(l2Txs), len(attrs.Transactions), "Expected txs to equal l1 info tx + user deposit txs + DepositsComplete")
 		require.Equal(t, eth.Data(depositsComplete).String(), attrs.Transactions[len(l2Txs)-1].String())
 		require.Equal(t, l2Txs, attrs.Transactions)
@@ -281,7 +281,7 @@ func TestPreparePayloadAttributes(t *testing.T) {
 		require.NotNil(t, attrs)
 		require.Equal(t, l2Parent.Time+cfg.BlockTime, uint64(attrs.Timestamp))
 		require.Equal(t, eth.Bytes32(l1Info.InfoMixDigest), attrs.PrevRandao)
-		require.Equal(t, addresses.GetAddressesOrDefault(cfg.L2ChainID.Uint64()).SuggestedFeeRecipient, attrs.SuggestedFeeRecipient)
+		require.Equal(t, predeploys.SequencerFeeVaultAddr, attrs.SuggestedFeeRecipient)
 		require.Equal(t, len(l2Txs), len(attrs.Transactions), "Expected txs to equal l1 info tx + user deposit txs + DepositsComplete")
 		require.Equal(t, eth.Data(depositsComplete).String(), attrs.Transactions[len(l2Txs)-1].String())
 		require.Equal(t, l2Txs, attrs.Transactions)

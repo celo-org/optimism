@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum-optimism/optimism/op-node/rollup/addresses"
+	"github.com/ethereum-optimism/optimism/op-service/predeploys"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
@@ -96,7 +96,6 @@ func NewL2Genesis(config *DeployConfig, l1StartHeader *types.Header) (*core.Gene
 		difficulty = newHexBig(0)
 	}
 
-	suggestedFeeRecipient := addresses.GetAddressesOrDefault(config.L2ChainID).SuggestedFeeRecipient
 	genesis := &core.Genesis{
 		Config:     &optimismChainConfig,
 		Nonce:      uint64(config.L2GenesisBlockNonce),
@@ -104,7 +103,7 @@ func NewL2Genesis(config *DeployConfig, l1StartHeader *types.Header) (*core.Gene
 		GasLimit:   uint64(gasLimit),
 		Difficulty: difficulty.ToInt(),
 		Mixhash:    config.L2GenesisBlockMixHash,
-		Coinbase:   suggestedFeeRecipient,
+		Coinbase:   predeploys.SequencerFeeVaultAddr,
 		Number:     uint64(config.L2GenesisBlockNumber),
 		GasUsed:    uint64(config.L2GenesisBlockGasUsed),
 		ParentHash: config.L2GenesisBlockParentHash,
