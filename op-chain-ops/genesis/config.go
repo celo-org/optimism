@@ -919,7 +919,8 @@ type DeployConfig struct {
 	LegacyDeployConfig `evm:"-"`
 
 	// DeployCeloContracts indicates whether to deploy Celo contracts.
-	DeployCeloContracts       bool            `json:"deployCeloContracts"`
+	DeployCeloContracts bool `json:"deployCeloContracts"`
+	// Unused, added to make strict config parsing possible
 	ProxyAdminOwnerIsMultiSig *bool           `json:"proxyAdminOwnerIsMultisig,omitempty"`
 	ExternalSuperchainConfig  *common.Address `json:"externalSuperchainConfig,omitempty"`
 }
