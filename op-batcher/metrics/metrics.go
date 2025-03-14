@@ -50,6 +50,9 @@ type Metricer interface {
 
 	RecordBlobUsedBytes(num int)
 
+	RecordBatchDaType(daType string)
+	RecordFailoverToEthDA()
+
 	Document() []opmetrics.DocumentedMetric
 
 	PendingDABytes() float64
@@ -88,6 +91,9 @@ type Metrics struct {
 	channelInputBytesTotal  prometheus.Counter
 	channelOutputBytesTotal prometheus.Counter
 	channelQueueLength      prometheus.Gauge
+
+	batchSentDATypeTotal prometheus.CounterVec
+	altDaFailoverTotal   prometheus.Counter
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -197,6 +203,18 @@ func NewMetrics(procName string) *Metrics {
 			Namespace: ns,
 			Name:      "channel_queue_length",
 			Help:      "The number of channels currently in memory.",
+		}),
+		batchSentDATypeTotal: *factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "batch_sent_da_type_total",
+			Help:      "Total number of batches sent, categorized by DA type",
+		},
+			[]string{"da_type"},
+		),
+		altDaFailoverTotal: factory.NewCounter(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "alt_da_failover_total",
+			Help:      "Total number of batches that failed to send to AltDA and were instead sent to L1",
 		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
@@ -343,6 +361,14 @@ func (m *Metrics) RecordBatchTxFailed() {
 
 func (m *Metrics) RecordBlobUsedBytes(num int) {
 	m.blobUsedBytes.Observe(float64(num))
+}
+
+func (m *Metrics) RecordBatchDaType(daType string) {
+	m.batchSentDATypeTotal.With(prometheus.Labels{"da_type": daType}).Inc()
+}
+
+func (m *Metrics) RecordFailoverToEthDA() {
+	m.altDaFailoverTotal.Inc()
 }
 
 func (m *Metrics) RecordChannelQueueLength(len int) {

@@ -863,6 +863,7 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 		}
 		// if Alt DA is enabled we post the txdata to the DA Provider and replace it with the commitment.
 		l.publishToAltDAAndL1(txdata, queue, receiptsCh, daGroup)
+		l.Metr.RecordBatchDaType(txdata.daType.Name())
 		// we return nil to allow publishStateToL1 to keep processing the next txdata
 		return nil
 	case DaTypeBlob:
@@ -884,6 +885,7 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 	}
 
 	l.sendTx(txdata, false, candidate, queue, receiptsCh)
+	l.Metr.RecordBatchDaType(txdata.daType.Name())
 	return nil
 }
 
