@@ -919,7 +919,9 @@ type DeployConfig struct {
 	LegacyDeployConfig `evm:"-"`
 
 	// DeployCeloContracts indicates whether to deploy Celo contracts.
-	DeployCeloContracts bool `json:"deployCeloContracts"`
+	DeployCeloContracts       bool            `json:"deployCeloContracts"`
+	ProxyAdminOwnerIsMultiSig *bool           `json:"proxyAdminOwnerIsMultisig,omitempty"`
+	ExternalSuperchainConfig  *common.Address `json:"externalSuperchainConfig,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
