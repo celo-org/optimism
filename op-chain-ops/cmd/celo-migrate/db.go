@@ -17,8 +17,9 @@ import (
 
 // Constants for the database
 const (
-	DBCache   = 1024 // size of the cache in MB
-	DBHandles = 60   // number of handles
+	DBCache                 = 1024                      // size of the cache in MB
+	DBHandles               = 60                        // number of handles
+	CeloFullMigrationMarker = "celoFullMigrationMarker" // Marker to indicate whether a previous full migration attempt has modified the database
 )
 
 var (
@@ -66,6 +67,33 @@ func blockBodyKey(number uint64, hash common.Hash) []byte {
 // blockReceiptsKey = blockReceiptsPrefix + num (uint64 big endian) + hash
 func blockReceiptsKey(number uint64, hash common.Hash) []byte {
 	return append(append(blockReceiptsPrefix, encodeBlockNumber(number)...), hash.Bytes()...)
+}
+
+// readFullMigrationMarker reads a marker indicating whether a previous full migration attempt has modified the database
+func readFullMigrationMarker(db ethdb.KeyValueReader) ([]byte, error) {
+	return db.Get([]byte(CeloFullMigrationMarker))
+}
+
+// writeFullMigrationMarker writes a marker indicating that a full migration has been attempted on the database
+func writeFullMigrationMarker(db ethdb.KeyValueWriter) error {
+	return db.Put([]byte(CeloFullMigrationMarker), []byte{1})
+}
+
+// checkForPrevFullMigration checks if a previous full migration has already been attempted on the database
+func checkForPrevFullMigration(newDBPath string) (bool, error) {
+	defer timer("checkForPrevFullMigration")()
+
+	newDB, err := openDBWithoutFreezer(newDBPath, true)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to open new database: %w", err)
+	}
+	defer newDB.Close()
+
+	marker, _ := readFullMigrationMarker(newDB)
+	return len(marker) > 0, nil
 }
 
 // Opens a database without access to AncientsDb
