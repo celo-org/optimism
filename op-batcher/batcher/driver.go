@@ -48,6 +48,7 @@ type txRef struct {
 	isCancel bool
 	isBlob   bool
 	daType   DaType
+	size     int
 }
 
 func (r txRef) String() string {
@@ -839,6 +840,7 @@ func (l *BatchSubmitter) publishToAltDAAndL1(txdata txData, queue *txmgr.Queue[t
 			return nil
 		}
 		l.Log.Info("Set altda input", "commitment", comm, "tx", txdata.ID())
+		l.Metr.RecordBatchDataSizeBytes(DaTypeAltDA.Name(), len(txdata.CallData()))
 		candidate := l.calldataTxCandidate(comm.TxData())
 		l.sendTx(txdata, false, candidate, queue, receiptsCh)
 		return nil
@@ -911,7 +913,7 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		candidate.GasLimit = floorDataGas
 	}
 
-	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType}, *candidate, receiptsCh)
+	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}, *candidate, receiptsCh)
 }
 
 // Copypaste from upstream geth
@@ -965,6 +967,9 @@ func (l *BatchSubmitter) handleReceipt(r txmgr.TxReceipt[txRef]) {
 	} else if r.Receipt != nil {
 		l.recordConfirmedTx(r.ID.id, r.Receipt)
 		l.Metr.RecordBatchDaType(r.ID.daType.Name())
+		if r.ID.daType != DaTypeAltDA {
+			l.Metr.RecordBatchDataSizeBytes(r.ID.daType.Name(), r.ID.size)
+		}
 	}
 	// Both r.Err and r.Receipt can be nil, in which case we do nothing.
 }

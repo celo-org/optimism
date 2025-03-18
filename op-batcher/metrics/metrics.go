@@ -51,6 +51,7 @@ type Metricer interface {
 	RecordBlobUsedBytes(num int)
 
 	RecordBatchDaType(daType string)
+	RecordBatchDataSizeBytes(daType string, size int)
 	RecordFailoverToEthDA()
 
 	Document() []opmetrics.DocumentedMetric
@@ -92,8 +93,9 @@ type Metrics struct {
 	channelOutputBytesTotal prometheus.Counter
 	channelQueueLength      prometheus.Gauge
 
-	batchSentDATypeTotal prometheus.CounterVec
-	altDaFailoverTotal   prometheus.Counter
+	batchSentDATypeTotal          prometheus.CounterVec
+	batchStoredDataSizeBytesTotal prometheus.CounterVec
+	altDaFailoverTotal            prometheus.Counter
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -209,6 +211,13 @@ func NewMetrics(procName string) *Metrics {
 			Name:      "batch_sent_da_type_total",
 			Help:      "Total number of batches sent, categorized by DA type",
 		},
+			[]string{"da_type"},
+		),
+		batchStoredDataSizeBytesTotal: *factory.NewCounterVec(
+			prometheus.CounterOpts{
+				Name: "batch_stored_data_size_bytes_total",
+				Help: "Total data size stored in each DA type (in bytes)",
+			},
 			[]string{"da_type"},
 		),
 		altDaFailoverTotal: factory.NewCounter(prometheus.CounterOpts{
@@ -365,6 +374,10 @@ func (m *Metrics) RecordBlobUsedBytes(num int) {
 
 func (m *Metrics) RecordBatchDaType(daType string) {
 	m.batchSentDATypeTotal.With(prometheus.Labels{"da_type": daType}).Inc()
+}
+
+func (m *Metrics) RecordBatchDataSizeBytes(daType string, size int) {
+	m.batchStoredDataSizeBytesTotal.WithLabelValues(daType).Add(float64(size))
 }
 
 func (m *Metrics) RecordFailoverToEthDA() {
