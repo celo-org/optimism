@@ -68,16 +68,18 @@ network: production: mainnet: #MainnetTemplate & {
 	// When are we able to set the correct values?
 	faultGameGenesisOutputRoot:        "0x3c736a83458982ae1f6b62284e9af2687333e17625c7147b9af4758fa84952e8"
 	faultGameAbsolutePrestate:         "0x0364010a7b2be12b8583c8bc2c610ef5b77bb52161cac1dd4f8cbe47edc05afd"
+	faultGameGenesisBlock: 31056500
 	l2OutputOracleStartingBlockNumber: 0
 	l2OutputOracleStartingTimestamp:   0
 }
 
 network: dryrun: mainnet: #MainnetTemplate & {
+  // not a safe, but we can use the parameter with an EOA
 	_params: l1CeloSafeAddress:   "0x1174B5f5Dd8fA3be9549b131E9810703D15f153d"
 	_params: feeRecipientAddress: "0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"
 	_params: withdrawFeesOnL2:    true
 
-	// instead of the aliased address, use the EOA
+	// instead of the aliased address, use an EOA
 	proxyAdminOwner:           _params.l1CeloSafeAddress
 	proxyAdminOwnerIsMultisig: false
 
@@ -89,6 +91,15 @@ network: dryrun: mainnet: #MainnetTemplate & {
 	l2OutputOracleProposer:   "0xc01061d4cc5b98965d2aa4b1dfcc1d77bb0d29f3"
 	l2OutputOracleChallenger: "0x9e21944b9dd761e7a89ecb17be005e955e750f2b"
 	superchainConfigGuardian: "0x1174B5f5Dd8fA3be9549b131E9810703D15f153d"
+
+	faultGameGenesisBlock: 31056500
+	disputeGameFinalityDelaySeconds: (1 * HourInSeconds)
+	faultGameWithdrawalDelay: (2 * disputeGameFinalityDelaySeconds)
+	proofMaturityDelaySeconds:       (2 * disputeGameFinalityDelaySeconds)
+	faultGameClockExtension:  (30 * MinuteInSeconds)
+	faultGameMaxClockDuration: faultGameWithdrawalDelay
+	preimageOracleChallengePeriod: (10 * MinuteInSeconds)
+
 
 	faultGameAbsolutePrestate:  "0x0318d12b4f68c79bd937d480326031ceffbefad5934e431a3b430c058c1c9e1b"
 	faultGameGenesisOutputRoot: "0x3c736a83458982ae1f6b62284e9af2687333e17625c7147b9af4758fa84952e8"
