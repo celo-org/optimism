@@ -14,7 +14,7 @@
     "faultGameMaxDepth": 73,
     "faultGameClockExtension": 10800,
     "faultGameMaxClockDuration": 302400,
-    "faultGameGenesisBlock": 31056500,
+    "faultGameGenesisBlock": 42,
     "faultGameGenesisOutputRoot": "0x2fafa02f4d94e20796afac0bae793bcc5c3cbb1244bc5a8c730153def18b0f3f",
     "faultGameSplitDepth": 30,
     "faultGameWithdrawalDelay": 604800,

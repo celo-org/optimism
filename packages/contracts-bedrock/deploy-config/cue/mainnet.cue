@@ -37,8 +37,12 @@ package deployconfig
 	finalizationPeriodSeconds:        (7 * DayInSeconds)
 	l2OutputOracleSubmissionInterval: 1800
 
-	preimageOracleMinProposalSize: 126000
-	preimageOracleChallengePeriod: 86400
+	// this has to be overwritten later after l2 genesis,
+	// but before the fault-game initialization
+	faultGameGenesisBlock: uint64 | *31056500
+
+	preimageOracleMinProposalSize: uint64 | *126000
+	preimageOracleChallengePeriod: uint64 | *86400
 
 	useAltDA:       true
 	useFaultProofs: true

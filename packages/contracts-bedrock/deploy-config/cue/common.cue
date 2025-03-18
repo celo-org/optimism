@@ -102,9 +102,6 @@ package deployconfig
 	faultGameMaxDepth:         uint64 | *73
 	faultGameClockExtension:   uint64 |  *10800
 	faultGameMaxClockDuration: uint64 |  *302400
-	// this has to be overwritten later after l2 genesis,
-	// but before the fault-game initialization
-	faultGameGenesisBlock: uint64 | *31056500
 	faultGameSplitDepth:   uint64 | *30
 	// we are following op and base here
 	faultGameWithdrawalDelay:        uint64 | *604800

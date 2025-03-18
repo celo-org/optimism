@@ -41,5 +41,7 @@ network: test: baklava: #Common & {
 	preimageOracleMinProposalSize: 126000
 	preimageOracleChallengePeriod: 86400
 
+	faultGameGenesisBlock: 42
+
 	useAltDA: true
 }
