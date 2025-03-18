@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rpc"
 
 	"golang.org/x/sync/errgroup"
 )
@@ -70,11 +69,6 @@ var (
 		Usage:    "Specifies the migration block number. If the source db is not synced exactly to the block immediately before this number (i.e. migration-block-number - 1), the migration will fail.",
 		Required: true,
 	}
-	migrationBlockTimeFlag = &cli.Uint64Flag{
-		Name:     "migration-block-time",
-		Usage:    "Specifies a unix timestamp to use for the migration block. This should be set to the same timestamp as was used for the sequencer migration. If performing the sequencer migration, this should set to a time in the future around when the migration script is expected to complete.",
-		Required: true,
-	}
 	oldDBPathFlag = &cli.PathFlag{
 		Name:     "old-db",
 		Usage:    "Path to the old Celo chaindata dir, can be found at '<datadir>/celo/chaindata'",
@@ -88,7 +82,7 @@ var (
 	batchSizeFlag = &cli.Uint64Flag{
 		Name:  "batch-size",
 		Usage: "Batch size to use for block migration, larger batch sizes can speed up migration but require more memory. If increasing the batch size consider also increasing the memory-limit",
-		Value: 50000,
+		Value: 5000,
 	}
 	bufferSizeFlag = &cli.Uint64Flag{
 		Name:  "buffer-size",
@@ -110,9 +104,24 @@ var (
 		Usage:    "Path to the db to perform a continuity check on",
 		Required: true,
 	}
+	dbCheckStartFlag = &cli.Uint64Flag{
+		Name:  "start",
+		Usage: "Block number to start the db check from. If not set, the db check will start from block 0.",
+		Value: 0,
+	}
 	dbCheckFailFastFlag = &cli.BoolFlag{
 		Name:  "fail-fast",
 		Usage: "Fail fast on the first error encountered. If set, the db check will stop on the first error encountered, otherwise it will continue to check all blocks and print out all errors at the end.",
+		Value: false,
+	}
+	l1BeaconRPCFlag = &cli.StringFlag{
+		Name:     "l1-beacon-rpc",
+		Usage:    "RPC URL for a node of the L1 beacon chain, required for mainnet migrations but not for alfajores or baklava",
+		Required: false,
+	}
+	skipDbCheck = &cli.BoolFlag{
+		Name:  "skip-db-check",
+		Usage: "Skip the db continuity check.",
 		Value: false,
 	}
 
@@ -123,6 +132,7 @@ var (
 		bufferSizeFlag,
 		memoryLimitFlag,
 		reset,
+		skipDbCheck,
 	}
 	fullMigrationFlags = append(
 		preMigrationFlags,
@@ -132,13 +142,14 @@ var (
 		l2AllocsFlag,
 		outfileRollupConfigFlag,
 		outfileGenesisFlag,
-		migrationBlockTimeFlag,
 		migrationBlockNumberFlag,
+		l1BeaconRPCFlag,
 	)
 	dbCheckFlags = []cli.Flag{
 		dbCheckPathFlag,
 		batchSizeFlag,
 		dbCheckFailFastFlag,
+		dbCheckStartFlag,
 	}
 )
 
@@ -149,6 +160,7 @@ type preMigrationOptions struct {
 	bufferSize       uint64
 	memoryLimit      int64
 	resetNonAncients bool
+	skipDbCheck      bool
 }
 
 type stateMigrationOptions struct {
@@ -159,6 +171,7 @@ type stateMigrationOptions struct {
 	outfileRollupConfig string
 	outfileGenesis      string
 	migrationBlockTime  uint64
+	l1BeaconRPC         string
 }
 
 type fullMigrationOptions struct {
@@ -169,6 +182,7 @@ type fullMigrationOptions struct {
 
 type dbCheckOptions struct {
 	dbPath    string
+	start     uint64
 	batchSize uint64
 	failFast  bool
 }
@@ -181,6 +195,7 @@ func parsePreMigrationOptions(ctx *cli.Context) preMigrationOptions {
 		bufferSize:       ctx.Uint64(bufferSizeFlag.Name),
 		memoryLimit:      ctx.Int64(memoryLimitFlag.Name),
 		resetNonAncients: ctx.Bool(reset.Name),
+		skipDbCheck:      ctx.Bool(skipDbCheck.Name),
 	}
 }
 
@@ -192,7 +207,7 @@ func parseStateMigrationOptions(ctx *cli.Context) stateMigrationOptions {
 		l2AllocsPath:        ctx.Path(l2AllocsFlag.Name),
 		outfileRollupConfig: ctx.Path(outfileRollupConfigFlag.Name),
 		outfileGenesis:      ctx.Path(outfileGenesisFlag.Name),
-		migrationBlockTime:  ctx.Uint64(migrationBlockTimeFlag.Name),
+		l1BeaconRPC:         ctx.String(l1BeaconRPCFlag.Name),
 	}
 }
 
@@ -209,6 +224,7 @@ func parseDBCheckOptions(ctx *cli.Context) dbCheckOptions {
 		dbPath:    ctx.String(dbCheckPathFlag.Name),
 		batchSize: ctx.Uint64(batchSizeFlag.Name),
 		failFast:  ctx.Bool(dbCheckFailFastFlag.Name),
+		start:     ctx.Uint64(dbCheckStartFlag.Name),
 	}
 }
 
@@ -290,6 +306,23 @@ func runFullMigration(opts fullMigrationOptions) error {
 
 	log.Info("Source db is synced to correct height", "head", head.Number.Uint64(), "migrationBlock", opts.migrationBlockNumber)
 
+	config, err := genesis.NewDeployConfig(opts.deployConfig)
+	if err != nil {
+		return err
+	}
+	switch config.L2ChainID {
+	case 62320: // baklava
+		opts.migrationBlockTime = 1740081460
+	case 44787: // alfajores
+		opts.migrationBlockTime = 1727339320
+	default:
+		opts.migrationBlockTime = head.Time + 60
+	}
+	// Verify that one of l1StartingBlockTag or l1BeaconRPC is set, but not both.
+	if !((config.L1StartingBlockTag != nil) != (opts.l1BeaconRPC != "")) {
+		return fmt.Errorf("exactly one of l1StartingBlockTag or l1BeaconRPC must be set")
+	}
+
 	var numAncients uint64
 	var strayAncientBlocks []*rawdb.NumberHash
 
@@ -300,7 +333,7 @@ func runFullMigration(opts fullMigrationOptions) error {
 	if err = runNonAncientMigration(opts.newDBPath, strayAncientBlocks, opts.batchSize, numAncients); err != nil {
 		return fmt.Errorf("failed to run non-ancient migration: %w", err)
 	}
-	if err = runStateMigration(opts.newDBPath, opts.stateMigrationOptions); err != nil {
+	if err = runStateMigration(head, opts.newDBPath, opts.stateMigrationOptions); err != nil {
 		return fmt.Errorf("failed to run state migration: %w", err)
 	}
 
@@ -327,10 +360,13 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return nil, 0, fmt.Errorf("failed to create new db path: %w", err)
 	}
 
-	if opts.resetNonAncients {
-		if err = cleanupNonAncientDb(opts.newDBPath); err != nil {
-			return nil, 0, fmt.Errorf("failed to cleanup non-ancient db: %w", err)
+	if !opts.skipDbCheck {
+		err = runDBCheckFromLastMigrated(opts)
+		if err != nil {
+			return nil, 0, fmt.Errorf("failed to run db check from last migrated block: %w", err)
 		}
+	} else {
+		log.Info("Skipping db continuity check")
 	}
 
 	var numAncientsNewBefore uint64
@@ -349,7 +385,26 @@ func runPreMigration(opts preMigrationOptions) ([]*rawdb.NumberHash, uint64, err
 		return nil
 	})
 	g.Go(func() error {
-		// By doing this once during the premigration, we get a speedup when we run it again in a full migration.
+		// Check if we should reset the non-ancient db. This is necessary if a full migration has been run before.
+		// The script can also be forced to reset non-ancients by passing the --reset flag.
+		shouldReset := opts.resetNonAncients
+		if !shouldReset {
+			prevFullMigration, err := checkForPrevFullMigration(opts.newDBPath)
+			if err != nil {
+				return fmt.Errorf("failed to check for previous full migration: %w", err)
+			}
+			if prevFullMigration {
+				log.Info("Previous full migration detected", "process", "pre-migration")
+			}
+			shouldReset = prevFullMigration
+		}
+		if shouldReset {
+			log.Info("Resetting non-ancient db", "process", "pre-migration")
+			if err := cleanupNonAncientDb(opts.newDBPath); err != nil {
+				return fmt.Errorf("failed to cleanup non-ancient db: %w", err)
+			}
+		}
+		// By doing this copy once during the premigration, we get a speedup when we run it again in a full migration.
 		return copyDbExceptAncients(opts.oldDBPath, opts.newDBPath)
 	})
 
@@ -380,6 +435,11 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 
 	log.Info("Non-Ancient Block Migration Started", "process", "non-ancients", "newDBPath", newDBPath, "batchSize", batchSize, "startBlock", numAncients, "endBlock", lastBlock, "count", lastBlock-lastAncient, "lastAncientBlock", lastAncient)
 
+	log.Info("Writing full migration marker", "process", "non-ancients")
+	if err := writeFullMigrationMarker(newDB); err != nil {
+		return fmt.Errorf("failed to write full migration marker: %w", err)
+	}
+
 	var numNonAncients uint64
 	if numNonAncients, err = migrateNonAncientsDb(newDB, lastBlock, numAncients, batchSize); err != nil {
 		return fmt.Errorf("failed to migrate non-ancients database: %w", err)
@@ -396,7 +456,7 @@ func runNonAncientMigration(newDBPath string, strayAncientBlocks []*rawdb.Number
 	return nil
 }
 
-func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
+func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMigrationOptions) error {
 	defer timer("state migration")()
 
 	log.Info("State Migration Started", "newDBPath", newDBPath, "deployConfig", opts.deployConfig, "l1Deployments", opts.l1Deployments, "l1RPC", opts.l1RPC, "l2AllocsPath", opts.l2AllocsPath, "outfileRollupConfig", opts.outfileRollupConfig)
@@ -421,37 +481,44 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 	config.SetDeployments(deployments)
 
-	// Get latest block information from L1
 	var l1StartBlock *types.Block
 	client, err := ethclient.Dial(opts.l1RPC)
 	if err != nil {
 		return fmt.Errorf("cannot dial %s: %w", opts.l1RPC, err)
 	}
 
+	chainID, err := client.ChainID(context.Background())
+	if err != nil {
+		return fmt.Errorf("cannot get L1 chain ID: %w", err)
+	}
+
+	// If the L1 starting block tag is not set, we determine it dynamically by
+	// finding the most recent final L1 block at the time of the L2 fork block.
 	if config.L1StartingBlockTag == nil {
-		l1StartBlock, err = client.BlockByNumber(context.Background(), nil)
+		// Find the L1 starting block, the L2 fork block occurs 1 minute after the last celo L1 block.
+		opts.migrationBlockTime = celoL1Head.Time + 60
+		bc := NewBeaconClient(opts.l1BeaconRPC)
+
+		l1StartBlockHash, err := bc.MostRecentFinalizedBlockAtTime(chainID.Uint64(), opts.migrationBlockTime)
 		if err != nil {
-			return fmt.Errorf("cannot fetch latest block: %w", err)
+			return fmt.Errorf("failed to find finalized L1 starting block: %w", err)
 		}
-		tag := rpc.BlockNumberOrHashWithHash(l1StartBlock.Hash(), true)
-		config.L1StartingBlockTag = (*genesis.MarshalableRPCBlockNumberOrHash)(&tag)
-	} else if config.L1StartingBlockTag.BlockHash != nil {
+		config.L1StartingBlockTag = &genesis.MarshalableRPCBlockNumberOrHash{BlockHash: &l1StartBlockHash}
+	}
+
+	if config.L1StartingBlockTag.BlockHash != nil {
 		l1StartBlock, err = client.BlockByHash(context.Background(), *config.L1StartingBlockTag.BlockHash)
 		if err != nil {
-			return fmt.Errorf("cannot fetch block by hash: %w", err)
+			return fmt.Errorf("failed to fetch l1startingBlock by hash (%v): %w", config.L1StartingBlockTag.BlockHash, err)
 		}
 	} else if config.L1StartingBlockTag.BlockNumber != nil {
 		l1StartBlock, err = client.BlockByNumber(context.Background(), big.NewInt(config.L1StartingBlockTag.BlockNumber.Int64()))
 		if err != nil {
-			return fmt.Errorf("cannot fetch block by number: %w", err)
+			return fmt.Errorf("failed to fetch l1startingBlock by number (%v): %w", config.L1StartingBlockTag.BlockNumber, err)
 		}
 	}
 
-	// Ensure that there is a starting L1 block
-	if l1StartBlock == nil {
-		return fmt.Errorf("no starting L1 block")
-	}
-
+	log.Info(fmt.Sprintf("Selected l1StartingBlock as block (%d), with hash (%v)", l1StartBlock.Number(), l1StartBlock.Hash()))
 	// Sanity check the config. Do this after filling in the L1StartingBlockTag
 	// if it is not defined.
 	if err := config.Check(log.New()); err != nil {
@@ -478,7 +545,7 @@ func runStateMigration(newDBPath string, opts stateMigrationOptions) error {
 	}
 	log.Info("Updated Cel2 state")
 
-	rollupConfig, err := config.RollupConfig(l1StartBlock.Header(), cel2Header.Hash(), cel2Header.Number.Uint64())
+	rollupConfig, err := config.RollupConfig(l1StartBlock.Header(), cel2Header.Hash(), cel2Header.Number.Uint64(), cel2Header.Time)
 	if err != nil {
 		return err
 	}
@@ -542,7 +609,7 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	// First, check continuity between ancients and non-ancients.
 	// Gaps in data will often halt the freezing process, so attempting to load the first non-ancient block
 	// will most likely fail if there is a gap.
-	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncientNumber+1, 1)
+	firstNonAncientRange, err := loadNonAncientRange(nonAncientDB, lastAncientNumber+1, 1, false)
 	if err != nil {
 		if opts.failFast {
 			return fmt.Errorf("failed to load first non-ancient block: %w", err)
@@ -617,15 +684,15 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 		return nil
 	}
 
-	log.Info("Checking continuity of ancient blocks", "start", 0, "end", lastAncientNumber, "count", lastAncientNumber+1)
-	if err := checkContinuity(0, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
-		return loadAncientRange(ancientDB, start, count)
+	log.Info("Checking continuity of ancient blocks", "start", opts.start, "end", lastAncientNumber, "count", lastAncientNumber-opts.start+1)
+	if err := checkContinuity(opts.start, lastAncientNumber, func(start, count uint64) (*RLPBlockRange, error) {
+		return loadAncientRange(ancientDB, start, count, false)
 	}); err != nil {
 		return err
 	}
 	log.Info("Checking continuity of non-ancient blocks", "start", lastAncientNumber+1, "end", lastBlockNumber, "count", lastBlockNumber-lastAncientNumber)
 	if err := checkContinuity(lastAncientNumber+1, lastBlockNumber, func(start, count uint64) (*RLPBlockRange, error) {
-		return loadNonAncientRange(nonAncientDB, start, count)
+		return loadNonAncientRange(nonAncientDB, start, count, false)
 	}); err != nil {
 		return err
 	}
@@ -639,6 +706,35 @@ func runDBCheck(opts dbCheckOptions) (err error) {
 	}
 
 	log.Info("DB Continuity Check Finished", "dbPath", opts.dbPath)
+
+	return nil
+}
+
+func runDBCheckFromLastMigrated(opts preMigrationOptions) (err error) {
+	newFreezer, err := NewChainFreezer(filepath.Join(opts.newDBPath, "ancient"), "", false)
+	if err != nil {
+		return fmt.Errorf("failed to open new freezer: %w", err)
+	}
+	numAncientsInNewDB, err := newFreezer.Ancients()
+	if err != nil {
+		return fmt.Errorf("failed to get number of ancients in new freezer: %w", err)
+	}
+	err = newFreezer.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close new freezer: %w", err)
+	}
+
+	var start uint64
+	if numAncientsInNewDB == 0 {
+		start = 0
+	} else {
+		start = numAncientsInNewDB - 1
+	}
+
+	err = runDBCheck(dbCheckOptions{dbPath: opts.oldDBPath, start: start, batchSize: opts.batchSize, failFast: true})
+	if err != nil {
+		return fmt.Errorf("failed to run db continuity check: %w", err)
+	}
 
 	return nil
 }

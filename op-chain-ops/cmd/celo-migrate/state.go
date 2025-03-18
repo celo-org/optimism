@@ -85,10 +85,43 @@ var (
 			// DeterministicDeploymentProxy
 			common.HexToAddress("0x4e59b44847b379578588920cA78FbF26c0B4956C"): false,
 		},
+		MainnetNetworkID: {
+			// Create2Deployer
+			// OP uses a version without an owner who can pause the contract,
+			// so we overwrite the existing contract during migration
+			common.HexToAddress("0x13b0d85ccb8bf860b6b79af3029fca081ae9bef2"): true,
+			// Permit2
+			common.HexToAddress("0x000000000022d473030f116ddee9f6b43ac78ba3"): false,
+			// EntryPoint_v070
+			common.HexToAddress("0x0000000071727de22e5e9d8baf0edac6f37da032"): false,
+			// DeterministicDeploymentProxy
+			common.HexToAddress("0x4e59b44847b379578588920ca78fbf26c0b4956c"): false,
+			// EntryPoint_v060
+			common.HexToAddress("0x5ff137d4b0fdcd49dca30c7cf57e578a026d2789"): false,
+			// Safe_v130
+			common.HexToAddress("0x69f4d1788e39c87893c980c06edf4b7f686e2938"): false,
+			// SenderCreator_v060
+			common.HexToAddress("0x7fc98430eaedbb6070b35b39d798725049088348"): false,
+			// SafeSingletonFactory
+			common.HexToAddress("0x914d7fec6aac8cd542e72bca78b30650d45643d7"): false,
+			// MultiSend_v130
+			common.HexToAddress("0x998739bfdaadde7c933b942a68053933098f9eda"): false,
+			// MultiSendCallOnly_v130
+			common.HexToAddress("0xa1dabef33b3b82c7814b6d82a79e50f4ac44102b"): false,
+			// CreateX
+			common.HexToAddress("0xba5ed099633d3b313e4d5f7bdc1305d3c28ba5ed"): false,
+			// Multicall3
+			common.HexToAddress("0xca11bde05977b3631167028862be2a173976ca11"): false,
+			// SenderCreator_v070
+			common.HexToAddress("0xefc2c1444ebcc4db75e7613d20c6a62ff67a167c"): false,
+			// SafeL2_v130
+			common.HexToAddress("0xfb1bffc9d739b8d520daf37df666da4c687191ea"): false,
+		},
 	}
 	unreleasedTreasuryAddressMap = map[uint64]common.Address{
 		AlfajoresNetworkID: common.HexToAddress("0x07bf0b2461A0cb608D5CF9a82ba97dAbA850F79F"),
 		BaklavaNetworkID:   common.HexToAddress("0x022c5d5837E177B6d145761feb4C5574e5b48F5e"),
+		MainnetNetworkID:   common.HexToAddress("0x7A8c7a833565fc428cdFBa20FE03fAfb178A434f"),
 	}
 )
 

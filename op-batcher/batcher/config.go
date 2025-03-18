@@ -96,11 +96,8 @@ type CLIConfig struct {
 	// ActiveSequencerCheckDuration is the duration between checks to determine the active sequencer endpoint.
 	ActiveSequencerCheckDuration time.Duration
 
-	// ThrottleInterval is the interval between notifying the block builder of the latest DA throttling state, or 0 to
-	// disable notifications entirely (only recommended for testing).
-	ThrottleInterval time.Duration
-	// ThrottleThreshold is the number of pending bytes beyond which the batcher will start throttling future bytes
-	// written to DA.
+	// ThrottleThreshold is the number of pending bytes beyond which the batcher will start throttling future bytes. Set to 0 to
+	// disable sequencer throttling entirely (only recommended for testing).
 	ThrottleThreshold uint64
 	// ThrottleTxSize is the DA size of a transaction to start throttling when we are over the throttling threshold.
 	ThrottleTxSize uint64
@@ -108,6 +105,9 @@ type CLIConfig struct {
 	ThrottleBlockSize uint64
 	// ThrottleAlwaysBlockSize is the total per-block DA limit to always imposing on block building.
 	ThrottleAlwaysBlockSize uint64
+
+	// PreferLocalSafeL2 triggers the batcher to load blocks from the sequencer based on the LocalSafeL2 SyncStatus field (instead of the SafeL2 field).
+	PreferLocalSafeL2 bool
 
 	// TestUseMaxTxSizeForBlobs allows to set the blob size with MaxL1TxSize.
 	// Should only be used for testing purposes.
@@ -209,9 +209,9 @@ func NewConfig(ctx *cli.Context) *CLIConfig {
 		RPC:                          oprpc.ReadCLIConfig(ctx),
 		AltDA:                        altda.ReadCLIConfig(ctx),
 		ThrottleThreshold:            ctx.Uint64(flags.ThrottleThresholdFlag.Name),
-		ThrottleInterval:             ctx.Duration(flags.ThrottleIntervalFlag.Name),
 		ThrottleTxSize:               ctx.Uint64(flags.ThrottleTxSizeFlag.Name),
 		ThrottleBlockSize:            ctx.Uint64(flags.ThrottleBlockSizeFlag.Name),
 		ThrottleAlwaysBlockSize:      ctx.Uint64(flags.ThrottleAlwaysBlockSizeFlag.Name),
+		PreferLocalSafeL2:            ctx.Bool(flags.PreferLocalSafeL2Flag.Name),
 	}
 }

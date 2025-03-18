@@ -75,6 +75,7 @@ func GenesisAndRollup(globalState *state.State, chainID common.Hash) (*core.Gene
 		chainState.StartBlock,
 		l2GenesisBlock.Hash(),
 		l2GenesisBlock.Number().Uint64(),
+		l2GenesisBlock.Time(),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to build rollup config: %w", err)

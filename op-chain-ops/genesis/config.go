@@ -920,6 +920,9 @@ type DeployConfig struct {
 
 	// DeployCeloContracts indicates whether to deploy Celo contracts.
 	DeployCeloContracts bool `json:"deployCeloContracts"`
+	// Unused, added to make strict config parsing possible
+	ProxyAdminOwnerIsMultiSig *bool           `json:"proxyAdminOwnerIsMultisig,omitempty"`
+	ExternalSuperchainConfig  *common.Address `json:"externalSuperchainConfig,omitempty"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -976,7 +979,7 @@ func (d *DeployConfig) SetDeployments(deployments *L1Deployments) {
 
 // RollupConfig converts a DeployConfig to a rollup.Config. If Ecotone is active at genesis, the
 // Overhead value is considered a noop.
-func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHash common.Hash, l2GenesisBlockNumber uint64) (*rollup.Config, error) {
+func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHash common.Hash, l2GenesisBlockNumber uint64, l2GenesisTimestamp uint64) (*rollup.Config, error) {
 	if d.OptimismPortalProxy == (common.Address{}) {
 		return nil, errors.New("OptimismPortalProxy cannot be address(0)")
 	}
@@ -1012,7 +1015,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 				Hash:   l2GenesisBlockHash,
 				Number: l2GenesisBlockNumber,
 			},
-			L2Time:       l1StartBlock.Time,
+			L2Time:       l2GenesisTimestamp,
 			SystemConfig: d.GenesisSystemConfig(),
 		},
 		BlockTime:               d.L2BlockTime,
