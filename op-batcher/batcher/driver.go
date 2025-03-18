@@ -966,9 +966,12 @@ func (l *BatchSubmitter) handleReceipt(r txmgr.TxReceipt[txRef]) {
 		l.recordFailedTx(r.ID.id, r.Err)
 	} else if r.Receipt != nil {
 		l.recordConfirmedTx(r.ID.id, r.Receipt)
-		l.Metr.RecordBatchDaType(r.ID.daType.Name())
-		if r.ID.daType != DaTypeAltDA {
-			l.Metr.RecordBatchDataSizeBytes(r.ID.daType.Name(), r.ID.size)
+
+		if !r.ID.isCancel {
+			l.Metr.RecordBatchDaType(r.ID.daType.Name())
+			if r.ID.daType != DaTypeAltDA {
+				l.Metr.RecordBatchDataSizeBytes(r.ID.daType.Name(), r.ID.size)
+			}
 		}
 	}
 	// Both r.Err and r.Receipt can be nil, in which case we do nothing.
