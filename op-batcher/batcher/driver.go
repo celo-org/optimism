@@ -47,6 +47,7 @@ type txRef struct {
 	id       txID
 	isCancel bool
 	isBlob   bool
+	daType   DaType
 }
 
 func (r txRef) String() string {
@@ -863,7 +864,6 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 		}
 		// if Alt DA is enabled we post the txdata to the DA Provider and replace it with the commitment.
 		l.publishToAltDAAndL1(txdata, queue, receiptsCh, daGroup)
-		l.Metr.RecordBatchDaType(txdata.daType.Name())
 		// we return nil to allow publishStateToL1 to keep processing the next txdata
 		return nil
 	case DaTypeBlob:
@@ -885,7 +885,6 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 	}
 
 	l.sendTx(txdata, false, candidate, queue, receiptsCh)
-	l.Metr.RecordBatchDaType(txdata.daType.Name())
 	return nil
 }
 
@@ -912,7 +911,7 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		candidate.GasLimit = floorDataGas
 	}
 
-	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob}, *candidate, receiptsCh)
+	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType}, *candidate, receiptsCh)
 }
 
 // Copypaste from upstream geth
@@ -965,8 +964,8 @@ func (l *BatchSubmitter) handleReceipt(r txmgr.TxReceipt[txRef]) {
 		l.recordFailedTx(r.ID.id, r.Err)
 	} else if r.Receipt != nil {
 		l.recordConfirmedTx(r.ID.id, r.Receipt)
+		l.Metr.RecordBatchDaType(r.ID.daType.Name())
 	}
-	// Both r.Err and r.Receipt can be nil, in which case we do nothing.
 }
 
 func (l *BatchSubmitter) recordFailedDARequest(id txID, err error) {
