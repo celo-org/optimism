@@ -99,17 +99,17 @@ package deployconfig
 	daResolveWindow:   1
 
 	// FaultProofs
-	faultGameMaxDepth:         73
-	faultGameClockExtension:   10800
-	faultGameMaxClockDuration: 302400
+	faultGameMaxDepth:         uint64 | *73
+	faultGameClockExtension:   uint64 |  *10800
+	faultGameMaxClockDuration: uint64 |  *302400
 	// this has to be overwritten later after l2 genesis,
 	// but before the fault-game initialization
-	faultGameGenesisBlock: 31056500
-	faultGameSplitDepth:   30
+	faultGameGenesisBlock: uint64 | *31056500
+	faultGameSplitDepth:   uint64 | *30
 	// we are following op and base here
-	faultGameWithdrawalDelay:        604800
-	proofMaturityDelaySeconds:       604800
-	disputeGameFinalityDelaySeconds: 302400
+	faultGameWithdrawalDelay:        uint64 | *604800
+	proofMaturityDelaySeconds:       uint64 | *604800
+	disputeGameFinalityDelaySeconds: uint64 | *302400
 	// different than OP's "0" type
 	respectedGameType: 1
 
