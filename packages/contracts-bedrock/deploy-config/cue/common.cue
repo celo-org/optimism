@@ -100,13 +100,13 @@ package deployconfig
 
 	// FaultProofs
 	faultGameMaxDepth:         uint64 | *73
-	faultGameClockExtension:   uint64 |  *10800
-	faultGameMaxClockDuration: uint64 |  *302400
-	faultGameSplitDepth:   uint64 | *30
+	faultGameClockExtension:   uint64 | *10800
+	faultGameMaxClockDuration: uint64 | *302400
+	faultGameSplitDepth:       uint64 | *30
 	// we are following op and base here
-	faultGameWithdrawalDelay:        uint64 | *604800
-	proofMaturityDelaySeconds:       uint64 | *604800
-	disputeGameFinalityDelaySeconds: uint64 | *302400
+	faultGameWithdrawalDelay:        uint64 | *(7 * DayInSeconds)
+	proofMaturityDelaySeconds:       uint64 | *(7 * DayInSeconds)
+	disputeGameFinalityDelaySeconds: uint64 | *(div(7*DayInSeconds, 2))
 	// different than OP's "0" type
 	respectedGameType: 1
 
