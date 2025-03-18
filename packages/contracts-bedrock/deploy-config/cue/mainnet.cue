@@ -14,6 +14,7 @@ package deployconfig
 		proxyAdminOwner: !=finalSystemOwner
 	}
 
+	externalSuperchainConfig: "0x95703e0982140D16f8ebA6d158FccEde42f04a4C"
 	protocolVersionsProxy: "0x1b6dEB2197418075AB314ac4D52Ca1D104a8F663"
 	// set this to null,
 	// and also we don't need to overwrite this later anymore
@@ -59,7 +60,6 @@ network: production: mainnet: #MainnetTemplate & {
 	l2OutputOracleProposer:   "0x1204884e697efd929729b9a717ea14496298a689"
 	l2OutputOracleChallenger: "0x6b145ebf66602ec524b196426b46631259689583"
 	superchainConfigGuardian: "0x6E226fa22e5F19363d231D3FA048aaBa73CC1f47"
-	externalSuperchainConfig: "0x95703e0982140D16f8ebA6d158FccEde42f04a4C"
 
 	// When are we able to set the correct values?
 	faultGameGenesisOutputRoot:        "0x3c736a83458982ae1f6b62284e9af2687333e17625c7147b9af4758fa84952e8"
@@ -71,12 +71,11 @@ network: production: mainnet: #MainnetTemplate & {
 network: dryrun: mainnet: #MainnetTemplate & {
 	_params: l1CeloSafeAddress:   "0x1174B5f5Dd8fA3be9549b131E9810703D15f153d"
 	_params: feeRecipientAddress: "0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"
-	_params: withdrawFeesOnL2:    false
+	_params: withdrawFeesOnL2:    true
 
 	// instead of the aliased address, use the EOA
 	proxyAdminOwner:           _params.l1CeloSafeAddress
 	proxyAdminOwnerIsMultisig: false
-	externalSuperchainConfig:  ZeroAddress
 
 	l2OutputOracleStartingBlockNumber: 0
 	l2OutputOracleStartingTimestamp:   0
