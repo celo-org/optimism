@@ -44,13 +44,9 @@ Finally after all blocks have been migrated, the script performs a series of mod
 
 - The longest running section of the script is the ancients migration, followed by the `rsync` command. By running these together in a `pre-migration` we greatly reduce how long they will take during the `full migration`. Changes made to non-ancient blocks and state during a `full migration` are erased by the next `rsync` command.
 
-  - The `rsync` command uses a `--checksum` flag so that checksums are used to determine which files need to copied. This ensures that the destination db will exactly match the source db after the `rsync` command finishes (except `/ancient`). This is necessary to allow for running the `full migration` multiple times on the same db, as the `rsync` command will be able to reset files that have been modified by the previous migration. If `rsync` were to rely only on file metadata like modification timestamps and size, the changes made by a `full migration` after files are copied would make it impossible to reliably mirror the source db.
-
 > ⚠️ **Do not migrate archive data, only full node data**. Because we use `rsync` with checksums, the command will take a very long time if run on archive data. All the historical state stored by an archive node will be checksummed even if a `pre-migration` has already been performed to copy over the data. This is slow and memory instensive. Moreover, Celo L2 nodes cannot use pre-hardfork state, so all the state data will be copied over and stored for no reason. Therefore, we do not recommend running the migration script on an archive datadir.
 
 ### Running the script
-
-// TODO(Alec)
 
 > [!NOTE]
 > You will need `rsync` to run this script if it's not already installed.
