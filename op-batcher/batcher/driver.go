@@ -966,6 +966,7 @@ func (l *BatchSubmitter) handleReceipt(r txmgr.TxReceipt[txRef]) {
 		l.recordConfirmedTx(r.ID.id, r.Receipt)
 		l.Metr.RecordBatchDaType(r.ID.daType.Name())
 	}
+	// Both r.Err and r.Receipt can be nil, in which case we do nothing.
 }
 
 func (l *BatchSubmitter) recordFailedDARequest(id txID, err error) {
