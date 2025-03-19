@@ -485,7 +485,7 @@ contract Deploy is Deployer {
         transferDisputeGameFactoryOwnership();
     }
 
-    function printeSetupFaultGames() public {
+    function printSetupFaultGames() public {
         address l2OutputOracleProxy = mustGetAddress("L2OutputOracleProxy");
         address l2OutputOracle = mustGetAddress("L2OutputOracle");
 
