@@ -100,8 +100,8 @@ package deployconfig
 
 	// FaultProofs
 	faultGameMaxDepth:         uint64 | *73
-	faultGameClockExtension:   uint64 | *10800
-	faultGameMaxClockDuration: uint64 | *302400
+	faultGameClockExtension:   uint64 | *(3*HourInSeconds)
+	faultGameMaxClockDuration: uint64 | *(div(7*DayInSeconds, 2))
 	faultGameSplitDepth:       uint64 | *30
 	// we are following op and base here
 	faultGameWithdrawalDelay:        uint64 | *(7 * DayInSeconds)
