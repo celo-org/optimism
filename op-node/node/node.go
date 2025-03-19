@@ -568,6 +568,31 @@ func (n *OpNode) Start(ctx context.Context) error {
 		return err
 	}
 	log.Info("Rollup node started")
+
+	// If n.cfg.Driver.SequencerUseFinalized is true, sequencer cannot retrieve non-finalized L1 blocks.
+	// OpNode periodically fetches the latest safe and finalized L1 blocks every epoch (13 minutes),
+	// but immediately after startup, these values are not yet available.
+	// In some cases, this can cause the sequencer to get stuck.
+	// To prevent this, here is to fetch and initialize the latest safe and finalized L1 block references at startup
+	reqCtx, reqCancel := context.WithTimeout(ctx, time.Second*20)
+	defer reqCancel()
+
+	safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
+	if err != nil {
+		return fmt.Errorf("failed to fetch L1 safe head: %w", err)
+	}
+	if safeRef != (eth.L1BlockRef{}) {
+		n.OnNewL1Safe(reqCtx, safeRef)
+	}
+
+	finalizedRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Finalized)
+	if err != nil {
+		return fmt.Errorf("failed to fetch L1 finalized head: %w", err)
+	}
+	if finalizedRef != (eth.L1BlockRef{}) {
+		n.OnNewL1Finalized(reqCtx, finalizedRef)
+	}
+
 	return nil
 }
 
