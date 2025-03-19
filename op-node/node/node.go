@@ -569,11 +569,11 @@ func (n *OpNode) Start(ctx context.Context) error {
 	}
 	log.Info("Rollup node started")
 
-	// If n.cfg.Driver.SequencerUseFinalized is true, sequencer cannot retrieve non-finalized L1 blocks.
-	// OpNode periodically fetches the latest safe and finalized L1 blocks every epoch (6.4 minutes),
-	// but immediately after startup, these values are not yet available.
-	// In some cases, this can cause the sequencer to get stuck because sequencer fails to retrieve next L1 block
-	// To prevent this, fetch and initialize the latest safe and finalized L1 block references at startup
+	// If n.cfg.Driver.SequencerUseFinalized is true, sequencer does not fetch non-finalized L1 blocks.
+	// The OpNode periodically fetches the latest safe and finalized L1 block heights (1 epoch ≒ 6.4 minutes by default),
+	// but these values are not available immediately after startup until the first polling occurs.
+	// In some cases, this can cause the sequencer to get stuck because it fails to retrieve the next L1 block.
+	// To prevent this, fetch and initialize the latest safe and finalized L1 block references at startup.
 	if n.cfg.Driver.SequencerUseFinalized {
 		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second*20)
 		defer reqCancel()
