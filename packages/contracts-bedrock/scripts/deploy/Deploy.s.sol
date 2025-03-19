@@ -501,10 +501,10 @@ contract Deploy is Deployer {
         console.log("*************************************************************************");
         console.log("");
 
-        console.log("_proxy: l2OutputOracleProxy address", l2OutputOracleProxy);
-        console.log("_implementation: l2OutputOracle implementation address", l2OutputOracle);
+        console.log("_proxy:", l2OutputOracleProxy, "// l2OutputOracleProxy address");
+        console.log("_implementation:", l2OutputOracle, "// l2OutputOracle implementation address");
 
-        console.log("_data: InnerCallData");
+        console.log("_data:");
         console.logBytes(abi.encodeCall(
             IL2OutputOracle.initialize,
             (
@@ -518,7 +518,9 @@ contract Deploy is Deployer {
             )
         ));
 
+        console.log("");
         console.log("########################################################################################");
+        console.log("");
 
         address anchorStateRegistryProxy = mustGetAddress("AnchorStateRegistryProxy");
         address anchorStateRegistry = mustGetAddress("AnchorStateRegistry");
@@ -545,11 +547,12 @@ contract Deploy is Deployer {
         console.log("*************************************************************************");
         console.log("Load ProxyAdmin abi to Gnosis Safe UI, choose function 'upgradeAndCall' and paste in following input parameters");
         console.log("*************************************************************************");
+        console.log("");
 
-        console.log("_proxy: anchorStateRegistryProxy address", anchorStateRegistryProxy);
-        console.log("_implementation: anchorStateRegistry implementation address", anchorStateRegistry);
+        console.log("_proxy:", anchorStateRegistryProxy, "// anchorStateRegistryProxy address");
+        console.log("_implementation:", anchorStateRegistry, "// anchorStateRegistry implementation address");
 
-        console.log("_data: InnerCallData");
+        console.log("_data:");
 
         console.logBytes(abi.encodeCall(IAnchorStateRegistry.initialize, (roots, superchainConfig)));
 
