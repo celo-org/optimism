@@ -592,7 +592,6 @@ func (n *OpNode) Start(ctx context.Context) error {
 		return err
 	}
 	log.Info("Rollup node started")
-
 	return nil
 }
 
