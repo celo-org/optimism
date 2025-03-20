@@ -1,28 +1,37 @@
-# Celo L2 Migration Script
+# Celo L2 Migration Tool
 
-## Overview
+Tool for preparing a pre-L2 Celo database for use in an L2 Celo node.
 
-This script migrates a Celo L1 database (old datadir) into a new database compatible with Celo L2 (new datadir). It consists of 3 main processes that respectively migrate ancient blocks, non-ancient blocks and state. Migrated data is copied into a new datadir, leaving the old datadir unchanged.
+> ⚠️ The instructions in this README are for illustrative purposes only. For the most complete and up-to-date information on how to participate in the Celo L2 hardfork, please see the [Celo Docs](https://docs.celo.org/cel2/notices/l2-migration).
+
+See also the [celo-l2-node-docker-compose](https://github.com/celo-org/celo-l2-node-docker-compose) repo, which provides tooling to make migrating and running Celo L2 nodes easy. We recommend migrating data using the tooling provided there, as it simplifies the migration interface significantly and provides necessary configuration artifacts.
+
+## Migration Script
+
+This script migrates a pre-L2 database into one compatible with Celo L2. It consists of 3 main processes for migrating ancient blocks, non-ancient blocks and state. Migrated data is written to a new datadir, leaving the old datadir unchanged.
 
 To minimize migration downtime, the script is designed to run in two stages:
-1. The `pre migration` stage can be run ahead of the `full migration` and will process as much of the migration as possible up to that point.
-2. The `full migration` can then be run to finish migrating new blocks that were created after the `pre migration` and apply necessary state changes on top of the migration block.
 
-### Pre migration
+1. The `pre-migration` stage can be run ahead of the `full migration` and will process as much of the migration as possible up to that point.
+2. The `full migration` can then be run to finish migrating new blocks that were created after the `pre-migration` and apply necessary state changes on top of the migration block.
 
-The `pre migration` consists of two parts that are run in parallel:
-- Copy and transform the ancient / frozen blocks (i.e. all blocks before the last 90000).
-- Copy over the rest of the database using `rsync`.
+### Pre-migration
+
+The `pre-migration` consists of two steps that are run in parallel:
+
+1. Copy and transform the ancient / frozen blocks (i.e. all blocks before the last 90000).
+2. Copy over the rest of the database using `rsync`.
 
 The ancients db is migrated sequentially because it is append-only, while the rest of the database is copied and then transformed in-place. We use `rsync` because it has flags for ignoring the ancients directory, skipping any already copied files and deleting any extra files in the new db, ensuring that we can run the script multiple times and only copy over actual updates.
 
-The `pre migration` step is still run during a `full migration` but it will be much quicker as only newly frozen blocks and recent file changes need to be migrated.
+The `pre-migration` step is still run during a `full migration` but it will be much quicker as only newly frozen blocks and recent file changes need to be migrated.
 
 ### Full migration
 
-During the `full migration`, we re-run the `pre migration` step to capture any updates since the last `pre migration` and then apply in-place changes to non-ancient blocks and state. While this is happening, the script also checks for any stray ancient blocks that have remained in leveldb despite being frozen and removes them from the new db. Non-ancient blocks are then transformed to ensure compatibility with the L2 codebase.
+During the `full migration`, we repeat the `pre-migration` step to capture any updates since the last `pre-migration` and then apply in-place changes to non-ancient blocks and state. While this is happening, the script also checks for any stray ancient blocks that have remained in leveldb despite being frozen and removes them from the new db. Non-ancient blocks are then transformed to ensure compatibility with the L2 codebase.
 
 Finally after all blocks have been migrated, the script performs a series of modifications to the state db:
+
 1. First, it deploys the L2 smart contracts by iterating through the genesis allocs passed to the script and setting the nonce, balance, code and storage for each address accordingly, overwritting existing data if necessary.
 2. Finally, these changes are committed to the state db to produce a new state root and create the first Celo L2 block.
 
@@ -31,9 +40,11 @@ Finally after all blocks have been migrated, the script performs a series of mod
 > [!TIP]
 > See `--help` for how to run each portion of the script individually, along with other configuration options.
 
-The longest running section of the script is the ancients migration, followed by the `rsync` command. By running these together in a `pre migration` we greatly reduce how long they will take during the `full migration`. Changes made to non-ancient blocks and state during a `full migration` are erased by the next `rsync` command.
+- The script outputs a `rollup-config.json` file that is passed to the sequencer in order to start the L2 network.
 
-The script outputs a `rollup-config.json` file that is passed to the sequencer in order to start the L2 network.
+- The longest running section of the script is the ancients migration, followed by the `rsync` command. By running these together in a `pre-migration` we greatly reduce how long they will take during the `full migration`. Changes made to non-ancient blocks and state during a `full migration` are erased by the next `rsync` command.
+
+> ⚠️ **Do not migrate archive data, only full node data**. Because we use `rsync` with checksums, the command will take a very long time if run on archive data. All the historical state stored by an archive node will be checksummed even if a `pre-migration` has already been performed to copy over the data. This is slow and memory instensive. Moreover, Celo L2 nodes cannot use pre-hardfork state, so all the state data will be copied over and stored for no reason. Therefore, we do not recommend running the migration script on an archive datadir.
 
 ### Running the script
 
@@ -124,7 +135,7 @@ forge script scripts/L2Genesis.s.sol:L2Genesis \
 
 To minimize downtime caused by the migration, node operators can prepare their Cel2 databases by running the pre-migration command a day ahead of the actual migration. This will pre-populate the new database with most of the ancient blocks needed for the final migration and copy over other chaindata without transforming it.
 
-If node operators would like to practice a `full migration` they can do so and reset their databases to the correct state by running another `pre migration` afterward.
+If node operators would like to practice a `full migration` they can do so and reset their databases to the correct state by running another `pre-migration` afterward.
 
 > [!IMPORTANT]
 > The pre-migration should be run using a chaindata snapshot, rather than a db that is being used by a node. To avoid network downtime, we recommend that node operators do not stop any nodes in order to perform the pre-migration.

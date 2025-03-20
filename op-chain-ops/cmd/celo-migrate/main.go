@@ -545,7 +545,17 @@ func runStateMigration(celoL1Head *types.Header, newDBPath string, opts stateMig
 	}
 	log.Info("Updated Cel2 state")
 
-	rollupConfig, err := config.RollupConfig(l1StartBlock.Header(), cel2Header.Hash(), cel2Header.Number.Uint64(), cel2Header.Time)
+	// We switched to using the time of the L2 start block as the l2_time in
+	// aca03db46a48441b17bdb6b7da1a93e7d2565f5e. This happened before our
+	// mainnet release, but we had already released our testnets using the
+	// l1StartBlock.Time as the l2_time.
+	l2Time := cel2Header.Time
+	switch config.L2ChainID {
+	case AlfajoresNetworkID, BaklavaNetworkID:
+		l2Time = l1StartBlock.Time()
+	}
+
+	rollupConfig, err := config.RollupConfig(l1StartBlock.Header(), cel2Header.Hash(), cel2Header.Number.Uint64(), l2Time)
 	if err != nil {
 		return err
 	}
