@@ -578,20 +578,20 @@ func (n *OpNode) Start(ctx context.Context) error {
 		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second*20)
 		defer reqCancel()
 
-		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
-		if err != nil {
-			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
-		}
-		if safeRef != (eth.L1BlockRef{}) {
-			n.OnNewL1Safe(reqCtx, safeRef)
-		}
-
 		finalizedRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Finalized)
 		if err != nil {
 			log.Warn("failed to fetch L1 block", "label", eth.Finalized, "err", err)
 		}
 		if finalizedRef != (eth.L1BlockRef{}) {
 			n.OnNewL1Finalized(reqCtx, finalizedRef)
+		}
+
+		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
+		}
+		if safeRef != (eth.L1BlockRef{}) {
+			n.OnNewL1Safe(reqCtx, safeRef)
 		}
 	}
 
