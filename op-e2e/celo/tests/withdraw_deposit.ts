@@ -9,10 +9,13 @@ export const withdrawDeposit = addTestOptions({
   Name: "test-withdraw-and-deposit-back",
   OnlyRunOnL2ChainIDs: undefined,
 })(async function (t: Deno.TestContext, ctx: Context): Promise<boolean> {
-  const bridgingAmount = parseEther("1");
-
+  // NOTE: important for mainnet test-runs:
+  // the initial L1 balance should cover the gas fee for
+  // the bridge contract interactions.
+  // Last time I checked locally this was around 441745 gas
   let initialBalanceL1: ERC20Amount<BaseERC20>;
   let initialBalanceL2: bigint;
+  let bridgingAmount: bigint;
   let celoToken: ERC20;
   let withdrawResult: WithdrawReturnType;
 
@@ -32,6 +35,17 @@ export const withdrawDeposit = addTestOptions({
       initialBalanceL2 = await ctx.public().l2.getBalance({
         address: ctx.wallet().l2.account!.address,
       });
+      // minimum withdraw amount
+      expect(initialBalanceL2 >= parseEther("0.02")).toBe(true);
+      // use half of the initial balance to account for gas cost.
+      // this isn't fool proof when amounts get small,
+      // but right now we don't want to calculate
+      // withdraw gascost.
+      bridgingAmount = initialBalanceL2 / BigInt(2);
+      // maximum brdiging amount
+      if (bridgingAmount > parseEther("1")) {
+        bridgingAmount = parseEther("1");
+      }
     }))
   ) {
     return false;
