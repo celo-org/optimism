@@ -32,16 +32,47 @@ export function sleepUntil(targetTime: Date | number): Promise<void> {
 export async function pollFunction<T>(
   fn: () => Promise<T>,
   until: (value: T | null, err: Error | null) => boolean | undefined,
-  pollInterval: number,
+  initialPollInterval: number,
   timeout: number | undefined,
+  exponentialBackoff: boolean,
 ): Promise<T | null> {
   const start = Date.now();
   let err: Error | null = null;
   let result: T | null = null;
+  const pollScalingFactor = exponentialBackoff ? 1.2 : 1;
+  let lastPollTick = start;
+  let currentPollInterval = initialPollInterval;
+  const maxPollInterval = initialPollInterval * 100;
 
   if (typeof until !== "function") {
     throw Error("passed in `until` parameter is not a function");
   }
+  const waitUntilNextTick = async function (): Promise<void> {
+    const timeNow = Date.now();
+    const timePassed = timeNow - lastPollTick;
+
+    let pollTime = currentPollInterval - timePassed;
+    if (pollTime < 0) {
+      // we should have polled already, don't wait
+      return;
+    }
+    if (timeout !== undefined) {
+      const timeUntilTimeout = start + timeout - timeNow;
+      if (timeUntilTimeout < 0) {
+        return;
+      }
+      if (timeUntilTimeout < pollTime) {
+        pollTime = timeUntilTimeout;
+      }
+    }
+
+    await sleep(pollTime);
+    lastPollTick = Date.now();
+    currentPollInterval = currentPollInterval * pollScalingFactor;
+    if (currentPollInterval > maxPollInterval) {
+      currentPollInterval = maxPollInterval;
+    }
+  };
 
   while (timeout === undefined || Date.now() - start < timeout) {
     err = null;
@@ -64,7 +95,7 @@ export async function pollFunction<T>(
     if (until(result, err) === true) {
       return result;
     }
-    await sleep(pollInterval);
+    await waitUntilNextTick();
   }
   if (err) {
     throw new Error(`timeout reached polling function: ${err.message}`, {
@@ -81,7 +112,13 @@ export async function waitClientReachable(
   const until = (val: number | null, _err: Error | null): boolean => {
     return typeof val === "number";
   };
-  await pollFunction(client.getChainId, until, 500, timeoutSeconds * 1000);
+  await pollFunction(
+    client.getChainId,
+    until,
+    500,
+    timeoutSeconds * 1000,
+    false,
+  );
   return null;
 }
 
@@ -97,6 +134,7 @@ export async function waitClientNotSyncing(
     (val: boolean | null, _err: Error | null): boolean => val === false,
     500,
     timeoutSeconds * 1000,
+    false,
   );
   return null;
 }
@@ -108,7 +146,13 @@ export async function waitClientReturnsBlockNum(
   const until = (val: bigint | null, _err: Error | null): boolean => {
     return typeof val === "bigint";
   };
-  await pollFunction(client.getBlockNumber, until, 500, timeoutSeconds * 1000);
+  await pollFunction(
+    client.getBlockNumber,
+    until,
+    500,
+    timeoutSeconds * 1000,
+    false,
+  );
   return null;
 }
 
@@ -134,6 +178,7 @@ export async function waitInitialL2OracleOutput(
     (l2Output: any | null, _err: Error | null) => !!l2Output,
     500,
     timeout * 1000,
+    true,
   );
   return null;
 }
@@ -153,6 +198,7 @@ export async function waitUntilTwoGames(publicClients: any, timeout: number) {
       games !== null ? games.length >= 2 : false,
     500,
     timeout * 1000,
+    true,
   );
   return null;
 }

@@ -164,8 +164,9 @@ export async function withdraw(
           return false;
         }
       },
-      1000,
+      10000,
       undefined,
+      true,
     );
     // XXX: is this enough to be certain of a successful finalization for the L2OO system
     // or do we also need to poll a contract call similarly to the Fault-Proof system?
@@ -251,7 +252,8 @@ export async function pollCheckWithdrawal<
       }
       return false;
     },
-    1000,
+    10000,
     undefined,
+    true,
   );
 }
