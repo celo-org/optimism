@@ -150,17 +150,27 @@ export class ClientAccountManager {
     const balance = await publicClient.getBalance({
       address: leader.account.address,
     });
+
     const gasPrice = await publicClient.getGasPrice();
-    const estPricePerTx = (gasPrice * BigInt(21000) * BigInt(12)) / BigInt(10);
+    // overshoot the current gas-price for fluctuation
+    const maxFeePerGas = (gasPrice * BigInt(15)) / BigInt(10);
     // We need some funds for gas to distribute to the test accounts.
-    const sendBalance = (balance as bigint) - estPricePerTx;
-    if (sendBalance == BigInt(0)) {
+    const feePerTx = maxFeePerGas * BigInt(21000);
+    const sendBalance =
+      (balance as bigint) / BigInt(this.numAccounts) - feePerTx;
+    if (sendBalance <= BigInt(0)) {
       throw Error("leader account insufficient funds");
     }
 
     const receipts: Array<Promise<TransactionReceipt>> = [];
     for (const acc of it) {
+      if (acc.address === leader.account.address) {
+        console.log("skipping funding leader account");
+        continue;
+      }
       const hash = await leader.sendTransaction({
+        type: "eip1559",
+        maxFeePerGas: maxFeePerGas,
         value: sendBalance,
         to: acc.address,
       });
