@@ -580,7 +580,7 @@ func (n *OpNode) Start(ctx context.Context) error {
 
 		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
 		if err != nil {
-			log.Warn("failed to poll L1 block", "label", eth.Safe, "err", err)
+			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
 		}
 		if safeRef != (eth.L1BlockRef{}) {
 			n.OnNewL1Safe(reqCtx, safeRef)
@@ -588,7 +588,7 @@ func (n *OpNode) Start(ctx context.Context) error {
 
 		finalizedRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Finalized)
 		if err != nil {
-			log.Warn("failed to poll L1 block", "label", eth.Finalized, "err", err)
+			log.Warn("failed to fetch L1 block", "label", eth.Finalized, "err", err)
 		}
 		if finalizedRef != (eth.L1BlockRef{}) {
 			n.OnNewL1Finalized(reqCtx, finalizedRef)
