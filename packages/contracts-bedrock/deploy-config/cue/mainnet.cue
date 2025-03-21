@@ -97,7 +97,7 @@ network: dryrun: mainnet: #MainnetTemplate & {
 	faultGameWithdrawalDelay:        (2 * disputeGameFinalityDelaySeconds)
 	proofMaturityDelaySeconds:       (2 * disputeGameFinalityDelaySeconds)
 	faultGameClockExtension:         (30 * MinuteInSeconds)
-	faultGameMaxClockDuration:       faultGameWithdrawalDelay
+	faultGameMaxClockDuration:       disputeGameFinalityDelaySeconds
 	preimageOracleChallengePeriod:   (10 * MinuteInSeconds)
 
 	faultGameAbsolutePrestate:  "0x0364010a7b2be12b8583c8bc2c610ef5b77bb52161cac1dd4f8cbe47edc05afd"

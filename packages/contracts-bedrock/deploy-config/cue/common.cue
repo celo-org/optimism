@@ -99,14 +99,15 @@ package deployconfig
 	daResolveWindow:   1
 
 	// FaultProofs
-	faultGameMaxDepth:         uint64 | *73
-	faultGameClockExtension:   uint64 | *(3*HourInSeconds)
-	faultGameMaxClockDuration: uint64 | *(div(7*DayInSeconds, 2))
-	faultGameSplitDepth:       uint64 | *30
+	faultGameMaxDepth:       uint64 | *73
+	faultGameClockExtension: uint64 | *(3 * HourInSeconds)
+	faultGameSplitDepth:     uint64 | *30
 	// we are following op and base here
-	faultGameWithdrawalDelay:        uint64 | *(7 * DayInSeconds)
+	faultGameWithdrawalDelay: uint64 | *(7 * DayInSeconds)
+
 	proofMaturityDelaySeconds:       uint64 | *(7 * DayInSeconds)
 	disputeGameFinalityDelaySeconds: uint64 | *(div(7*DayInSeconds, 2))
+	faultGameMaxClockDuration:       uint64 | *(div(7*DayInSeconds, 2))
 	// different than OP's "0" type
 	respectedGameType: 1
 
