@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -27,7 +28,7 @@ func (ft *finalizedTest) Run(t *testing.T) {
 	l1Finalized := eth.L1BlockRef{Number: ft.final, Hash: ft.hash}
 	l1FinalizedGetter := func() eth.L1BlockRef { return l1Finalized }
 
-	f := NewFinalized(l1FinalizedGetter, l1Fetcher)
+	f := NewFinalized(l1FinalizedGetter, l1Fetcher, log.New())
 
 	if ft.pass {
 		// no calls to the l1Fetcher are made if the block number is not finalized yet
