@@ -738,6 +738,32 @@ func initP2PSigner(ctx context.Context, cfg *config.Config, node *OpNode) (p2p.S
 }
 
 func (n *OpNode) Start(ctx context.Context) error {
+	// If n.cfg.Driver.SequencerUseFinalized is true, sequencer does not use non-finalized L1 blocks as L1 origin
+	// The OpNode periodically fetches the latest safe and finalized L1 block heights (1 epoch ≒ 6.4 minutes by default),
+	// but these values are not available immediately after startup until the first polling occurs.
+	// In some cases, this can cause the sequencer to get stuck because it fails to retrieve the next L1 block.
+	// To prevent this, fetch and initialize the latest safe and finalized L1 block references at startup.
+	if n.cfg.Driver.SequencerUseFinalized {
+		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second*20)
+		defer reqCancel()
+
+		finalizedRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Finalized)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Finalized, "err", err)
+		} else if finalizedRef != (eth.L1BlockRef{}) {
+			n.l2Driver.StatusTracker.OnL1Finalized(finalizedRef)
+			n.l2Driver.Finalizer.OnL1Finalized(finalizedRef)
+			n.l2Driver.SyncDeriver.OnL1Finalized(ctx)
+		}
+
+		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
+		} else if safeRef != (eth.L1BlockRef{}) {
+			n.l2Driver.StatusTracker.OnL1Safe(safeRef)
+		}
+	}
+
 	if n.interopSys != nil {
 		if err := n.interopSys.Start(ctx); err != nil {
 			n.log.Error("Could not start interop sub system", "err", err)
