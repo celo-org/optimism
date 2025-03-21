@@ -62,8 +62,9 @@ type OpNode struct {
 	l1SafeSub      ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 	l1FinalizedSub ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 
-	eventSys   event.System
-	eventDrain driver.Drain
+	eventEmitter event.Emitter
+	eventSys     event.System
+	eventDrain   driver.Drain
 
 	l1Source  *sources.L1Client     // L1 Client to fetch data from
 	l2Driver  *driver.Driver        // L2 Engine to Sync
@@ -207,15 +208,15 @@ func (n *OpNode) initL1(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to validate the L1 config: %w", err)
 	}
 
-	emitter := n.eventSys.Register("l1-signals", nil)
+	n.eventEmitter = n.eventSys.Register("l1-signals", nil)
 	onL1Head := func(ctx context.Context, sig eth.L1BlockRef) {
-		emitter.Emit(ctx, status.L1UnsafeEvent{L1Unsafe: sig})
+		n.eventEmitter.Emit(ctx, status.L1UnsafeEvent{L1Unsafe: sig})
 	}
 	onL1Safe := func(ctx context.Context, sig eth.L1BlockRef) {
-		emitter.Emit(ctx, status.L1SafeEvent{L1Safe: sig})
+		n.eventEmitter.Emit(ctx, status.L1SafeEvent{L1Safe: sig})
 	}
 	onL1Finalized := func(ctx context.Context, sig eth.L1BlockRef) {
-		emitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: sig})
+		n.eventEmitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: sig})
 	}
 
 	// Keep subscribed to the L1 heads, which keeps the L1 maintainer pointing to the best headers to sync
@@ -557,6 +558,30 @@ func (n *OpNode) initP2PSigner(ctx context.Context, cfg *config.Config) (err err
 }
 
 func (n *OpNode) Start(ctx context.Context) error {
+	// If n.cfg.Driver.SequencerUseFinalized is true, sequencer does not use non-finalized L1 blocks as L1 origin
+	// The OpNode periodically fetches the latest safe and finalized L1 block heights (1 epoch ≒ 6.4 minutes by default),
+	// but these values are not available immediately after startup until the first polling occurs.
+	// In some cases, this can cause the sequencer to get stuck because it fails to retrieve the next L1 block.
+	// To prevent this, fetch and initialize the latest safe and finalized L1 block references at startup.
+	if n.cfg.Driver.SequencerUseFinalized {
+		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second*20)
+		defer reqCancel()
+
+		finalizedRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Finalized)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Finalized, "err", err)
+		} else if finalizedRef != (eth.L1BlockRef{}) {
+			n.eventEmitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: finalizedRef})
+		}
+
+		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
+		} else if safeRef != (eth.L1BlockRef{}) {
+			n.eventEmitter.Emit(ctx, status.L1SafeEvent{L1Safe: safeRef})
+		}
+	}
+
 	if n.interopSys != nil {
 		if err := n.interopSys.Start(ctx); err != nil {
 			n.log.Error("Could not start interop sub system", "err", err)
