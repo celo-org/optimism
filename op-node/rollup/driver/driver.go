@@ -240,7 +240,7 @@ func NewDriver(
 		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1, l2)
 		var seqL1Blocks sequencing.L1Blocks
 		if driverCfg.SequencerUseFinalized {
-			seqL1Blocks = finalized.NewFinalized(statusTracker.L1Finalized, l1)
+			seqL1Blocks = finalized.NewFinalized(statusTracker.L1Finalized, l1, log)
 		} else {
 			seqL1Blocks = confdepth.NewConfDepth(driverCfg.SequencerConfDepth, statusTracker.L1Head, l1)
 		}
