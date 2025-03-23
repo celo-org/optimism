@@ -90,6 +90,12 @@ export function makeChainConfigs(
       contracts: {
         ...l2ChainConfig.contracts,
         ...contractAddressesL2Celo,
+        optimismMintableERC20Factory: {
+          address: "0x4200000000000000000000000000000000000012",
+          [l1ChainID]: {
+            address: contractAddressesL1.OptimismMintableERC20FactoryProxy,
+          },
+        },
         customGasToken: {
           [l1ChainID]: {
             address: contractAddressesL1.CustomGasTokenProxy,

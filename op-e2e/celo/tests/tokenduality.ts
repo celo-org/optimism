@@ -6,7 +6,7 @@ import { expect } from "jsr:@std/expect";
 export const tokenduality = addTestOptions({
   Concurrent: true,
   Name: "test-tokenduality",
-  OnlyRunOnL2ChainIDs: [901],
+  OnlyRunOnL2ChainIDs: [999],
 })(async function (_: Deno.TestContext, ctx: Context): Promise<boolean> {
   const l2Contracts: ChainContractsCeloL2 = ctx.public().l2.chain!
     .contracts as ChainContractsCeloL2;

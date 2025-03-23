@@ -8,7 +8,7 @@ export const wethBridge = addTestOptions({
   // only run on local devnet, since this test
   // works with hardcoded owner accounts on the devnet
   // deployment
-  OnlyRunOnL2ChainIDs: [901],
+  OnlyRunOnL2ChainIDs: [999],
 })(async function (_: Deno.TestContext, ctx: Context): Promise<boolean> {
   const contractsPath = join(
     ctx.config.MonorepoPath,

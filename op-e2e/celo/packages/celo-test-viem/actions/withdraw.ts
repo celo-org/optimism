@@ -3,12 +3,15 @@ import type {
   PublicClients,
   WalletClients,
 } from "../clients/clients.ts";
+import { simulateBridgeERC20To } from "./bridge.ts";
+import type { BridgedERC20TokenPair } from "./common.ts";
 import type {
   Account,
   Address,
   Chain,
   GetBlockReturnType,
   HttpTransport,
+  TransactionReceipt,
 } from "viem";
 import type {
   BuildProveWithdrawalParameters,
@@ -16,6 +19,7 @@ import type {
   WaitToFinalizeReturnType,
 } from "viem/op-stack";
 import { getPortalVersion } from "viem/op-stack";
+import { ERC20 } from "reverse-mirage";
 import { parseAbi } from "viem";
 import { pollFunction, sleepSeconds } from "@celo-test/util";
 
@@ -38,13 +42,68 @@ export type WithdrawReturnType = {
   l2GasPayment: bigint;
 };
 
-export async function withdraw(
+export type InitiateWithdrawReturnType = {
+  receipt: TransactionReceipt;
+  gasPaid: bigint;
+};
+
+export async function initiateERC20Withdraw(
+  value: bigint,
+  to: Address,
+  // l1Gas: bigint, // TODO: do we need this here, or should we simulate?
+  tokenPair: BridgedERC20TokenPair,
+  publicClients: PublicClients,
+  walletClients: WalletClients<Account>,
+): Promise<InitiateWithdrawReturnType> {
+  let localToken: ERC20;
+  let remoteToken: ERC20;
+  // XXX: why did this work before we correct the
+  // if statement?
+  if (tokenPair.nativeOnL1 === true) {
+    localToken = tokenPair.bridgedToken;
+    remoteToken = tokenPair.nativeToken;
+  } else {
+    localToken = tokenPair.nativeToken;
+    remoteToken = tokenPair.bridgedToken;
+  }
+  const bridgeERC20 = await simulateBridgeERC20To(
+    {
+      account: walletClients.l2.account,
+      chain: publicClients.l2.chain,
+      request: {
+        //TODO: calculate gas for the l1 execution, so this would be a ERC20 transfer with gas prices on l1?
+        gas: 200000,
+        to: to,
+        value: value,
+        data: "0x",
+      },
+      localToken: localToken.address,
+      remoteToken: remoteToken.address,
+    },
+    publicClients,
+  );
+  const hash = await walletClients.l2.writeContract(bridgeERC20.args); // TODO: fix type
+  const receipt = await publicClients.l2.waitForTransactionReceipt({
+    hash: hash,
+  });
+  console.log("initiateWithdrawal receipt (l2)", receipt);
+
+  return {
+    receipt: receipt,
+    gasPaid:
+      // TODO: when we implement the other direction,
+      // l1Fee doesn't exist on l1 receipt,
+      receipt.gasUsed * receipt.effectiveGasPrice + (receipt.l1Fee ?? 0n),
+  };
+}
+
+export async function initiateNativeWithdraw(
   value: bigint,
   to: Address,
   l1Gas: bigint,
   publicClients: PublicClients,
   walletClients: WalletClients<Account>,
-): Promise<WithdrawReturnType> {
+): Promise<InitiateWithdrawReturnType> {
   const initiateHash = await walletClients.l2.initiateWithdrawal({
     request: {
       gas: l1Gas,
@@ -57,15 +116,24 @@ export async function withdraw(
   });
   console.log("initiateWithdrawal receipt (l2)", receipt);
 
-  const l2GasPayment =
-    receipt.gasUsed * receipt.effectiveGasPrice + (receipt.l1Fee ?? 0n);
+  return {
+    receipt: receipt,
+    gasPaid:
+      receipt.gasUsed * receipt.effectiveGasPrice + (receipt.l1Fee ?? 0n),
+  };
+}
 
+export async function settleWithdraw(
+  withdrawReceipt: TransactionReceipt,
+  publicClients: PublicClients,
+  walletClients: WalletClients<Account>,
+): Promise<WithdrawReturnType> {
   // first wait with our wait function, because it is target-time based
   // and considers CPU suspend and hibernate:
   // NOTE: viem only returns a time here when more than 2 fault-games
   // can be found from the DisputeGameFactory
   const timeToProve = await publicClients.l1.getTimeToProve({
-    receipt,
+    receipt: withdrawReceipt,
     // deno-lint-ignore no-explicit-any
     targetChain: publicClients.l2.chain as any,
   });
@@ -76,14 +144,21 @@ export async function withdraw(
   await sleepSeconds(timeToProve.seconds);
 
   // Only now call the waitToProve, which now will immediately
-  // try to call the L1 contracts.
+  // try to call the L1 contracts
+  // (XXX: I think? why is this taking so
+  // long on the mainnet after already waiting the timeToProve?).
+  // TODO: check again what get-time-toprove would show now.
+  // because internally the waitToProve waits this time initially
+  // before making any calls..
+  //
+  //
   // NOTE: for the L2OO system,
   // this function requires the mulitcall3 contract to be deployed
   // on the L1 chain.
   //
   console.log("call wait to prove");
   const { output, game, withdrawal } = await publicClients.l1.waitToProve({
-    receipt,
+    receipt: withdrawReceipt,
     // deno-lint-ignore no-explicit-any
     targetChain: publicClients.l2.chain as any,
   });
@@ -130,7 +205,7 @@ export async function withdraw(
   if (proveReceipt.status != "success") {
     return {
       success: false,
-      l2GasPayment: l2GasPayment,
+      l2GasPayment: 0n, //FIXME: we don't need this here actually because now you have it in the initate function
     };
   }
 
@@ -197,7 +272,7 @@ export async function withdraw(
 
   return {
     success: finalizeReceipt.status == "success",
-    l2GasPayment: l2GasPayment,
+    l2GasPayment: 0n, // FIXME: we don't need this here anymore
   };
 }
 

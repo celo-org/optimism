@@ -1,4 +1,9 @@
-import { deposit, withdraw, type WithdrawReturnType } from "@celo-test/viem";
+import {
+  deposit,
+  initiateNativeWithdraw,
+  settleWithdraw,
+} from "@celo-test/viem";
+import type { WithdrawReturnType } from "@celo-test/viem";
 import { addTestOptions, Context } from "@celo-test/runner";
 import { parseEther } from "viem";
 import type { BaseERC20, ERC20, ERC20Amount } from "reverse-mirage";
@@ -7,7 +12,7 @@ import { expect } from "jsr:@std/expect";
 export const withdrawDeposit = addTestOptions({
   Concurrent: true,
   Name: "test-withdraw-and-deposit-back",
-  OnlyRunOnL2ChainIDs: undefined,
+  OnlyRunOnL2ChainIDs: [999],
 })(async function (t: Deno.TestContext, ctx: Context): Promise<boolean> {
   // NOTE: important for mainnet test-runs:
   // the initial L1 balance should cover the gas fee for
@@ -52,14 +57,19 @@ export const withdrawDeposit = addTestOptions({
   }
   if (
     !(await t.step("withdraw", async () => {
-      withdrawResult = await withdraw(
+      const withdraw = await initiateNativeWithdraw(
         bridgingAmount,
         ctx.wallet().l1.account!.address,
         21_000n,
         ctx.public(),
         ctx.wallet(),
       );
-      expect(withdrawResult.success).toBe(true);
+      expect(withdraw.receipt.status === "success").toBe(true);
+      withdrawResult = await settleWithdraw(
+        withdraw.receipt,
+        ctx.public(),
+        ctx.wallet(),
+      );
 
       const balanceL1AfterWithdraw = await ctx.public().l1.getERC20BalanceOf({
         erc20: celoToken,

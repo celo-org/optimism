@@ -259,6 +259,7 @@ async function runAllTests(
     }
     await Promise.allSettled(steps);
   } finally {
+    // TODO: refund the funder account from all contexts
     await t.step({
       name: "teardown",
       sanitizeOps: false,
