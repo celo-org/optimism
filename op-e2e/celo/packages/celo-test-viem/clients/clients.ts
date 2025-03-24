@@ -1,5 +1,6 @@
 import { createPublicClient, createWalletClient, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { sleep } from "@celo-test/util";
 import { publicActionsERC20, walletActionsERC20 } from "./erc20.ts";
 import type {
   Account,
@@ -163,17 +164,23 @@ export class ClientAccountManager {
     }
 
     const receipts: Array<Promise<TransactionReceipt>> = [];
+    let transactionCount = await publicClient.getTransactionCount({
+      address: leader.account.address,
+    });
     for (const acc of it) {
       if (acc.address === leader.account.address) {
         console.log("skipping funding leader account");
         continue;
       }
+      await sleep(500);
       const hash = await leader.sendTransaction({
         type: "eip1559",
         maxFeePerGas: maxFeePerGas,
         value: sendBalance,
         to: acc.address,
+        nonce: transactionCount,
       });
+      transactionCount++;
       receipts.push(
         publicClient.waitForTransactionReceipt({
           hash: hash,

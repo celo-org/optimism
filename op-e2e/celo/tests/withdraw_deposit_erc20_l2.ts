@@ -16,7 +16,7 @@ import { expect } from "jsr:@std/expect";
 export const withdrawDepositERC20L2Native = addTestOptions({
   Concurrent: true,
   Name: "test-withdraw-and-deposit-back-erc20-l2",
-  OnlyRunOnL2ChainIDs: [901],
+  OnlyRunOnL2ChainIDs: undefined,
 })(async function (t: Deno.TestContext, ctx: Context): Promise<boolean> {
   // NOTE: important for mainnet test-runs:
   // the initial L1 balance should cover the gas fee for
@@ -27,7 +27,7 @@ export const withdrawDepositERC20L2Native = addTestOptions({
   let initialBalanceL2Eth: bigint;
 
   let bridgeTokenPair: BridgedERC20TokenPair;
-  const bridgingAmount: bigint = parseEther("100");
+  const bridgingAmount: bigint = parseEther("10");
   let withdrawResult: WithdrawReturnType;
 
   if (
@@ -76,6 +76,7 @@ export const withdrawDepositERC20L2Native = addTestOptions({
   }
   if (
     !(await t.step("withdraw", async () => {
+      //FIXME: I think here we have the allowance issue
       const withdraw = await initiateBridgeERC20To(
         bridgingAmount,
         ctx.wallet().l1.account!.address,
@@ -92,8 +93,9 @@ export const withdrawDepositERC20L2Native = addTestOptions({
         ctx.public(),
         ctx.wallet(),
       );
+      expect(withdrawResult.prove.success).toBe(true);
+      expect(withdrawResult.finalize.success).toBe(true);
       ctx.storeArtifact("settle withdraw result", withdrawResult);
-      expect(withdrawResult.success).toBe(true);
 
       const balanceBridgedAfterWithdraw = await ctx
         .public()

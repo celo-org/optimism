@@ -61,7 +61,7 @@ export async function initiateBridgeERC20To(
   //TODO: return approve receipt
   // approve the allowance for the bridge,
   // but only if we are on the "native" side
-  if (chainHasNativeToken) {
+  if (chainHasNativeToken === true) {
     const approve = await walletClient.simulateERC20Approve({
       args: {
         amount: { amount: value, token: localToken, type: "Amount" },
@@ -85,9 +85,7 @@ export async function initiateBridgeERC20To(
         //TODO: calculate gas for the other chain execution,
         //so this would be a ERC20 transfer simulated on the other chain rpc?
         // gas: 200000,
-        gas: 1000000, // FIXME: this seems to work, but this is only what's added to some base-gas calculations within the messenger.
-        // so maybe it's for some reason still enough
-        // gas: 1000000000, // FIXME:
+        gas: 200000, // FIXME: this seems to work, but this is only what's added to some base-gas calculations within the messenger.
         to: to,
         value: value,
         data: "0x",

@@ -3,8 +3,6 @@ import type {
   PublicClients,
   WalletClients,
 } from "../clients/clients.ts";
-import { simulateBridgeERC20To } from "./bridge.ts";
-import type { BridgedERC20TokenPair } from "./common.ts";
 import type {
   Account,
   Address,
@@ -15,11 +13,11 @@ import type {
 } from "viem";
 import type {
   BuildProveWithdrawalParameters,
+  GetGameReturnType,
   WaitToFinalizeParameters,
   WaitToFinalizeReturnType,
 } from "viem/op-stack";
 import { getPortalVersion } from "viem/op-stack";
-import type { ERC20 } from "reverse-mirage";
 import { parseAbi } from "viem";
 import { pollFunction, sleepSeconds } from "@celo-test/util";
 
@@ -38,8 +36,16 @@ const portal2Abi = parseAbi([
 ]);
 
 export type WithdrawReturnType = {
-  success: boolean;
-  l2GasPayment: bigint;
+  prove: {
+    receipt: TransactionReceipt | undefined;
+    success: boolean;
+    chainId: number;
+  };
+  finalize: {
+    receipt: TransactionReceipt | undefined;
+    success: boolean;
+    chainId: number;
+  };
 };
 
 export type InitiateWithdrawReturnType = {
@@ -82,6 +88,38 @@ export async function settleWithdraw(
   publicClients: PublicClients,
   walletClients: WalletClients<Account>,
 ): Promise<WithdrawReturnType> {
+  // the getTimeToProve broadly speaking takes the average delta of the last 10 games
+  // so this overestimates when we recently stopped the propeser / challenger.
+  // that's why we rather poll the get games for the l2Blocknumber,
+  // so that the waitToProve immediately finds the game and calculates a wait time of 0
+
+  console.log(
+    "waiting for dispute game that includes l2-block: ",
+    withdrawReceipt.blockNumber,
+  );
+  await pollFunction(
+    async (): Promise<GetGameReturnType> =>
+      await publicClients.l1.getGame({
+        l2BlockNumber: withdrawReceipt.blockNumber,
+        targetChain: publicClients.l2.chain as any,
+      }),
+    (val: GetGameReturnType | null, _err: Error | null) => {
+      if (_err != null) {
+        return false;
+      }
+      if (val !== null) {
+        // we found a game for the blocknumber
+        return true;
+      } else {
+        return false;
+      }
+    },
+    60_000,
+    undefined,
+    false,
+  );
+  // now check again that the time to prove is actually 0
+  // // XXX: (this is mainly for testing that the poll time calculation in waitToProve now returns 0)
   // first wait with our wait function, because it is target-time based
   // and considers CPU suspend and hibernate:
   // NOTE: viem only returns a time here when more than 2 fault-games
@@ -91,7 +129,8 @@ export async function settleWithdraw(
     // deno-lint-ignore no-explicit-any
     targetChain: publicClients.l2.chain as any,
   });
-  if (!timeToProve.seconds) {
+  console.log("timeToProve", timeToProve);
+  if (timeToProve.seconds === undefined) {
     throw Error("couldn't calculate time to prove");
   }
   console.log("waiting for time to prove (in s):", timeToProve.seconds);
@@ -149,12 +188,19 @@ export async function settleWithdraw(
   const proveReceipt = await publicClients.l1.waitForTransactionReceipt({
     hash: proveHash,
   });
-
-  //TODO:
-  if (proveReceipt.status != "success") {
+  const proveSuccess = proveReceipt.status === "success";
+  if (!proveSuccess) {
     return {
-      success: false,
-      l2GasPayment: 0n, //FIXME: we don't need this here actually because now you have it in the initate function
+      prove: {
+        receipt: proveReceipt,
+        success: proveSuccess,
+        chainId: publicClients.l1.chain.id,
+      },
+      finalize: {
+        receipt: undefined,
+        success: false,
+        chainId: publicClients.l1.chain.id,
+      },
     };
   }
 
@@ -215,10 +261,17 @@ export async function settleWithdraw(
     hash: finalizeHash,
   });
 
-  //TODO:
   return {
-    success: finalizeReceipt.status == "success",
-    l2GasPayment: 0n, // FIXME: we don't need this here anymore
+    prove: {
+      receipt: proveReceipt,
+      success: proveSuccess,
+      chainId: publicClients.l1.chain.id,
+    },
+    finalize: {
+      receipt: finalizeReceipt,
+      success: finalizeReceipt.status === "success",
+      chainId: publicClients.l1.chain.id,
+    },
   };
 }
 

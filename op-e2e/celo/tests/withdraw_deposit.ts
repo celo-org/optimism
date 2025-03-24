@@ -11,7 +11,7 @@ import { expect } from "jsr:@std/expect";
 export const withdrawDeposit = addTestOptions({
   Concurrent: true,
   Name: "test-withdraw-and-deposit-back",
-  OnlyRunOnL2ChainIDs: [901],
+  OnlyRunOnL2ChainIDs: undefined,
 })(async function (t: Deno.TestContext, ctx: Context): Promise<boolean> {
   // NOTE: important for mainnet test-runs:
   // the initial L1 balance should cover the gas fee for
@@ -75,6 +75,8 @@ export const withdrawDeposit = addTestOptions({
         ctx.wallet(),
       );
       ctx.storeArtifact("withdraw settle result l1", withdrawSettleResult);
+      expect(withdrawSettleResult.finalize.success).toBe(true);
+      expect(withdrawSettleResult.prove.success).toBe(true);
 
       const balanceL1AfterWithdraw = await ctx.public().l1.getERC20BalanceOf({
         erc20: celoToken,

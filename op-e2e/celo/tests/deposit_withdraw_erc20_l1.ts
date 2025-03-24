@@ -16,7 +16,7 @@ import { expect } from "jsr:@std/expect";
 export const withdrawDepositERC20L1Native = addTestOptions({
   Concurrent: true,
   Name: "test-deposit-and-withdraw-back-erc20-l1",
-  OnlyRunOnL2ChainIDs: [901],
+  OnlyRunOnL2ChainIDs: undefined,
 })(async function (t: Deno.TestContext, ctx: Context): Promise<boolean> {
   // NOTE: important for mainnet test-runs:
   // the initial L1 balance should cover the gas fee for
@@ -24,7 +24,7 @@ export const withdrawDepositERC20L1Native = addTestOptions({
   let initialBalanceNative: ERC20Amount<BaseERC20>;
   let initialBalanceBridged: ERC20Amount<BaseERC20>;
   let initialBalanceL2Eth: bigint;
-  const bridgingAmount: bigint = parseEther("100");
+  const bridgingAmount: bigint = parseEther("10");
 
   let bridgeTokenPair: BridgedERC20TokenPair;
   let withdrawResult: WithdrawReturnType;
@@ -149,7 +149,8 @@ export const withdrawDepositERC20L1Native = addTestOptions({
         ctx.wallet(),
       );
       ctx.storeArtifact("settle withdraw result", withdrawResult);
-      expect(withdrawResult.success).toBe(true);
+      expect(withdrawResult.finalize.success).toBe(true);
+      expect(withdrawResult.prove.success).toBe(true);
 
       const balanceNativeAfterWithdraw = await ctx
         .public()
