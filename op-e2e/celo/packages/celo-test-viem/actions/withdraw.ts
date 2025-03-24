@@ -19,7 +19,7 @@ import type {
   WaitToFinalizeReturnType,
 } from "viem/op-stack";
 import { getPortalVersion } from "viem/op-stack";
-import { ERC20 } from "reverse-mirage";
+import type { ERC20 } from "reverse-mirage";
 import { parseAbi } from "viem";
 import { pollFunction, sleepSeconds } from "@celo-test/util";
 
@@ -47,55 +47,10 @@ export type InitiateWithdrawReturnType = {
   gasPaid: bigint;
 };
 
-export async function initiateERC20Withdraw(
-  value: bigint,
-  to: Address,
-  // l1Gas: bigint, // TODO: do we need this here, or should we simulate?
-  tokenPair: BridgedERC20TokenPair,
-  publicClients: PublicClients,
-  walletClients: WalletClients<Account>,
-): Promise<InitiateWithdrawReturnType> {
-  let localToken: ERC20;
-  let remoteToken: ERC20;
-  // XXX: why did this work before we correct the
-  // if statement?
-  if (tokenPair.nativeOnL1 === true) {
-    localToken = tokenPair.bridgedToken;
-    remoteToken = tokenPair.nativeToken;
-  } else {
-    localToken = tokenPair.nativeToken;
-    remoteToken = tokenPair.bridgedToken;
-  }
-  const bridgeERC20 = await simulateBridgeERC20To(
-    {
-      account: walletClients.l2.account,
-      chain: publicClients.l2.chain,
-      request: {
-        //TODO: calculate gas for the l1 execution, so this would be a ERC20 transfer with gas prices on l1?
-        gas: 200000,
-        to: to,
-        value: value,
-        data: "0x",
-      },
-      localToken: localToken.address,
-      remoteToken: remoteToken.address,
-    },
-    publicClients,
-  );
-  const hash = await walletClients.l2.writeContract(bridgeERC20.args); // TODO: fix type
-  const receipt = await publicClients.l2.waitForTransactionReceipt({
-    hash: hash,
-  });
-  console.log("initiateWithdrawal receipt (l2)", receipt);
-
-  return {
-    receipt: receipt,
-    gasPaid:
-      // TODO: when we implement the other direction,
-      // l1Fee doesn't exist on l1 receipt,
-      receipt.gasUsed * receipt.effectiveGasPrice + (receipt.l1Fee ?? 0n),
-  };
-}
+export type InitiateBridgeERC20ToReturnType = {
+  receipt: TransactionReceipt;
+  gasPaid: bigint;
+};
 
 export async function initiateNativeWithdraw(
   value: bigint,
@@ -114,7 +69,6 @@ export async function initiateNativeWithdraw(
   const receipt = await publicClients.l2.waitForTransactionReceipt({
     hash: initiateHash,
   });
-  console.log("initiateWithdrawal receipt (l2)", receipt);
 
   return {
     receipt: receipt,
@@ -187,21 +141,16 @@ export async function settleWithdraw(
   const proveWithdrawalArgs = await publicClients.l2.buildProveWithdrawal(
     proveWithdrawalParams,
   );
-  console.log(
-    "built prove-withdrawal args, to be posted on l1",
-    proveWithdrawalArgs,
-  );
   const proveHash = await walletClients.l1.proveWithdrawal(
     // deno-lint-ignore no-explicit-any
     proveWithdrawalArgs as any,
   );
 
-  console.log("wait for prove-withdrawal tx hash (l1):)", proveHash);
   const proveReceipt = await publicClients.l1.waitForTransactionReceipt({
     hash: proveHash,
   });
-  console.log("proveWithdrawal tx-hash (l1)", proveReceipt.transactionHash);
 
+  //TODO:
   if (proveReceipt.status != "success") {
     return {
       success: false,
@@ -265,11 +214,8 @@ export async function settleWithdraw(
   const finalizeReceipt = await publicClients.l1.waitForTransactionReceipt({
     hash: finalizeHash,
   });
-  console.log(
-    "finalizeWithdrawal tx-hash (l1)",
-    finalizeReceipt.transactionHash,
-  );
 
+  //TODO:
   return {
     success: finalizeReceipt.status == "success",
     l2GasPayment: 0n, // FIXME: we don't need this here anymore

@@ -41,7 +41,6 @@ export const tokenduality = addTestOptions({
     hash: transferHash,
     timeout: 30_000,
   });
-  console.log("token-duality tx-hash (l2)", receipt.transactionHash);
 
   expect(receipt.status).toBe("success");
   const balanceAfter = await ctx.public().l2.getBalance({

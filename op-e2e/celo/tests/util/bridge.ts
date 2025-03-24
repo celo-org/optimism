@@ -64,7 +64,6 @@ export async function setupERC20BridgeToken(
     args: [],
     bytecode: testBridgeToken.bytecode["object"],
   });
-  console.log("deploy hash", txHash);
   const tokenDeployReceipt = await pubCNative.waitForTransactionReceipt({
     hash: txHash,
   });
@@ -92,7 +91,6 @@ export async function setupERC20BridgeToken(
     functionName: "createOptimismMintableERC20",
     args: [nativeTokenAddress, "TestBridgeToken", "TBT"],
   });
-  console.log("tx write request", request);
 
   txHash = await wlltCRemote.writeContract(request);
   receipt = await pubCRemote.waitForTransactionReceipt({
@@ -110,9 +108,6 @@ export async function setupERC20BridgeToken(
   // FIXME: not strictly equal, because the actual address is checksummed
   // expect(topics[1].args!.remoteToken).toBe(bridgingTokenAddressL1);
   //
-  // TODO: log the chain-id with the token address
-  console.log("created native token on chain", nativeTokenAddress);
-  console.log("created remote token on chain", bridgeTokenAddress);
 
   const bridgedTokenERC20 = await pubCRemote.getERC20({
     erc20: {

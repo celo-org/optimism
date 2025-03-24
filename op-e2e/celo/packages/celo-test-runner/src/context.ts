@@ -6,8 +6,21 @@ import type {
   WalletClients,
 } from "@celo-test/viem";
 import type { Config } from "./types.ts";
+import type { TestLogger } from "./logger.ts";
 import type { Account, HDAccount, Hex } from "viem";
 import { toHex } from "viem";
+
+// deno-lint-ignore no-explicit-any
+type StoreArtifactFnExternal = (id: string, message: string, data: any) => void;
+// deno-lint-ignore no-explicit-any
+type StoreArtifactFn = (message: string, data: any) => void;
+
+// interface TestLogger {
+//   injectLogger(id: string, ctx: Context): void;
+//   // deno-lint-ignore no-explicit-any
+//   store(id: string, message: string, data: any): void;
+//   flush(): Promise<void>;
+// }
 
 export class Context {
   concurrent: boolean;
@@ -16,6 +29,8 @@ export class Context {
   clientManager: ClientAccountManager;
   parent: Context | null;
   chains: Chains;
+  private _storeArtifact: StoreArtifactFn | undefined;
+  logger: TestLogger;
 
   private _pubClients: PublicClients | undefined;
   private _walletClients: WalletClients<Account> | undefined;
@@ -26,7 +41,9 @@ export class Context {
     parent: Context | undefined,
     concurrent: boolean,
     contracts: ContractAddressesL1,
+    logger: TestLogger,
   ) {
+    this.logger = logger;
     this.contracts = contracts;
     this.clientManager = clientManager;
     this.chains = clientManager.chains;
@@ -54,6 +71,21 @@ export class Context {
   l2PrivateKey(): Hex {
     const acc = this.wallet().l2.account as HDAccount;
     return toHex(acc.getHdKey().privateKey!);
+  }
+
+  injectArtifactStore(id: string, fn: StoreArtifactFnExternal) {
+    // deno-lint-ignore no-explicit-any
+    this._storeArtifact = function (message: string, data: any) {
+      return fn(id, message, data);
+    };
+  }
+
+  // deno-lint-ignore no-explicit-any
+  storeArtifact(message: string, data: any) {
+    if (this._storeArtifact === undefined) {
+      throw Error("artifact store not injected");
+    }
+    this._storeArtifact(message, data);
   }
 
   resetClients(numFundedAccounts: number) {
@@ -85,6 +117,7 @@ export class Context {
       this,
       concurrent,
       this.contracts,
+      this.logger,
     );
   }
 }

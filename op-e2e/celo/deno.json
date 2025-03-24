@@ -1,7 +1,8 @@
 {
   "tasks": {
-    "test": "deno test --allow-read --allow-run --allow-net='127.0.0.1,localhost' --allow-env --env-file=.default.env --env-file=.env main.test.ts"
-    "test-baklava": "deno test --allow-read --allow-run --allow-net --allow-env --env-file=.baklava.env main.test.ts"
+    "test": "deno test --allow-write='./' --allow-read --allow-run --allow-net='127.0.0.1,localhost' --allow-env --env-file=.default.env --env-file=.env main.test.ts"
+    "test-baklava": "deno test --allow-write='./' --allow-read --allow-run --allow-net --allow-env --env-file=.baklava.env main.test.ts"
+    "test-dryrun": "deno test --allow-write='./' --allow-read --allow-run --allow-net --allow-env --env-file=.mainnet-dryrun.env main.test.ts"
     "cache-deps": "deno cache main.test.ts"
   },
   "workspace": [

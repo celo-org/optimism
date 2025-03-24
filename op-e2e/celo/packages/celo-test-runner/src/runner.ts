@@ -1,4 +1,5 @@
 import type { Context } from "./context.ts";
+import { bindLoggerToTest } from "./logger.ts";
 import type {
   Config,
   TestCase,
@@ -92,6 +93,7 @@ function serialTestDefinitionsForFile(
           sanitizeResources: false,
           sanitizeExit: false,
           fn: async (t) => {
+            bindLoggerToTest(t, ctx);
             await test.Func(t, ctx);
           },
         });
@@ -105,6 +107,7 @@ function serialTestDefinitionsForFile(
           ignore: skipTest(test, ctx.config),
           sanitizeExit: false,
           fn: (t) => {
+            bindLoggerToTest(t, ctx);
             test.Func(t, ctx);
           },
         });
@@ -151,6 +154,7 @@ function concurrentTestDefinitionsForFile(
             sanitizeResources: false,
             sanitizeExit: false,
             fn: async (t) => {
+              bindLoggerToTest(t, ctx);
               await test.Func(t, ctx);
             },
           }),
@@ -266,6 +270,10 @@ async function runAllTests(
       sanitizeResources: false,
       sanitizeExit: false,
       fn: async (t1) => {
+        if (rootCtx !== undefined) {
+          console.log("writing artifacts file");
+          await rootCtx.logger.flush();
+        }
         await teardown(t1, config);
       },
     });

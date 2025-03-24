@@ -2,6 +2,7 @@ import { join } from "jsr:@std/path";
 import { ClientAccountManager } from "@celo-test/viem";
 import type { Config } from "./types.ts";
 import { Context } from "./context.ts";
+import { TestLogger } from "./logger.ts";
 import {
   waitClientNotSyncing,
   waitClientReturnsBlockNum,
@@ -125,7 +126,9 @@ export async function setup(
     await waitInitialL2OracleOutput(publicClient, 120);
   }
   console.log("chain networks stable");
-  return new Context(clients, config, undefined, false, addressesL1);
+
+  const logger = new TestLogger(config.ArtifactsDirPath);
+  return new Context(clients, config, undefined, false, addressesL1, logger);
 }
 
 export async function teardown(_: Deno.TestContext, config: Config) {

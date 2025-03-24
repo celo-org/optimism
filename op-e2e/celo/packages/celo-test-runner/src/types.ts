@@ -17,6 +17,7 @@ export type Config = {
   SpawnDevnet: boolean;
 
   TestDirPath: string;
+  ArtifactsDirPath: string;
   MonorepoPath: string;
   ContractAddressesL1FilePath: string;
   ContractAddressesL2FilePath: string | undefined;
