@@ -3,6 +3,7 @@ import {
   settleWithdraw,
   waitForDepositReceiptL2,
 } from "@celo-test/viem";
+import { sleep } from "@celo-test/util";
 import { setupERC20BridgeToken } from "./util/bridge.ts";
 import type {
   BridgedERC20TokenPair,
@@ -46,6 +47,7 @@ export const withdrawDepositERC20L1Native = addTestOptions({
   }
   if (
     !(await t.step("setup test and query balances", async () => {
+      await sleep(10000);
       initialBalanceL2Eth = await ctx.public().l2.getBalance({
         address: ctx.wallet().l2.account!.address,
       });
@@ -91,6 +93,7 @@ export const withdrawDepositERC20L1Native = addTestOptions({
       );
       ctx.storeArtifact("deposit receipt on l2", depositReceiptL2);
       expect(depositReceiptL2.status === "success").toBe(true);
+      await sleep(10000);
 
       const balanceNativeAfterDeposit = await ctx
         .public()
@@ -121,6 +124,8 @@ export const withdrawDepositERC20L1Native = addTestOptions({
       expect(balanceNativeAfterDeposit.amount).toBe(
         initialBalanceNative.amount - bridgingAmount,
       );
+      //FIXME: this fails, as the amount is 0
+      // maybe this is not deposited yet??
       expect(balanceBridgedAfterDeposit.amount).toBe(bridgingAmount);
       // TODO: do we know the exact expected amount?
       // FIXME: this is not true in the test, is this correct?
@@ -143,6 +148,7 @@ export const withdrawDepositERC20L1Native = addTestOptions({
       expect(withdraw.bridge.receipt).toBeDefined();
       expect(withdraw.bridge.receipt?.status === "success").toBe(true);
 
+      await sleep(10000);
       withdrawResult = await settleWithdraw(
         withdraw.bridge.receipt!,
         ctx.public(),
@@ -152,6 +158,7 @@ export const withdrawDepositERC20L1Native = addTestOptions({
       expect(withdrawResult.finalize.success).toBe(true);
       expect(withdrawResult.prove.success).toBe(true);
 
+      await sleep(10000);
       const balanceNativeAfterWithdraw = await ctx
         .public()
         .l1.getERC20BalanceOf({

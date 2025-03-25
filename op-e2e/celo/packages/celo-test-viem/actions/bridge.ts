@@ -4,6 +4,7 @@ import type { PublicClients, WalletClients } from "../clients/clients.ts";
 import type { BridgedERC20TokenPair } from "./common.ts";
 import type { Account, Address, Chain, TransactionReceipt } from "viem";
 import type { ERC20 } from "reverse-mirage";
+import { sleep } from "@celo-test/util";
 
 export type InitiateBridgeERC20ToReturnType = {
   approve: {
@@ -76,6 +77,7 @@ export async function initiateBridgeERC20To(
       hash: approveHash,
     });
   }
+  sleep(5000);
 
   const bridgeERC20 = await simulateBridgeERC20To(
     {

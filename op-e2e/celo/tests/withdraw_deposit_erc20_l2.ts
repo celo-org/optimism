@@ -13,6 +13,8 @@ import { setupERC20BridgeToken } from "./util/bridge.ts";
 import type { BaseERC20, ERC20Amount } from "reverse-mirage";
 import { expect } from "jsr:@std/expect";
 
+// FIXME: add sleeps in between writes, so that
+// the prod nodes can keep up to incorporate / serve the new state
 export const withdrawDepositERC20L2Native = addTestOptions({
   Concurrent: true,
   Name: "test-withdraw-and-deposit-back-erc20-l2",
@@ -105,7 +107,7 @@ export const withdrawDepositERC20L2Native = addTestOptions({
         });
       ctx.storeArtifact(
         "balance bridged after withdraw",
-        initialBalanceNative.amount,
+        balanceBridgedAfterWithdraw.amount,
       );
       const balanceNativeAfterWithdraw = await ctx
         .public()
@@ -188,7 +190,9 @@ export const withdrawDepositERC20L2Native = addTestOptions({
       expect(balanceL2EthAfterDeposit < initialBalanceL2Eth).toBe(true);
 
       expect(balanceBridgedAfterDeposit.amount).toBe(0n);
-      expect(balanceNativeAfterDeposit.amount).toBe(bridgingAmount);
+      expect(balanceNativeAfterDeposit.amount).toBe(
+        initialBalanceNative.amount,
+      );
     }))
   ) {
     return false;

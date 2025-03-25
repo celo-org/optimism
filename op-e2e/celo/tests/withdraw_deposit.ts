@@ -8,6 +8,8 @@ import { parseEther } from "viem";
 import type { BaseERC20, ERC20, ERC20Amount } from "reverse-mirage";
 import { expect } from "jsr:@std/expect";
 
+// FIXME: add sleeps in between writes, so that
+// the prod nodes can keep up to incorporate / serve the new state
 export const withdrawDeposit = addTestOptions({
   Concurrent: true,
   Name: "test-withdraw-and-deposit-back",

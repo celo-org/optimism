@@ -1,6 +1,7 @@
 import { join } from "jsr:@std/path";
 import { Context } from "@celo-test/runner";
 import { Address, parseEventLogs } from "viem";
+import { sleep } from "@celo-test/util";
 import { BridgedERC20TokenPair, getContractAddress } from "@celo-test/viem";
 import { expect } from "jsr:@std/expect";
 
@@ -84,6 +85,7 @@ export async function setupERC20BridgeToken(
   let receipt = await pubCNative.waitForTransactionReceipt({
     hash: txHash,
   });
+
   const { request } = await pubCRemote.simulateContract({
     account: wlltCRemote.account,
     address: mntblFactoryRemote,
@@ -109,6 +111,7 @@ export async function setupERC20BridgeToken(
   // expect(topics[1].args!.remoteToken).toBe(bridgingTokenAddressL1);
   //
 
+  await sleep(5000);
   const bridgedTokenERC20 = await pubCRemote.getERC20({
     erc20: {
       address: bridgeTokenAddress,
