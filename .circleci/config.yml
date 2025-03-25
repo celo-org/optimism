@@ -229,7 +229,7 @@ jobs:
             cp -r .devnet/ .devnet-mt-cannon/
       - run:
           name: Generate Celo allocs
-          command: DEVNET_L2OO="true" DEVNET_CELO="true" make devnet-allocs
+          command: DEVNET_L2OO="false" DEVNET_ALTDA="true" GENERIC_ALTDA="true" DEVNET_CELO="true" make devnet-allocs
       - run:
           name: Copy Celo allocs to .devnet-celo
           command: cp -r .devnet/ .devnet-celo/
@@ -259,12 +259,7 @@ jobs:
             - ".devnet-altda"
             - ".devnet-altda-generic"
             - ".devnet-mt-cannon"
-            - ".devnet-celo/addresses.json"
-            - ".devnet-celo/allocs-l1.json"
-            - ".devnet-celo/allocs-l2-delta.json"
-            - ".devnet-celo/allocs-l2-ecotone.json"
-            - ".devnet-celo/allocs-l2-fjord.json"
-            - ".devnet-celo/addresses.json"
+            - ".devnet-celo"
       - notify-failures-on-develop
 
   docker-build:
@@ -1040,11 +1035,14 @@ jobs:
             equal: ['celo', <<parameters.variant>>]
           steps:
             - run:
+                name: Set DEVNET_ALTDA = true
+                command: echo 'export DEVNET_ALTDA=true' >> $BASH_ENV
+            - run:
+                name: Set GENERIC_ALTDA = true
+                command: echo 'export GENERIC_ALTDA=true' >> $BASH_ENV
+            - run:
                 name: Set DEVNET_CELO = true
                 command: echo 'export DEVNET_CELO=true' >> $BASH_ENV
-            - run:
-                name: Set DEVNET_L2OO = true
-                command: echo 'export DEVNET_L2OO=true' >> $BASH_ENV
       - when:
           condition:
             equal: ['altda-generic', <<parameters.variant>>]
@@ -1138,25 +1136,37 @@ jobs:
                 command: make devnet-test
       - when:
           condition:
-              equal: ['celo', <<parameters.variant>>]
+            equal: ['celo', <<parameters.variant>>]
           steps:
+            # TODO: include this in the base image directly
+            - run:
+                name: install Deno v2.
+                command: |
+                  curl -fsSL https://deno.land/install.sh | DENO_INSTALL=$HOME/.local sh -s v2.1.9 &&
+                  echo 'export PATH=$HOME/.local/bin/:${PATH}' >> $BASH_ENV
+            - run:
+                name: set Deno cache path in env
+                command: |
+                  echo 'export DENO_DIR=$HOME/.cache/deno' >> $BASH_ENV
             - restore_cache:
-                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
-            # install dependencies
-            - run:
-                working_directory:  op-e2e/celo
-                name: install dependencies
-                command: npm install
-            # save any changes to the cache
-            - save_cache:
-                key: v1-celo-deps-{{ checksum "op-e2e/celo/package-lock.json" }}
+                key: deno-cache-v2-{{ checksum "op-e2e/celo/deno.lock" }}
                 paths:
-                  - op-e2e/celo/node_modules
+                  - ~/.cache/deno 
             - run:
-                working_directory:  op-e2e/celo
+                name: Cache Deno Dependencies
+                working_directory: op-e2e/celo
+                command: deno run cache-deps
+            - save_cache:
+                key: deno-cache-v2-{{ checksum "op-e2e/celo/deno.lock" }}
+                paths:
+                  - ~/.cache/deno 
+            - run:
+                environment:
+                  CELOTEST_SPAWN_DEVNET: false
+                working_directory: op-e2e/celo
                 name: Run Celo e2e tests
                 command: |
-                  SPAWN_DEVNET=false ./run_all_tests.sh
+                  deno run test
       - run:
           name: Dump op-node logs
           command: |

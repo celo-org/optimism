@@ -1,0 +1,24 @@
+{
+  "tasks": {
+    "test": "deno test --allow-write='./' --allow-read --allow-run --allow-net='127.0.0.1,localhost' --allow-env --env-file=.default.env --env-file=.env main.test.ts"
+    "test-baklava": "deno test --allow-write='./' --allow-read --allow-run --allow-net --allow-env --env-file=.baklava.env main.test.ts"
+    "test-dryrun": "deno test --allow-write='./' --allow-read --allow-run --allow-net --allow-env --env-file=.mainnet-dryrun.env main.test.ts"
+    "cache-deps": "deno cache main.test.ts"
+  },
+  "workspace": [
+    "./packages/celo-test-runner",
+    "./packages/celo-test-util",
+    "./packages/celo-test-viem"
+  ],
+  "imports": {
+    "@celo/celocli": "npm:@celo/celocli@^6.0.0",
+    "@dx/reflect": "jsr:@dx/reflect@^0.2.14",
+    "@std/assert": "jsr:@std/assert@^1.0.11",
+    "@std/dotenv": "jsr:@std/dotenv@^0.225.3",
+    "@std/expect": "jsr:@std/expect@^1.0.13",
+    "@std/io": "jsr:@std/io@^0.225.2",
+    "@std/testing": "jsr:@std/testing@^1.0.9",
+    "reverse-mirage": "npm:reverse-mirage@^1.1.0",
+    "viem": "npm:viem@^2.22.21"
+  },
+}
