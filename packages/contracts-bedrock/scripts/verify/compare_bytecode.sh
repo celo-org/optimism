@@ -25,6 +25,12 @@ if [ -z "$LOCAL_BYTECODE" ]; then
   exit 1
 fi
 
+# Special exception for SuperchainConfig version diff
+if grep -q "SuperchainConfig" "$ARTIFACT_FILE"; then
+  # Replace metadata version "1.1.1-beta.1" with "1.1.0" since SuperchainConfig was deployed with version "1.1.0" instead of "1.1.1-beta.1" (no other changes)
+  LOCAL_BYTECODE=$(echo "$LOCAL_BYTECODE" | sed 's/600c81526020017f312e312e312d626574612e31/600581526020017f312e312e3000000000000000/g')
+fi
+
 # Replace immutables with 0000
 IMMUTABLES=$(jq -c '.deployedBytecode.immutableReferences' "$ARTIFACT_FILE")
 
@@ -47,11 +53,11 @@ if [ "$IMMUTABLES" != "null" ]; then
   done
 fi
 
-# Now compare ignoring immutables
+# Now compare ignoring immutables and version diff
 if [ "$DEPLOYED_BYTECODE" = "$LOCAL_BYTECODE" ]; then
-  echo "$ARTIFACT_FILE Success: Deployed bytecode matches local artifact (excluding immutables)."
+  echo "$ARTIFACT_FILE Success: Deployed bytecode matches local artifact (excluding immutables/version diff)."
 else
-  echo "$ARTIFACT_FILE Mismatch: Bytecode differs beyond immutables."
+  echo "$ARTIFACT_FILE Mismatch: Bytecode differs beyond immutables/version diff."
   echo "Deployed: $DEPLOYED_BYTECODE"
   echo "Local:    $LOCAL_BYTECODE"
 fi
