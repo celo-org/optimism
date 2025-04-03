@@ -213,11 +213,11 @@ func NewMetrics(procName string) *Metrics {
 		},
 			[]string{"da_type"},
 		),
-		batchStoredDataSizeBytesTotal: *factory.NewCounterVec(
-			prometheus.CounterOpts{
-				Name: "batch_stored_data_size_bytes_total",
-				Help: "Total data size stored in each DA type (in bytes)",
-			},
+		batchStoredDataSizeBytesTotal: *factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "batch_stored_data_size_bytes_total",
+			Help:      "Total data size stored in each DA type (in bytes)",
+		},
 			[]string{"da_type"},
 		),
 		altDaFailoverTotal: factory.NewCounter(prometheus.CounterOpts{
