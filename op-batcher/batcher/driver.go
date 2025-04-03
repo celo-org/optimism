@@ -47,6 +47,8 @@ type txRef struct {
 	id       txID
 	isCancel bool
 	isBlob   bool
+	daType   DaType
+	size     int
 }
 
 func (r txRef) String() string {
@@ -910,7 +912,7 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		candidate.GasLimit = floorDataGas
 	}
 
-	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob}, *candidate, receiptsCh)
+	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}, *candidate, receiptsCh)
 }
 
 // Copypaste from upstream geth
@@ -963,6 +965,10 @@ func (l *BatchSubmitter) handleReceipt(r txmgr.TxReceipt[txRef]) {
 		l.recordFailedTx(r.ID.id, r.Err)
 	} else if r.Receipt != nil {
 		l.recordConfirmedTx(r.ID.id, r.Receipt)
+		if !r.ID.isCancel {
+			l.Metr.RecordBatchDaType(r.ID.daType.Name())
+			l.Metr.RecordBatchDataSizeBytes(r.ID.daType.Name(), r.ID.size)
+		}
 	}
 	// Both r.Err and r.Receipt can be nil, in which case we do nothing.
 }
