@@ -101,6 +101,7 @@ func (c *channel) AltDASubmissionFailed(id string, failoverToEthDA bool) {
 		// batcherService.initChannelConfig function stateless so that we can reuse it.
 		c.log.Info("Failing over to calldata txs", "id", c.ID())
 		c.cfg.DaType = DaTypeCalldata
+		c.metr.RecordFailoverToEthDA()
 	}
 }
 
