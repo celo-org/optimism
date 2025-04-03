@@ -66,6 +66,7 @@ func (c *channel) TxFailed(id string, failoverToEthDA bool) {
 		// TODO: figure out how to switch to blobs/auto instead. Might need to make
 		// batcherService.initChannelConfig function stateless so that we can reuse it.
 		c.cfg.DaType = DaTypeCalldata
+		c.metr.RecordFailoverToEthDA()
 	}
 	c.metr.RecordBatchTxFailed()
 }
