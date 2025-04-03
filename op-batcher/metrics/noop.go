@@ -45,6 +45,11 @@ func (*noopMetrics) RecordBatchTxSubmitted() {}
 func (*noopMetrics) RecordBatchTxSuccess()   {}
 func (*noopMetrics) RecordBatchTxFailed()    {}
 func (*noopMetrics) RecordBlobUsedBytes(int) {}
+
+func (*noopMetrics) RecordBatchDaType(string)             {}
+func (*noopMetrics) RecordBatchDataSizeBytes(string, int) {}
+func (*noopMetrics) RecordFailoverToEthDA()               {}
+
 func (*noopMetrics) StartBalanceMetrics(log.Logger, *ethclient.Client, common.Address) io.Closer {
 	return nil
 }
