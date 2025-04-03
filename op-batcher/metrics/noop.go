@@ -60,6 +60,10 @@ func (*noopMetrics) RecordBatchTxSubmitted(string) {}
 func (*noopMetrics) RecordBatchTxSuccess(string)   {}
 func (*noopMetrics) RecordBatchTxFailed(string)    {}
 func (*noopMetrics) RecordBlobUsedBytes(int)       {}
+
+func (*noopMetrics) RecordBatchDaType(string)             {}
+func (*noopMetrics) RecordBatchDataSizeBytes(string, int) {}
+
 func (*noopMetrics) StartBalanceMetrics(log.Logger, *ethclient.Client, common.Address) io.Closer {
 	return nil
 }

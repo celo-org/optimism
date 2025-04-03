@@ -65,6 +65,9 @@ type Metricer interface {
 
 	RecordBlobUsedBytes(num int)
 
+	RecordBatchDaType(daType string)
+	RecordBatchDataSizeBytes(daType string, size int)
+
 	Document() []opmetrics.DocumentedMetric
 
 	PendingDABytes() float64
@@ -107,6 +110,10 @@ type Metrics struct {
 	channelInputBytesTotal  prometheus.Counter
 	channelOutputBytesTotal prometheus.Counter
 	channelQueueLength      prometheus.Gauge
+
+	batchSentDATypeTotal          prometheus.CounterVec
+	batchStoredDataSizeBytesTotal prometheus.CounterVec
+	altDaFailoverTotal            prometheus.Counter
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -231,6 +238,25 @@ func NewMetrics(procName string) *Metrics {
 			Namespace: ns,
 			Name:      "channel_queue_length",
 			Help:      "The number of channels currently in memory.",
+		}),
+		batchSentDATypeTotal: *factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "batch_sent_da_type_total",
+			Help:      "Total number of batches successfully stored, categorized by DA type.",
+		},
+			[]string{"da_type"},
+		),
+		batchStoredDataSizeBytesTotal: *factory.NewCounterVec(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "batch_stored_data_size_bytes_total",
+			Help:      "Total batch size stored in each DA type (in bytes).",
+		},
+			[]string{"da_type"},
+		),
+		altDaFailoverTotal: factory.NewCounter(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "alt_da_failover_total",
+			Help:      "Total number of batches that could not be stored in AltDA and were sent to L1 instead",
 		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
@@ -451,6 +477,14 @@ func (m *Metrics) RecordBatchTxFailed(daType string) {
 
 func (m *Metrics) RecordBlobUsedBytes(num int) {
 	m.blobUsedBytes.Observe(float64(num))
+}
+
+func (m *Metrics) RecordBatchDaType(daType string) {
+	m.batchSentDATypeTotal.With(prometheus.Labels{"da_type": daType}).Inc()
+}
+
+func (m *Metrics) RecordBatchDataSizeBytes(daType string, size int) {
+	m.batchStoredDataSizeBytesTotal.WithLabelValues(daType).Add(float64(size))
 }
 
 func (m *Metrics) RecordChannelQueueLength(len int) {
