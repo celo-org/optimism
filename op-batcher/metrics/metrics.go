@@ -209,21 +209,21 @@ func NewMetrics(procName string) *Metrics {
 		batchSentDATypeTotal: *factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: ns,
 			Name:      "batch_sent_da_type_total",
-			Help:      "Total number of batches sent, categorized by DA type",
+			Help:      "Total number of batches successfully stored, categorized by DA type.",
 		},
 			[]string{"da_type"},
 		),
 		batchStoredDataSizeBytesTotal: *factory.NewCounterVec(prometheus.CounterOpts{
 			Namespace: ns,
 			Name:      "batch_stored_data_size_bytes_total",
-			Help:      "Total data size stored in each DA type (in bytes)",
+			Help:      "Total batch size stored in each DA type (in bytes).",
 		},
 			[]string{"da_type"},
 		),
 		altDaFailoverTotal: factory.NewCounter(prometheus.CounterOpts{
 			Namespace: ns,
 			Name:      "alt_da_failover_total",
-			Help:      "Total number of batches that failed to send to AltDA and were instead sent to L1",
+			Help:      "Total number of batches that could not be stored in AltDA and were sent to L1 instead",
 		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
