@@ -840,7 +840,7 @@ func (l *BatchSubmitter) publishToAltDAAndL1(txdata txData, queue *txmgr.Queue[t
 			return nil
 		}
 		l.Log.Info("Set altda input", "commitment", comm, "tx", txdata.ID())
-		l.Metr.RecordBatchDataSizeBytes(DaTypeAltDA.Name(), len(txdata.CallData()))
+		l.Metr.RecordBatchDataSizeBytes(DaTypeAltDA.Name(), txdata.Len())
 		candidate := l.calldataTxCandidate(comm.TxData())
 		l.sendTx(txdata, false, candidate, queue, receiptsCh)
 		return nil
