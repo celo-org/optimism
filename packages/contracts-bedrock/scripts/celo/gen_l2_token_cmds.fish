@@ -8,7 +8,7 @@ if [ -z "$argv" ];
 end
 
 echo
-echo "Commands to deploy L2 tokens for bridging from Ethereum. If tokens don't use 18 decimals, use createOptimismMintableERC20WithDecimals instead."
+echo "Commands to deploy L2 tokens for bridging from Ethereum:"
 echo
 
 set -x ETH_RPC_URL https://ethereum-rpc.publicnode.com
@@ -16,5 +16,6 @@ set -x ETH_RPC_URL https://ethereum-rpc.publicnode.com
 for address in $argv
 	set symbol (cast call $address "symbol() returns (string)" --json | jq -r '.[0]')
 	set name (cast call $address "name() returns (string)" --json | jq -r '.[0]')
-	echo cast send 0x4200000000000000000000000000000000000012 "\"createOptimismMintableERC20(address,string,string)\"" $address "\"$name (Celo native bridge)\"" \"$symbol\" --private-key \$PRIVKEY
+	set decimals (cast call $address "decimals() returns (uint256)" --json | jq -r '.[0]')
+	echo cast send 0x4200000000000000000000000000000000000012 "\"createOptimismMintableERC20WithDecimals(address,string,string,uint8)\"" $address "\"$name (Celo native bridge)\"" \"$symbol\" $decimals --private-key \$PRIVKEY
 end
