@@ -275,6 +275,10 @@ func (m *mockBlockType) IsIsthmus(blkTime uint64) bool {
 	return false
 }
 
-func (m *mockBlockType) IsGingerbread(blockNum *.big.Int) bool {
+func (m *mockBlockType) IsGingerbread(blockNum *big.Int) bool {
+	return false
+}
+
+func (m *mockBlockType) IsMigratedChain() bool {
 	return false
 }
