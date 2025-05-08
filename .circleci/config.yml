@@ -1718,6 +1718,10 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
             - discord
+      - cannon-prestate-quick:
+          context:
+            - circleci-repo-readonly-authenticated-github-token
+            - discord
       - go-lint:
           context:
             - circleci-repo-readonly-authenticated-github-token
