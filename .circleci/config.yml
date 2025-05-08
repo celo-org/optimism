@@ -1792,6 +1792,10 @@ workflows:
           scan_command: semgrep scan --test --config .semgrep/rules/ .semgrep/tests/
           context:
             - circleci-repo-readonly-authenticated-github-token
+      - cannon-prestate-quick:
+          context:
+            - circleci-repo-readonly-authenticated-github-token
+            - discord
       - go-lint:
           context:
             - circleci-repo-readonly-authenticated-github-token
