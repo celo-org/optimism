@@ -64,6 +64,8 @@ import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IAddressManager } from "src/legacy/interfaces/IAddressManager.sol";
 
+import { ForgeArtifacts } from "scripts/libraries/ForgeArtifacts.sol";
+
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
 ///         To add a new contract to the system, add a public function that deploys that individual contract.
@@ -476,11 +478,86 @@ contract Deploy is Deployer {
 
     /// @notice Deploy the fault games and set the implementations. Initialize AnchorStateRegistry.
     function setupFaultGames() public {
-        initializeL2OutputOracle();
+        // initializeL2OutputOracle();
         setCannonFaultGameImplementation({ _allowUpgrade: false });
         setPermissionedCannonFaultGameImplementation({ _allowUpgrade: false });
-        initializeAnchorStateRegistry(false);
+        // initializeAnchorStateRegistry(false);
         transferDisputeGameFactoryOwnership();
+    }
+
+    function printSetupFaultGames() public {
+        address l2OutputOracleProxy = mustGetAddress("L2OutputOracleProxy");
+        address l2OutputOracle = mustGetAddress("L2OutputOracle");
+
+        address proxyAdmin = mustGetAddress("ProxyAdmin");
+
+        console.log("Proxy admin abi");
+        console.log(ForgeArtifacts.getAbi("ProxyAdmin"));
+
+        console.log("ProxyAdmin address", proxyAdmin);
+        console.log("");
+        console.log("*************************************************************************");
+        console.log("Load ProxyAdmin abi to Gnosis Safe UI, choose function 'upgradeAndCall' and paste in following input parameters");
+        console.log("*************************************************************************");
+        console.log("");
+
+        console.log("_proxy:", l2OutputOracleProxy, "// l2OutputOracleProxy address");
+        console.log("_implementation:", l2OutputOracle, "// l2OutputOracle implementation address");
+
+        console.log("_data:");
+        console.logBytes(abi.encodeCall(
+            IL2OutputOracle.initialize,
+            (
+                cfg.l2OutputOracleSubmissionInterval(),
+                cfg.l2BlockTime(),
+                cfg.l2OutputOracleStartingBlockNumber(),
+                cfg.l2OutputOracleStartingTimestamp(),
+                cfg.l2OutputOracleProposer(),
+                cfg.l2OutputOracleChallenger(),
+                cfg.finalizationPeriodSeconds()
+            )
+        ));
+
+        console.log("");
+        console.log("########################################################################################");
+        console.log("");
+
+        address anchorStateRegistryProxy = mustGetAddress("AnchorStateRegistryProxy");
+        address anchorStateRegistry = mustGetAddress("AnchorStateRegistry");
+        ICeloSuperchainConfig superchainConfig = ICeloSuperchainConfig(mustGetAddress("CeloSuperchainConfigProxy"));
+
+        IAnchorStateRegistry.StartingAnchorRoot[] memory roots;
+
+        roots = new IAnchorStateRegistry.StartingAnchorRoot[](2);
+        roots[0] = IAnchorStateRegistry.StartingAnchorRoot({
+            gameType: GameTypes.CANNON,
+            outputRoot: OutputRoot({
+                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                l2BlockNumber: cfg.faultGameGenesisBlock()
+            })
+        });
+        roots[1] = IAnchorStateRegistry.StartingAnchorRoot({
+            gameType: GameTypes.PERMISSIONED_CANNON,
+            outputRoot: OutputRoot({
+                root: Hash.wrap(cfg.faultGameGenesisOutputRoot()),
+                l2BlockNumber: cfg.faultGameGenesisBlock()
+            })
+        });
+
+        console.log("*************************************************************************");
+        console.log("Load ProxyAdmin abi to Gnosis Safe UI, choose function 'upgradeAndCall' and paste in following input parameters");
+        console.log("*************************************************************************");
+        console.log("");
+
+        console.log("_proxy:", anchorStateRegistryProxy, "// anchorStateRegistryProxy address");
+        console.log("_implementation:", anchorStateRegistry, "// anchorStateRegistry implementation address");
+
+        console.log("_data:");
+
+        console.logBytes(abi.encodeCall(IAnchorStateRegistry.initialize, (roots, superchainConfig)));
+
+        // initializeL2OutputOracle();
+        // initializeAnchorStateRegistry(false);
     }
 
     /// @notice Deploy all of the proxies
