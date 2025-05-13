@@ -988,6 +988,11 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 			DAResolveWindow:    d.DAResolveWindow,
 		}
 	}
+	chainOp := &rollup.ChainOpConfig{
+		Eip1559Elasticity:        d.EIP1559Elasticity,
+		Eip1559Denominator:       d.EIP1559Denominator,
+		Eip1559DenominatorCanyon: d.EIP1559DenominatorCanyon,
+	}
 
 	l1StartTime := l1StartBlock.Time
 
@@ -1028,6 +1033,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 		InteropTime:             d.InteropTime(l1StartTime),
 		ProtocolVersionsAddress: d.ProtocolVersionsProxy,
 		AltDAConfig:             altDA,
+		ChainOpConfig:           chainOp,
 	}, nil
 }
 

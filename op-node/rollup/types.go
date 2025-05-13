@@ -65,6 +65,12 @@ type AltDAConfig struct {
 	DAResolveWindow uint64 `json:"da_resolve_window"`
 }
 
+type ChainOpConfig struct {
+	Eip1559Elasticity        uint64 `json:"eip1559Elasticity"`
+	Eip1559Denominator       uint64 `json:"eip1559Denominator"`
+	Eip1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+}
+
 type Config struct {
 	// Genesis anchor point of the rollup
 	Genesis Genesis `json:"genesis"`
@@ -139,6 +145,9 @@ type Config struct {
 
 	// AltDAConfig. We are in the process of migrating to the AltDAConfig from these legacy top level values
 	AltDAConfig *AltDAConfig `json:"alt_da,omitempty"`
+
+	// ChainOpConfig is the configuration for the Eip parameters
+	ChainOpConfig *ChainOpConfig `json:"chain_op_config,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
