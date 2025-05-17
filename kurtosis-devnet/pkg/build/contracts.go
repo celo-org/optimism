@@ -44,7 +44,7 @@ type ContractBuilder struct {
 
 const (
 	contractsCmdTemplateStr = "just {{ .ContractsPath }}/build-no-tests"
-	relativeContractsPath   = "../packages/contracts-bedrock"
+	relativeContractsPath   = "../../optimism-2/packages/contracts-bedrock" // TODO(kouring): Fix this
 	solidityCachePath       = "cache/solidity-files-cache.json"
 )
 

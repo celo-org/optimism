@@ -27,6 +27,7 @@ _docker_build TAG TARGET CONTEXT DOCKERFILE *ARGS:
         {{CONTEXT}}
 
 _docker_build_stack TAG TARGET *ARGS: (_docker_build TAG TARGET "../" "ops/docker/op-stack-go/Dockerfile" ARGS)
+_docker_build_stack2 TAG TARGET *ARGS: (_docker_build TAG TARGET "../../optimism-2/" "ops/docker/op-stack-go/Dockerfile" ARGS)
 
 cannon-image TAG='cannon:devnet': (_docker_build_stack TAG "cannon-target")
 da-server-image TAG='da-server:devnet': (_docker_build_stack TAG "da-server-target")
@@ -36,7 +37,9 @@ op-batcher-image TAG='op-batcher:devnet': (_docker_build_stack TAG "op-batcher-t
 # docker-bake.hcl to do the right thing).
 op-challenger-image TAG='op-challenger:devnet': (_docker_build_stack TAG "op-challenger-target" "--build-arg" "KONA_VERSION=0.1.0-beta.15" "--build-arg" "ASTERISC_VERSION=v1.2.0")
 op-conductor-image TAG='op-conductor:devnet': (_docker_build_stack TAG "op-conductor-target")
-op-deployer-image TAG='op-deployer:devnet': (_docker_build_stack TAG "op-deployer-target")
+
+op-deployer-image TAG='op-deployer:devnet': (_docker_build_stack2 TAG "op-deployer-target")
+
 op-dispute-mon-image TAG='op-dispute-mon:devnet': (_docker_build_stack TAG "op-dispute-mon-target")
 op-node-image TAG='op-node:devnet': (_docker_build_stack TAG "op-node-target")
 op-program-image TAG='op-program:devnet': (_docker_build_stack TAG "op-program-target")
