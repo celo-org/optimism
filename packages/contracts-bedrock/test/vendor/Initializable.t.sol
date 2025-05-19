@@ -18,7 +18,7 @@ import "scripts/deploy/Deployer.sol";
 // Interfaces
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ProtocolVersion } from "src/L1/interfaces/IProtocolVersions.sol";
 import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistry.sol";
 
@@ -74,7 +74,8 @@ contract Initializer_Test is Bridge_Initializer {
                 name: "L1CrossDomainMessenger",
                 target: deploy.mustGetAddress("L1CrossDomainMessenger"),
                 initCalldata: abi.encodeCall(
-                    l1CrossDomainMessenger.initialize, (superchainConfig, optimismPortal, systemConfig)
+                    l1CrossDomainMessenger.initialize,
+                    (ICeloSuperchainConfig(address(superchainConfig)), optimismPortal, systemConfig)
                 )
             })
         );
@@ -84,7 +85,8 @@ contract Initializer_Test is Bridge_Initializer {
                 name: "L1CrossDomainMessengerProxy",
                 target: address(l1CrossDomainMessenger),
                 initCalldata: abi.encodeCall(
-                    l1CrossDomainMessenger.initialize, (superchainConfig, optimismPortal, systemConfig)
+                    l1CrossDomainMessenger.initialize,
+                    (ICeloSuperchainConfig(address(superchainConfig)), optimismPortal, systemConfig)
                 )
             })
         );
@@ -109,7 +111,7 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "DelayedWETH",
                 target: deploy.mustGetAddress("DelayedWETH"),
-                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ISuperchainConfig(address(0))))
+                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ICeloSuperchainConfig(address(0))))
             })
         );
         // DelayedWETHProxy
@@ -117,7 +119,7 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "DelayedWETHProxy",
                 target: address(delayedWeth),
-                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ISuperchainConfig(address(0))))
+                initCalldata: abi.encodeCall(delayedWeth.initialize, (address(0), ICeloSuperchainConfig(address(0))))
             })
         );
         // L2OutputOracleImpl
@@ -141,7 +143,10 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "OptimismPortal",
                 target: deploy.mustGetAddress("OptimismPortal"),
-                initCalldata: abi.encodeCall(optimismPortal.initialize, (l2OutputOracle, systemConfig, superchainConfig))
+                initCalldata: abi.encodeCall(
+                    optimismPortal.initialize,
+                    (l2OutputOracle, systemConfig, ICeloSuperchainConfig(address(superchainConfig)))
+                )
             })
         );
         // OptimismPortalProxy
@@ -149,7 +154,10 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "OptimismPortalProxy",
                 target: address(optimismPortal),
-                initCalldata: abi.encodeCall(optimismPortal.initialize, (l2OutputOracle, systemConfig, superchainConfig))
+                initCalldata: abi.encodeCall(
+                    optimismPortal.initialize,
+                    (l2OutputOracle, systemConfig, ICeloSuperchainConfig(address(superchainConfig)))
+                )
             })
         );
         // OptimismPortal2Impl
@@ -162,7 +170,7 @@ contract Initializer_Test is Bridge_Initializer {
                     (
                         disputeGameFactory,
                         systemConfig,
-                        superchainConfig,
+                        ICeloSuperchainConfig(address(superchainConfig)),
                         GameType.wrap(uint32(deploy.cfg().respectedGameType()))
                     )
                 )
@@ -274,7 +282,8 @@ contract Initializer_Test is Bridge_Initializer {
                 name: "L1StandardBridge",
                 target: deploy.mustGetAddress("L1StandardBridge"),
                 initCalldata: abi.encodeCall(
-                    l1StandardBridge.initialize, (l1CrossDomainMessenger, superchainConfig, systemConfig)
+                    l1StandardBridge.initialize,
+                    (l1CrossDomainMessenger, ICeloSuperchainConfig(address(superchainConfig)), systemConfig)
                 )
             })
         );
@@ -284,7 +293,8 @@ contract Initializer_Test is Bridge_Initializer {
                 name: "L1StandardBridgeProxy",
                 target: address(l1StandardBridge),
                 initCalldata: abi.encodeCall(
-                    l1StandardBridge.initialize, (l1CrossDomainMessenger, superchainConfig, systemConfig)
+                    l1StandardBridge.initialize,
+                    (l1CrossDomainMessenger, ICeloSuperchainConfig(address(superchainConfig)), systemConfig)
                 )
             })
         );
@@ -309,7 +319,9 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "L1ERC721Bridge",
                 target: deploy.mustGetAddress("L1ERC721Bridge"),
-                initCalldata: abi.encodeCall(l1ERC721Bridge.initialize, (l1CrossDomainMessenger, superchainConfig))
+                initCalldata: abi.encodeCall(
+                    l1ERC721Bridge.initialize, (l1CrossDomainMessenger, ICeloSuperchainConfig(address(superchainConfig)))
+                )
             })
         );
         // L1ERC721BridgeProxy
@@ -317,7 +329,9 @@ contract Initializer_Test is Bridge_Initializer {
             InitializeableContract({
                 name: "L1ERC721BridgeProxy",
                 target: address(l1ERC721Bridge),
-                initCalldata: abi.encodeCall(l1ERC721Bridge.initialize, (l1CrossDomainMessenger, superchainConfig))
+                initCalldata: abi.encodeCall(
+                    l1ERC721Bridge.initialize, (l1CrossDomainMessenger, ICeloSuperchainConfig(address(superchainConfig)))
+                )
             })
         );
         // L2ERC721Bridge
@@ -367,7 +381,7 @@ contract Initializer_Test is Bridge_Initializer {
                 target: address(anchorStateRegistry),
                 initCalldata: abi.encodeCall(
                     anchorStateRegistry.initialize,
-                    (new IAnchorStateRegistry.StartingAnchorRoot[](1), ISuperchainConfig(address(0)))
+                    (new IAnchorStateRegistry.StartingAnchorRoot[](1), ICeloSuperchainConfig(address(0)))
                 )
             })
         );
@@ -378,8 +392,24 @@ contract Initializer_Test is Bridge_Initializer {
                 target: address(anchorStateRegistry),
                 initCalldata: abi.encodeCall(
                     anchorStateRegistry.initialize,
-                    (new IAnchorStateRegistry.StartingAnchorRoot[](1), ISuperchainConfig(address(0)))
+                    (new IAnchorStateRegistry.StartingAnchorRoot[](1), ICeloSuperchainConfig(address(0)))
                 )
+            })
+        );
+        // CeloSuperchainConfig
+        contracts.push(
+            InitializeableContract({
+                name: "CeloSuperchainConfig",
+                target: address(celoSuperchainConfig),
+                initCalldata: abi.encodeWithSignature("initialize(address,bool,address)", address(0), false, address(0))
+            })
+        );
+        // CeloSuperchainConfigProxy
+        contracts.push(
+            InitializeableContract({
+                name: "CeloSuperchainConfigProxy",
+                target: address(celoSuperchainConfig),
+                initCalldata: abi.encodeWithSignature("initialize(address,bool,address)", address(0), false, address(0))
             })
         );
 
@@ -393,7 +423,7 @@ contract Initializer_Test is Bridge_Initializer {
     ///         3. The `initialize()` function of each contract cannot be called again.
     function test_cannotReinitialize_succeeds() public {
         // Collect exclusions.
-        string[] memory excludes = new string[](9);
+        string[] memory excludes = new string[](10);
         // TODO: Neither of these contracts are labeled properly in the deployment script. Both are
         //       currently being labeled as their non-interop versions. Remove these exclusions once
         //       the deployment script is fixed.
@@ -414,6 +444,8 @@ contract Initializer_Test is Bridge_Initializer {
         excludes[7] = "src/L1/OPContractsManagerInterop.sol";
         // The L2OutputOracle is not always deployed (and is no longer being modified)
         excludes[8] = "src/L1/L2OutputOracle.sol";
+        // Celo contracts are not setup the same way as most of the OP L2 Genesis contracts.
+        excludes[9] = "src/celo/*";
 
         // Get all contract names in the src directory, minus the excluded contracts.
         string[] memory contractNames = ForgeArtifacts.getContractNames("src/*", excludes);

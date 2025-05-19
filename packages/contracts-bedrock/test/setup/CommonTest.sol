@@ -22,6 +22,7 @@ contract CommonTest is Test, Setup, Events {
     bool useLegacyContracts;
     address customGasToken;
     bool useInteropOverride;
+    address externalSuperchainConfig;
 
     function setUp() public virtual override {
         alice = makeAddr("alice");
@@ -44,6 +45,9 @@ contract CommonTest is Test, Setup, Events {
         }
         if (useInteropOverride) {
             deploy.cfg().setUseInterop(true);
+        }
+        if (externalSuperchainConfig != address(0)) {
+            deploy.cfg().setExternalSuperchainConfig(externalSuperchainConfig);
         }
 
         vm.etch(address(ffi), vm.getDeployedCode("FFIInterface.sol:FFIInterface"));
@@ -149,5 +153,16 @@ contract CommonTest is Test, Setup, Events {
         }
 
         useInteropOverride = true;
+    }
+
+    function enableExternalSuperchainConfig(address _externalSuperchainConfig) public {
+        // Check if the system has already been deployed, based off of the heuristic that alice and bob have not been
+        // set by the `setUp` function yet.
+        if (!(alice == address(0) && bob == address(0))) {
+            revert("CommonTest: Cannot enable interop after deployment. Consider overriding `setUp`.");
+        }
+
+        externalSuperchainConfig = _externalSuperchainConfig;
+        super.withoutSuperchain();
     }
 }

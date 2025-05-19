@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import { IStandardBridge } from "src/universal/interfaces/IStandardBridge.sol";
 import { ICrossDomainMessenger } from "src/universal/interfaces/ICrossDomainMessenger.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 
 interface IL1StandardBridge is IStandardBridge {
@@ -64,12 +64,12 @@ interface IL1StandardBridge is IStandardBridge {
         payable;
     function initialize(
         ICrossDomainMessenger _messenger,
-        ISuperchainConfig _superchainConfig,
+        ICeloSuperchainConfig _superchainConfig,
         ISystemConfig _systemConfig
     )
         external;
     function l2TokenBridge() external view returns (address);
-    function superchainConfig() external view returns (ISuperchainConfig);
+    function superchainConfig() external view returns (ICeloSuperchainConfig);
     function systemConfig() external view returns (ISystemConfig);
     function version() external view returns (string memory);
 

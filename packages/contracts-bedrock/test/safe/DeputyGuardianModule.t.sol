@@ -41,8 +41,8 @@ contract DeputyGuardianModule_TestInit is CommonTest, SafeTestTools {
 
         // Set the Safe as the Guardian of the SuperchainConfig
         vm.store(
-            address(superchainConfig),
-            superchainConfig.GUARDIAN_SLOT(),
+            address(celoSuperchainConfig),
+            celoSuperchainConfig.GUARDIAN_SLOT(),
             bytes32(uint256(uint160(address(safeInstance.safe))))
         );
 
@@ -53,7 +53,7 @@ contract DeputyGuardianModule_TestInit is CommonTest, SafeTestTools {
                 _name: "DeputyGuardianModule",
                 _args: DeployUtils.encodeConstructor(
                     abi.encodeCall(
-                        IDeputyGuardianModule.__constructor__, (safeInstance.safe, superchainConfig, deputyGuardian)
+                        IDeputyGuardianModule.__constructor__, (safeInstance.safe, celoSuperchainConfig, deputyGuardian)
                     )
                 )
             })
@@ -67,14 +67,14 @@ contract DeputyGuardianModule_Getters_Test is DeputyGuardianModule_TestInit {
     function test_getters_works() external view {
         assertEq(address(deputyGuardianModule.safe()), address(safeInstance.safe));
         assertEq(address(deputyGuardianModule.deputyGuardian()), address(deputyGuardian));
-        assertEq(address(deputyGuardianModule.superchainConfig()), address(superchainConfig));
+        assertEq(address(deputyGuardianModule.superchainConfig()), address(celoSuperchainConfig));
     }
 }
 
 contract DeputyGuardianModule_Pause_Test is DeputyGuardianModule_TestInit {
     /// @dev Tests that `pause` successfully pauses when called by the deputy guardian.
     function test_pause_succeeds() external {
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Paused("Deputy Guardian");
 
         vm.expectEmit(address(safeInstance.safe));
@@ -85,7 +85,7 @@ contract DeputyGuardianModule_Pause_Test is DeputyGuardianModule_TestInit {
 
         vm.prank(address(deputyGuardian));
         deputyGuardianModule.pause();
-        assertEq(superchainConfig.paused(), true);
+        assertEq(celoSuperchainConfig.paused(), true);
     }
 }
 
@@ -99,8 +99,8 @@ contract DeputyGuardianModule_Pause_TestFail is DeputyGuardianModule_TestInit {
     /// @dev Tests that when the call from the Safe reverts, the error message is returned.
     function test_pause_targetReverts_reverts() external {
         vm.mockCallRevert(
-            address(superchainConfig),
-            abi.encodePacked(superchainConfig.pause.selector),
+            address(celoSuperchainConfig),
+            abi.encodePacked(celoSuperchainConfig.pause.selector),
             "SuperchainConfig: pause() reverted"
         );
 
@@ -116,12 +116,12 @@ contract DeputyGuardianModule_Unpause_Test is DeputyGuardianModule_TestInit {
         super.setUp();
         vm.prank(address(deputyGuardian));
         deputyGuardianModule.pause();
-        assertTrue(superchainConfig.paused());
+        assertTrue(celoSuperchainConfig.paused());
     }
 
     /// @dev Tests that `unpause` successfully unpauses when called by the deputy guardian.
     function test_unpause_succeeds() external {
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Unpaused();
 
         vm.expectEmit(address(safeInstance.safe));
@@ -132,7 +132,7 @@ contract DeputyGuardianModule_Unpause_Test is DeputyGuardianModule_TestInit {
 
         vm.prank(address(deputyGuardian));
         deputyGuardianModule.unpause();
-        assertFalse(superchainConfig.paused());
+        assertFalse(celoSuperchainConfig.paused());
     }
 }
 
@@ -143,14 +143,14 @@ contract DeputyGuardianModule_Unpause_TestFail is DeputyGuardianModule_Unpause_T
     function test_unpause_notDeputyGuardian_reverts() external {
         vm.expectRevert(abi.encodeWithSelector(Unauthorized.selector));
         deputyGuardianModule.unpause();
-        assertTrue(superchainConfig.paused());
+        assertTrue(celoSuperchainConfig.paused());
     }
 
     /// @dev Tests that when the call from the Safe reverts, the error message is returned.
     function test_unpause_targetReverts_reverts() external {
         vm.mockCallRevert(
-            address(superchainConfig),
-            abi.encodePacked(superchainConfig.unpause.selector),
+            address(celoSuperchainConfig),
+            abi.encodePacked(celoSuperchainConfig.unpause.selector),
             "SuperchainConfig: unpause reverted"
         );
 

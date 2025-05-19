@@ -41,7 +41,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IResourceMetering } from "src/L1/interfaces/IResourceMetering.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IDisputeGameFactory } from "src/dispute/interfaces/IDisputeGameFactory.sol";
 import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
 import { IL1Block } from "src/L2/interfaces/IL1Block.sol";
@@ -98,7 +98,7 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
     bool private spacer_53_0_1;
 
     /// @notice Contract of the Superchain Config.
-    ISuperchainConfig public superchainConfig;
+    ICeloSuperchainConfig public superchainConfig;
 
     /// @custom:legacy
     /// @custom:spacer l2Oracle
@@ -196,7 +196,7 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
         initialize({
             _disputeGameFactory: IDisputeGameFactory(address(0)),
             _systemConfig: ISystemConfig(address(0)),
-            _superchainConfig: ISuperchainConfig(address(0)),
+            _superchainConfig: ICeloSuperchainConfig(address(0)),
             _initialRespectedGameType: GameType.wrap(0)
         });
     }
@@ -208,7 +208,7 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
     function initialize(
         IDisputeGameFactory _disputeGameFactory,
         ISystemConfig _systemConfig,
-        ISuperchainConfig _superchainConfig,
+        ICeloSuperchainConfig _superchainConfig,
         GameType _initialRespectedGameType
     )
         public

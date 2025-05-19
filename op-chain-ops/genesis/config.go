@@ -271,9 +271,11 @@ var _ ConfigChecker = (*GasTokenDeployConfig)(nil)
 
 func (d *GasTokenDeployConfig) Check(log log.Logger) error {
 	if d.UseCustomGasToken {
-		if d.CustomGasTokenAddress == (common.Address{}) {
-			return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
-		}
+		// NOTE: we are using the address(0) as an instruction to deploy the L1 token,
+		//       so this deploy-config validation has to be disabled
+		// if d.CustomGasTokenAddress == (common.Address{}) {
+		// 	return fmt.Errorf("%w: CustomGasTokenAddress cannot be address(0)", ErrInvalidDeployConfig)
+		// }
 		log.Info("Using custom gas token", "address", d.CustomGasTokenAddress)
 	}
 	return nil
@@ -905,6 +907,15 @@ type DeployConfig struct {
 
 	// Legacy, ignored, here for strict-JSON decoding to be accepted.
 	LegacyDeployConfig `evm:"-"`
+
+	// DeployCeloContracts indicates whether to deploy Celo contracts.
+	DeployCeloContracts bool `json:"deployCeloContracts"`
+
+	// Address of the external SuperchainConfig that CeloSuperchainConfig should point to.
+	ExternalSuperchainConfig common.Address `json:"externalSuperchainConfig"`
+
+	// Used to validate the ProxyAdmin owner address.
+	ProxyAdminOwnerIsMultisig bool `json:"proxyAdminOwnerIsMultisig"`
 }
 
 // Copy will deeply copy the DeployConfig. This does a JSON roundtrip to copy
@@ -977,6 +988,11 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 			DAResolveWindow:    d.DAResolveWindow,
 		}
 	}
+	chainOp := &rollup.ChainOpConfig{
+		Eip1559Elasticity:        d.EIP1559Elasticity,
+		Eip1559Denominator:       d.EIP1559Denominator,
+		Eip1559DenominatorCanyon: d.EIP1559DenominatorCanyon,
+	}
 
 	l1StartTime := l1StartBlock.Time
 
@@ -1017,6 +1033,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *types.Header, l2GenesisBlockHa
 		InteropTime:             d.InteropTime(l1StartTime),
 		ProtocolVersionsAddress: d.ProtocolVersionsProxy,
 		AltDAConfig:             altDA,
+		ChainOpConfig:           chainOp,
 	}, nil
 }
 

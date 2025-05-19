@@ -83,7 +83,7 @@ contract L1ERC721Bridge_Test is Bridge_Initializer {
         assertEq(address(l1ERC721Bridge.messenger()), address(l1CrossDomainMessenger));
         assertEq(address(l1ERC721Bridge.OTHER_BRIDGE()), Predeploys.L2_ERC721_BRIDGE);
         assertEq(address(l1ERC721Bridge.otherBridge()), Predeploys.L2_ERC721_BRIDGE);
-        assertEq(address(l1ERC721Bridge.superchainConfig()), address(superchainConfig));
+        assertEq(address(l1ERC721Bridge.superchainConfig()), address(celoSuperchainConfig));
     }
 
     /// @dev Tests that the ERC721 can be bridged successfully.
@@ -319,27 +319,57 @@ contract L1ERC721Bridge_Pause_Test is Bridge_Initializer {
     /// @dev Verifies that the `paused` accessor returns the same value as the `paused` function of the
     ///      `superchainConfig`.
     function test_paused_succeeds() external view {
-        assertEq(l1ERC721Bridge.paused(), superchainConfig.paused());
+        assertEq(l1ERC721Bridge.paused(), celoSuperchainConfig.paused());
     }
 
     /// @dev Ensures that the `paused` function of the bridge contract actually calls the `paused` function of the
     ///      `superchainConfig`.
     function test_pause_callsSuperchainConfig_succeeds() external {
-        vm.expectCall(address(superchainConfig), abi.encodeCall(ISuperchainConfig.paused, ()));
+        vm.expectCall(address(celoSuperchainConfig), abi.encodeCall(ISuperchainConfig.paused, ()));
         l1ERC721Bridge.paused();
     }
 
-    /// @dev Checks that the `paused` state of the bridge matches the `paused` state of the `superchainConfig` after
-    ///      it's been changed.
+    /// @dev Checks that the `paused` state of the bridge matches the `paused` state of the
+    ///      `celoSuperchainConfig` after it's been changed.
+    function test_pause_matchesCeloSuperchainConfig_succeeds() external {
+        assertFalse(l1StandardBridge.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
+
+        vm.prank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("identifier");
+
+        assertTrue(l1StandardBridge.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
+    }
+
+    /// @dev Checks that pausing the Superchain SuperchainConfig propagates to
+    //       the paused state of bridge.
     function test_pause_matchesSuperchainConfig_succeeds() external {
         assertFalse(l1StandardBridge.paused());
-        assertEq(l1StandardBridge.paused(), superchainConfig.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
 
         vm.prank(superchainConfig.guardian());
         superchainConfig.pause("identifier");
 
         assertTrue(l1StandardBridge.paused());
-        assertEq(l1StandardBridge.paused(), superchainConfig.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
+    }
+
+    /// @dev Checks that the `paused` state of the bridge matches the `paused` state of the
+    ///      `celoSuperchainConfig` after it's been paused and unpaused.
+    function test_unpause_matchesCeloSuperchainConfig_succeeds() external {
+        assertFalse(l1StandardBridge.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
+
+        vm.prank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("identifier");
+        assertTrue(l1StandardBridge.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
+
+        vm.prank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.unpause();
+        assertFalse(l1StandardBridge.paused());
+        assertEq(l1StandardBridge.paused(), celoSuperchainConfig.paused());
     }
 }
 

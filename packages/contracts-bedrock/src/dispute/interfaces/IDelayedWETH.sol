@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 
 interface IDelayedWETH {
     struct WithdrawalRequest {
@@ -16,10 +16,10 @@ interface IDelayedWETH {
     fallback() external payable;
     receive() external payable;
 
-    function config() external view returns (ISuperchainConfig);
+    function config() external view returns (ICeloSuperchainConfig);
     function delay() external view returns (uint256);
     function hold(address _guy, uint256 _wad) external;
-    function initialize(address _owner, ISuperchainConfig _config) external;
+    function initialize(address _owner, ICeloSuperchainConfig _config) external;
     function owner() external view returns (address);
     function recover(uint256 _wad) external;
     function transferOwnership(address newOwner) external; // nosemgrep

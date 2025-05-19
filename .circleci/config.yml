@@ -152,8 +152,8 @@ commands:
 
 jobs:
   cannon-go-lint-and-test:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     parameters:
       skip_slow_tests:
         type: boolean
@@ -240,8 +240,8 @@ jobs:
           working_directory: cannon/mipsevm/tests/open_mips_tests
 
   contracts-bedrock-build:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     parameters:
       skip_pattern:
         description: Glob pattern of tests to skip
@@ -751,8 +751,8 @@ jobs:
         description: should load in foundry artifacts
         type: boolean
         default: false
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - check-changed:
@@ -761,13 +761,19 @@ jobs:
           at: "."
           if: ${{ uses_artifacts }}
       - run:
+          name: Install dependencies
+          command: |
+            apt update
+            apt install -y parallel
+          working_directory: .
+      - run:
           name: Fuzz
           command: make fuzz
           working_directory: "<<parameters.package_name>>"
 
   go-lint:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - run:
@@ -834,8 +840,8 @@ jobs:
           when: always
 
   go-test:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - attach_workspace:
@@ -893,16 +899,12 @@ jobs:
         description: Slack user or group to mention when notifying of failures
         type: string
         default: ""
-      resource_class:
-        description: Machine resource class
-        type: string
-        default: ethereum-optimism/latitude-1
       skip_slow_tests:
         description: Indicates that slow tests should be skipped
         type: boolean
         default: false
-    machine: true
-    resource_class: <<parameters.resource_class>>
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - attach_workspace:
@@ -949,8 +951,8 @@ jobs:
                 mentions: "<<parameters.mentions>>"
 
   cannon-prestate:
-    machine: true
-    resource_class: ethereum-optimism/latitude-1
+    docker:
+      - image: <<pipeline.parameters.ci_builder_image>>
     steps:
       - checkout
       - run:

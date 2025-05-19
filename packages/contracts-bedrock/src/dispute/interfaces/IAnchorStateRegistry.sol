@@ -3,7 +3,7 @@ pragma solidity ^0.8.0;
 
 import { IFaultDisputeGame } from "src/dispute/interfaces/IFaultDisputeGame.sol";
 import { IDisputeGameFactory } from "src/dispute/interfaces/IDisputeGameFactory.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import "src/dispute/lib/Types.sol";
 
 interface IAnchorStateRegistry {
@@ -22,11 +22,11 @@ interface IAnchorStateRegistry {
     function disputeGameFactory() external view returns (IDisputeGameFactory);
     function initialize(
         StartingAnchorRoot[] memory _startingAnchorRoots,
-        ISuperchainConfig _superchainConfig
+        ICeloSuperchainConfig _superchainConfig
     )
         external;
     function setAnchorState(IFaultDisputeGame _game) external;
-    function superchainConfig() external view returns (ISuperchainConfig);
+    function superchainConfig() external view returns (ICeloSuperchainConfig);
     function tryUpdateAnchorState() external;
     function version() external view returns (string memory);
 

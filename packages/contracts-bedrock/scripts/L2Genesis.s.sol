@@ -32,6 +32,8 @@ import { IL2CrossDomainMessenger } from "src/L2/interfaces/IL2CrossDomainMesseng
 import { IGasPriceOracle } from "src/L2/interfaces/IGasPriceOracle.sol";
 import { IL1Block } from "src/L2/interfaces/IL1Block.sol";
 
+import { L2GenesisCelo } from "./L2GenesisCelo.sol";
+
 struct L1Dependencies {
     address payable l1CrossDomainMessengerProxy;
     address payable l1StandardBridgeProxy;
@@ -45,7 +47,7 @@ struct L1Dependencies {
 ///         effects in the constructor and no immutables in the bytecode.
 ///         2. A contract must be deployed using the `new` syntax if there are immutables in the code.
 ///         Any other side effects from the init code besides setting the immutables must be cleaned up afterwards.
-contract L2Genesis is Deployer {
+contract L2Genesis is L2GenesisCelo {
     using ForkUtils for Fork;
     using OutputModeUtils for OutputMode;
 
@@ -95,6 +97,7 @@ contract L2Genesis is Deployer {
     /// @notice Sets up the script and ensures the deployer account is used to make calls.
     function setUp() public override {
         deployer = makeAddr("deployer");
+        _celoL2Outfile = celoL2Outfile();
         super.setUp();
     }
 
@@ -150,10 +153,16 @@ contract L2Genesis is Deployer {
         vm.startPrank(deployer);
         vm.chainId(cfg.l2ChainID());
 
-        dealEthToPrecompiles();
+        if (cfg.deployCeloContracts()) {
+            dealEthToPrecompiles();
+        }
+
         setPredeployProxies();
         setPredeployImplementations(_l1Dependencies);
         setPreinstalls();
+        if (cfg.deployCeloContracts()) {
+            setCeloPredeploys();
+        }
         if (cfg.fundDevAccounts()) {
             fundDevAccounts();
         }
@@ -233,7 +242,9 @@ contract L2Genesis is Deployer {
             if (Predeploys.isSupportedPredeploy(addr, cfg.useInterop())) {
                 address implementation = Predeploys.predeployToCodeNamespace(addr);
                 console.log("Setting proxy %s implementation: %s", addr, implementation);
+                string memory name = Predeploys.getName(addr);
                 EIP1967Helper.setImplementation(addr, implementation);
+                celoSave(name, implementation, addr);
             }
         }
     }
@@ -424,6 +435,7 @@ contract L2Genesis is Deployer {
     ///         in the constructor is set manually.
     function setWETH() public {
         console.log("Setting %s implementation at: %s", "WETH", Predeploys.WETH);
+        celoSave("WETH", Predeploys.WETH, address(0));
         vm.etch(Predeploys.WETH, vm.getDeployedCode("WETH.sol:WETH"));
     }
 
@@ -505,6 +517,7 @@ contract L2Genesis is Deployer {
         );
         console.log("Setting %s implementation at: %s", "GovernanceToken", Predeploys.GOVERNANCE_TOKEN);
         vm.etch(Predeploys.GOVERNANCE_TOKEN, address(token).code);
+        celoSave("GovernanceToken", Predeploys.GOVERNANCE_TOKEN, address(0));
 
         bytes32 _nameSlot = hex"0000000000000000000000000000000000000000000000000000000000000003";
         bytes32 _symbolSlot = hex"0000000000000000000000000000000000000000000000000000000000000004";

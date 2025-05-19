@@ -9,7 +9,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 
 // Interfaces
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
 
@@ -20,7 +20,7 @@ import { IOptimismPortal } from "src/L1/interfaces/IOptimismPortal.sol";
 ///         interface instead of interacting with lower-level contracts directly.
 contract L1CrossDomainMessenger is CrossDomainMessenger, ISemver {
     /// @notice Contract of the SuperchainConfig.
-    ISuperchainConfig public superchainConfig;
+    ICeloSuperchainConfig public superchainConfig;
 
     /// @notice Contract of the OptimismPortal.
     /// @custom:network-specific
@@ -36,7 +36,7 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ISemver {
     /// @notice Constructs the L1CrossDomainMessenger contract.
     constructor() CrossDomainMessenger() {
         initialize({
-            _superchainConfig: ISuperchainConfig(address(0)),
+            _superchainConfig: ICeloSuperchainConfig(address(0)),
             _portal: IOptimismPortal(payable(address(0))),
             _systemConfig: ISystemConfig(address(0))
         });
@@ -47,7 +47,7 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ISemver {
     /// @param _portal Contract of the OptimismPortal contract on this network.
     /// @param _systemConfig Contract of the SystemConfig contract on this network.
     function initialize(
-        ISuperchainConfig _superchainConfig,
+        ICeloSuperchainConfig _superchainConfig,
         IOptimismPortal _portal,
         ISystemConfig _systemConfig
     )

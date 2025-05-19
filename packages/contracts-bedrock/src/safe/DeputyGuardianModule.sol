@@ -12,24 +12,24 @@ import { GameType, Timestamp } from "src/dispute/lib/Types.sol";
 // Interfaces
 import { IAnchorStateRegistry } from "src/dispute/interfaces/IAnchorStateRegistry.sol";
 import { IFaultDisputeGame } from "src/dispute/interfaces/IFaultDisputeGame.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IOptimismPortal2 } from "src/L1/interfaces/IOptimismPortal2.sol";
 import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
 
 /// @title DeputyGuardianModule
 /// @notice This module is intended to be enabled on the Security Council Safe, which will own the Guardian role in the
-///         SuperchainConfig contract. The DeputyGuardianModule should allow a Deputy Guardian to administer any of the
-///         actions that the Guardian is authorized to take. The security council can revoke the Deputy Guardian's
+///         CeloSuperchainConfig contract. The DeputyGuardianModule should allow a Deputy Guardian to administer any of
+///         the actions that the Guardian is authorized to take. The security council can revoke the Deputy Guardian's
 ///         authorization at any time by disabling this module.
 contract DeputyGuardianModule is ISemver {
     /// @notice Error message for failed transaction execution
     error ExecutionFailed(string);
 
-    /// @notice Emitted when the SuperchainConfig is paused
+    /// @notice Emitted when the CeloSuperchainConfig is paused
     event Paused(string identifier);
 
-    /// @notice Emitted when the SuperchainConfig is unpaused
+    /// @notice Emitted when the CeloSuperchainConfig is unpaused
     event Unpaused();
 
     /// @notice Emitted when a DisputeGame is blacklisted
@@ -41,8 +41,8 @@ contract DeputyGuardianModule is ISemver {
     /// @notice The Safe contract instance
     Safe internal immutable SAFE;
 
-    /// @notice The SuperchainConfig's address
-    ISuperchainConfig internal immutable SUPERCHAIN_CONFIG;
+    /// @notice The CeloSuperchainConfig's address
+    ICeloSuperchainConfig internal immutable SUPERCHAIN_CONFIG;
 
     /// @notice The deputy guardian's address
     address internal immutable DEPUTY_GUARDIAN;
@@ -52,7 +52,7 @@ contract DeputyGuardianModule is ISemver {
     string public constant version = "2.0.1-beta.4";
 
     // Constructor to initialize the Safe and baseModule instances
-    constructor(Safe _safe, ISuperchainConfig _superchainConfig, address _deputyGuardian) {
+    constructor(Safe _safe, ICeloSuperchainConfig _superchainConfig, address _deputyGuardian) {
         SAFE = _safe;
         SUPERCHAIN_CONFIG = _superchainConfig;
         DEPUTY_GUARDIAN = _deputyGuardian;
@@ -64,9 +64,9 @@ contract DeputyGuardianModule is ISemver {
         safe_ = SAFE;
     }
 
-    /// @notice Getter function for the SuperchainConfig's address
-    /// @return superchainConfig_ The SuperchainConfig's address
-    function superchainConfig() public view returns (ISuperchainConfig superchainConfig_) {
+    /// @notice Getter function for the CeloSuperchainConfig's address
+    /// @return superchainConfig_ The CeloSuperchainConfig's address
+    function superchainConfig() public view returns (ICeloSuperchainConfig superchainConfig_) {
         superchainConfig_ = SUPERCHAIN_CONFIG;
     }
 
@@ -84,7 +84,7 @@ contract DeputyGuardianModule is ISemver {
     }
 
     /// @notice Calls the Security Council Safe's `execTransactionFromModuleReturnData()`, with the arguments
-    ///      necessary to call `pause()` on the `SuperchainConfig` contract.
+    ///      necessary to call `pause()` on the `CeloSuperchainConfig` contract.
     ///      Only the deputy guardian can call this function.
     function pause() external {
         _onlyDeputyGuardian();
@@ -99,7 +99,7 @@ contract DeputyGuardianModule is ISemver {
     }
 
     /// @notice Calls the Security Council Safe's `execTransactionFromModuleReturnData()`, with the arguments
-    ///      necessary to call `unpause()` on the `SuperchainConfig` contract.
+    ///      necessary to call `unpause()` on the `CeloSuperchainConfig` contract.
     ///      Only the deputy guardian can call this function.
     function unpause() external {
         _onlyDeputyGuardian();

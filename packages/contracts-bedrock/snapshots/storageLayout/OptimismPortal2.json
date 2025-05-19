@@ -60,7 +60,7 @@
     "label": "superchainConfig",
     "offset": 1,
     "slot": "53",
-    "type": "contract ISuperchainConfig"
+    "type": "contract ICeloSuperchainConfig"
   },
   {
     "bytes": "20",

@@ -9,9 +9,6 @@ import { CommonTest } from "test/setup/CommonTest.sol";
 import { NextImpl } from "test/mocks/NextImpl.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 
-// Contracts
-import { SuperchainConfig } from "src/L1/SuperchainConfig.sol";
-
 // Libraries
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
@@ -65,7 +62,7 @@ contract OptimismPortal2_Test is CommonTest {
         assertEq(address(optimismPortal2.disputeGameFactory()), address(disputeGameFactory));
         assertEq(address(optimismPortal2.systemConfig()), address(systemConfig));
         assertEq(optimismPortal2.guardian(), guardian);
-        assertEq(address(optimismPortal2.superchainConfig()), address(superchainConfig));
+        assertEq(address(optimismPortal2.superchainConfig()), address(celoSuperchainConfig));
         assertEq(optimismPortal2.l2Sender(), Constants.DEFAULT_L2_SENDER);
         assertEq(optimismPortal2.paused(), false);
         assertEq(optimismPortal2.respectedGameType().raw(), deploy.cfg().respectedGameType());
@@ -75,6 +72,22 @@ contract OptimismPortal2_Test is CommonTest {
     ///      when called by the GUARDIAN.
     function test_pause_succeeds() external {
         address guardian = optimismPortal2.guardian();
+
+        assertEq(optimismPortal2.paused(), false);
+
+        vm.expectEmit(address(celoSuperchainConfig));
+        emit Paused("identifier");
+
+        vm.prank(guardian);
+        celoSuperchainConfig.pause("identifier");
+
+        assertEq(optimismPortal2.paused(), true);
+    }
+
+    /// @dev Tests that pausing the Superchain successfully pauses
+    ///      when called by the Superchain GUARDIAN.
+    function test_superchainPause_succeeds() external {
+        address guardian = superchainConfig.guardian();
 
         assertEq(optimismPortal2.paused(), false);
 
@@ -92,9 +105,9 @@ contract OptimismPortal2_Test is CommonTest {
         assertEq(optimismPortal2.paused(), false);
 
         assertTrue(optimismPortal2.guardian() != alice);
-        vm.expectRevert("SuperchainConfig: only guardian can pause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can pause");
         vm.prank(alice);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         assertEq(optimismPortal2.paused(), false);
     }
@@ -105,13 +118,13 @@ contract OptimismPortal2_Test is CommonTest {
         address guardian = optimismPortal2.guardian();
 
         vm.prank(guardian);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
         assertEq(optimismPortal2.paused(), true);
 
-        vm.expectEmit(address(superchainConfig));
+        vm.expectEmit(address(celoSuperchainConfig));
         emit Unpaused();
         vm.prank(guardian);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
         assertEq(optimismPortal2.paused(), false);
     }
@@ -121,13 +134,13 @@ contract OptimismPortal2_Test is CommonTest {
         address guardian = optimismPortal2.guardian();
 
         vm.prank(guardian);
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
         assertEq(optimismPortal2.paused(), true);
 
         assertTrue(optimismPortal2.guardian() != alice);
-        vm.expectRevert("SuperchainConfig: only guardian can unpause");
+        vm.expectRevert("CeloSuperchainConfig: only guardian can unpause");
         vm.prank(alice);
-        superchainConfig.unpause();
+        celoSuperchainConfig.unpause();
 
         assertEq(optimismPortal2.paused(), true);
     }
@@ -532,7 +545,7 @@ contract OptimismPortal2_FinalizeWithdrawal_Test is CommonTest {
     /// @dev Tests that `proveWithdrawalTransaction` reverts when paused.
     function test_proveWithdrawalTransaction_paused_reverts() external {
         vm.prank(optimismPortal2.guardian());
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         vm.expectRevert(CallPaused.selector);
         optimismPortal2.proveWithdrawalTransaction({
@@ -917,7 +930,7 @@ contract OptimismPortal2_FinalizeWithdrawal_Test is CommonTest {
     /// @dev Tests that `finalizeWithdrawalTransaction` reverts if the contract is paused.
     function test_finalizeWithdrawalTransaction_paused_reverts() external {
         vm.prank(optimismPortal2.guardian());
-        superchainConfig.pause("identifier");
+        celoSuperchainConfig.pause("identifier");
 
         vm.expectRevert(CallPaused.selector);
         optimismPortal2.finalizeWithdrawalTransaction(_defaultTx);

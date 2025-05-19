@@ -7,7 +7,7 @@ import { WETH98 } from "src/universal/WETH98.sol";
 
 // Interfaces
 import { ISemver } from "src/universal/interfaces/ISemver.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 
 /// @custom:proxied true
 /// @title DelayedWETH
@@ -41,19 +41,19 @@ contract DelayedWETH is OwnableUpgradeable, WETH98, ISemver {
     /// @notice Withdrawal delay in seconds.
     uint256 internal immutable DELAY_SECONDS;
 
-    /// @notice Address of the SuperchainConfig contract.
-    ISuperchainConfig public config;
+    /// @notice Address of the CeloSuperchainConfig contract.
+    ICeloSuperchainConfig public config;
 
     /// @param _delay The delay for withdrawals in seconds.
     constructor(uint256 _delay) {
         DELAY_SECONDS = _delay;
-        initialize({ _owner: address(0), _config: ISuperchainConfig(address(0)) });
+        initialize({ _owner: address(0), _config: ICeloSuperchainConfig(address(0)) });
     }
 
     /// @notice Initializes the contract.
     /// @param _owner The address of the owner.
-    /// @param _config Address of the SuperchainConfig contract.
-    function initialize(address _owner, ISuperchainConfig _config) public initializer {
+    /// @param _config Address of the CeloSuperchainConfig contract.
+    function initialize(address _owner, ICeloSuperchainConfig _config) public initializer {
         __Ownable_init();
         _transferOwnership(_owner);
         config = _config;

@@ -14,7 +14,7 @@ import { ISemver } from "src/universal/interfaces/ISemver.sol";
 import { IFaultDisputeGame } from "src/dispute/interfaces/IFaultDisputeGame.sol";
 import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
 import { IDisputeGameFactory } from "src/dispute/interfaces/IDisputeGameFactory.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 
 /// @custom:proxied true
 /// @title AnchorStateRegistry
@@ -40,7 +40,7 @@ contract AnchorStateRegistry is Initializable, ISemver {
     mapping(GameType => OutputRoot) public anchors;
 
     /// @notice Address of the SuperchainConfig contract.
-    ISuperchainConfig public superchainConfig;
+    ICeloSuperchainConfig public superchainConfig;
 
     /// @param _disputeGameFactory DisputeGameFactory address.
     constructor(IDisputeGameFactory _disputeGameFactory) {
@@ -53,7 +53,7 @@ contract AnchorStateRegistry is Initializable, ISemver {
     /// @param _superchainConfig The address of the SuperchainConfig contract.
     function initialize(
         StartingAnchorRoot[] memory _startingAnchorRoots,
-        ISuperchainConfig _superchainConfig
+        ICeloSuperchainConfig _superchainConfig
     )
         public
         initializer

@@ -23,6 +23,7 @@ import { IL1CrossDomainMessenger } from "src/L1/interfaces/IL1CrossDomainMesseng
 import { IL2OutputOracle } from "src/L1/interfaces/IL2OutputOracle.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
 import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { IDataAvailabilityChallenge } from "src/L1/interfaces/IDataAvailabilityChallenge.sol";
 import { IL1StandardBridge } from "src/L1/interfaces/IL1StandardBridge.sol";
 import { IProtocolVersions } from "src/L1/interfaces/IProtocolVersions.sol";
@@ -86,6 +87,7 @@ contract Setup {
     IOptimismMintableERC20Factory l1OptimismMintableERC20Factory;
     IProtocolVersions protocolVersions;
     ISuperchainConfig superchainConfig;
+    ICeloSuperchainConfig celoSuperchainConfig;
     IDataAvailabilityChallenge dataAvailabilityChallenge;
 
     // L2 contracts
@@ -111,6 +113,8 @@ contract Setup {
     ISuperchainTokenBridge superchainTokenBridge = ISuperchainTokenBridge(Predeploys.SUPERCHAIN_TOKEN_BRIDGE);
     IOptimismSuperchainERC20Factory l2OptimismSuperchainERC20Factory =
         IOptimismSuperchainERC20Factory(Predeploys.OPTIMISM_SUPERCHAIN_ERC20_FACTORY);
+
+    bool needsSuperchain = true;
 
     /// @dev Deploys the Deploy contract without including its bytecode in the bytecode
     ///      of this contract by fetching the bytecode dynamically using `vm.getCode()`.
@@ -141,7 +145,7 @@ contract Setup {
             hex"7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffe03601600081602082378035828234f58015156039578182fd5b8082525050506014600cf3"
         );
 
-        deploy.run();
+        deploy.run(needsSuperchain);
         console.log("Setup: completed L1 deployment, registering addresses now");
 
         optimismPortal = IOptimismPortal(deploy.mustGetAddress("OptimismPortalProxy"));
@@ -157,6 +161,7 @@ contract Setup {
             IOptimismMintableERC20Factory(deploy.mustGetAddress("OptimismMintableERC20FactoryProxy"));
         protocolVersions = IProtocolVersions(deploy.mustGetAddress("ProtocolVersionsProxy"));
         superchainConfig = ISuperchainConfig(deploy.mustGetAddress("SuperchainConfigProxy"));
+        celoSuperchainConfig = ICeloSuperchainConfig(deploy.mustGetAddress("CeloSuperchainConfigProxy"));
         anchorStateRegistry = IAnchorStateRegistry(deploy.mustGetAddress("AnchorStateRegistryProxy"));
 
         vm.label(address(optimismPortal), "OptimismPortal");
@@ -179,6 +184,7 @@ contract Setup {
         vm.label(address(protocolVersions), "ProtocolVersions");
         vm.label(deploy.mustGetAddress("ProtocolVersionsProxy"), "ProtocolVersionsProxy");
         vm.label(address(superchainConfig), "SuperchainConfig");
+        vm.label(address(celoSuperchainConfig), "CeloSuperchainConfig");
         vm.label(deploy.mustGetAddress("SuperchainConfigProxy"), "SuperchainConfigProxy");
         vm.label(AddressAliasHelper.applyL1ToL2Alias(address(l1CrossDomainMessenger)), "L1CrossDomainMessenger_aliased");
 
@@ -264,5 +270,9 @@ contract Setup {
 
     function labelPreinstall(address _addr) internal {
         vm.label(_addr, Preinstalls.getName(_addr));
+    }
+
+    function withoutSuperchain() internal {
+        needsSuperchain = false;
     }
 }

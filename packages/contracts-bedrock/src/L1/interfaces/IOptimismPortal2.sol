@@ -6,7 +6,7 @@ import { GameType, Timestamp } from "src/dispute/lib/LibUDT.sol";
 import { IDisputeGame } from "src/dispute/interfaces/IDisputeGame.sol";
 import { IDisputeGameFactory } from "src/dispute/interfaces/IDisputeGameFactory.sol";
 import { ISystemConfig } from "src/L1/interfaces/ISystemConfig.sol";
-import { ISuperchainConfig } from "src/L1/interfaces/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "src/L1/interfaces/ICeloSuperchainConfig.sol";
 
 interface IOptimismPortal2 {
     error AlreadyFinalized();
@@ -81,7 +81,7 @@ interface IOptimismPortal2 {
     function initialize(
         IDisputeGameFactory _disputeGameFactory,
         ISystemConfig _systemConfig,
-        ISuperchainConfig _superchainConfig,
+        ICeloSuperchainConfig _superchainConfig,
         GameType _initialRespectedGameType
     )
         external;
@@ -110,7 +110,7 @@ interface IOptimismPortal2 {
     function respectedGameTypeUpdatedAt() external view returns (uint64);
     function setGasPayingToken(address _token, uint8 _decimals, bytes32 _name, bytes32 _symbol) external;
     function setRespectedGameType(GameType _gameType) external;
-    function superchainConfig() external view returns (ISuperchainConfig);
+    function superchainConfig() external view returns (ICeloSuperchainConfig);
     function systemConfig() external view returns (ISystemConfig);
     function version() external pure returns (string memory);
 
