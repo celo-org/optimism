@@ -2,6 +2,7 @@ package sources
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -127,10 +128,13 @@ func (s *L2Client) L2BlockRefByLabel(ctx context.Context, label eth.BlockLabel) 
 // L2BlockRefByNumber returns the [eth.L2BlockRef] for the given block number.
 func (s *L2Client) L2BlockRefByNumber(ctx context.Context, num uint64) (eth.L2BlockRef, error) {
 	envelope, err := s.PayloadByNumber(ctx, num)
+	envelopeJson, _ := json.MarshalIndent(envelope.ExecutionPayload, "", "\t")
+	fmt.Printf("\n\nid=%s, hash=%s, envelope=\n%s\n\n\n", envelope.ID().String(), envelope.ExecutionPayload.BlockRef().Hash, envelopeJson)
 	if err != nil {
 		// w%: wrap to preserve ethereum.NotFound case
 		return eth.L2BlockRef{}, fmt.Errorf("failed to determine L2BlockRef of height %v, could not get payload: %w", num, err)
 	}
+	fmt.Printf("\n!!!! calling PayloadToBlockRef \n\n")
 	ref, err := derive.PayloadToBlockRef(s.rollupCfg, envelope.ExecutionPayload)
 	if err != nil {
 		return eth.L2BlockRef{}, err
