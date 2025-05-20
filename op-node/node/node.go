@@ -62,9 +62,9 @@ type OpNode struct {
 	l1SafeSub      ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 	l1FinalizedSub ethereum.Subscription // Subscription to get L1 safe blocks, a.k.a. justified data (polling)
 
-	eventEmitter event.Emitter
-	eventSys     event.System
-	eventDrain   driver.Drain
+	emitter    event.Emitter
+	eventSys   event.System
+	eventDrain driver.Drain
 
 	l1Source  *sources.L1Client     // L1 Client to fetch data from
 	l2Driver  *driver.Driver        // L2 Engine to Sync
@@ -208,15 +208,15 @@ func (n *OpNode) initL1(ctx context.Context, cfg *config.Config) error {
 		return fmt.Errorf("failed to validate the L1 config: %w", err)
 	}
 
-	n.eventEmitter = n.eventSys.Register("l1-signals", nil)
+	n.emitter = n.eventSys.Register("l1-signals", nil)
 	onL1Head := func(ctx context.Context, sig eth.L1BlockRef) {
-		n.eventEmitter.Emit(ctx, status.L1UnsafeEvent{L1Unsafe: sig})
+		n.emitter.Emit(ctx, status.L1UnsafeEvent{L1Unsafe: sig})
 	}
 	onL1Safe := func(ctx context.Context, sig eth.L1BlockRef) {
-		n.eventEmitter.Emit(ctx, status.L1SafeEvent{L1Safe: sig})
+		n.emitter.Emit(ctx, status.L1SafeEvent{L1Safe: sig})
 	}
 	onL1Finalized := func(ctx context.Context, sig eth.L1BlockRef) {
-		n.eventEmitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: sig})
+		n.emitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: sig})
 	}
 
 	// Keep subscribed to the L1 heads, which keeps the L1 maintainer pointing to the best headers to sync
@@ -571,14 +571,14 @@ func (n *OpNode) Start(ctx context.Context) error {
 		if err != nil {
 			log.Warn("failed to fetch L1 block", "label", eth.Finalized, "err", err)
 		} else if finalizedRef != (eth.L1BlockRef{}) {
-			n.eventEmitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: finalizedRef})
+			n.emitter.Emit(ctx, finality.FinalizeL1Event{FinalizedL1: finalizedRef})
 		}
 
 		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
 		if err != nil {
 			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
 		} else if safeRef != (eth.L1BlockRef{}) {
-			n.eventEmitter.Emit(ctx, status.L1SafeEvent{L1Safe: safeRef})
+			n.emitter.Emit(ctx, status.L1SafeEvent{L1Safe: safeRef})
 		}
 	}
 
