@@ -84,7 +84,7 @@ func Test_ProgramAction_OperatorFeeConsistency(gt *testing.T) {
 		getCurrentBalances := func() (alice *big.Int, l1FeeVault *big.Int, baseFeeVault *big.Int, sequencerFeeVault *big.Int, operatorFeeVault *big.Int) {
 			alice = balanceAt(env.Alice.Address())
 			l1FeeVault = balanceAt(predeploys.L1FeeVaultAddr)
-			baseFeeVault = balanceAt(predeploys.BaseFeeVaultAddr)
+			baseFeeVault = balanceAt(getBaseFeeRecipientAddress(env))
 			sequencerFeeVault = balanceAt(predeploys.SequencerFeeVaultAddr)
 			operatorFeeVault = balanceAt(predeploys.OperatorFeeVaultAddr)
 
