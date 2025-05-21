@@ -1,0 +1,15 @@
+
+format:
+  cue fmt ./cue
+
+export-mainnet:
+  cue export ./cue -e network.production.mainnet -f -o mainnet-celo.json
+
+export-dryrun:
+  cue export ./cue -e network.dryrun.mainnet -f -o mainnet-celo-dryrun.json
+
+export-baklava:
+  cue export ./cue -e network.test.baklava -f -o baklava.json
+
+export-all: export-mainnet export-baklava export-dryrun
+
