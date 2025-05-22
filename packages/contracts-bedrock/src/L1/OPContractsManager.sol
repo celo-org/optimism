@@ -905,7 +905,10 @@ contract OPContractsManager is ISemver {
         virtual
         returns (bytes memory)
     {
-        return abi.encodeCall(IL1CrossDomainMessenger.initialize, (superchainConfig, _output.optimismPortalProxy));
+        return abi.encodeCall(
+            IL1CrossDomainMessenger.initialize,
+            (superchainConfig, _output.optimismPortalProxy, _output.systemConfigProxy)
+        );
     }
 
     /// @notice Helper method for encoding the L1StandardBridge initializer data.
@@ -915,7 +918,10 @@ contract OPContractsManager is ISemver {
         virtual
         returns (bytes memory)
     {
-        return abi.encodeCall(IL1StandardBridge.initialize, (_output.l1CrossDomainMessengerProxy, superchainConfig));
+        return abi.encodeCall(
+            IL1StandardBridge.initialize,
+            (_output.l1CrossDomainMessengerProxy, superchainConfig, _output.systemConfigProxy)
+        );
     }
 
     function encodeDisputeGameFactoryInitializer() internal view virtual returns (bytes memory) {

@@ -188,6 +188,11 @@
         "internalType": "contract IOptimismPortal2",
         "name": "_portal",
         "type": "address"
+      },
+      {
+        "internalType": "contract ISystemConfig",
+        "name": "_systemConfig",
+        "type": "address"
       }
     ],
     "name": "initialize",
@@ -333,6 +338,19 @@
     "outputs": [
       {
         "internalType": "contract ISuperchainConfig",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "systemConfig",
+    "outputs": [
+      {
+        "internalType": "contract ISystemConfig",
         "name": "",
         "type": "address"
       }
