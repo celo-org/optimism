@@ -6,7 +6,6 @@ import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { Constants } from "src/libraries/Constants.sol";
 
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
@@ -58,10 +57,8 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ISemver {
     }
 
     /// @inheritdoc CrossDomainMessenger
-    /// @dev This is added to maintain compatibility with the CrossDomainMessenger abstract contract and should always
-    /// return the ether address and 18 decimals.
-    function gasPayingToken() internal pure override returns (address addr_, uint8 decimals_) {
-        return (Constants.ETHER, 18);
+    function gasPayingToken() internal view override returns (address addr_, uint8 decimals_) {
+        (addr_, decimals_) = systemConfig.gasPayingToken();
     }
 
     /// @notice Getter function for the OptimismPortal contract on this chain.

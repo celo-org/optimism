@@ -494,7 +494,8 @@ contract OPContractsManager is ISemver {
                 l1StandardBridge: _opChainConfigs[i].systemConfigProxy.l1StandardBridge(),
                 disputeGameFactory: address(getDisputeGameFactory(_opChainConfigs[i].systemConfigProxy)),
                 optimismPortal: _opChainConfigs[i].systemConfigProxy.optimismPortal(),
-                optimismMintableERC20Factory: _opChainConfigs[i].systemConfigProxy.optimismMintableERC20Factory()
+                optimismMintableERC20Factory: _opChainConfigs[i].systemConfigProxy.optimismMintableERC20Factory(),
+                gasPayingToken: Constants.ETHER
             });
 
             // Check that all contracts have the correct superchainConfig
@@ -994,7 +995,8 @@ contract OPContractsManager is ISemver {
             l1StandardBridge: address(_output.l1StandardBridgeProxy),
             disputeGameFactory: address(_output.disputeGameFactoryProxy),
             optimismPortal: address(_output.optimismPortalProxy),
-            optimismMintableERC20Factory: address(_output.optimismMintableERC20FactoryProxy)
+            optimismMintableERC20Factory: address(_output.optimismMintableERC20FactoryProxy),
+            gasPayingToken: Constants.ETHER
         });
 
         assertValidContractAddress(opChainAddrs_.l1CrossDomainMessenger);

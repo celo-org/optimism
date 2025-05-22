@@ -531,7 +531,8 @@ contract Deploy is Deployer {
                         l1StandardBridge: artifacts.mustGetAddress("L1StandardBridgeProxy"),
                         disputeGameFactory: artifacts.mustGetAddress("DisputeGameFactoryProxy"),
                         optimismPortal: artifacts.mustGetAddress("OptimismPortalProxy"),
-                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy")
+                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy"),
+                        gasPayingToken: customGasTokenAddress
                     })
                 )
             )
