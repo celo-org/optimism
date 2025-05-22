@@ -11,6 +11,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
 import { IL2ToL1MessagePasser } from "interfaces/L2/IL2ToL1MessagePasser.sol";
+import { IL1Block } from "interfaces/L2/IL1Block.sol";
 
 /// @custom:proxied true
 /// @custom:predeploy 0x4200000000000000000000000000000000000007
@@ -19,8 +20,8 @@ import { IL2ToL1MessagePasser } from "interfaces/L2/IL2ToL1MessagePasser.sol";
 ///         L2 on the L2 side. Users are generally encouraged to use this contract instead of lower
 ///         level message passing contracts.
 contract L2CrossDomainMessenger is CrossDomainMessenger, ISemver {
-    /// @custom:semver 2.1.1-beta.8
-    string public constant version = "2.1.1-beta.8";
+    /// @custom:semver 2.1.1-beta.7
+    string public constant version = "2.1.1-beta.7";
 
     /// @notice Constructs the L2CrossDomainMessenger contract.
     constructor() {
@@ -46,6 +47,11 @@ contract L2CrossDomainMessenger is CrossDomainMessenger, ISemver {
         IL2ToL1MessagePasser(payable(Predeploys.L2_TO_L1_MESSAGE_PASSER)).initiateWithdrawal{ value: _value }(
             _to, _gasLimit, _data
         );
+    }
+
+    /// @inheritdoc CrossDomainMessenger
+    function gasPayingToken() internal view override returns (address addr_, uint8 decimals_) {
+        (addr_, decimals_) = IL1Block(Predeploys.L1_BLOCK_ATTRIBUTES).gasPayingToken();
     }
 
     /// @inheritdoc CrossDomainMessenger
