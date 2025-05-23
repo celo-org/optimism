@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  OP_GETH_BASE_BRANCH: "celo-rebase-12"
+  OP_GETH_BASE_BRANCH: "celo-rebase-13"
 
 jobs:
   job_id:
