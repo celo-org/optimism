@@ -103,6 +103,11 @@
   },
   {
     "inputs": [],
+    "name": "NotCustomGasToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "Unauthorized",
     "type": "error"
   }

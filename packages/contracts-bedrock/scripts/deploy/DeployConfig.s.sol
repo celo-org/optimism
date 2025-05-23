@@ -82,6 +82,9 @@ contract DeployConfig is Script {
     uint256 public faultGameV2ClockExtension;
     uint256 public faultGameV2MaxClockDuration;
 
+    bool public useCustomGasToken;
+    address public customGasTokenAddress;
+
     bool public useInterop;
     bool public useUpgradedFork;
     bytes32 public devFeatureBitmap;
@@ -157,6 +160,9 @@ contract DeployConfig is Script {
         daBondSize = _readOr(_json, "$.daBondSize", 1000000000);
         daResolverRefundPercentage = _readOr(_json, "$.daResolverRefundPercentage", 0);
 
+        useCustomGasToken = _readOr(_json, "$.useCustomGasToken", false);
+        customGasTokenAddress = _readOr(_json, "$.customGasTokenAddress", address(0));
+
         useInterop = _readOr(_json, "$.useInterop", false);
         devFeatureBitmap = bytes32(_readOr(_json, "$.devFeatureBitmap", 0));
         useUpgradedFork;
@@ -223,6 +229,12 @@ contract DeployConfig is Script {
     /// @notice Allow the `devFeatureBitmap` config to be overridden in testing environments
     function setDevFeatureBitmap(bytes32 _devFeatureBitmap) public {
         devFeatureBitmap = _devFeatureBitmap;
+    }
+
+    /// @notice Allow the `useCustomGasToken` config to be overridden in testing environments
+    function setUseCustomGasToken(address _token) public {
+        useCustomGasToken = true;
+        customGasTokenAddress = _token;
     }
 
     /// @notice Allow the `useUpgradedFork` config to be overridden in testing environments

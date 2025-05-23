@@ -2,13 +2,14 @@
 pragma solidity 0.8.15;
 
 // Libraries
-import { Unauthorized, ZeroAddress } from "src/libraries/errors/CommonErrors.sol";
+import { NotCustomGasToken, Unauthorized, ZeroAddress } from "src/libraries/errors/CommonErrors.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { SafeSend } from "src/universal/SafeSend.sol";
 
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
 import { IL2ToL2CrossDomainMessenger } from "interfaces/L2/IL2ToL2CrossDomainMessenger.sol";
+import { IL1Block } from "interfaces/L2/IL1Block.sol";
 import { IETHLiquidity } from "interfaces/L2/IETHLiquidity.sol";
 
 /// @custom:proxied true
@@ -45,6 +46,10 @@ contract SuperchainETHBridge is ISemver {
     function sendETH(address _to, uint256 _chainId) external payable returns (bytes32 msgHash_) {
         if (_to == address(0)) revert ZeroAddress();
 
+        if (IL1Block(Predeploys.L1_BLOCK_ATTRIBUTES).isCustomGasToken()) {
+            revert NotCustomGasToken();
+        }
+
         // NOTE: 'burn' will soon change to 'deposit'.
         IETHLiquidity(Predeploys.ETH_LIQUIDITY).burn{ value: msg.value }();
 
@@ -68,6 +73,10 @@ contract SuperchainETHBridge is ISemver {
             IL2ToL2CrossDomainMessenger(Predeploys.L2_TO_L2_CROSS_DOMAIN_MESSENGER).crossDomainMessageContext();
 
         if (crossDomainMessageSender != address(this)) revert InvalidCrossDomainSender();
+
+        if (IL1Block(Predeploys.L1_BLOCK_ATTRIBUTES).isCustomGasToken()) {
+            revert NotCustomGasToken();
+        }
 
         // NOTE: 'mint' will soon change to 'withdraw'.
         IETHLiquidity(Predeploys.ETH_LIQUIDITY).mint(_amount);

@@ -11,6 +11,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 import { ISemver } from "interfaces/universal/ISemver.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
+import { IL1Block } from "interfaces/L2/IL1Block.sol";
 
 /// @custom:proxied true
 /// @custom:predeploy 0x4200000000000000000000000000000000000010
@@ -83,6 +84,11 @@ contract L2StandardBridge is StandardBridge, ISemver {
         );
     }
 
+    /// @inheritdoc StandardBridge
+    function gasPayingToken() internal view override returns (address addr_, uint8 decimals_) {
+        (addr_, decimals_) = IL1Block(Predeploys.L1_BLOCK_ATTRIBUTES).gasPayingToken();
+    }
+
     /// @custom:legacy
     /// @notice Initiates a withdrawal from L2 to L1.
     ///         This function only works with OptimismMintableERC20 tokens or ether. Use the
@@ -103,6 +109,7 @@ contract L2StandardBridge is StandardBridge, ISemver {
         virtual
         onlyEOA
     {
+        require(isCustomGasToken() == false, "L2StandardBridge: not supported with custom gas token");
         _initiateWithdrawal(_l2Token, msg.sender, msg.sender, _amount, _minGasLimit, _extraData);
     }
 
@@ -131,6 +138,7 @@ contract L2StandardBridge is StandardBridge, ISemver {
         payable
         virtual
     {
+        require(isCustomGasToken() == false, "L2StandardBridge: not supported with custom gas token");
         _initiateWithdrawal(_l2Token, msg.sender, _to, _amount, _minGasLimit, _extraData);
     }
 

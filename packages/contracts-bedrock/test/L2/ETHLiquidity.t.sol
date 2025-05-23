@@ -5,7 +5,7 @@ pragma solidity 0.8.15;
 import { CommonTest } from "test/setup/CommonTest.sol";
 
 // Error imports
-import { Unauthorized } from "src/libraries/errors/CommonErrors.sol";
+import { Unauthorized, NotCustomGasToken } from "src/libraries/errors/CommonErrors.sol";
 import { InvalidAmount } from "src/libraries/errors/CommonErrors.sol";
 
 /// @title ETHLiquidity_TestInit
@@ -85,6 +85,26 @@ contract ETHLiquidity_Burn_Test is ETHLiquidity_TestInit {
 
         // Assert
         assertEq(_caller.balance, _amount);
+        assertEq(address(ethLiquidity).balance, STARTING_LIQUIDITY_BALANCE);
+    }
+
+    /// @notice Tests that the burn function reverts when called on a custom gas token chain.
+    /// @param _amount Amount of ETH (in wei) to call the burn function with.
+    function testFuzz_burn_fromCustomGasTokenChain_fails(uint256 _amount) public {
+        // Assume
+        _amount = bound(_amount, 0, type(uint248).max - 1);
+
+        // Arrange
+        vm.deal(address(superchainETHBridge), _amount);
+        vm.mockCall(address(l1Block), abi.encodeCall(l1Block.isCustomGasToken, ()), abi.encode(true));
+
+        // Act
+        vm.prank(address(superchainETHBridge));
+        vm.expectRevert(NotCustomGasToken.selector);
+        ethLiquidity.burn{ value: _amount }();
+
+        // Assert
+        assertEq(address(superchainETHBridge).balance, _amount);
         assertEq(address(ethLiquidity).balance, STARTING_LIQUIDITY_BALANCE);
     }
 }
@@ -196,6 +216,25 @@ contract ETHLiquidity_Fund_Test is ETHLiquidity_TestInit {
         ethLiquidity.fund{ value: 0 }();
 
         // Assert
+        assertEq(address(ethLiquidity).balance, STARTING_LIQUIDITY_BALANCE);
+    }
+
+    /// @notice Tests that the mint function reverts when called on a custom gas token chain.
+    /// @param _amount Amount of ETH (in wei) to call the mint function with.
+    function testFuzz_mint_fromCustomGasTokenChain_fails(uint256 _amount) public {
+        // Assume
+        _amount = bound(_amount, 0, type(uint248).max - 1);
+
+        // Arrange
+        vm.mockCall(address(l1Block), abi.encodeCall(l1Block.isCustomGasToken, ()), abi.encode(true));
+
+        // Act
+        vm.prank(address(superchainETHBridge));
+        vm.expectRevert(NotCustomGasToken.selector);
+        ethLiquidity.mint(_amount);
+
+        // Assert
+        assertEq(address(superchainETHBridge).balance, 0);
         assertEq(address(ethLiquidity).balance, STARTING_LIQUIDITY_BALANCE);
     }
 }

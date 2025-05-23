@@ -6,7 +6,7 @@ import { CommonTest } from "test/setup/CommonTest.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { Unauthorized, ZeroAddress } from "src/libraries/errors/CommonErrors.sol";
+import { NotCustomGasToken, Unauthorized, ZeroAddress } from "src/libraries/errors/CommonErrors.sol";
 
 // Interfaces
 import { IETHLiquidity } from "interfaces/L2/IETHLiquidity.sol";
@@ -57,7 +57,7 @@ contract SuperchainETHBridge_SendETH_Test is SuperchainETHBridge_TestInit {
 
     /// @notice Tests the `sendETH` function burns the sender ETH, sends the message, and emits the
     ///         `SendETH` event.
-    function testFuzz_sendETH_succeeds(
+    function testFuzz_sendETH_fromNonCustomGasTokenChain_succeeds(
         address _sender,
         address _to,
         uint256 _amount,
@@ -74,6 +74,7 @@ contract SuperchainETHBridge_SendETH_Test is SuperchainETHBridge_TestInit {
 
         // Arrange
         vm.deal(_sender, _amount);
+        _mockAndExpect(address(l1Block), abi.encodeCall(l1Block.isCustomGasToken, ()), abi.encode(false));
 
         // Get the total balance of `_sender` before the send to compare later on the assertions
         uint256 _senderBalanceBefore = _sender.balance;
@@ -102,6 +103,30 @@ contract SuperchainETHBridge_SendETH_Test is SuperchainETHBridge_TestInit {
 
         // Check the total supply and balance of `_sender` after the send were updated correctly
         assertEq(_sender.balance, _senderBalanceBefore - _amount);
+    }
+
+    /// @notice Tests the `sendETH` function reverts when called on a custom gas token chain.
+    function testFuzz_sendETH_fromCustomGasTokenChain_fails(
+        address _sender,
+        address _to,
+        uint256 _amount,
+        uint256 _chainId
+    )
+        external
+    {
+        // Assume
+        vm.assume(_sender != ZERO_ADDRESS);
+        vm.assume(_to != ZERO_ADDRESS);
+        _amount = bound(_amount, 0, type(uint248).max - 1);
+
+        // Arrange
+        vm.deal(_sender, _amount);
+        _mockAndExpect(address(l1Block), abi.encodeCall(l1Block.isCustomGasToken, ()), abi.encode(true));
+
+        // Call the `sendETH` function
+        vm.prank(_sender);
+        vm.expectRevert(NotCustomGasToken.selector);
+        superchainETHBridge.sendETH{ value: _amount }(_to, _chainId);
     }
 }
 
@@ -149,6 +174,35 @@ contract SuperchainETHBridge_RelayETH_Test is SuperchainETHBridge_TestInit {
         superchainETHBridge.relayETH(_crossDomainMessageSender, _to, _amount);
     }
 
+    /// @notice Tests the `relayETH` function reverts when called on a custom gas token chain.
+    function testFuzz_relayETH_fromCustomGasTokenChain_fails(
+        address _from,
+        address _to,
+        uint256 _amount,
+        uint256 _source
+    )
+        public
+    {
+        // Assume
+        vm.assume(_to != ZERO_ADDRESS);
+        _amount = bound(_amount, 0, type(uint248).max - 1);
+
+        // Arrange
+        _mockAndExpect(address(l1Block), abi.encodeCall(l1Block.isCustomGasToken, ()), abi.encode(true));
+        _mockAndExpect(
+            Predeploys.L2_TO_L2_CROSS_DOMAIN_MESSENGER,
+            abi.encodeCall(IL2ToL2CrossDomainMessenger.crossDomainMessageContext, ()),
+            abi.encode(address(superchainETHBridge), _source)
+        );
+        // Expect to not call the `mint` function in the `ETHLiquidity` contract
+        vm.expectCall(Predeploys.ETH_LIQUIDITY, abi.encodeCall(IETHLiquidity.mint, (_amount)), 0);
+
+        // Act
+        vm.prank(Predeploys.L2_TO_L2_CROSS_DOMAIN_MESSENGER);
+        vm.expectRevert(NotCustomGasToken.selector);
+        superchainETHBridge.relayETH(_from, _to, _amount);
+    }
+
     /// @notice Tests the `relayETH` function relays the proper amount of ETH and emits the
     ///         `RelayETH` event.
     function testFuzz_relayETH_succeeds(address _from, address _to, uint256 _amount, uint256 _source) public {
@@ -160,6 +214,7 @@ contract SuperchainETHBridge_RelayETH_Test is SuperchainETHBridge_TestInit {
         // Arrange
         vm.deal(address(superchainETHBridge), _amount);
         vm.deal(Predeploys.ETH_LIQUIDITY, _amount);
+        _mockAndExpect(address(l1Block), abi.encodeCall(l1Block.isCustomGasToken, ()), abi.encode(false));
         _mockAndExpect(
             Predeploys.L2_TO_L2_CROSS_DOMAIN_MESSENGER,
             abi.encodeCall(IL2ToL2CrossDomainMessenger.crossDomainMessageContext, ()),

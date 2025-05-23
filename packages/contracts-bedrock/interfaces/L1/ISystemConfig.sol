@@ -5,6 +5,7 @@ import { IResourceMetering } from "interfaces/L1/IResourceMetering.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IProxyAdminOwnedBase } from "interfaces/L1/IProxyAdminOwnedBase.sol";
 
+/// @notice This interface corresponds to the Custom Gas Token version of the SystemConfig contract.
 interface ISystemConfig is IProxyAdminOwnedBase {
     enum UpdateType {
         BATCHER,
