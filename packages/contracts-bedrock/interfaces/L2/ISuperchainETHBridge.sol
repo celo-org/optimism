@@ -5,6 +5,7 @@ import { ISemver } from "interfaces/universal/ISemver.sol";
 
 interface ISuperchainETHBridge is ISemver {
     error Unauthorized();
+    error NotCustomGasToken();
     error InvalidCrossDomainSender();
     error ZeroAddress();
 

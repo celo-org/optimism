@@ -12,6 +12,7 @@ import { IProxyAdminOwnedBase } from "interfaces/L1/IProxyAdminOwnedBase.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 
 interface IOptimismPortalInterop is IProxyAdminOwnedBase {
+    error CustomGasTokenNotSupported();
     error ContentLengthMismatch();
     error EmptyItem();
     error InvalidDataRemainder();

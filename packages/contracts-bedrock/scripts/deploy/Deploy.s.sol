@@ -21,8 +21,10 @@ import { DeployAltDA } from "scripts/deploy/DeployAltDA.s.sol";
 import { StandardConstants } from "scripts/deploy/StandardConstants.sol";
 
 // Libraries
+import { Constants } from "src/libraries/Constants.sol";
 import { Types } from "scripts/libraries/Types.sol";
 import { Duration } from "src/dispute/lib/LibUDT.sol";
+import { StorageSlot, ForgeArtifacts } from "scripts/libraries/ForgeArtifacts.sol";
 import { GameType, Claim, GameTypes, Proposal, Hash } from "src/dispute/lib/Types.sol";
 
 // Interfaces
@@ -30,6 +32,7 @@ import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
 import { IDelayedWETH } from "interfaces/dispute/IDelayedWETH.sol";
 import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.sol";
@@ -178,6 +181,12 @@ contract Deploy is Deployer {
             GameType.wrap(uint32(cfg.respectedGameType()))
         );
         vm.stopPrank();
+
+        if (cfg.useCustomGasToken()) {
+            // Reset the systemconfig then reinitialize it with the custom gas token
+            resetInitializedProxy("SystemConfig");
+            initializeSystemConfig();
+        }
 
         if (cfg.useAltDA()) {
             bytes32 typeHash = keccak256(bytes(cfg.daCommitmentType()));
@@ -408,6 +417,54 @@ contract Deploy is Deployer {
         addr_ = address(proxy);
     }
 
+    /// @notice Initialize the SystemConfig
+    function initializeSystemConfig() public broadcast {
+        console.log("Upgrading and initializing SystemConfig proxy");
+        address systemConfigProxy = artifacts.mustGetAddress("SystemConfigProxy");
+        address systemConfig = artifacts.mustGetAddress("SystemConfigImpl");
+
+        bytes32 batcherHash = bytes32(uint256(uint160(cfg.batchSenderAddress())));
+
+        address customGasTokenAddress = Constants.ETHER;
+        if (cfg.useCustomGasToken()) {
+            customGasTokenAddress = cfg.customGasTokenAddress();
+        }
+
+        IProxyAdmin proxyAdmin = IProxyAdmin(payable(artifacts.mustGetAddress("ProxyAdmin")));
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(systemConfigProxy),
+            _implementation: systemConfig,
+            _data: abi.encodeCall(
+                ISystemConfig.initialize,
+                (
+                    cfg.finalSystemOwner(),
+                    cfg.basefeeScalar(),
+                    cfg.blobbasefeeScalar(),
+                    batcherHash,
+                    uint64(cfg.l2GenesisBlockGasLimit()),
+                    cfg.p2pSequencerAddress(),
+                    Constants.DEFAULT_RESOURCE_CONFIG(),
+                    cfg.batchInboxAddress(),
+                    ISystemConfig.Addresses({
+                        l1CrossDomainMessenger: artifacts.mustGetAddress("L1CrossDomainMessengerProxy"),
+                        l1ERC721Bridge: artifacts.mustGetAddress("L1ERC721BridgeProxy"),
+                        l1StandardBridge: artifacts.mustGetAddress("L1StandardBridgeProxy"),
+                        optimismPortal: artifacts.mustGetAddress("OptimismPortalProxy"),
+                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy")
+                    }),
+                    cfg.l2ChainID(),
+                    ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy"))
+                )
+            )
+        });
+
+        ISystemConfig config = ISystemConfig(systemConfigProxy);
+        string memory version = config.version();
+        console.log("SystemConfig version: %s", version);
+
+        ChainAssertions.checkSystemConfig({ _doi: DeployOPChainInput(address(0)), _contracts: _proxies(), _isProxy: true });
+    }
+
     /// @notice Get the DeployInput struct to use for testing
     function getDeployInput() public view returns (IOPContractsManager.DeployInput memory) {
         string memory saltMixer = "salt mixer";
@@ -435,5 +492,17 @@ contract Deploy is Deployer {
             disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
             disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration()))
         });
+    }
+
+    /// @notice Reset the initialized value on a proxy contract so that it can be initialized again
+    function resetInitializedProxy(string memory _contractName) internal {
+        console.log("resetting initialized value on %s Proxy", _contractName);
+        address proxy = artifacts.mustGetAddress(string.concat(_contractName, "Proxy"));
+        StorageSlot memory slot = ForgeArtifacts.getInitializedSlot(_contractName);
+        bytes32 slotVal = vm.load(proxy, bytes32(slot.slot));
+        uint256 value = uint256(slotVal);
+        value = value & ~(0xFF << (slot.offset * 8));
+        slotVal = bytes32(value);
+        vm.store(proxy, bytes32(slot.slot), slotVal);
     }
 }
