@@ -141,9 +141,9 @@
   },
   {
     "bytes": "20",
-    "label": "spacer_253_0_20",
+    "label": "systemConfig",
     "offset": 0,
     "slot": "253",
-    "type": "address"
+    "type": "contract ISystemConfig"
   }
 ]

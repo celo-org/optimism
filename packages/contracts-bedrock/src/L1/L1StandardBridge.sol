@@ -12,6 +12,7 @@ import { Constants } from "src/libraries/Constants.sol";
 import { ISemver } from "interfaces/universal/ISemver.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 
 /// @custom:proxied true
 /// @title L1StandardBridge
@@ -81,10 +82,8 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @notice Address of the SuperchainConfig contract.
     ISuperchainConfig public superchainConfig;
 
-    /// @custom:legacy
-    /// @custom:spacer systemConfig
-    /// @notice Spacer taking up the legacy `systemConfig` slot.
-    address private spacer_51_0_20;
+    /// @notice Address of the SystemConfig contract.
+    ISystemConfig public systemConfig;
 
     /// @notice Constructs the L1StandardBridge contract.
     constructor() StandardBridge() {
@@ -94,8 +93,16 @@ contract L1StandardBridge is StandardBridge, ISemver {
     /// @notice Initializer.
     /// @param _messenger        Contract for the CrossDomainMessenger on this network.
     /// @param _superchainConfig Contract for the SuperchainConfig on this network.
-    function initialize(ICrossDomainMessenger _messenger, ISuperchainConfig _superchainConfig) external initializer {
+    function initialize(
+        ICrossDomainMessenger _messenger,
+        ISuperchainConfig _superchainConfig,
+        ISystemConfig _systemConfig
+    )
+        external
+        initializer
+    {
         superchainConfig = _superchainConfig;
+        systemConfig = _systemConfig;
         __StandardBridge_init({
             _messenger: _messenger,
             _otherBridge: StandardBridge(payable(Predeploys.L2_STANDARD_BRIDGE))
