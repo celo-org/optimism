@@ -5,6 +5,8 @@ import { IResourceMetering } from "interfaces/L1/IResourceMetering.sol";
 
 /// @notice This interface corresponds to the Custom Gas Token version of the SystemConfig contract.
 interface ISystemConfig {
+    error CustomGasTokenNotSupported();
+
     enum UpdateType {
         BATCHER,
         FEE_SCALARS,
@@ -21,6 +23,7 @@ interface ISystemConfig {
         address disputeGameFactory;
         address optimismPortal;
         address optimismMintableERC20Factory;
+        address gasPayingToken;
     }
 
     event ConfigUpdate(uint256 indexed version, UpdateType indexed updateType, bytes data);
@@ -46,6 +49,9 @@ interface ISystemConfig {
     function eip1559Denominator() external view returns (uint32);
     function eip1559Elasticity() external view returns (uint32);
     function getAddresses() external view returns (Addresses memory);
+    function gasPayingToken() external view returns (address addr_, uint8 decimals_);
+    function gasPayingTokenName() external view returns (string memory name_);
+    function gasPayingTokenSymbol() external view returns (string memory symbol_);
     function initialize(
         address _owner,
         uint32 _basefeeScalar,
@@ -58,6 +64,7 @@ interface ISystemConfig {
         Addresses memory _addresses
     )
         external;
+    function isCustomGasToken() external view returns (bool);
     function l1CrossDomainMessenger() external view returns (address addr_);
     function l1ERC721Bridge() external view returns (address addr_);
     function l1StandardBridge() external view returns (address addr_);

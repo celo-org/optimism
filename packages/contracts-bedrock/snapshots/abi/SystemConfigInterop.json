@@ -409,11 +409,21 @@
             "internalType": "address",
             "name": "optimismMintableERC20Factory",
             "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "gasPayingToken",
+            "type": "address"
           }
         ],
         "internalType": "struct SystemConfig.Addresses",
         "name": "_addresses",
         "type": "tuple"
+      },
+      {
+        "internalType": "address",
+        "name": "_dependencyManager",
+        "type": "address"
       }
     ],
     "name": "initialize",
@@ -526,21 +536,34 @@
             "internalType": "address",
             "name": "optimismMintableERC20Factory",
             "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "gasPayingToken",
+            "type": "address"
           }
         ],
         "internalType": "struct SystemConfig.Addresses",
         "name": "_addresses",
         "type": "tuple"
-      },
-      {
-        "internalType": "address",
-        "name": "_dependencyManager",
-        "type": "address"
       }
     ],
     "name": "initialize",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "isCustomGasToken",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -983,5 +1006,10 @@
     ],
     "name": "OwnershipTransferred",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "CustomGasTokenNotSupported",
+    "type": "error"
   }
 ]
