@@ -84,6 +84,9 @@ library ChainAssertions {
         require(config.l1StandardBridge() == address(0), "CHECK-SCFG-400");
         require(config.optimismPortal() == address(0), "CHECK-SCFG-420");
         require(config.optimismMintableERC20Factory() == address(0), "CHECK-SCFG-430");
+        // Check custom gas token
+        (address gasPayingToken,) = config.gasPayingToken();
+        require(gasPayingToken == Constants.ETHER, "CHECK-SCFG-440");
     }
 
     /// @notice Asserts that the SystemConfig is setup correctly

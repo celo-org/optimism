@@ -404,6 +404,11 @@
             "internalType": "address",
             "name": "optimismMintableERC20Factory",
             "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "gasPayingToken",
+            "type": "address"
           }
         ],
         "internalType": "struct SystemConfig.Addresses",
@@ -435,6 +440,19 @@
       }
     ],
     "name": "isFeatureEnabled",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "isCustomGasToken",
     "outputs": [
       {
         "internalType": "bool",
@@ -1052,6 +1070,11 @@
   {
     "inputs": [],
     "name": "SystemConfig_InvalidFeatureState",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "CustomGasTokenNotSupported",
     "type": "error"
   }
 ]

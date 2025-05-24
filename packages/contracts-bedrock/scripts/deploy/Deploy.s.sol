@@ -452,7 +452,8 @@ contract Deploy is Deployer {
                         l1ERC721Bridge: artifacts.mustGetAddress("L1ERC721BridgeProxy"),
                         l1StandardBridge: artifacts.mustGetAddress("L1StandardBridgeProxy"),
                         optimismPortal: artifacts.mustGetAddress("OptimismPortalProxy"),
-                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy")
+                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy"),
+                        gasPayingToken: customGasTokenAddress
                     }),
                     cfg.l2ChainID(),
                     ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy"))
@@ -464,7 +465,31 @@ contract Deploy is Deployer {
         string memory version = config.version();
         console.log("SystemConfig version: %s", version);
 
-        ChainAssertions.checkSystemConfig({ _doi: DeployOPChainInput(address(0)), _contracts: _proxies(), _isProxy: true });
+        IOPContractsManager.DeployInput memory di = getDeployInput();
+        Types.DeployOPChainInput memory doi = Types.DeployOPChainInput({
+            opChainProxyAdminOwner: cfg.finalSystemOwner(),
+            systemConfigOwner: cfg.finalSystemOwner(),
+            batcher: cfg.batchSenderAddress(),
+            unsafeBlockSigner: cfg.p2pSequencerAddress(),
+            proposer: cfg.l2OutputOracleProposer(),
+            challenger: cfg.l2OutputOracleChallenger(),
+            basefeeScalar: cfg.basefeeScalar(),
+            blobBaseFeeScalar: cfg.blobbasefeeScalar(),
+            l2ChainId: cfg.l2ChainID(),
+            opcm: artifacts.mustGetAddress("OPContractsManagerProxy"),
+            saltMixer: "salt mixer",
+            gasLimit: uint64(cfg.l2GenesisBlockGasLimit()),
+            disputeGameType: GameTypes.PERMISSIONED_CANNON,
+            disputeAbsolutePrestate: Claim.wrap(bytes32(cfg.faultGameAbsolutePrestate())),
+            disputeMaxGameDepth: cfg.faultGameMaxDepth(),
+            disputeSplitDepth: cfg.faultGameSplitDepth(),
+            disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
+            disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
+            allowCustomDisputeParameters: false,
+            operatorFeeScalar: 0,
+            operatorFeeConstant: 0
+        });
+        ChainAssertions.checkSystemConfigProxies({ _contracts: _proxies(), _doi: doi });
     }
 
     /// @notice Get the DeployInput struct to use for testing
