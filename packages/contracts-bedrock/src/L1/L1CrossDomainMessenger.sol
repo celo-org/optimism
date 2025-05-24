@@ -81,7 +81,7 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ProxyAdminOwnedBase, Re
     function superchainConfig() public view returns (ISuperchainConfig) {
         return systemConfig.superchainConfig();
     }
-    
+
     /// @inheritdoc CrossDomainMessenger
     /// @dev This is added to maintain compatibility with the CrossDomainMessenger abstract contract and should always
     /// return the ether address and 18 decimals.
