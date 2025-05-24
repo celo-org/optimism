@@ -450,7 +450,8 @@ contract Deploy is Deployer {
                         l1ERC721Bridge: artifacts.mustGetAddress("L1ERC721BridgeProxy"),
                         l1StandardBridge: artifacts.mustGetAddress("L1StandardBridgeProxy"),
                         optimismPortal: artifacts.mustGetAddress("OptimismPortalProxy"),
-                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy")
+                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy"),
+                        gasPayingToken: customGasTokenAddress
                     }),
                     cfg.l2ChainID(),
                     ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy"))

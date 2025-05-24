@@ -11,6 +11,7 @@ import { Process } from "scripts/libraries/Process.sol";
 // Libraries
 import { LibString } from "@solady/utils/LibString.sol";
 import { GameType, Hash, Proposal } from "src/dispute/lib/Types.sol";
+import { Constants } from "src/libraries/Constants.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 import { DevFeatures } from "src/libraries/DevFeatures.sol";
 
@@ -191,7 +192,8 @@ contract Initializer_Test is CommonTest {
                             l1ERC721Bridge: address(0),
                             l1StandardBridge: address(0),
                             optimismPortal: address(0),
-                            optimismMintableERC20Factory: address(0)
+                            optimismMintableERC20Factory: address(0),
+                            gasPayingToken: Constants.ETHER
                         }),
                         0,
                         ISuperchainConfig(address(0))
@@ -227,7 +229,8 @@ contract Initializer_Test is CommonTest {
                             l1ERC721Bridge: address(0),
                             l1StandardBridge: address(0),
                             optimismPortal: address(0),
-                            optimismMintableERC20Factory: address(0)
+                            optimismMintableERC20Factory: address(0),
+                            gasPayingToken: Constants.ETHER
                         }),
                         0,
                         ISuperchainConfig(address(0))

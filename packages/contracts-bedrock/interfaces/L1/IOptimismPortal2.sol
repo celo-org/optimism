@@ -12,6 +12,8 @@ import { IProxyAdminOwnedBase } from "interfaces/L1/IProxyAdminOwnedBase.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 
 interface IOptimismPortal2 is IProxyAdminOwnedBase {
+    error OnlyCustomGasToken();
+    error CustomGasTokenNotSupported();
     error ContentLengthMismatch();
     error EmptyItem();
     error InvalidDataRemainder();
@@ -33,6 +35,9 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
     error OptimismPortal_ProofNotOldEnough();
     error OptimismPortal_Unproven();
     error OptimismPortal_InvalidLockboxState();
+    error OptimismPortal_TransferFailed();
+    error OptimismPortal_NoValue();
+    error OptimismPortal_Unauthorized();
     error OutOfGas();
     error UnexpectedList();
     error UnexpectedString();
@@ -47,7 +52,17 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
 
     function anchorStateRegistry() external view returns (IAnchorStateRegistry);
     function ethLockbox() external view returns (IETHLockbox);
+    function balance() external view returns (uint256);
     function checkWithdrawal(bytes32 _withdrawalHash, address _proofSubmitter) external view;
+    function depositERC20Transaction(
+        address _to,
+        uint256 _mint,
+        uint256 _value,
+        uint64 _gasLimit,
+        bool _isCreation,
+        bytes memory _data
+    )
+        external;
     function depositTransaction(
         address _to,
         uint256 _value,
@@ -99,6 +114,7 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
         returns (IDisputeGame disputeGameProxy, uint64 timestamp);
     function respectedGameType() external view returns (GameType);
     function respectedGameTypeUpdatedAt() external view returns (uint64);
+    function setGasPayingToken(address _token, uint8 _decimals, bytes32 _name, bytes32 _symbol) external;
     function systemConfig() external view returns (ISystemConfig);
     function upgrade(IAnchorStateRegistry _anchorStateRegistry) external;
     function version() external pure returns (string memory);

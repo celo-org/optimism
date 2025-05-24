@@ -91,6 +91,9 @@ library ChainAssertions {
             require(config.l1StandardBridge() == _contracts.L1StandardBridge, "CHECK-SCFG-180");
             require(config.optimismPortal() == _contracts.OptimismPortal, "CHECK-SCFG-200");
             require(config.optimismMintableERC20Factory() == _contracts.OptimismMintableERC20Factory, "CHECK-SCFG-210");
+            // Check custom gas token
+            (address gasPayingToken,) = config.gasPayingToken();
+            require(gasPayingToken == Constants.ETHER, "CHECK-SCFG-211");
         } else {
             require(config.owner() == address(0), "CHECK-SCFG-220");
             require(config.overhead() == 0, "CHECK-SCFG-230");
@@ -115,6 +118,9 @@ library ChainAssertions {
             require(config.l1StandardBridge() == address(0), "CHECK-SCFG-400");
             require(config.optimismPortal() == address(0), "CHECK-SCFG-420");
             require(config.optimismMintableERC20Factory() == address(0), "CHECK-SCFG-430");
+            // Check custom gas token
+            (address gasPayingToken,) = config.gasPayingToken();
+            require(gasPayingToken == Constants.ETHER, "CHECK-SCFG-440");
         }
     }
 

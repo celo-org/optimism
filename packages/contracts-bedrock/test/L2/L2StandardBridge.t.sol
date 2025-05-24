@@ -20,7 +20,6 @@ import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenge
 import { IStandardBridge } from "interfaces/universal/IStandardBridge.sol";
 import { IL2ToL1MessagePasser } from "interfaces/L2/IL2ToL1MessagePasser.sol";
 import { IL2StandardBridge } from "interfaces/L2/IL2StandardBridge.sol";
-import { IGasToken } from "src/libraries/GasPayingToken.sol";
 
 /// @title L2StandardBridge_TestInit
 /// @notice Reusable test initialization for `L2StandardBridge` tests.
@@ -299,6 +298,19 @@ contract L2StandardBridge_Receive_Test is L2StandardBridge_TestInit {
         assertEq(success, true);
         assertEq(address(l2ToL1MessagePasser).balance, 100);
     }
+
+    /// @dev Tests that the receive function reverts with custom gas token.
+    function testFuzz_receive_customGasToken_reverts(uint256 _value) external {
+        vm.prank(alice, alice);
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
+        vm.deal(alice, _value);
+        (bool success, bytes memory data) = address(l2StandardBridge).call{ value: _value }(hex"");
+        assertFalse(success);
+        assembly {
+            data := add(data, 0x04)
+        }
+        assertEq(abi.decode(data, (string)), "StandardBridge: cannot bridge ETH with custom gas token");
+    }
 }
 
 /// @title L2StandardBridge_Withdraw_Test
@@ -378,7 +390,7 @@ contract L2StandardBridge_Withdraw_Test is L2StandardBridge_TestInit {
 
     /// @dev Tests that `withdraw` reverts with custom gas token.
     function test_withdraw_customGasToken_reverts() external {
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdraw(address(Predeploys.LEGACY_ERC20_ETH), 1, 1, hex"");
@@ -386,7 +398,7 @@ contract L2StandardBridge_Withdraw_Test is L2StandardBridge_TestInit {
 
     /// @dev Tests that `withdraw` reverts with custom gas token.
     function test_withdrawERC20_customGasToken_reverts() external {
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdraw(address(L1Token), 1, 1, hex"");
@@ -395,7 +407,7 @@ contract L2StandardBridge_Withdraw_Test is L2StandardBridge_TestInit {
     /// @dev Tests that `withdraw` reverts with custom gas token.
     function test_withdrawERC20WithValue_customGasToken_reverts() external {
         vm.deal(alice, 1 ether);
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdraw{ value: 1 ether }(address(L1Token), 1, 1, hex"");
@@ -404,7 +416,7 @@ contract L2StandardBridge_Withdraw_Test is L2StandardBridge_TestInit {
     /// @dev Tests that `withdraw` with value reverts with custom gas token.
     function test_withdraw_customGasTokenWithValue_reverts() external {
         vm.deal(alice, 1 ether);
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdraw{ value: 1 ether }(address(Predeploys.LEGACY_ERC20_ETH), 1, 1, hex"");
@@ -434,7 +446,7 @@ contract L2StandardBridge_WithdrawTo_Test is L2StandardBridge_TestInit {
 
     /// @dev Tests that `withdrawTo` reverts with custom gas token.
     function test_withdrawTo_customGasToken_reverts() external {
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdrawTo(address(Predeploys.LEGACY_ERC20_ETH), bob, 1, 1, hex"");
@@ -442,7 +454,7 @@ contract L2StandardBridge_WithdrawTo_Test is L2StandardBridge_TestInit {
 
     /// @dev Tests that `withdrawTo` reverts with custom gas token.
     function test_withdrawToERC20_customGasToken_reverts() external {
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdrawTo(address(L2Token), bob, 1, 1, hex"");
@@ -451,7 +463,7 @@ contract L2StandardBridge_WithdrawTo_Test is L2StandardBridge_TestInit {
     /// @dev Tests that `withdrawTo` reverts with custom gas token.
     function test_withdrawToERC20WithValue_customGasToken_reverts() external {
         vm.deal(alice, 1 ether);
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdrawTo{ value: 1 ether }(address(L2Token), bob, 1, 1, hex"");
@@ -460,7 +472,7 @@ contract L2StandardBridge_WithdrawTo_Test is L2StandardBridge_TestInit {
     /// @dev Tests that `withdrawTo` with value reverts with custom gas token.
     function test_withdrawTo_customGasTokenWithValue_reverts() external {
         vm.deal(alice, 1 ether);
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(18)));
         vm.expectRevert("L2StandardBridge: not supported with custom gas token");
         vm.prank(alice, alice);
         l2StandardBridge.withdrawTo{ value: 1 ether }(address(Predeploys.LEGACY_ERC20_ETH), bob, 1, 1, hex"");
@@ -569,7 +581,7 @@ contract L2StandardBridge_Unclassified_Test is L2StandardBridge_TestInit {
     /// @notice Tests that bridging reverts with custom gas token.
     function test_bridgeETH_customGasToken_reverts() external {
         vm.prank(alice, alice);
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
         vm.expectRevert("StandardBridge: cannot bridge ETH with custom gas token");
 
         l2StandardBridge.bridgeETH(50000, hex"dead");
@@ -620,7 +632,7 @@ contract L2StandardBridge_Unclassified_Test is L2StandardBridge_TestInit {
     )
         external
     {
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
         vm.expectRevert("StandardBridge: cannot bridge ETH with custom gas token");
         vm.deal(address(this), _value);
         l2StandardBridge.bridgeETHTo{ value: _value }(bob, _minGasLimit, _extraData);
@@ -644,6 +656,22 @@ contract L2StandardBridge_Unclassified_Test is L2StandardBridge_TestInit {
         emit ETHBridgeFinalized(alice, alice, 100, hex"");
 
         l2StandardBridge.finalizeBridgeETH{ value: 100 }(alice, alice, 100, hex"");
+    }
+
+    /// @dev Tests that finalizing bridged reverts with custom gas token.
+    function test_finalizeBridgeETH_customGasToken_reverts() external {
+        address messenger = address(l2StandardBridge.messenger());
+        vm.mockCall(
+            messenger,
+            abi.encodeCall(ICrossDomainMessenger.xDomainMessageSender, ()),
+            abi.encode(address(l2StandardBridge.OTHER_BRIDGE()))
+        );
+        vm.deal(address(l2CrossDomainMessenger), 1);
+        vm.prank(address(l2CrossDomainMessenger));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
+        vm.expectRevert("StandardBridge: cannot bridge ETH with custom gas token");
+
+        l2StandardBridge.finalizeBridgeETH(alice, alice, 1, hex"");
     }
 
     /// @notice Tests that `finalizeBridgeERC20` succeeds.
@@ -687,7 +715,7 @@ contract L2StandardBridge_Unclassified_Test is L2StandardBridge_TestInit {
     /// @dev Tests that the receive function reverts with custom gas token.
     function testFuzz_receive_customGasToken_reverts(uint256 _value) external {
         vm.prank(alice, alice);
-        vm.mockCall(address(l1Block), abi.encodeCall(IGasToken.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
+        vm.mockCall(address(l1Block), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(1), uint8(2)));
         vm.deal(alice, _value);
         (bool success, bytes memory data) = address(l2StandardBridge).call{ value: _value }(hex"");
         assertFalse(success);
