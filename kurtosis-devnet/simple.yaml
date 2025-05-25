@@ -1,15 +1,8 @@
 optimism_package:
-  altda_deploy_config:
-    use_altda: true
-    da_commitment_type: KeccakCommitment
-    da_challenge_window: 100
-    da_resolve_window: 100
-    da_bond_size: 0
-    da_resolver_refund_percentage: 0
   chains:
     - participants:
       - el_type: op-geth
-        el_image: {{ localDockerImage "op-geth" }}
+        el_image: ""
         el_log_level: ""
         el_extra_env_vars: {}
         el_extra_labels: {}
@@ -37,13 +30,12 @@ optimism_package:
         count: 1
       network_params:
         network: "kurtosis"
-        network_id: "42220"
+        network_id: "2151908"
         seconds_per_slot: 2
         name: "op-kurtosis"
         fjord_time_offset: 0
         granite_time_offset: 0
         holocene_time_offset: 0
-        isthmus_time_offset: 0
         fund_dev_accounts: true
       batcher_params:
         image: {{ localDockerImage "op-batcher" }}
@@ -51,8 +43,7 @@ optimism_package:
       challenger_params:
         image: {{ localDockerImage "op-challenger" }}
         cannon_prestate_path: ""
-        cannon_prestates_url: {{ localPrestate.URL }}
-# cannon_prestates_url: "http://fileserver/proofs/op-program/cannon"
+        cannon_prestates_url: "http://fileserver/proofs/op-program/cannon"
         extra_params: []
       proposer_params:
         image: {{ localDockerImage "op-proposer" }}
@@ -63,14 +54,12 @@ optimism_package:
         rollup_boost_image: ""
         builder_host: ""
         builder_port: ""
-      additional_services:
-      - "da_server"
+      additional_services: []
   op_contract_deployer_params:
     image: {{ localDockerImage "op-deployer" }}
     l1_artifacts_locator: {{ localContractArtifacts "l1" }}
     l2_artifacts_locator: {{ localContractArtifacts "l2" }}
     global_deploy_overrides:
-      image_genesis: {{ localDockerImage "op-deployer-new" }}
       faultGameAbsolutePrestate: {{ localPrestate.Hashes.prestate }}
   global_log_level: "info"
   global_node_selectors: {}
