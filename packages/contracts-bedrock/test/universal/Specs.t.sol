@@ -1132,7 +1132,7 @@ contract Specification_Test is CommonTest {
                 assertTrue(
                     spec.sel != bytes4(0),
                     string.concat(
-                        "Specification_Test: missing spec definition for ", contractName, "::", abiEntry.fnName
+                        "Specification_Test: missing spec definition for ", contractName, "::", abiEntry.fnName, "::", spec.name
                     )
                 );
                 assertEq(
