@@ -50,6 +50,11 @@ var VersionsMainnetData string
 //go:embed standard-versions-sepolia.toml
 var VersionsSepoliaData string
 
+//go:embed standard-versions-holesky.toml
+var VersionsHoleskyData string
+
+var L1VersionsHolesky L1Versions
+
 var L1VersionsSepolia L1Versions
 
 var L1VersionsMainnet L1Versions
@@ -98,6 +103,7 @@ type OPCMBlueprints struct {
 type OPCMBlueprintsByChain struct {
 	Mainnet *OPCMBlueprints
 	Sepolia *OPCMBlueprints
+	Holesky *OPCMBlueprints
 }
 
 var opcmBlueprintsByVersion = map[string]OPCMBlueprintsByChain{
@@ -122,6 +128,16 @@ var opcmBlueprintsByVersion = map[string]OPCMBlueprintsByChain{
 			PermissionedDisputeGame1: common.HexToAddress("0xf72Ac5f164cC024DE09a2c249441715b69a16eAb"),
 			PermissionedDisputeGame2: common.HexToAddress("0x713dAC5A23728477547b484f9e0D751077E300a2"),
 		},
+		Holesky: &OPCMBlueprints{
+			AddressManager:           common.HexToAddress("0xF9f47a32F0BB1F92cF200b1CC9a1713F96b65284"),
+			Proxy:                    common.HexToAddress(""),
+			ProxyAdmin:               common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"),
+			L1ChugSplashProxy:        common.HexToAddress(""),
+			ResolvedDelegateProxy:    common.HexToAddress(""),
+			AnchorStateRegistry:      common.HexToAddress("0x4808399b1FE4e64aB2E1fb6AEb677be1e0486E48"),
+			PermissionedDisputeGame1: common.HexToAddress(""), // updated
+			PermissionedDisputeGame2: common.HexToAddress(""), // updated
+		},
 	},
 	"op-contracts/v1.8.0-rc.4": {
 		Mainnet: &OPCMBlueprints{
@@ -144,6 +160,16 @@ var opcmBlueprintsByVersion = map[string]OPCMBlueprintsByChain{
 			PermissionedDisputeGame1: common.HexToAddress("0x596A4334a28056c7943c8bcEf220F38cA5B42dC5"), // updated
 			PermissionedDisputeGame2: common.HexToAddress("0x4E3E5C09B07AAA3fe482F5A1f82a19e91944Fffc"), // updated
 		},
+		Holesky: &OPCMBlueprints{
+			AddressManager:           common.HexToAddress("0xF9f47a32F0BB1F92cF200b1CC9a1713F96b65284"),
+			Proxy:                    common.HexToAddress(""),
+			ProxyAdmin:               common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"),
+			L1ChugSplashProxy:        common.HexToAddress(""),
+			ResolvedDelegateProxy:    common.HexToAddress(""),
+			AnchorStateRegistry:      common.HexToAddress("0x4808399b1FE4e64aB2E1fb6AEb677be1e0486E48"),
+			PermissionedDisputeGame1: common.HexToAddress(""), // updated
+			PermissionedDisputeGame2: common.HexToAddress(""), // updated
+		},
 	},
 }
 
@@ -161,6 +187,12 @@ func OPCMBlueprintsFor(chainID uint64, version string) (OPCMBlueprints, error) {
 			return OPCMBlueprints{}, fmt.Errorf("unsupported version: %s", version)
 		}
 		return *bps, nil
+	case 17000:
+		bps := opcmBlueprintsByVersion[version].Holesky
+		if bps == nil {
+			return OPCMBlueprints{}, fmt.Errorf("unsupported version: %s", version)
+		}
+		return *bps, nil
 	default:
 		return OPCMBlueprints{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -172,6 +204,8 @@ func L1VersionsDataFor(chainID uint64) (string, error) {
 		return VersionsMainnetData, nil
 	case 11155111:
 		return VersionsSepoliaData, nil
+	case 17000:
+		return VersionsHoleskyData, nil
 	default:
 		return "", fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -183,6 +217,8 @@ func L1VersionsFor(chainID uint64) (L1Versions, error) {
 		return L1VersionsMainnet, nil
 	case 11155111:
 		return L1VersionsSepolia, nil
+	case 17000:
+		return L1VersionsHolesky, nil
 	default:
 		return L1Versions{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -194,6 +230,8 @@ func GuardianAddressFor(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesMainnet.Guardian), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.Guardian), nil
+	case 17000:
+		return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -205,6 +243,8 @@ func ChallengerAddressFor(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesMainnet.Challenger), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.Challenger), nil
+	case 17000:
+		return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -216,6 +256,7 @@ func SuperchainFor(chainID uint64) (superchain.Superchain, error) {
 		return superchain.GetSuperchain("mainnet")
 	case 11155111:
 		return superchain.GetSuperchain("sepolia")
+	// TODO: Add Superchain for Holesky?
 	default:
 		return superchain.Superchain{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -251,6 +292,14 @@ func ManagerImplementationAddrFor(chainID uint64, tag string) (common.Address, e
 		default:
 			return common.Address{}, fmt.Errorf("unsupported sepolia tag: %s", tag)
 		}
+	case 17000:
+		switch tag {
+		case "op-contracts/v1.8.0-rc.4":
+			// Generated using the bootstrap command on 23/05/2025.
+			return common.HexToAddress("0x83cccf6d865ea06d103dcc9cf10d56b17dd4e74e"), nil
+		default:
+			return common.Address{}, fmt.Errorf("unsupported holesky tag: %s", tag)
+		}
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -265,6 +314,8 @@ func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 		return common.HexToAddress("0x543bA4AADBAb8f9025686Bd03993043599c6fB04"), nil
 	case 11155111:
 		return common.HexToAddress("0x189aBAAaa82DfC015A588A7dbaD6F13b1D3485Bc"), nil
+	case 17000:
+		return common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -276,6 +327,8 @@ func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesMainnet.L1ProxyAdminOwner), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.L1ProxyAdminOwner), nil
+	case 17000:
+		return common.HexToAddress("0xf05f102e890E713DC9dc0a5e13A8879D5296ee48"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -287,6 +340,8 @@ func ProtocolVersionsOwner(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesMainnet.ProtocolVersionsOwner), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.ProtocolVersionsOwner), nil
+	case 17000:
+		return common.HexToAddress("0xe571b94cf7e95c46dfe6bea529335f4a11d15d92"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -354,6 +409,11 @@ func init() {
 
 	L1VersionsSepolia = L1Versions{}
 	if err := toml.Unmarshal([]byte(VersionsSepoliaData), &L1VersionsSepolia); err != nil {
+		panic(err)
+	}
+
+	L1VersionsHolesky = L1Versions{}
+	if err := toml.Unmarshal([]byte(VersionsHoleskyData), &L1VersionsHolesky); err != nil {
 		panic(err)
 	}
 }

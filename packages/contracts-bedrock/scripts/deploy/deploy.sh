@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+[ -z "$DEPLOY_ETH_RPC_URL" ] && echo "Need to set the DEPLOY_ETH_RPC_URL via env" && exit 1;
+[ -z "$DEPLOY_PRIVATE_KEY" ] && echo "Need to set the DEPLOY_PRIVATE_KEY via env" && exit 1;
+
 verify_flag=""
 if [ -n "${DEPLOY_VERIFY:-}" ]; then
   verify_flag="--verify"
