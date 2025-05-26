@@ -355,7 +355,7 @@ contract Initializer_Test is CommonTest {
     ///         3. The `initialize()` function of each contract cannot be called again.
     function test_cannotReinitialize_succeeds() public {
         // Collect exclusions.
-        string[] memory excludes = new string[](11);
+        string[] memory excludes = new string[](12);
         // TODO: Neither of these contracts are labeled properly in the deployment script. Both are
         //       currently being labeled as their non-interop versions. Remove these exclusions once
         //       the deployment script is fixed.
@@ -379,6 +379,7 @@ contract Initializer_Test is CommonTest {
         excludes[9] = "src/L1/OPContractsManagerInterop.sol";
         // L2 contract initialization is tested in Predeploys.t.sol
         excludes[10] = "src/L2/*";
+        excludes[11] = "src/celo/*";
 
         // Get all contract names in the src directory, minus the excluded contracts.
         string[] memory contractNames = ForgeArtifacts.getContractNames("src/*", excludes);
