@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/urfave/cli/v2"
 
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
@@ -213,6 +214,7 @@ func NewRollupConfigFromCLI(log log.Logger, ctx *cli.Context) (*rollup.Config, e
 		return nil, err
 	}
 	applyOverrides(ctx, rollupConfig)
+	applyCeloHardforks(rollupConfig)
 	return rollupConfig, nil
 }
 
@@ -282,6 +284,29 @@ func applyOverrides(ctx *cli.Context, rollupConfig *rollup.Config) {
 	if ctx.IsSet(opflags.InteropOverrideFlagName) {
 		interop := ctx.Uint64(opflags.InteropOverrideFlagName)
 		rollupConfig.InteropTime = &interop
+	}
+}
+
+// applyCeloHardforks modifies the rollupConfig to apply Celo-specific hardforks.
+// This code is a shortcut and the proper config should be added to the superchain registry.
+// See https://github.com/celo-org/op-geth/issues/389
+func applyCeloHardforks(rollupConfig *rollup.Config) {
+	switch rollupConfig.L2ChainID.Uint64() {
+	case params.CeloMainnetChainID:
+		activationTime := params.CeloMainnetIsthmusTimestamp
+		rollupConfig.HoloceneTime = &activationTime
+		rollupConfig.IsthmusTime = &activationTime
+		rollupConfig.PectraBlobScheduleTime = &activationTime
+	case params.CeloAlfajoresChainID:
+		activationTime := params.AlfajoresIsthmusTimestamp
+		rollupConfig.HoloceneTime = &activationTime
+		rollupConfig.IsthmusTime = &activationTime
+		rollupConfig.PectraBlobScheduleTime = &activationTime
+	case params.CeloBaklavaChainID:
+		activationTime := params.BaklavaIsthmusTimestamp
+		rollupConfig.HoloceneTime = &activationTime
+		rollupConfig.IsthmusTime = &activationTime
+		rollupConfig.PectraBlobScheduleTime = &activationTime
 	}
 }
 
