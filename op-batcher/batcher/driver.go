@@ -306,13 +306,7 @@ func (l *BatchSubmitter) loadBlockIntoState(ctx context.Context, blockNumber uin
 		return nil, fmt.Errorf("adding L2 block to state: %w", err)
 	}
 
-	// TODO(kourin): Fix this
-	l.Log.Info("Added L2 block to local state !!!!!!", "block", eth.ToBlockID(block), "tx_count", len(block.Transactions()), "time", block.Time(),
-		"Fjord Time", l.RollupConfig.FjordTime,
-		"Granite Time", l.RollupConfig.GraniteTime,
-		"Holocene Time", l.RollupConfig.HoloceneTime,
-		"Isthmus time", l.RollupConfig.IsthmusTime,
-	)
+	l.Log.Info("Added L2 block to local state", "block", eth.ToBlockID(block), "tx_count", len(block.Transactions()), "time", block.Time())
 
 	return block, nil
 }
