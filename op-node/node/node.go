@@ -568,7 +568,10 @@ func initL2(ctx context.Context, cfg *config.Config, node *OpNode) (*sources.Eng
 	if cfg.AltDA.Enabled && err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("failed to get altDA config: %w", err)
 	}
-	altDA := altda.NewAltDA(node.log, cfg.AltDA, rpCfg, node.metrics.AltDAMetrics)
+	altDA, err := altda.NewAltDA(node.log, cfg.AltDA, rpCfg, node.metrics.AltDAMetrics)
+	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("failed to create altDA: %w", err)
+	}
 	var safeDB closableSafeDB
 	if cfg.SafeDBPath != "" {
 		node.log.Info("Safe head database enabled", "path", cfg.SafeDBPath)
