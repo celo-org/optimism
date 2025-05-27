@@ -3,7 +3,6 @@ package batcher
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
 	"sync"
 	"testing"
@@ -125,7 +124,8 @@ func TestBatchSubmitter_SafeL1Origin_FailsToResolveRollupClient(t *testing.T) {
 	ep.rollupClientErr = errors.New("failed to resolve rollup client")
 
 	_, err := bs.safeL1Origin(context.Background())
-	fmt.Println(err)
+	log := testlog.Logger(t, log.LevelDebug)
+	log.Debug("Err", err)
 	require.Error(t, err)
 }
 
