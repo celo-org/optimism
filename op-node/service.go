@@ -238,6 +238,7 @@ func NewRollupConfigFromCLI(log log.Logger, ctx cliiface.Context) (*rollup.Confi
 	if err != nil {
 		return nil, err
 	}
+	applyCeloHardforks(rollupConfig)
 	applyOverrides(ctx, rollupConfig)
 	return rollupConfig, nil
 }
@@ -325,6 +326,31 @@ func NewL1ChainConfigFromCLI(log log.Logger, ctx cliiface.Context) (*params.Chai
 	// If that fails, try to load the config from the .config property.
 	// This should work if the provided file is a genesis file / chainspec
 	return jsonutil.LoadJSONFieldStrict[params.ChainConfig](l1ChainConfigPath, "config")
+}
+
+// applyCeloHardforks modifies the rollupConfig to apply Celo-specific hardforks.
+// This code is a shortcut and the proper config should be added to the superchain registry.
+// See https://github.com/celo-org/op-geth/issues/389
+func applyCeloHardforks(rollupConfig *rollup.Config) {
+	switch rollupConfig.L2ChainID.Uint64() {
+	case params.CeloMainnetChainID:
+		activationTime := params.CeloMainnetIsthmusTimestamp
+		rollupConfig.HoloceneTime = &activationTime
+		rollupConfig.IsthmusTime = &activationTime
+		rollupConfig.PectraBlobScheduleTime = &activationTime
+	case params.CeloAlfajoresChainID:
+		activationTime := params.AlfajoresIsthmusTimestamp
+		rollupConfig.HoloceneTime = &activationTime
+		rollupConfig.IsthmusTime = &activationTime
+		rollupConfig.PectraBlobScheduleTime = &activationTime
+	case params.CeloBaklavaChainID:
+		activationTime := params.BaklavaIsthmusTimestamp
+		rollupConfig.HoloceneTime = &activationTime
+		rollupConfig.IsthmusTime = &activationTime
+		rollupConfig.PectraBlobScheduleTime = &activationTime
+	default:
+		// No Celo hardforks for other chains, do nothing.
+	}
 }
 
 func NewDependencySetFromCLI(cli cliiface.Context) (depset.DependencySet, error) {
