@@ -83,6 +83,8 @@ optimism_package:
 ethereum_package:
   participants:
     - el_type: geth
+      el_extra_params:
+      - "--miner.gasprice=1"
       cl_type: teku
   network_params:
     preset: minimal
