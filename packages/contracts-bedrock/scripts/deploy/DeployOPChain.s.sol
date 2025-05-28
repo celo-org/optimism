@@ -379,7 +379,7 @@ contract DeployOPChain is Script {
             disputeMaxClockDuration: _doi.disputeMaxClockDuration()
         });
 
-        vm.broadcast(msg.sender);
+        vm.broadcast();
         IOPContractsManager.DeployOutput memory deployOutput = opcm.deploy(deployInput);
 
         vm.label(address(deployOutput.opChainProxyAdmin), "opChainProxyAdmin");

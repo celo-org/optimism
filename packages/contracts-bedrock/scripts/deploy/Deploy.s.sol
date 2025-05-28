@@ -65,7 +65,7 @@ contract Deploy is Deployer {
 
     /// @notice Modifier that wraps a function in broadcasting.
     modifier broadcast() {
-        vm.startBroadcast(msg.sender);
+        vm.startBroadcast();
         _;
         vm.stopBroadcast();
     }
@@ -197,6 +197,7 @@ contract Deploy is Deployer {
         // Set up the Superchain if needed.
         if (_needsSuperchain) {
             deploySuperchain();
+            console.log("superchain deploeyed");
         }
 
         deployImplementations({ _isInterop: cfg.useInterop() });
@@ -312,6 +313,7 @@ contract Deploy is Deployer {
         artifacts.save("MipsSingleton", address(dio.mipsSingleton()));
         artifacts.save("OPContractsManager", address(dio.opcm()));
         artifacts.save("DelayedWETHImpl", address(dio.delayedWETHImpl()));
+        artifacts.save("SystemConfigImpl", address(dio.systemConfigImpl()));
 
         // Get a contract set from the implementation addresses which were just deployed.
         Types.ContractSet memory impls = Types.ContractSet({
@@ -398,11 +400,11 @@ contract Deploy is Deployer {
             "Deploy: The PermissionlessDelayedWETH is already set by the OPCM, it is no longer necessary to deploy it separately."
         );
         address delayedWETHImpl = artifacts.mustGetAddress("DelayedWETHImpl");
-        address delayedWETHPermissionlessGameProxy = deployERC1967ProxyWithOwner("DelayedWETHProxy", msg.sender);
-        vm.broadcast(msg.sender);
+        address delayedWETHPermissionlessGameProxy = deployERC1967ProxyWithOwner("DelayedWETHProxy", tx.origin);
+        vm.broadcast();
         IProxy(payable(delayedWETHPermissionlessGameProxy)).upgradeToAndCall({
             _implementation: delayedWETHImpl,
-            _data: abi.encodeCall(IDelayedWETH.initialize, (msg.sender, ISuperchainConfig(superchainConfigProxy)))
+            _data: abi.encodeCall(IDelayedWETH.initialize, (tx.origin, ISuperchainConfig(superchainConfigProxy)))
         });
 
         setAlphabetFaultGameImplementation();
@@ -962,7 +964,7 @@ contract Deploy is Deployer {
         string memory saltMixer = "salt mixer";
         return IOPContractsManager.DeployInput({
             roles: IOPContractsManager.Roles({
-                opChainProxyAdminOwner: msg.sender,
+                opChainProxyAdminOwner: tx.origin,
                 systemConfigOwner: cfg.finalSystemOwner(),
                 batcher: cfg.batchSenderAddress(),
                 unsafeBlockSigner: cfg.p2pSequencerAddress(),

@@ -569,7 +569,7 @@ contract DeployImplementations is Script {
         // First we deploy the blueprints for the singletons deployed by OPCM.
         // forgefmt: disable-start
         IOPContractsManager.Blueprints memory blueprints;
-        vm.startBroadcast(msg.sender);
+        vm.startBroadcast();
         address checkAddress;
         (blueprints.addressManager, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("AddressManager"), _salt);
         require(checkAddress == address(0), "OPCM-10");
@@ -781,11 +781,11 @@ contract DeployImplementations is Script {
         IPreimageOracle preimageOracle = IPreimageOracle(address(_dio.preimageOracleSingleton()));
 
         // We want to ensure that the OPCM for upgrade 13 is deployed with Mips32 on production networks.
-        if (mipsVersion != 2) {
-            if (block.chainid == Chains.Mainnet || block.chainid == Chains.Sepolia) {
-                revert("DeployImplementations: Only Mips64 should be deployed on Mainnet or Sepolia");
-            }
-        }
+        // if (mipsVersion != 2) {
+        //     if (block.chainid == Chains.Mainnet || block.chainid == Chains.Sepolia) {
+        //         revert("DeployImplementations: Only Mips64 should be deployed on Mainnet or Sepolia");
+        //     }
+        // }
 
         IMIPS singleton = IMIPS(
             DeployUtils.createDeterministic({

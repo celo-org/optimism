@@ -75,7 +75,7 @@ contract DeployAsterisc is Script {
 
     function DeployAsteriscSingleton(DeployAsteriscInput _mi, DeployAsteriscOutput _mo) internal {
         IPreimageOracle preimageOracle = IPreimageOracle(_mi.preimageOracle());
-        vm.broadcast(msg.sender);
+        vm.broadcast();
         IRISCV singleton = IRISCV(
             DeployUtils.create1({
                 _name: "RISCV",

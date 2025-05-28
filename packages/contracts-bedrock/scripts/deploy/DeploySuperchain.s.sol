@@ -4,6 +4,8 @@ pragma solidity 0.8.15;
 import { Script } from "forge-std/Script.sol";
 import { stdToml } from "forge-std/StdToml.sol";
 
+import { console2 as console } from "forge-std/console2.sol";
+
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IProtocolVersions, ProtocolVersion } from "interfaces/L1/IProtocolVersions.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
@@ -308,14 +310,21 @@ contract DeploySuperchain is Script {
 
         // Deploy the proxy admin, with the owner set to the deployer.
         deploySuperchainProxyAdmin(_dsi, _dso);
+        console.log("deploySuperchainProxyAdmin");
 
         // Deploy and initialize the superchain contracts.
         deploySuperchainImplementationContracts(_dsi, _dso);
+        console.log("deploySuperchainImplementationContracts");
+
         deployAndInitializeSuperchainConfig(_dsi, _dso);
+        console.log("deployAndInitializeSuperchainConfig");
+
         deployAndInitializeProtocolVersions(_dsi, _dso);
+        console.log("deployAndInitializeProtocolVersions");
 
         // Transfer ownership of the ProxyAdmin from the deployer to the specified owner.
         transferProxyAdminOwnership(_dsi, _dso);
+        console.log("transferProxyAdminOwnership");
 
         // Output assertions, to make sure outputs were assigned correctly.
         _dso.checkOutput(_dsi);
@@ -328,11 +337,11 @@ contract DeploySuperchain is Script {
         // We explicitly specify the deployer as `msg.sender` because for testing we deploy this script from a test
         // contract. If we provide no argument, the foundry default sender would be the broadcaster during test, but the
         // broadcaster needs to be the deployer since they are set to the initial proxy admin owner.
-        vm.broadcast(msg.sender);
+        vm.broadcast();
         IProxyAdmin superchainProxyAdmin = IProxyAdmin(
             DeployUtils.create1({
                 _name: "ProxyAdmin",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (msg.sender)))
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (tx.origin)))
             })
         );
 
@@ -370,8 +379,8 @@ contract DeploySuperchain is Script {
 
         IProxyAdmin superchainProxyAdmin = _dso.superchainProxyAdmin();
         ISuperchainConfig superchainConfigImpl = _dso.superchainConfigImpl();
-
-        vm.startBroadcast(msg.sender);
+        console.log("superchainProxyAdmin", address(superchainProxyAdmin));
+        vm.startBroadcast();
         ISuperchainConfig superchainConfigProxy = ISuperchainConfig(
             DeployUtils.create1({
                 _name: "Proxy",
@@ -399,7 +408,7 @@ contract DeploySuperchain is Script {
         IProxyAdmin superchainProxyAdmin = _dso.superchainProxyAdmin();
         IProtocolVersions protocolVersionsImpl = _dso.protocolVersionsImpl();
 
-        vm.startBroadcast(msg.sender);
+        vm.startBroadcast();
         IProtocolVersions protocolVersionsProxy = IProtocolVersions(
             DeployUtils.create1({
                 _name: "Proxy",
@@ -428,7 +437,7 @@ contract DeploySuperchain is Script {
         IProxyAdmin superchainProxyAdmin = _dso.superchainProxyAdmin();
         DeployUtils.assertValidContractAddress(address(superchainProxyAdmin));
 
-        vm.broadcast(msg.sender);
+        vm.broadcast();
         superchainProxyAdmin.transferOwnership(superchainProxyAdminOwner);
     }
 

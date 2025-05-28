@@ -111,7 +111,7 @@ contract DeployAltDA is Script {
 
     function deployDataAvailabilityChallengeProxy(DeployAltDAInput _dai, DeployAltDAOutput _dao) public {
         bytes32 salt = _dai.salt();
-        vm.broadcast(msg.sender);
+        vm.broadcast();
         IProxy proxy = IProxy(
             DeployUtils.create2({
                 _name: "Proxy",
@@ -125,7 +125,7 @@ contract DeployAltDA is Script {
 
     function deployDataAvailabilityChallengeImpl(DeployAltDAInput _dai, DeployAltDAOutput _dao) public {
         bytes32 salt = _dai.salt();
-        vm.broadcast(msg.sender);
+        vm.broadcast();
         IDataAvailabilityChallenge impl = IDataAvailabilityChallenge(
             DeployUtils.create2({
                 _name: "DataAvailabilityChallenge",
@@ -148,7 +148,7 @@ contract DeployAltDA is Script {
         uint256 bondSize = _dai.bondSize();
         uint256 resolverRefundPercentage = _dai.resolverRefundPercentage();
 
-        vm.startBroadcast(msg.sender);
+        vm.startBroadcast();
         proxy.upgradeToAndCall(
             address(impl),
             abi.encodeCall(
