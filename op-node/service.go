@@ -307,6 +307,8 @@ func applyCeloHardforks(rollupConfig *rollup.Config) {
 		rollupConfig.HoloceneTime = &activationTime
 		rollupConfig.IsthmusTime = &activationTime
 		rollupConfig.PectraBlobScheduleTime = &activationTime
+	default:
+		// No Celo hardforks for other chains, do nothing.
 	}
 }
 
