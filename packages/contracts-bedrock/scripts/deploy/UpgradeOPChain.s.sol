@@ -49,7 +49,9 @@ contract CeloUpgradeOPChain is Script {
             claim_ := _claim
         }
     }
+}
 
+contract CeloUpgradeAlfajores is CeloUpgradeOPChain {
     function run() external {
         // setup
         console.log("Setup started!");
@@ -62,6 +64,28 @@ contract CeloUpgradeOPChain is Script {
         );
         uoci.set(UpgradeOPChainInput.prank.selector, address(0xf05f102e890E713DC9dc0a5e13A8879D5296ee48));
         uoci.set(UpgradeOPChainInput.opcm.selector, address(0x83cccf6d865EA06d103dcc9CF10D56B17Dd4e74E));
+        uoci.set(UpgradeOPChainInput.opChainConfigs.selector, config);
+
+        // execution
+        console.log("Execution!");
+        UpgradeOPChain upgrade = new UpgradeOPChain();
+        upgrade.run(uoci);
+    }
+}
+
+contract CeloUpgradeBaklava is CeloUpgradeOPChain {
+    function run() external {
+        // setup
+        console.log("Setup started!");
+        UpgradeOPChainInput uoci = new UpgradeOPChainInput();
+        OPContractsManager.OpChainConfig[] memory config = new OPContractsManager.OpChainConfig[](1);
+        config[0] = OPContractsManager.OpChainConfig(
+            ISystemConfig(0x3ee24bF404e4a5D27A437d910F56E1eD999B1De8),
+            IProxyAdmin(0xBF101Bd81fb69aB00ab261465454dF1a171726Bf),
+            convert(bytes32(hex"03b357b30095022ecbb44ef00d1de19df39cf69ee92a60683a6be2c6f8fe6a3e"))
+        );
+        uoci.set(UpgradeOPChainInput.prank.selector, address(0xd542f3328ff2516443FE4db1c89E427F67169D94));
+        uoci.set(UpgradeOPChainInput.opcm.selector, address(0xAF66Cb99Fb7f632394269B7d746CD4c37D736678));
         uoci.set(UpgradeOPChainInput.opChainConfigs.selector, config);
 
         // execution

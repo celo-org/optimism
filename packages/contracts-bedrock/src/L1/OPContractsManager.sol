@@ -1096,7 +1096,8 @@ contract OPContractsManager is ISemver {
 
     /// @notice Retrieves the Superchain Config for a bridge contract
     function getSuperchainConfig(address _hasSuperchainConfig) internal view returns (ISuperchainConfig) {
-        return IHasSuperchainConfig(_hasSuperchainConfig).superchainConfig();
+        address celoSuperchainConfig_ = address(IHasSuperchainConfig(_hasSuperchainConfig).superchainConfig());
+        return IHasSuperchainConfig(celoSuperchainConfig_).superchainConfig();
     }
 
     /// @notice Retrieves the Anchor State Registry for a given game

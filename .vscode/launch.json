@@ -5,6 +5,24 @@
     "version": "0.2.0",
     "configurations": [
         {
+            "name": "Debug Op-Deployer boostrap implementations",
+            "type": "go",
+            "request": "launch",
+            "mode": "debug",
+            "program": "op-deployer/cmd/op-deployer/main.go",
+            "args": [
+                "bootstrap",
+                "implementations",
+                "--l1-rpc-url=http://127.0.0.1:8545",
+                "--l1-contracts-release=op-contracts/v2.0.0",
+                "--artifacts-locator=file://~/Documents/Optimism/packages/contracts-bedrock/forge-artifacts",
+                "--superchain-config-proxy=0xf07502A4a950d870c43b12660fB1Dd18c170D344",
+                "--protocol-versions-proxy=0x3d438C63e0431DA844d3F60E6c712d10FC75c529",
+                "--upgrade-controller=0xd542f3328ff2516443FE4db1c89E427F67169D94",
+                "--private-key=..."
+            ]
+        },
+        {
             "name": "Debug Op-Deployer boostrap validator",
             "type": "go",
             "request": "launch",
@@ -14,7 +32,7 @@
                 "bootstrap",
                 "validator",
                 "--l1-rpc-url=http://127.0.0.1:8545",
-                "--config=~/Documents/Celo/packages/protocol/scripts/foundry/upgrade/config-validator.json",
+                "--config=~/Documents/Celo/packages/protocol/scripts/foundry/upgrade/config-validator-baklava.json",
                 "--artifacts-locator=file://~/Documents/Optimism/packages/contracts-bedrock/forge-artifacts",
                 "--private-key=..."
             ]
@@ -29,7 +47,7 @@
                 "upgrade",
                 "v2.0.0",
                 "--l1-rpc-url=http://127.0.0.1:8545",
-                "--config=~/Documents/Celo/packages/protocol/scripts/foundry/upgrade/config-upgrade.json",
+                "--config=~/Documents/Celo/packages/protocol/scripts/foundry/upgrade/config-upgrade-baklava.json",
                 "--override-artifacts-url=file://~/Documents/Optimism/packages/contracts-bedrock/forge-artifacts",
                 "--private-key=..."
             ]

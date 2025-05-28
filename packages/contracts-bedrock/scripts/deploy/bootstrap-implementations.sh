@@ -5,13 +5,14 @@ set -euo pipefail
 [ -z "$DEPLOY_ETH_RPC_URL" ] && echo "Need to set the DEPLOY_ETH_RPC_URL via env" && exit 1;
 [ -z "$DEPLOY_PRIVATE_KEY" ] && echo "Need to set the DEPLOY_PRIVATE_KEY via env" && exit 1;
 
-echo "> Upgrading contracts"
+echo "> Bootstraping contracts"
 if [ "${NETWORK}" == "alfajores" ]; then
-echo "Performing upgrade for Alfajores!"
-forge script -vvv scripts/deploy/UpgradeOPChain.s.sol:CeloUpgradeAlfajores --rpc-url "$DEPLOY_ETH_RPC_URL" --broadcast --private-key "$DEPLOY_PRIVATE_KEY"
+echo "Performing bootstrap for Alfajores!"
+echo "Alfajores is not yet configured from this script!"
+exit 1;
 elif [ "${NETWORK}" == "baklava" ]; then
-echo "Performing upgrade for Baklava!"
-forge script -vvv scripts/deploy/UpgradeOPChain.s.sol:CeloUpgradeBaklava --rpc-url "$DEPLOY_ETH_RPC_URL" --broadcast --private-key "$DEPLOY_PRIVATE_KEY"
+echo "Performing bootstrap for Baklava!"
+forge script -vvv scripts/deploy/DeployImplementations.s.sol:BaklavaDeployImplementations --rpc-url "$DEPLOY_ETH_RPC_URL" --broadcast --private-key "$DEPLOY_PRIVATE_KEY"
 else
   echo "Unsupported network! Choose from 'alfajores' or 'baklava'"
 fi

@@ -2,6 +2,7 @@
 pragma solidity 0.8.15;
 
 import { Script } from "forge-std/Script.sol";
+import { console2 as console } from "forge-std/console2.sol";
 
 import { LibString } from "@solady/utils/LibString.sol";
 
@@ -434,6 +435,30 @@ contract DeployImplementationsOutput is BaseDeployIO {
         IAnchorStateRegistry registry = anchorStateRegistryImpl();
 
         DeployUtils.assertInitialized({ _contractAddress: address(registry), _isProxy: false, _slot: 0, _offset: 0 });
+    }
+}
+
+contract BaklavaDeployImplementations is Script {
+    function run() external {
+        // setup
+        console.log("Setup started!");
+        DeployImplementationsInput dii = new DeployImplementationsInput();
+        dii.set(DeployImplementationsInput.withdrawalDelaySeconds.selector, 302400);
+        dii.set(DeployImplementationsInput.minProposalSizeBytes.selector, 126000);
+        dii.set(DeployImplementationsInput.challengePeriodSeconds.selector, 86400);
+        dii.set(DeployImplementationsInput.proofMaturityDelaySeconds.selector, 604800);
+        dii.set(DeployImplementationsInput.disputeGameFinalityDelaySeconds.selector, 302400);
+        dii.set(DeployImplementationsInput.mipsVersion.selector, 1);
+        dii.set(DeployImplementationsInput.l1ContractsRelease.selector, "op-contracts/v2.0.0");
+        dii.set(DeployImplementationsInput.superchainConfigProxy.selector, address(0xf07502A4a950d870c43b12660fB1Dd18c170D344));
+        dii.set(DeployImplementationsInput.protocolVersionsProxy.selector, address(0x3d438C63e0431DA844d3F60E6c712d10FC75c529));
+        dii.set(DeployImplementationsInput.superchainProxyAdmin.selector, address(0xBF101Bd81fb69aB00ab261465454dF1a171726Bf));
+        dii.set(DeployImplementationsInput.upgradeController.selector, address(0xd542f3328ff2516443FE4db1c89E427F67169D94));
+
+        // execution
+        console.log("Execution!");
+        DeployImplementations upgrade = new DeployImplementations();
+        upgrade.run(dii, new DeployImplementationsOutput());
     }
 }
 

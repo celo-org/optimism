@@ -50,7 +50,7 @@ var VersionsMainnetData string
 //go:embed standard-versions-sepolia.toml
 var VersionsSepoliaData string
 
-//go:embed standard-versions-holesky.toml
+//go:embed standard-versions-holesky-baklava.toml
 var VersionsHoleskyData string
 
 var L1VersionsHolesky L1Versions
@@ -128,13 +128,25 @@ var opcmBlueprintsByVersion = map[string]OPCMBlueprintsByChain{
 			PermissionedDisputeGame1: common.HexToAddress("0xf72Ac5f164cC024DE09a2c249441715b69a16eAb"),
 			PermissionedDisputeGame2: common.HexToAddress("0x713dAC5A23728477547b484f9e0D751077E300a2"),
 		},
+		// Alfajores
+		// Holesky: &OPCMBlueprints{
+		// 	AddressManager:           common.HexToAddress("0xF9f47a32F0BB1F92cF200b1CC9a1713F96b65284"),
+		// 	Proxy:                    common.HexToAddress(""),
+		// 	ProxyAdmin:               common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"),
+		// 	L1ChugSplashProxy:        common.HexToAddress(""),
+		// 	ResolvedDelegateProxy:    common.HexToAddress(""),
+		// 	AnchorStateRegistry:      common.HexToAddress("0x4808399b1FE4e64aB2E1fb6AEb677be1e0486E48"),
+		// 	PermissionedDisputeGame1: common.HexToAddress(""), // updated
+		// 	PermissionedDisputeGame2: common.HexToAddress(""), // updated
+		// },
+		// Baklava
 		Holesky: &OPCMBlueprints{
-			AddressManager:           common.HexToAddress("0xF9f47a32F0BB1F92cF200b1CC9a1713F96b65284"),
+			AddressManager:           common.HexToAddress("0x156aa732322e878E01e3fB9d6C7a3b30b267bBA4"),
 			Proxy:                    common.HexToAddress(""),
-			ProxyAdmin:               common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"),
+			ProxyAdmin:               common.HexToAddress("0xBF101Bd81fb69aB00ab261465454dF1a171726Bf"),
 			L1ChugSplashProxy:        common.HexToAddress(""),
 			ResolvedDelegateProxy:    common.HexToAddress(""),
-			AnchorStateRegistry:      common.HexToAddress("0x4808399b1FE4e64aB2E1fb6AEb677be1e0486E48"),
+			AnchorStateRegistry:      common.HexToAddress("0xFbAe891e299D97A8B1e142d8413E26b771BE24Fa"),
 			PermissionedDisputeGame1: common.HexToAddress(""), // updated
 			PermissionedDisputeGame2: common.HexToAddress(""), // updated
 		},
@@ -160,13 +172,25 @@ var opcmBlueprintsByVersion = map[string]OPCMBlueprintsByChain{
 			PermissionedDisputeGame1: common.HexToAddress("0x596A4334a28056c7943c8bcEf220F38cA5B42dC5"), // updated
 			PermissionedDisputeGame2: common.HexToAddress("0x4E3E5C09B07AAA3fe482F5A1f82a19e91944Fffc"), // updated
 		},
+		// Alfajores
+		// Holesky: &OPCMBlueprints{
+		// 	AddressManager:           common.HexToAddress("0xF9f47a32F0BB1F92cF200b1CC9a1713F96b65284"),
+		// 	Proxy:                    common.HexToAddress(""),
+		// 	ProxyAdmin:               common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"),
+		// 	L1ChugSplashProxy:        common.HexToAddress(""),
+		// 	ResolvedDelegateProxy:    common.HexToAddress(""),
+		// 	AnchorStateRegistry:      common.HexToAddress("0x4808399b1FE4e64aB2E1fb6AEb677be1e0486E48"),
+		// 	PermissionedDisputeGame1: common.HexToAddress(""), // updated
+		// 	PermissionedDisputeGame2: common.HexToAddress(""), // updated
+		// },
+		// Baklava
 		Holesky: &OPCMBlueprints{
-			AddressManager:           common.HexToAddress("0xF9f47a32F0BB1F92cF200b1CC9a1713F96b65284"),
+			AddressManager:           common.HexToAddress("0x156aa732322e878E01e3fB9d6C7a3b30b267bBA4"),
 			Proxy:                    common.HexToAddress(""),
-			ProxyAdmin:               common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"),
+			ProxyAdmin:               common.HexToAddress("0xBF101Bd81fb69aB00ab261465454dF1a171726Bf"),
 			L1ChugSplashProxy:        common.HexToAddress(""),
 			ResolvedDelegateProxy:    common.HexToAddress(""),
-			AnchorStateRegistry:      common.HexToAddress("0x4808399b1FE4e64aB2E1fb6AEb677be1e0486E48"),
+			AnchorStateRegistry:      common.HexToAddress("0xFbAe891e299D97A8B1e142d8413E26b771BE24Fa"),
 			PermissionedDisputeGame1: common.HexToAddress(""), // updated
 			PermissionedDisputeGame2: common.HexToAddress(""), // updated
 		},
@@ -231,7 +255,10 @@ func GuardianAddressFor(chainID uint64) (common.Address, error) {
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.Guardian), nil
 	case 17000:
-		return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
+		// Alfajores
+		// return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
+		// Baklava
+		return common.HexToAddress("0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -244,7 +271,10 @@ func ChallengerAddressFor(chainID uint64) (common.Address, error) {
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.Challenger), nil
 	case 17000:
-		return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
+		// Alfajores
+		// return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
+		// Baklava
+		return common.HexToAddress("0xDc94436A193a827786270dD4F6cD4b35c3f0C8f8"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -296,7 +326,10 @@ func ManagerImplementationAddrFor(chainID uint64, tag string) (common.Address, e
 		switch tag {
 		case "op-contracts/v1.8.0-rc.4":
 			// Generated using the bootstrap command on 23/05/2025.
-			return common.HexToAddress("0x83cccf6d865ea06d103dcc9cf10d56b17dd4e74e"), nil
+			// Alfajores
+			// return common.HexToAddress("0x83cccf6d865ea06d103dcc9cf10d56b17dd4e74e"), nil
+			// Baklava
+			return common.HexToAddress("0xAF66Cb99Fb7f632394269B7d746CD4c37D736678"), nil
 		default:
 			return common.Address{}, fmt.Errorf("unsupported holesky tag: %s", tag)
 		}
@@ -315,7 +348,10 @@ func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 	case 11155111:
 		return common.HexToAddress("0x189aBAAaa82DfC015A588A7dbaD6F13b1D3485Bc"), nil
 	case 17000:
-		return common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"), nil
+		// Alfajores
+		// return common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"), nil
+		// Baklava
+		return common.HexToAddress("0xBF101Bd81fb69aB00ab261465454dF1a171726Bf"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -328,7 +364,10 @@ func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.L1ProxyAdminOwner), nil
 	case 17000:
-		return common.HexToAddress("0xf05f102e890E713DC9dc0a5e13A8879D5296ee48"), nil
+		// Alfajores
+		// return common.HexToAddress("0xf05f102e890E713DC9dc0a5e13A8879D5296ee48"), nil
+		// Baklava
+		return common.HexToAddress("0xd542f3328ff2516443FE4db1c89E427F67169D94"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -341,7 +380,10 @@ func ProtocolVersionsOwner(chainID uint64) (common.Address, error) {
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.ProtocolVersionsOwner), nil
 	case 17000:
-		return common.HexToAddress("0xe571b94cf7e95c46dfe6bea529335f4a11d15d92"), nil
+		// Alfajores
+		// return common.HexToAddress("0xe571b94cf7e95c46dfe6bea529335f4a11d15d92"), nil
+		// Baklava
+		return common.HexToAddress("0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
