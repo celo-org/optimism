@@ -129,7 +129,7 @@ contract L2Genesis is Deployer {
         //  The setUp() is skipped (since we insert a custom DeployConfig, and do not use Artifacts)
         deployer = makeAddr("deployer");
         runWithOptions(
-            OutputMode.NONE,
+            OutputMode.ALL,
             Config.fork(),
             L1Dependencies({
                 l1CrossDomainMessengerProxy: payable(vm.envAddress("L2GENESIS_L1CrossDomainMessengerProxy")),
@@ -150,6 +150,7 @@ contract L2Genesis is Deployer {
         console.log("L2Genesis: outputMode: %s, fork: %s", _mode.toString(), _fork.toString());
         vm.startPrank(deployer);
         vm.chainId(cfg.l2ChainID());
+        console.log("L2Genesis: chainId: %s", cfg.l2ChainID());
 
         dealEthToPrecompiles();
         setPredeployProxies();
