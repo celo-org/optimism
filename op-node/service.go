@@ -213,8 +213,8 @@ func NewRollupConfigFromCLI(log log.Logger, ctx *cli.Context) (*rollup.Config, e
 	if err != nil {
 		return nil, err
 	}
-	applyOverrides(ctx, rollupConfig)
 	applyCeloHardforks(rollupConfig)
+	applyOverrides(ctx, rollupConfig)
 	return rollupConfig, nil
 }
 
