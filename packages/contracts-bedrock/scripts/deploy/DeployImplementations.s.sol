@@ -36,6 +36,7 @@ import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
+import { Config } from "scripts/libraries/Config.sol";
 
 // See DeploySuperchain.s.sol for detailed comments on the script architecture used here.
 contract DeployImplementationsInput is BaseDeployIO {
@@ -471,6 +472,11 @@ contract DeployImplementationsOutput is BaseDeployIO {
 }
 
 contract DeployImplementations is Script {
+    /// @notice Returns the salt used for CREATE2 deployments based on the IMPL_SALT environment variable.
+    function _implSalt() internal view returns (bytes32) {
+        return keccak256(bytes(Config.implSalt()));
+    }
+
     bytes32 internal _salt = DeployUtils.DEFAULT_SALT;
 
     // -------- Core Deployment Methods --------
@@ -549,7 +555,7 @@ contract DeployImplementations is Script {
                         )
                     )
                 ),
-                _salt: _salt
+                _salt: _implSalt()
             })
         );
 
@@ -571,20 +577,20 @@ contract DeployImplementations is Script {
         IOPContractsManager.Blueprints memory blueprints;
         vm.startBroadcast();
         address checkAddress;
-        (blueprints.addressManager, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("AddressManager"), _salt);
+        (blueprints.addressManager, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("AddressManager"), _implSalt());
         require(checkAddress == address(0), "OPCM-10");
-        (blueprints.proxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("Proxy"), _salt);
+        (blueprints.proxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("Proxy"), _implSalt());
         require(checkAddress == address(0), "OPCM-20");
-        (blueprints.proxyAdmin, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("ProxyAdmin"), _salt);
+        (blueprints.proxyAdmin, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("ProxyAdmin"), _implSalt());
         require(checkAddress == address(0), "OPCM-30");
-        (blueprints.l1ChugSplashProxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("L1ChugSplashProxy"), _salt);
+        (blueprints.l1ChugSplashProxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("L1ChugSplashProxy"), _implSalt());
         require(checkAddress == address(0), "OPCM-40");
-        (blueprints.resolvedDelegateProxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("ResolvedDelegateProxy"), _salt);
+        (blueprints.resolvedDelegateProxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("ResolvedDelegateProxy"), _implSalt());
         require(checkAddress == address(0), "OPCM-50");
         // The max initcode/runtimecode size is 48KB/24KB.
         // But for Blueprint, the initcode is stored as runtime code, that's why it's necessary to split into 2 parts.
-        (blueprints.permissionedDisputeGame1, blueprints.permissionedDisputeGame2) = DeployUtils.createDeterministicBlueprint(vm.getCode("PermissionedDisputeGame"), _salt);
-        (blueprints.permissionlessDisputeGame1, blueprints.permissionlessDisputeGame2) = DeployUtils.createDeterministicBlueprint(vm.getCode("FaultDisputeGame"), _salt);
+        (blueprints.permissionedDisputeGame1, blueprints.permissionedDisputeGame2) = DeployUtils.createDeterministicBlueprint(vm.getCode("PermissionedDisputeGame"), _implSalt());
+        (blueprints.permissionlessDisputeGame1, blueprints.permissionlessDisputeGame2) = DeployUtils.createDeterministicBlueprint(vm.getCode("FaultDisputeGame"), _implSalt());
         // forgefmt: disable-end
         vm.stopBroadcast();
 
@@ -601,7 +607,7 @@ contract DeployImplementations is Script {
             DeployUtils.createDeterministic({
                 _name: "SuperchainConfig",
                 _args: DeployUtils.encodeConstructor(abi.encodeCall(ISuperchainConfig.__constructor__, ())),
-                _salt: _salt
+                _salt: _implSalt()
             })
         );
         vm.label(address(impl), "SuperchainConfigImpl");
@@ -613,7 +619,7 @@ contract DeployImplementations is Script {
             DeployUtils.createDeterministic({
                 _name: "ProtocolVersions",
                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IProtocolVersions.__constructor__, ())),
-                _salt: _salt
+                _salt: _implSalt()
             })
         );
         vm.label(address(impl), "ProtocolVersionsImpl");

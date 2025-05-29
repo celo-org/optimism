@@ -24,6 +24,10 @@ import {
     DeployImplementationsOutput
 } from "scripts/deploy/DeployImplementations.s.sol";
 
+import {CeloTokenL1} from "src/celo/CeloTokenL1.sol";
+
+import { Proxy } from "src/universal/Proxy.sol";
+
 // Libraries
 import { Constants } from "src/libraries/Constants.sol";
 import { Types } from "scripts/libraries/Types.sol";
@@ -213,6 +217,7 @@ contract Deploy is Deployer {
         vm.stopPrank();
 
         if (cfg.useCustomGasToken()) {
+            setupCustomGasToken();
             // Reset the systemconfig then reinitialize it with the custom gas token
             resetInitializedProxy("SystemConfig");
             initializeSystemConfig();
@@ -370,6 +375,8 @@ contract Deploy is Deployer {
         IOPContractsManager opcm = IOPContractsManager(artifacts.mustGetAddress("OPContractsManager"));
 
         IOPContractsManager.DeployInput memory deployInput = getDeployInput();
+
+        vm.broadcast();
         IOPContractsManager.DeployOutput memory deployOutput = opcm.deploy(deployInput);
 
         // Save all deploy outputs from the OPCM, in the order they are declared in the DeployOutput struct
@@ -505,6 +512,7 @@ contract Deploy is Deployer {
     /// @notice Initialize the SystemConfig
     function initializeSystemConfig() public broadcast {
         console.log("Upgrading and initializing SystemConfig proxy");
+
         address systemConfigProxy = artifacts.mustGetAddress("SystemConfigProxy");
         address systemConfig = artifacts.mustGetAddress("SystemConfigImpl");
 
@@ -514,6 +522,8 @@ contract Deploy is Deployer {
         if (cfg.useCustomGasToken()) {
             customGasTokenAddress = cfg.customGasTokenAddress();
         }
+
+        console.log("customGasTokenAddress", customGasTokenAddress);
 
         IProxyAdmin proxyAdmin = IProxyAdmin(payable(artifacts.mustGetAddress("ProxyAdmin")));
         proxyAdmin.upgradeAndCall({
@@ -998,5 +1008,51 @@ contract Deploy is Deployer {
         value = value & ~(0xFF << (slot.offset * 8));
         slotVal = bytes32(value);
         vm.store(proxy, bytes32(slot.slot), slotVal);
+    }
+
+    function setupCustomGasToken() internal {
+        if (cfg.useCustomGasToken() && cfg.customGasTokenAddress() == address(0)) {
+            deployERC1967ProxyWithOwner("CustomGasTokenProxy", tx.origin);
+
+            console.log("Setting up Custom gas token");
+            deployCustomGasToken();
+            initializeCustomGasToken();
+
+            address proxyAddress = artifacts.mustGetAddress("CustomGasTokenProxy");
+            cfg.setUseCustomGasToken(proxyAddress);
+        }
+    }
+
+    function deployCustomGasToken() public broadcast returns (address addr_) {
+        console.log("Deploying CustomGasToken implementation");
+
+        CeloTokenL1 customGasToken = new CeloTokenL1{ salt: _implSalt() }();
+
+        artifacts.save("CustomGasToken", address(customGasToken));
+        console.log("CustomGasToken deployed at %s", address(customGasToken));
+        addr_ = address(customGasToken);
+    }
+
+     /// @notice Initialize the CustomGasToken
+    function initializeCustomGasToken() public broadcast {
+        console.log("Upgrading and initializing CustomGasToken proxy");
+        address customGasTokenProxyAddress = artifacts.mustGetAddress("CustomGasTokenProxy");
+        address customGasTokenAddress = artifacts.mustGetAddress("CustomGasToken");
+        address portalProxyAddress = artifacts.mustGetAddress("OptimismPortalProxy");
+
+        Proxy customGasTokenProxy = Proxy(payable(customGasTokenProxyAddress));
+
+        customGasTokenProxy.upgradeToAndCall(
+            customGasTokenAddress,
+            abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
+        );
+
+        // _upgradeAndCallViaSafe({
+        //     _proxy: payable(customGasTokenProxyAddress),
+        //     _implementation: customGasTokenAddress,
+        //     _innerCallData: abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
+        // });
+
+        // ChainAssertions.checkCeloTokenL1({ _contracts: _proxies(), _isProxy: false });
     }
 }

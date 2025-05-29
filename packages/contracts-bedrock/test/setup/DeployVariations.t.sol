@@ -16,8 +16,6 @@ contract DeployVariations_Test is CommonTest {
     // Enable features which should be possible to enable or disable regardless of other options.
     function enableAddOns(bool _enableCGT, bool _enableAltDa) public {
         if (_enableCGT) {
-            if (true) revert CustomGasTokenNotSupported();
-
             ERC20 token = new ERC20("Silly", "SIL");
             super.enableCustomGasToken(address(token));
         }
