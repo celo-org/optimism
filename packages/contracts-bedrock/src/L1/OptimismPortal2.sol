@@ -240,8 +240,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
         if (token == Constants.ETHER) {
             return address(this).balance;
         } else {
-            // Temporary revert till we support custom gas tokens
-            if (true) revert CustomGasTokenNotSupported();
 
             return _balance;
         }
@@ -450,8 +448,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
             //      to accomplish this, `callWithMinGas` will revert.
             success = SafeCall.callWithMinGas(_tx.target, _tx.gasLimit, _tx.value, _tx.data);
         } else {
-            // Temporary revert till we support custom gas tokens
-            if (true) revert CustomGasTokenNotSupported();
 
             // Cannot call the token contract directly from the portal. This would allow an attacker
             // to call approve from a withdrawal and drain the balance of the portal.
@@ -522,8 +518,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
         public
         metered(_gasLimit)
     {
-        // Temporary revert till we support custom gas tokens
-        if (true) revert CustomGasTokenNotSupported();
 
         // Can only be called if an ERC20 token is used for gas paying on L2
         (address token,) = gasPayingToken();
@@ -574,9 +568,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
         metered(_gasLimit)
     {
         (address token,) = gasPayingToken();
-
-        // Temporary revert till we support custom gas tokens
-        if (token != Constants.ETHER) revert CustomGasTokenNotSupported();
 
         if (token != Constants.ETHER && msg.value != 0) revert NoValue();
 
@@ -640,8 +631,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
     /// @notice Sets the gas paying token for the L2 system. This token is used as the
     ///         L2 native asset. Only the SystemConfig contract can call this function.
     function setGasPayingToken(address _token, uint8 _decimals, bytes32 _name, bytes32 _symbol) external {
-        // Temporary revert till we support custom gas tokens
-        if (true) revert CustomGasTokenNotSupported();
 
         if (msg.sender != address(systemConfig)) revert Unauthorized();
 
