@@ -338,73 +338,73 @@ contract DeployOPChain is Script {
     // -------- Core Deployment Methods --------
 
     function run(DeployOPChainInput _doi, DeployOPChainOutput _doo) public {
-        IOPContractsManager opcm = _doi.opcm();
+        // IOPContractsManager opcm = _doi.opcm();
 
-        IOPContractsManager.Roles memory roles = IOPContractsManager.Roles({
-            opChainProxyAdminOwner: _doi.opChainProxyAdminOwner(),
-            systemConfigOwner: _doi.systemConfigOwner(),
-            batcher: _doi.batcher(),
-            unsafeBlockSigner: _doi.unsafeBlockSigner(),
-            proposer: _doi.proposer(),
-            challenger: _doi.challenger()
-        });
-        IOPContractsManager.DeployInput memory deployInput = IOPContractsManager.DeployInput({
-            roles: roles,
-            basefeeScalar: _doi.basefeeScalar(),
-            blobBasefeeScalar: _doi.blobBaseFeeScalar(),
-            l2ChainId: _doi.l2ChainId(),
-            startingAnchorRoot: _doi.startingAnchorRoot(),
-            saltMixer: _doi.saltMixer(),
-            gasLimit: _doi.gasLimit(),
-            disputeGameType: _doi.disputeGameType(),
-            disputeAbsolutePrestate: _doi.disputeAbsolutePrestate(),
-            disputeMaxGameDepth: _doi.disputeMaxGameDepth(),
-            disputeSplitDepth: _doi.disputeSplitDepth(),
-            disputeClockExtension: _doi.disputeClockExtension(),
-            disputeMaxClockDuration: _doi.disputeMaxClockDuration()
-        });
+        // IOPContractsManager.Roles memory roles = IOPContractsManager.Roles({
+        //     opChainProxyAdminOwner: _doi.opChainProxyAdminOwner(),
+        //     systemConfigOwner: _doi.systemConfigOwner(),
+        //     batcher: _doi.batcher(),
+        //     unsafeBlockSigner: _doi.unsafeBlockSigner(),
+        //     proposer: _doi.proposer(),
+        //     challenger: _doi.challenger()
+        // });
+        // IOPContractsManager.DeployInput memory deployInput = IOPContractsManager.DeployInput({
+        //     roles: roles,
+        //     basefeeScalar: _doi.basefeeScalar(),
+        //     blobBasefeeScalar: _doi.blobBaseFeeScalar(),
+        //     l2ChainId: _doi.l2ChainId(),
+        //     startingAnchorRoot: _doi.startingAnchorRoot(),
+        //     saltMixer: _doi.saltMixer(),
+        //     gasLimit: _doi.gasLimit(),
+        //     disputeGameType: _doi.disputeGameType(),
+        //     disputeAbsolutePrestate: _doi.disputeAbsolutePrestate(),
+        //     disputeMaxGameDepth: _doi.disputeMaxGameDepth(),
+        //     disputeSplitDepth: _doi.disputeSplitDepth(),
+        //     disputeClockExtension: _doi.disputeClockExtension(),
+        //     disputeMaxClockDuration: _doi.disputeMaxClockDuration()
+        // });
 
-        vm.broadcast(msg.sender);
-        IOPContractsManager.DeployOutput memory deployOutput = opcm.deploy(deployInput);
+        // vm.broadcast(msg.sender);
+        // IOPContractsManager.DeployOutput memory deployOutput = opcm.deploy(deployInput);
 
-        vm.label(address(deployOutput.opChainProxyAdmin), "opChainProxyAdmin");
-        vm.label(address(deployOutput.addressManager), "addressManager");
-        vm.label(address(deployOutput.l1ERC721BridgeProxy), "l1ERC721BridgeProxy");
-        vm.label(address(deployOutput.systemConfigProxy), "systemConfigProxy");
-        vm.label(address(deployOutput.optimismMintableERC20FactoryProxy), "optimismMintableERC20FactoryProxy");
-        vm.label(address(deployOutput.l1StandardBridgeProxy), "l1StandardBridgeProxy");
-        vm.label(address(deployOutput.l1CrossDomainMessengerProxy), "l1CrossDomainMessengerProxy");
-        vm.label(address(deployOutput.optimismPortalProxy), "optimismPortalProxy");
-        vm.label(address(deployOutput.disputeGameFactoryProxy), "disputeGameFactoryProxy");
-        vm.label(address(deployOutput.anchorStateRegistryProxy), "anchorStateRegistryProxy");
-        // vm.label(address(deployOutput.faultDisputeGame), "faultDisputeGame");
-        vm.label(address(deployOutput.permissionedDisputeGame), "permissionedDisputeGame");
-        vm.label(address(deployOutput.delayedWETHPermissionedGameProxy), "delayedWETHPermissionedGameProxy");
-        // TODO: Eventually switch from Permissioned to Permissionless.
-        // vm.label(address(deployOutput.delayedWETHPermissionlessGameProxy), "delayedWETHPermissionlessGameProxy");
+        // vm.label(address(deployOutput.opChainProxyAdmin), "opChainProxyAdmin");
+        // vm.label(address(deployOutput.addressManager), "addressManager");
+        // vm.label(address(deployOutput.l1ERC721BridgeProxy), "l1ERC721BridgeProxy");
+        // vm.label(address(deployOutput.systemConfigProxy), "systemConfigProxy");
+        // vm.label(address(deployOutput.optimismMintableERC20FactoryProxy), "optimismMintableERC20FactoryProxy");
+        // vm.label(address(deployOutput.l1StandardBridgeProxy), "l1StandardBridgeProxy");
+        // vm.label(address(deployOutput.l1CrossDomainMessengerProxy), "l1CrossDomainMessengerProxy");
+        // vm.label(address(deployOutput.optimismPortalProxy), "optimismPortalProxy");
+        // vm.label(address(deployOutput.disputeGameFactoryProxy), "disputeGameFactoryProxy");
+        // vm.label(address(deployOutput.anchorStateRegistryProxy), "anchorStateRegistryProxy");
+        // // vm.label(address(deployOutput.faultDisputeGame), "faultDisputeGame");
+        // vm.label(address(deployOutput.permissionedDisputeGame), "permissionedDisputeGame");
+        // vm.label(address(deployOutput.delayedWETHPermissionedGameProxy), "delayedWETHPermissionedGameProxy");
+        // // TODO: Eventually switch from Permissioned to Permissionless.
+        // // vm.label(address(deployOutput.delayedWETHPermissionlessGameProxy), "delayedWETHPermissionlessGameProxy");
 
-        _doo.set(_doo.opChainProxyAdmin.selector, address(deployOutput.opChainProxyAdmin));
-        _doo.set(_doo.addressManager.selector, address(deployOutput.addressManager));
-        _doo.set(_doo.l1ERC721BridgeProxy.selector, address(deployOutput.l1ERC721BridgeProxy));
-        _doo.set(_doo.systemConfigProxy.selector, address(deployOutput.systemConfigProxy));
-        _doo.set(
-            _doo.optimismMintableERC20FactoryProxy.selector, address(deployOutput.optimismMintableERC20FactoryProxy)
-        );
-        _doo.set(_doo.l1StandardBridgeProxy.selector, address(deployOutput.l1StandardBridgeProxy));
-        _doo.set(_doo.l1CrossDomainMessengerProxy.selector, address(deployOutput.l1CrossDomainMessengerProxy));
-        _doo.set(_doo.optimismPortalProxy.selector, address(deployOutput.optimismPortalProxy));
-        _doo.set(_doo.disputeGameFactoryProxy.selector, address(deployOutput.disputeGameFactoryProxy));
-        _doo.set(_doo.anchorStateRegistryProxy.selector, address(deployOutput.anchorStateRegistryProxy));
-        // _doo.set(_doo.faultDisputeGame.selector, address(deployOutput.faultDisputeGame));
-        _doo.set(_doo.permissionedDisputeGame.selector, address(deployOutput.permissionedDisputeGame));
-        _doo.set(_doo.delayedWETHPermissionedGameProxy.selector, address(deployOutput.delayedWETHPermissionedGameProxy));
-        // TODO: Eventually switch from Permissioned to Permissionless.
+        // _doo.set(_doo.opChainProxyAdmin.selector, address(deployOutput.opChainProxyAdmin));
+        // _doo.set(_doo.addressManager.selector, address(deployOutput.addressManager));
+        // _doo.set(_doo.l1ERC721BridgeProxy.selector, address(deployOutput.l1ERC721BridgeProxy));
+        // _doo.set(_doo.systemConfigProxy.selector, address(deployOutput.systemConfigProxy));
         // _doo.set(
-        //     _doo.delayedWETHPermissionlessGameProxy.selector,
-        // address(deployOutput.delayedWETHPermissionlessGameProxy)
+        //     _doo.optimismMintableERC20FactoryProxy.selector, address(deployOutput.optimismMintableERC20FactoryProxy)
         // );
+        // _doo.set(_doo.l1StandardBridgeProxy.selector, address(deployOutput.l1StandardBridgeProxy));
+        // _doo.set(_doo.l1CrossDomainMessengerProxy.selector, address(deployOutput.l1CrossDomainMessengerProxy));
+        // _doo.set(_doo.optimismPortalProxy.selector, address(deployOutput.optimismPortalProxy));
+        // _doo.set(_doo.disputeGameFactoryProxy.selector, address(deployOutput.disputeGameFactoryProxy));
+        // _doo.set(_doo.anchorStateRegistryProxy.selector, address(deployOutput.anchorStateRegistryProxy));
+        // // _doo.set(_doo.faultDisputeGame.selector, address(deployOutput.faultDisputeGame));
+        // _doo.set(_doo.permissionedDisputeGame.selector, address(deployOutput.permissionedDisputeGame));
+        // _doo.set(_doo.delayedWETHPermissionedGameProxy.selector, address(deployOutput.delayedWETHPermissionedGameProxy));
+        // // TODO: Eventually switch from Permissioned to Permissionless.
+        // // _doo.set(
+        // //     _doo.delayedWETHPermissionlessGameProxy.selector,
+        // // address(deployOutput.delayedWETHPermissionlessGameProxy)
+        // // );
 
-        checkOutput(_doi, _doo);
+        // checkOutput(_doi, _doo);
     }
 
     function checkOutput(DeployOPChainInput _doi, DeployOPChainOutput _doo) public {

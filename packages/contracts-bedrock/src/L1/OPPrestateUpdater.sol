@@ -71,10 +71,10 @@ contract OPPrestateUpdater is OPContractsManager {
         return "none";
     }
 
-    function deploy(DeployInput memory _input) external pure override returns (DeployOutput memory) {
-        _input; // Silence warning
-        revert NotImplemented();
-    }
+    // function deploy(DeployInput memory _input) external pure override returns (DeployOutput memory) {
+    //     _input; // Silence warning
+    //     revert NotImplemented();
+    // }
 
     function upgrade(OpChainConfig[] memory _opChainConfigs) external pure override {
         _opChainConfigs; // Silence warning

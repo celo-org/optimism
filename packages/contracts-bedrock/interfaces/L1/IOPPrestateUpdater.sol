@@ -110,7 +110,7 @@ interface IOPPrestateUpdater {
     )
     external;
 
-    function deploy(IOPContractsManager.DeployInput calldata _input) external returns (IOPContractsManager.DeployOutput memory);
+    // function deploy(IOPContractsManager.DeployInput calldata _input) external returns (IOPContractsManager.DeployOutput memory);
 
     /// @notice Upgrades the implementation of all proxies in the specified chains
     /// @param _opChainConfigs The chains to upgrade

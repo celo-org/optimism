@@ -232,7 +232,7 @@ interface IOPContractsManager {
     )
         external;
 
-    function deploy(DeployInput calldata _input) external returns (DeployOutput memory);
+    // function deploy(DeployInput calldata _input) external returns (DeployOutput memory);
 
     /// @notice Upgrades the implementation of all proxies in the specified chains
     /// @param _opChainConfigs The chains to upgrade

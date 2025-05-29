@@ -85,7 +85,8 @@ contract CeloUpgradeBaklava is CeloUpgradeOPChain {
             convert(bytes32(hex"03b357b30095022ecbb44ef00d1de19df39cf69ee92a60683a6be2c6f8fe6a3e"))
         );
         uoci.set(UpgradeOPChainInput.prank.selector, address(0xd542f3328ff2516443FE4db1c89E427F67169D94));
-        uoci.set(UpgradeOPChainInput.opcm.selector, address(0xAF66Cb99Fb7f632394269B7d746CD4c37D736678));
+        // uoci.set(UpgradeOPChainInput.opcm.selector, address(0xAF66Cb99Fb7f632394269B7d746CD4c37D736678));
+        uoci.set(UpgradeOPChainInput.opcm.selector, address(0x216e0Bd7F565A0bbb1d09F04bE39650Da2697339));
         uoci.set(UpgradeOPChainInput.opChainConfigs.selector, config);
 
         // execution

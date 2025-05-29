@@ -17,7 +17,6 @@ import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.so
 import { IDisputeGame } from "interfaces/dispute/IDisputeGame.sol";
 import { IAddressManager } from "interfaces/legacy/IAddressManager.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
-import { IDelayedWETH } from "interfaces/dispute/IDelayedWETH.sol";
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
 import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
 import { IPermissionedDisputeGame } from "interfaces/dispute/IPermissionedDisputeGame.sol";
@@ -273,183 +272,183 @@ contract OPContractsManager is ISemver {
         upgradeController = _upgradeController;
     }
 
-    function deploy(DeployInput calldata _input) external virtual returns (DeployOutput memory) {
-        assertValidInputs(_input);
-        uint256 l2ChainId = _input.l2ChainId;
-        string memory saltMixer = _input.saltMixer;
-        DeployOutput memory output;
+    // function deploy(DeployInput calldata _input) external virtual returns (DeployOutput memory) {
+    //     assertValidInputs(_input);
+    //     uint256 l2ChainId = _input.l2ChainId;
+    //     string memory saltMixer = _input.saltMixer;
+    //     DeployOutput memory output;
 
-        // -------- Deploy Chain Singletons --------
+    //     // -------- Deploy Chain Singletons --------
 
-        // The AddressManager is used to store the implementation for the L1CrossDomainMessenger
-        // due to it's usage of the legacy ResolvedDelegateProxy.
-        output.addressManager = IAddressManager(
-            Blueprint.deployFrom(
-                blueprint.addressManager, computeSalt(l2ChainId, saltMixer, "AddressManager"), abi.encode()
-            )
-        );
-        // The ProxyAdmin is the owner of all proxies for the chain. We temporarily set the owner to
-        // this contract, and then transfer ownership to the specified owner at the end of deployment.
-        output.opChainProxyAdmin = IProxyAdmin(
-            Blueprint.deployFrom(
-                blueprint.proxyAdmin, computeSalt(l2ChainId, saltMixer, "ProxyAdmin"), abi.encode(address(this))
-            )
-        );
-        // Set the AddressManager on the ProxyAdmin.
-        output.opChainProxyAdmin.setAddressManager(output.addressManager);
-        // Transfer ownership of the AddressManager to the ProxyAdmin.
-        transferOwnership(address(output.addressManager), address(output.opChainProxyAdmin));
+    //     // The AddressManager is used to store the implementation for the L1CrossDomainMessenger
+    //     // due to it's usage of the legacy ResolvedDelegateProxy.
+    //     output.addressManager = IAddressManager(
+    //         Blueprint.deployFrom(
+    //             blueprint.addressManager, computeSalt(l2ChainId, saltMixer, "AddressManager"), abi.encode()
+    //         )
+    //     );
+    //     // The ProxyAdmin is the owner of all proxies for the chain. We temporarily set the owner to
+    //     // this contract, and then transfer ownership to the specified owner at the end of deployment.
+    //     output.opChainProxyAdmin = IProxyAdmin(
+    //         Blueprint.deployFrom(
+    //             blueprint.proxyAdmin, computeSalt(l2ChainId, saltMixer, "ProxyAdmin"), abi.encode(address(this))
+    //         )
+    //     );
+    //     // Set the AddressManager on the ProxyAdmin.
+    //     output.opChainProxyAdmin.setAddressManager(output.addressManager);
+    //     // Transfer ownership of the AddressManager to the ProxyAdmin.
+    //     transferOwnership(address(output.addressManager), address(output.opChainProxyAdmin));
 
-        // -------- Deploy Proxy Contracts --------
+    //     // -------- Deploy Proxy Contracts --------
 
-        // Deploy ERC-1967 proxied contracts.
-        output.l1ERC721BridgeProxy =
-            IL1ERC721Bridge(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "L1ERC721Bridge"));
-        output.optimismPortalProxy =
-            IOptimismPortal2(payable(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "OptimismPortal")));
-        output.systemConfigProxy =
-            ISystemConfig(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "SystemConfig"));
-        output.optimismMintableERC20FactoryProxy = IOptimismMintableERC20Factory(
-            deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "OptimismMintableERC20Factory")
-        );
-        output.disputeGameFactoryProxy =
-            IDisputeGameFactory(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "DisputeGameFactory"));
-        output.anchorStateRegistryProxy =
-            IAnchorStateRegistry(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "AnchorStateRegistry"));
+    //     // Deploy ERC-1967 proxied contracts.
+    //     output.l1ERC721BridgeProxy =
+    //         IL1ERC721Bridge(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "L1ERC721Bridge"));
+    //     output.optimismPortalProxy =
+    //         IOptimismPortal2(payable(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "OptimismPortal")));
+    //     output.systemConfigProxy =
+    //         ISystemConfig(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "SystemConfig"));
+    //     output.optimismMintableERC20FactoryProxy = IOptimismMintableERC20Factory(
+    //         deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "OptimismMintableERC20Factory")
+    //     );
+    //     output.disputeGameFactoryProxy =
+    //         IDisputeGameFactory(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "DisputeGameFactory"));
+    //     output.anchorStateRegistryProxy =
+    //         IAnchorStateRegistry(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "AnchorStateRegistry"));
 
-        // Deploy legacy proxied contracts.
-        output.l1StandardBridgeProxy = IL1StandardBridge(
-            payable(
-                Blueprint.deployFrom(
-                    blueprint.l1ChugSplashProxy,
-                    computeSalt(l2ChainId, saltMixer, "L1StandardBridge"),
-                    abi.encode(output.opChainProxyAdmin)
-                )
-            )
-        );
-        output.opChainProxyAdmin.setProxyType(address(output.l1StandardBridgeProxy), IProxyAdmin.ProxyType.CHUGSPLASH);
-        string memory contractName = "OVM_L1CrossDomainMessenger";
-        output.l1CrossDomainMessengerProxy = IL1CrossDomainMessenger(
-            Blueprint.deployFrom(
-                blueprint.resolvedDelegateProxy,
-                computeSalt(l2ChainId, saltMixer, "L1CrossDomainMessenger"),
-                abi.encode(output.addressManager, contractName)
-            )
-        );
-        output.opChainProxyAdmin.setProxyType(
-            address(output.l1CrossDomainMessengerProxy), IProxyAdmin.ProxyType.RESOLVED
-        );
-        output.opChainProxyAdmin.setImplementationName(address(output.l1CrossDomainMessengerProxy), contractName);
+    //     // Deploy legacy proxied contracts.
+    //     output.l1StandardBridgeProxy = IL1StandardBridge(
+    //         payable(
+    //             Blueprint.deployFrom(
+    //                 blueprint.l1ChugSplashProxy,
+    //                 computeSalt(l2ChainId, saltMixer, "L1StandardBridge"),
+    //                 abi.encode(output.opChainProxyAdmin)
+    //             )
+    //         )
+    //     );
+    //     output.opChainProxyAdmin.setProxyType(address(output.l1StandardBridgeProxy), IProxyAdmin.ProxyType.CHUGSPLASH);
+    //     string memory contractName = "OVM_L1CrossDomainMessenger";
+    //     output.l1CrossDomainMessengerProxy = IL1CrossDomainMessenger(
+    //         Blueprint.deployFrom(
+    //             blueprint.resolvedDelegateProxy,
+    //             computeSalt(l2ChainId, saltMixer, "L1CrossDomainMessenger"),
+    //             abi.encode(output.addressManager, contractName)
+    //         )
+    //     );
+    //     output.opChainProxyAdmin.setProxyType(
+    //         address(output.l1CrossDomainMessengerProxy), IProxyAdmin.ProxyType.RESOLVED
+    //     );
+    //     output.opChainProxyAdmin.setImplementationName(address(output.l1CrossDomainMessengerProxy), contractName);
 
-        // Eventually we will switch from DelayedWETHPermissionedGameProxy to DelayedWETHPermissionlessGameProxy.
-        output.delayedWETHPermissionedGameProxy = IDelayedWETH(
-            payable(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "DelayedWETHPermissionedGame"))
-        );
+    //     // Eventually we will switch from DelayedWETHPermissionedGameProxy to DelayedWETHPermissionlessGameProxy.
+    //     output.delayedWETHPermissionedGameProxy = IDelayedWETH(
+    //         payable(deployProxy(l2ChainId, output.opChainProxyAdmin, saltMixer, "DelayedWETHPermissionedGame"))
+    //     );
 
-        // While not a proxy, we deploy the PermissionedDisputeGame here as well because it's bespoke per chain.
-        output.permissionedDisputeGame = IPermissionedDisputeGame(
-            Blueprint.deployFrom(
-                blueprint.permissionedDisputeGame1,
-                blueprint.permissionedDisputeGame2,
-                computeSalt(l2ChainId, saltMixer, "PermissionedDisputeGame"),
-                encodePermissionedFDGConstructor(
-                    IFaultDisputeGame.GameConstructorParams({
-                        gameType: _input.disputeGameType,
-                        absolutePrestate: _input.disputeAbsolutePrestate,
-                        maxGameDepth: _input.disputeMaxGameDepth,
-                        splitDepth: _input.disputeSplitDepth,
-                        clockExtension: _input.disputeClockExtension,
-                        maxClockDuration: _input.disputeMaxClockDuration,
-                        vm: IBigStepper(implementation.mipsImpl),
-                        weth: IDelayedWETH(payable(address(output.delayedWETHPermissionedGameProxy))),
-                        anchorStateRegistry: IAnchorStateRegistry(address(output.anchorStateRegistryProxy)),
-                        l2ChainId: _input.l2ChainId
-                    }),
-                    _input.roles.proposer,
-                    _input.roles.challenger
-                )
-            )
-        );
+    //     // While not a proxy, we deploy the PermissionedDisputeGame here as well because it's bespoke per chain.
+    //     output.permissionedDisputeGame = IPermissionedDisputeGame(
+    //         Blueprint.deployFrom(
+    //             blueprint.permissionedDisputeGame1,
+    //             blueprint.permissionedDisputeGame2,
+    //             computeSalt(l2ChainId, saltMixer, "PermissionedDisputeGame"),
+    //             encodePermissionedFDGConstructor(
+    //                 IFaultDisputeGame.GameConstructorParams({
+    //                     gameType: _input.disputeGameType,
+    //                     absolutePrestate: _input.disputeAbsolutePrestate,
+    //                     maxGameDepth: _input.disputeMaxGameDepth,
+    //                     splitDepth: _input.disputeSplitDepth,
+    //                     clockExtension: _input.disputeClockExtension,
+    //                     maxClockDuration: _input.disputeMaxClockDuration,
+    //                     vm: IBigStepper(implementation.mipsImpl),
+    //                     weth: IDelayedWETH(payable(address(output.delayedWETHPermissionedGameProxy))),
+    //                     anchorStateRegistry: IAnchorStateRegistry(address(output.anchorStateRegistryProxy)),
+    //                     l2ChainId: _input.l2ChainId
+    //                 }),
+    //                 _input.roles.proposer,
+    //                 _input.roles.challenger
+    //             )
+    //         )
+    //     );
 
-        // -------- Set and Initialize Proxy Implementations --------
-        bytes memory data;
+    //     // -------- Set and Initialize Proxy Implementations --------
+    //     bytes memory data;
 
-        data = encodeL1ERC721BridgeInitializer(output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin, address(output.l1ERC721BridgeProxy), implementation.l1ERC721BridgeImpl, data
-        );
+    //     data = encodeL1ERC721BridgeInitializer(output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin, address(output.l1ERC721BridgeProxy), implementation.l1ERC721BridgeImpl, data
+    //     );
 
-        data = encodeOptimismPortalInitializer(output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin, address(output.optimismPortalProxy), implementation.optimismPortalImpl, data
-        );
+    //     data = encodeOptimismPortalInitializer(output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin, address(output.optimismPortalProxy), implementation.optimismPortalImpl, data
+    //     );
 
-        data = encodeSystemConfigInitializer(_input, output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin, address(output.systemConfigProxy), implementation.systemConfigImpl, data
-        );
+    //     data = encodeSystemConfigInitializer(_input, output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin, address(output.systemConfigProxy), implementation.systemConfigImpl, data
+    //     );
 
-        data = encodeOptimismMintableERC20FactoryInitializer(output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.optimismMintableERC20FactoryProxy),
-            implementation.optimismMintableERC20FactoryImpl,
-            data
-        );
+    //     data = encodeOptimismMintableERC20FactoryInitializer(output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin,
+    //         address(output.optimismMintableERC20FactoryProxy),
+    //         implementation.optimismMintableERC20FactoryImpl,
+    //         data
+    //     );
 
-        data = encodeL1CrossDomainMessengerInitializer(output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.l1CrossDomainMessengerProxy),
-            implementation.l1CrossDomainMessengerImpl,
-            data
-        );
+    //     data = encodeL1CrossDomainMessengerInitializer(output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin,
+    //         address(output.l1CrossDomainMessengerProxy),
+    //         implementation.l1CrossDomainMessengerImpl,
+    //         data
+    //     );
 
-        data = encodeL1StandardBridgeInitializer(output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin, address(output.l1StandardBridgeProxy), implementation.l1StandardBridgeImpl, data
-        );
+    //     data = encodeL1StandardBridgeInitializer(output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin, address(output.l1StandardBridgeProxy), implementation.l1StandardBridgeImpl, data
+    //     );
 
-        data = encodeDelayedWETHInitializer(_input);
-        // Eventually we will switch from DelayedWETHPermissionedGameProxy to DelayedWETHPermissionlessGameProxy.
-        upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.delayedWETHPermissionedGameProxy),
-            implementation.delayedWETHImpl,
-            data
-        );
+    //     data = encodeDelayedWETHInitializer(_input);
+    //     // Eventually we will switch from DelayedWETHPermissionedGameProxy to DelayedWETHPermissionlessGameProxy.
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin,
+    //         address(output.delayedWETHPermissionedGameProxy),
+    //         implementation.delayedWETHImpl,
+    //         data
+    //     );
 
-        // We set the initial owner to this contract, set game implementations, then transfer ownership.
-        data = encodeDisputeGameFactoryInitializer();
-        upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.disputeGameFactoryProxy),
-            implementation.disputeGameFactoryImpl,
-            data
-        );
-        setDGFImplementation(
-            output.disputeGameFactoryProxy,
-            GameTypes.PERMISSIONED_CANNON,
-            IDisputeGame(address(output.permissionedDisputeGame))
-        );
+    //     // We set the initial owner to this contract, set game implementations, then transfer ownership.
+    //     data = encodeDisputeGameFactoryInitializer();
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin,
+    //         address(output.disputeGameFactoryProxy),
+    //         implementation.disputeGameFactoryImpl,
+    //         data
+    //     );
+    //     setDGFImplementation(
+    //         output.disputeGameFactoryProxy,
+    //         GameTypes.PERMISSIONED_CANNON,
+    //         IDisputeGame(address(output.permissionedDisputeGame))
+    //     );
 
-        transferOwnership(address(output.disputeGameFactoryProxy), address(_input.roles.opChainProxyAdminOwner));
+    //     transferOwnership(address(output.disputeGameFactoryProxy), address(_input.roles.opChainProxyAdminOwner));
 
-        data = encodeAnchorStateRegistryInitializer(_input, output);
-        upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.anchorStateRegistryProxy),
-            implementation.anchorStateRegistryImpl,
-            data
-        );
+    //     data = encodeAnchorStateRegistryInitializer(_input, output);
+    //     upgradeToAndCall(
+    //         output.opChainProxyAdmin,
+    //         address(output.anchorStateRegistryProxy),
+    //         implementation.anchorStateRegistryImpl,
+    //         data
+    //     );
 
-        // -------- Finalize Deployment --------
-        // Transfer ownership of the ProxyAdmin from this contract to the specified owner.
-        transferOwnership(address(output.opChainProxyAdmin), _input.roles.opChainProxyAdminOwner);
+    //     // -------- Finalize Deployment --------
+    //     // Transfer ownership of the ProxyAdmin from this contract to the specified owner.
+    //     transferOwnership(address(output.opChainProxyAdmin), _input.roles.opChainProxyAdminOwner);
 
-        emit Deployed(l2ChainId, msg.sender, abi.encode(output));
-        return output;
-    }
+    //     emit Deployed(l2ChainId, msg.sender, abi.encode(output));
+    //     return output;
+    // }
 
     /// @notice Verifies that all OpChainConfig inputs are valid and reverts if any are invalid.
     function assertValidOpChainConfig(OpChainConfig memory _config) internal view {

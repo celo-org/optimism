@@ -933,7 +933,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("protocolVersions()") });
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("superchainProxyAdmin()") });
         _addSpec({ _name: "OPContractsManager", _sel: _getSel("l1ContractsRelease()") });
-        _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.deploy.selector });
+        // _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.deploy.selector });
         _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.blueprints.selector });
         _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.chainIdToBatchInboxAddress.selector });
         _addSpec({ _name: "OPContractsManager", _sel: IOPContractsManager.implementations.selector });
@@ -949,7 +949,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("protocolVersions()") });
         _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("superchainProxyAdmin()") });
         _addSpec({ _name: "OPPrestateUpdater", _sel: _getSel("l1ContractsRelease()") });
-        _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.deploy.selector });
+        // _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.deploy.selector });
         _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.blueprints.selector });
         _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.chainIdToBatchInboxAddress.selector });
         _addSpec({ _name: "OPPrestateUpdater", _sel: IOPContractsManager.implementations.selector });
@@ -966,7 +966,7 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("protocolVersions()") });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("superchainProxyAdmin()") });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: _getSel("l1ContractsRelease()") });
-        _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.deploy.selector });
+        // _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.deploy.selector });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.blueprints.selector });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.chainIdToBatchInboxAddress.selector });
         _addSpec({ _name: "OPContractsManagerInterop", _sel: IOPContractsManager.implementations.selector });

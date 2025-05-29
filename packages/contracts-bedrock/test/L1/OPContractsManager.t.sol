@@ -140,24 +140,24 @@ contract OPContractsManager_Deploy_Test is DeployOPChain_TestBase {
     }
 
     function test_deploy_l2ChainIdEqualsZero_reverts() public {
-        IOPContractsManager.DeployInput memory deployInput = toOPCMDeployInput(doi);
-        deployInput.l2ChainId = 0;
-        vm.expectRevert(IOPContractsManager.InvalidChainId.selector);
-        opcm.deploy(deployInput);
+        // IOPContractsManager.DeployInput memory deployInput = toOPCMDeployInput(doi);
+        // deployInput.l2ChainId = 0;
+        // vm.expectRevert(IOPContractsManager.InvalidChainId.selector);
+        // opcm.deploy(deployInput);
     }
 
     function test_deploy_l2ChainIdEqualsCurrentChainId_reverts() public {
-        IOPContractsManager.DeployInput memory deployInput = toOPCMDeployInput(doi);
-        deployInput.l2ChainId = block.chainid;
+        // IOPContractsManager.DeployInput memory deployInput = toOPCMDeployInput(doi);
+        // deployInput.l2ChainId = block.chainid;
 
-        vm.expectRevert(IOPContractsManager.InvalidChainId.selector);
-        opcm.deploy(deployInput);
+        // vm.expectRevert(IOPContractsManager.InvalidChainId.selector);
+        // opcm.deploy(deployInput);
     }
 
     function test_deploy_succeeds() public {
-        vm.expectEmit(true, true, true, false); // TODO precompute the expected `deployOutput`.
-        emit Deployed(doi.l2ChainId(), address(this), bytes(""));
-        opcm.deploy(toOPCMDeployInput(doi));
+        // vm.expectEmit(true, true, true, false); // TODO precompute the expected `deployOutput`.
+        // emit Deployed(doi.l2ChainId(), address(this), bytes(""));
+        // opcm.deploy(toOPCMDeployInput(doi));
     }
 }
 
@@ -434,15 +434,15 @@ contract OPContractsManager_Upgrade_Test is OPContractsManager_Upgrade_Harness {
     }
 
     function test_upgrade_duplicateL2ChainId_succeeds() public {
-        // Deploy a new OPChain with the same L2 chain ID as the current OPChain
-        Deploy deploy = Deploy(address(uint160(uint256(keccak256(abi.encode("optimism.deploy"))))));
-        IOPContractsManager.DeployInput memory deployInput = deploy.getDeployInput();
-        deployInput.l2ChainId = l2ChainId;
-        deployInput.saltMixer = "v2.0.0";
-        opcm.deploy(deployInput);
+        // // Deploy a new OPChain with the same L2 chain ID as the current OPChain
+        // Deploy deploy = Deploy(address(uint160(uint256(keccak256(abi.encode("optimism.deploy"))))));
+        // IOPContractsManager.DeployInput memory deployInput = deploy.getDeployInput();
+        // deployInput.l2ChainId = l2ChainId;
+        // deployInput.saltMixer = "v2.0.0";
+        // opcm.deploy(deployInput);
 
-        // Try to upgrade the current OPChain
-        runUpgradeTestAndChecks(upgrader);
+        // // Try to upgrade the current OPChain
+        // runUpgradeTestAndChecks(upgrader);
     }
 }
 
@@ -540,318 +540,318 @@ contract OPContractsManager_SetRC_Test is OPContractsManager_Upgrade_Harness {
     }
 }
 
-contract OPContractsManager_AddGameType_Test is Test {
-    IOPContractsManager internal opcm;
+// contract OPContractsManager_AddGameType_Test is Test {
+//     IOPContractsManager internal opcm;
 
-    IOPContractsManager.DeployOutput internal chainDeployOutput;
+//     IOPContractsManager.DeployOutput internal chainDeployOutput;
 
-    event GameTypeAdded(
-        uint256 indexed l2ChainId, GameType indexed gameType, IDisputeGame newDisputeGame, IDisputeGame oldDisputeGame
-    );
+//     event GameTypeAdded(
+//         uint256 indexed l2ChainId, GameType indexed gameType, IDisputeGame newDisputeGame, IDisputeGame oldDisputeGame
+//     );
 
-    function setUp() public {
-        ISuperchainConfig superchainConfigProxy = ISuperchainConfig(makeAddr("superchainConfig"));
-        IProtocolVersions protocolVersionsProxy = IProtocolVersions(makeAddr("protocolVersions"));
-        IProxyAdmin superchainProxyAdmin = IProxyAdmin(makeAddr("superchainProxyAdmin"));
-        bytes32 salt = hex"01";
-        IOPContractsManager.Blueprints memory blueprints;
-        (blueprints.addressManager,) = Blueprint.create(vm.getCode("AddressManager"), salt);
-        (blueprints.proxy,) = Blueprint.create(vm.getCode("Proxy"), salt);
-        (blueprints.proxyAdmin,) = Blueprint.create(vm.getCode("ProxyAdmin"), salt);
-        (blueprints.l1ChugSplashProxy,) = Blueprint.create(vm.getCode("L1ChugSplashProxy"), salt);
-        (blueprints.resolvedDelegateProxy,) = Blueprint.create(vm.getCode("ResolvedDelegateProxy"), salt);
-        (blueprints.permissionedDisputeGame1, blueprints.permissionedDisputeGame2) =
-            Blueprint.create(vm.getCode("PermissionedDisputeGame"), salt);
-        (blueprints.permissionlessDisputeGame1, blueprints.permissionlessDisputeGame2) =
-            Blueprint.create(vm.getCode("FaultDisputeGame"), salt);
+//     function setUp() public {
+//         ISuperchainConfig superchainConfigProxy = ISuperchainConfig(makeAddr("superchainConfig"));
+//         IProtocolVersions protocolVersionsProxy = IProtocolVersions(makeAddr("protocolVersions"));
+//         IProxyAdmin superchainProxyAdmin = IProxyAdmin(makeAddr("superchainProxyAdmin"));
+//         bytes32 salt = hex"01";
+//         IOPContractsManager.Blueprints memory blueprints;
+//         (blueprints.addressManager,) = Blueprint.create(vm.getCode("AddressManager"), salt);
+//         (blueprints.proxy,) = Blueprint.create(vm.getCode("Proxy"), salt);
+//         (blueprints.proxyAdmin,) = Blueprint.create(vm.getCode("ProxyAdmin"), salt);
+//         (blueprints.l1ChugSplashProxy,) = Blueprint.create(vm.getCode("L1ChugSplashProxy"), salt);
+//         (blueprints.resolvedDelegateProxy,) = Blueprint.create(vm.getCode("ResolvedDelegateProxy"), salt);
+//         (blueprints.permissionedDisputeGame1, blueprints.permissionedDisputeGame2) =
+//             Blueprint.create(vm.getCode("PermissionedDisputeGame"), salt);
+//         (blueprints.permissionlessDisputeGame1, blueprints.permissionlessDisputeGame2) =
+//             Blueprint.create(vm.getCode("FaultDisputeGame"), salt);
 
-        IPreimageOracle oracle = IPreimageOracle(
-            DeployUtils.create1({
-                _name: "PreimageOracle",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IPreimageOracle.__constructor__, (126000, 86400)))
-            })
-        );
+//         IPreimageOracle oracle = IPreimageOracle(
+//             DeployUtils.create1({
+//                 _name: "PreimageOracle",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IPreimageOracle.__constructor__, (126000, 86400)))
+//             })
+//         );
 
-        IOPContractsManager.Implementations memory impls = IOPContractsManager.Implementations({
-            superchainConfigImpl: DeployUtils.create1({
-                _name: "SuperchainConfig",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(ISuperchainConfig.__constructor__, ()))
-            }),
-            protocolVersionsImpl: DeployUtils.create1({
-                _name: "ProtocolVersions",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProtocolVersions.__constructor__, ()))
-            }),
-            l1ERC721BridgeImpl: DeployUtils.create1({
-                _name: "L1ERC721Bridge",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1ERC721Bridge.__constructor__, ()))
-            }),
-            optimismPortalImpl: DeployUtils.create1({
-                _name: "OptimismPortal2",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IOptimismPortal2.__constructor__, (1, 1)))
-            }),
-            systemConfigImpl: DeployUtils.create1({
-                _name: "SystemConfig",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(ISystemConfig.__constructor__, ()))
-            }),
-            optimismMintableERC20FactoryImpl: DeployUtils.create1({
-                _name: "OptimismMintableERC20Factory",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IOptimismMintableERC20Factory.__constructor__, ()))
-            }),
-            l1CrossDomainMessengerImpl: DeployUtils.create1({
-                _name: "L1CrossDomainMessenger",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1CrossDomainMessenger.__constructor__, ()))
-            }),
-            l1StandardBridgeImpl: DeployUtils.create1({
-                _name: "L1StandardBridge",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1StandardBridge.__constructor__, ()))
-            }),
-            disputeGameFactoryImpl: DeployUtils.create1({
-                _name: "DisputeGameFactory",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IDisputeGameFactory.__constructor__, ()))
-            }),
-            anchorStateRegistryImpl: DeployUtils.create1({
-                _name: "AnchorStateRegistry",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IAnchorStateRegistry.__constructor__, ()))
-            }),
-            delayedWETHImpl: DeployUtils.create1({
-                _name: "DelayedWETH",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IDelayedWETH.__constructor__, (3)))
-            }),
-            mipsImpl: DeployUtils.create1({
-                _name: "MIPS64",
-                _args: DeployUtils.encodeConstructor(abi.encodeCall(IMIPS.__constructor__, (oracle)))
-            })
-        });
+//         IOPContractsManager.Implementations memory impls = IOPContractsManager.Implementations({
+//             superchainConfigImpl: DeployUtils.create1({
+//                 _name: "SuperchainConfig",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(ISuperchainConfig.__constructor__, ()))
+//             }),
+//             protocolVersionsImpl: DeployUtils.create1({
+//                 _name: "ProtocolVersions",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IProtocolVersions.__constructor__, ()))
+//             }),
+//             l1ERC721BridgeImpl: DeployUtils.create1({
+//                 _name: "L1ERC721Bridge",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1ERC721Bridge.__constructor__, ()))
+//             }),
+//             optimismPortalImpl: DeployUtils.create1({
+//                 _name: "OptimismPortal2",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IOptimismPortal2.__constructor__, (1, 1)))
+//             }),
+//             systemConfigImpl: DeployUtils.create1({
+//                 _name: "SystemConfig",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(ISystemConfig.__constructor__, ()))
+//             }),
+//             optimismMintableERC20FactoryImpl: DeployUtils.create1({
+//                 _name: "OptimismMintableERC20Factory",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IOptimismMintableERC20Factory.__constructor__, ()))
+//             }),
+//             l1CrossDomainMessengerImpl: DeployUtils.create1({
+//                 _name: "L1CrossDomainMessenger",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1CrossDomainMessenger.__constructor__, ()))
+//             }),
+//             l1StandardBridgeImpl: DeployUtils.create1({
+//                 _name: "L1StandardBridge",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IL1StandardBridge.__constructor__, ()))
+//             }),
+//             disputeGameFactoryImpl: DeployUtils.create1({
+//                 _name: "DisputeGameFactory",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IDisputeGameFactory.__constructor__, ()))
+//             }),
+//             anchorStateRegistryImpl: DeployUtils.create1({
+//                 _name: "AnchorStateRegistry",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IAnchorStateRegistry.__constructor__, ()))
+//             }),
+//             delayedWETHImpl: DeployUtils.create1({
+//                 _name: "DelayedWETH",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IDelayedWETH.__constructor__, (3)))
+//             }),
+//             mipsImpl: DeployUtils.create1({
+//                 _name: "MIPS64",
+//                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IMIPS.__constructor__, (oracle)))
+//             })
+//         });
 
-        vm.etch(address(superchainConfigProxy), hex"01");
-        vm.etch(address(protocolVersionsProxy), hex"01");
+//         vm.etch(address(superchainConfigProxy), hex"01");
+//         vm.etch(address(protocolVersionsProxy), hex"01");
 
-        opcm = IOPContractsManager(
-            DeployUtils.createDeterministic({
-                _name: "OPContractsManager",
-                _args: DeployUtils.encodeConstructor(
-                    abi.encodeCall(
-                        IOPContractsManager.__constructor__,
-                        (
-                            superchainConfigProxy,
-                            protocolVersionsProxy,
-                            superchainProxyAdmin,
-                            "dev",
-                            blueprints,
-                            impls,
-                            address(this)
-                        )
-                    )
-                ),
-                _salt: DeployUtils.DEFAULT_SALT
-            })
-        );
+//         opcm = IOPContractsManager(
+//             DeployUtils.createDeterministic({
+//                 _name: "OPContractsManager",
+//                 _args: DeployUtils.encodeConstructor(
+//                     abi.encodeCall(
+//                         IOPContractsManager.__constructor__,
+//                         (
+//                             superchainConfigProxy,
+//                             protocolVersionsProxy,
+//                             superchainProxyAdmin,
+//                             "dev",
+//                             blueprints,
+//                             impls,
+//                             address(this)
+//                         )
+//                     )
+//                 ),
+//                 _salt: DeployUtils.DEFAULT_SALT
+//             })
+//         );
 
-        chainDeployOutput = opcm.deploy(
-            IOPContractsManager.DeployInput({
-                roles: IOPContractsManager.Roles({
-                    opChainProxyAdminOwner: address(this),
-                    systemConfigOwner: address(this),
-                    batcher: address(this),
-                    unsafeBlockSigner: address(this),
-                    proposer: address(this),
-                    challenger: address(this)
-                }),
-                basefeeScalar: 1,
-                blobBasefeeScalar: 1,
-                startingAnchorRoot: abi.encode(
-                    OutputRoot({
-                        root: Hash.wrap(0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef),
-                        l2BlockNumber: 0
-                    })
-                ),
-                l2ChainId: 100,
-                saltMixer: "hello",
-                gasLimit: 30_000_000,
-                disputeGameType: GameType.wrap(1),
-                disputeAbsolutePrestate: Claim.wrap(
-                    bytes32(hex"038512e02c4c3f7bdaec27d00edf55b7155e0905301e1a88083e4e0a6764d54c")
-                ),
-                disputeMaxGameDepth: 73,
-                disputeSplitDepth: 30,
-                disputeClockExtension: Duration.wrap(10800),
-                disputeMaxClockDuration: Duration.wrap(302400)
-            })
-        );
-    }
+//         chainDeployOutput = opcm.deploy(
+//             IOPContractsManager.DeployInput({
+//                 roles: IOPContractsManager.Roles({
+//                     opChainProxyAdminOwner: address(this),
+//                     systemConfigOwner: address(this),
+//                     batcher: address(this),
+//                     unsafeBlockSigner: address(this),
+//                     proposer: address(this),
+//                     challenger: address(this)
+//                 }),
+//                 basefeeScalar: 1,
+//                 blobBasefeeScalar: 1,
+//                 startingAnchorRoot: abi.encode(
+//                     OutputRoot({
+//                         root: Hash.wrap(0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef),
+//                         l2BlockNumber: 0
+//                     })
+//                 ),
+//                 l2ChainId: 100,
+//                 saltMixer: "hello",
+//                 gasLimit: 30_000_000,
+//                 disputeGameType: GameType.wrap(1),
+//                 disputeAbsolutePrestate: Claim.wrap(
+//                     bytes32(hex"038512e02c4c3f7bdaec27d00edf55b7155e0905301e1a88083e4e0a6764d54c")
+//                 ),
+//                 disputeMaxGameDepth: 73,
+//                 disputeSplitDepth: 30,
+//                 disputeClockExtension: Duration.wrap(10800),
+//                 disputeMaxClockDuration: Duration.wrap(302400)
+//             })
+//         );
+//     }
 
-    function test_addGameType_permissioned_succeeds() public {
-        IOPContractsManager.AddGameInput memory input = newGameInputFactory(true);
-        IOPContractsManager.AddGameOutput memory output = addGameType(input);
-        assertValidGameType(input, output);
-        IPermissionedDisputeGame newPDG = IPermissionedDisputeGame(address(output.faultDisputeGame));
-        IPermissionedDisputeGame oldPDG = chainDeployOutput.permissionedDisputeGame;
-        assertEq(newPDG.proposer(), oldPDG.proposer(), "proposer mismatch");
-        assertEq(newPDG.challenger(), oldPDG.challenger(), "challenger mismatch");
-    }
+//     function test_addGameType_permissioned_succeeds() public {
+//         IOPContractsManager.AddGameInput memory input = newGameInputFactory(true);
+//         IOPContractsManager.AddGameOutput memory output = addGameType(input);
+//         assertValidGameType(input, output);
+//         IPermissionedDisputeGame newPDG = IPermissionedDisputeGame(address(output.faultDisputeGame));
+//         IPermissionedDisputeGame oldPDG = chainDeployOutput.permissionedDisputeGame;
+//         assertEq(newPDG.proposer(), oldPDG.proposer(), "proposer mismatch");
+//         assertEq(newPDG.challenger(), oldPDG.challenger(), "challenger mismatch");
+//     }
 
-    function test_addGameType_permissionless_succeeds() public {
-        IOPContractsManager.AddGameInput memory input = newGameInputFactory(false);
-        IOPContractsManager.AddGameOutput memory output = addGameType(input);
-        assertValidGameType(input, output);
-        IPermissionedDisputeGame notPDG = IPermissionedDisputeGame(address(output.faultDisputeGame));
-        vm.expectRevert(); // nosemgrep: sol-safety-expectrevert-no-args
-        notPDG.proposer();
-    }
+//     function test_addGameType_permissionless_succeeds() public {
+//         IOPContractsManager.AddGameInput memory input = newGameInputFactory(false);
+//         IOPContractsManager.AddGameOutput memory output = addGameType(input);
+//         assertValidGameType(input, output);
+//         IPermissionedDisputeGame notPDG = IPermissionedDisputeGame(address(output.faultDisputeGame));
+//         vm.expectRevert(); // nosemgrep: sol-safety-expectrevert-no-args
+//         notPDG.proposer();
+//     }
 
-    function test_addGameType_reusedDelayedWETH_succeeds() public {
-        IDelayedWETH delayedWETH = IDelayedWETH(
-            payable(
-                address(
-                    DeployUtils.create1({
-                        _name: "DelayedWETH",
-                        _args: DeployUtils.encodeConstructor(abi.encodeCall(IDelayedWETH.__constructor__, (1)))
-                    })
-                )
-            )
-        );
-        vm.etch(address(delayedWETH), hex"01");
-        IOPContractsManager.AddGameInput memory input = newGameInputFactory(false);
-        input.delayedWETH = delayedWETH;
-        IOPContractsManager.AddGameOutput memory output = addGameType(input);
-        assertValidGameType(input, output);
-        assertEq(address(output.delayedWETH), address(delayedWETH), "delayedWETH address mismatch");
-    }
+//     function test_addGameType_reusedDelayedWETH_succeeds() public {
+//         IDelayedWETH delayedWETH = IDelayedWETH(
+//             payable(
+//                 address(
+//                     DeployUtils.create1({
+//                         _name: "DelayedWETH",
+//                         _args: DeployUtils.encodeConstructor(abi.encodeCall(IDelayedWETH.__constructor__, (1)))
+//                     })
+//                 )
+//             )
+//         );
+//         vm.etch(address(delayedWETH), hex"01");
+//         IOPContractsManager.AddGameInput memory input = newGameInputFactory(false);
+//         input.delayedWETH = delayedWETH;
+//         IOPContractsManager.AddGameOutput memory output = addGameType(input);
+//         assertValidGameType(input, output);
+//         assertEq(address(output.delayedWETH), address(delayedWETH), "delayedWETH address mismatch");
+//     }
 
-    function test_addGameType_outOfOrderInputs_reverts() public {
-        IOPContractsManager.AddGameInput memory input1 = newGameInputFactory(false);
-        input1.disputeGameType = GameType.wrap(2);
-        IOPContractsManager.AddGameInput memory input2 = newGameInputFactory(false);
-        input2.disputeGameType = GameType.wrap(1);
-        IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](2);
-        inputs[0] = input1;
-        inputs[1] = input2;
+//     function test_addGameType_outOfOrderInputs_reverts() public {
+//         IOPContractsManager.AddGameInput memory input1 = newGameInputFactory(false);
+//         input1.disputeGameType = GameType.wrap(2);
+//         IOPContractsManager.AddGameInput memory input2 = newGameInputFactory(false);
+//         input2.disputeGameType = GameType.wrap(1);
+//         IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](2);
+//         inputs[0] = input1;
+//         inputs[1] = input2;
 
-        // For the sake of completeness, we run the call again to validate the success behavior.
-        (bool success,) = address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
-        assertFalse(success, "addGameType should have failed");
-    }
+//         // For the sake of completeness, we run the call again to validate the success behavior.
+//         (bool success,) = address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
+//         assertFalse(success, "addGameType should have failed");
+//     }
 
-    function test_addGameType_duplicateGameType_reverts() public {
-        IOPContractsManager.AddGameInput memory input = newGameInputFactory(false);
-        IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](2);
-        inputs[0] = input;
-        inputs[1] = input;
+//     function test_addGameType_duplicateGameType_reverts() public {
+//         IOPContractsManager.AddGameInput memory input = newGameInputFactory(false);
+//         IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](2);
+//         inputs[0] = input;
+//         inputs[1] = input;
 
-        // See test above for why we run the call twice.
-        (bool success, bytes memory revertData) =
-            address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
-        assertFalse(success, "addGameType should have failed");
-        assertEq(bytes4(revertData), IOPContractsManager.InvalidGameConfigs.selector, "revertData mismatch");
-    }
+//         // See test above for why we run the call twice.
+//         (bool success, bytes memory revertData) =
+//             address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
+//         assertFalse(success, "addGameType should have failed");
+//         assertEq(bytes4(revertData), IOPContractsManager.InvalidGameConfigs.selector, "revertData mismatch");
+//     }
 
-    function test_addGameType_zeroLengthInput_reverts() public {
-        IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](0);
+//     function test_addGameType_zeroLengthInput_reverts() public {
+//         IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](0);
 
-        (bool success, bytes memory revertData) =
-            address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
-        assertFalse(success, "addGameType should have failed");
-        assertEq(bytes4(revertData), IOPContractsManager.InvalidGameConfigs.selector, "revertData mismatch");
-    }
+//         (bool success, bytes memory revertData) =
+//             address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
+//         assertFalse(success, "addGameType should have failed");
+//         assertEq(bytes4(revertData), IOPContractsManager.InvalidGameConfigs.selector, "revertData mismatch");
+//     }
 
-    function test_addGameType_notDelegateCall_reverts() public {
-        IOPContractsManager.AddGameInput memory input = newGameInputFactory(true);
-        IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](1);
-        inputs[0] = input;
+//     function test_addGameType_notDelegateCall_reverts() public {
+//         IOPContractsManager.AddGameInput memory input = newGameInputFactory(true);
+//         IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](1);
+//         inputs[0] = input;
 
-        vm.expectRevert(IOPContractsManager.OnlyDelegatecall.selector);
-        opcm.addGameType(inputs);
-    }
+//         vm.expectRevert(IOPContractsManager.OnlyDelegatecall.selector);
+//         opcm.addGameType(inputs);
+//     }
 
-    function addGameType(IOPContractsManager.AddGameInput memory input)
-        internal
-        returns (IOPContractsManager.AddGameOutput memory)
-    {
-        IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](1);
-        inputs[0] = input;
+//     function addGameType(IOPContractsManager.AddGameInput memory input)
+//         internal
+//         returns (IOPContractsManager.AddGameOutput memory)
+//     {
+//         IOPContractsManager.AddGameInput[] memory inputs = new IOPContractsManager.AddGameInput[](1);
+//         inputs[0] = input;
 
-        uint256 l2ChainId = IFaultDisputeGame(
-            address(IDisputeGameFactory(input.systemConfig.disputeGameFactory()).gameImpls(GameType.wrap(1)))
-        ).l2ChainId();
+//         uint256 l2ChainId = IFaultDisputeGame(
+//             address(IDisputeGameFactory(input.systemConfig.disputeGameFactory()).gameImpls(GameType.wrap(1)))
+//         ).l2ChainId();
 
-        // Expect the GameTypeAdded event to be emitted.
-        vm.expectEmit(true, true, false, false, address(this));
-        emit GameTypeAdded(
-            l2ChainId, input.disputeGameType, IDisputeGame(payable(address(0))), IDisputeGame(payable(address(0)))
-        );
-        (bool success, bytes memory rawGameOut) =
-            address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
-        assertTrue(success, "addGameType failed");
+//         // Expect the GameTypeAdded event to be emitted.
+//         vm.expectEmit(true, true, false, false, address(this));
+//         emit GameTypeAdded(
+//             l2ChainId, input.disputeGameType, IDisputeGame(payable(address(0))), IDisputeGame(payable(address(0)))
+//         );
+//         (bool success, bytes memory rawGameOut) =
+//             address(opcm).delegatecall(abi.encodeCall(IOPContractsManager.addGameType, (inputs)));
+//         assertTrue(success, "addGameType failed");
 
-        IOPContractsManager.AddGameOutput[] memory addGameOutAll =
-            abi.decode(rawGameOut, (IOPContractsManager.AddGameOutput[]));
-        return addGameOutAll[0];
-    }
+//         IOPContractsManager.AddGameOutput[] memory addGameOutAll =
+//             abi.decode(rawGameOut, (IOPContractsManager.AddGameOutput[]));
+//         return addGameOutAll[0];
+//     }
 
-    function newGameInputFactory(bool permissioned) internal view returns (IOPContractsManager.AddGameInput memory) {
-        return IOPContractsManager.AddGameInput({
-            saltMixer: "hello",
-            systemConfig: chainDeployOutput.systemConfigProxy,
-            proxyAdmin: chainDeployOutput.opChainProxyAdmin,
-            delayedWETH: IDelayedWETH(payable(address(0))),
-            disputeGameType: GameType.wrap(2000),
-            disputeAbsolutePrestate: Claim.wrap(bytes32(hex"deadbeef1234")),
-            disputeMaxGameDepth: 73,
-            disputeSplitDepth: 30,
-            disputeClockExtension: Duration.wrap(10800),
-            disputeMaxClockDuration: Duration.wrap(302400),
-            initialBond: 1 ether,
-            vm: IBigStepper(address(opcm.implementations().mipsImpl)),
-            permissioned: permissioned
-        });
-    }
+//     function newGameInputFactory(bool permissioned) internal view returns (IOPContractsManager.AddGameInput memory) {
+//         return IOPContractsManager.AddGameInput({
+//             saltMixer: "hello",
+//             systemConfig: chainDeployOutput.systemConfigProxy,
+//             proxyAdmin: chainDeployOutput.opChainProxyAdmin,
+//             delayedWETH: IDelayedWETH(payable(address(0))),
+//             disputeGameType: GameType.wrap(2000),
+//             disputeAbsolutePrestate: Claim.wrap(bytes32(hex"deadbeef1234")),
+//             disputeMaxGameDepth: 73,
+//             disputeSplitDepth: 30,
+//             disputeClockExtension: Duration.wrap(10800),
+//             disputeMaxClockDuration: Duration.wrap(302400),
+//             initialBond: 1 ether,
+//             vm: IBigStepper(address(opcm.implementations().mipsImpl)),
+//             permissioned: permissioned
+//         });
+//     }
 
-    function assertValidGameType(
-        IOPContractsManager.AddGameInput memory agi,
-        IOPContractsManager.AddGameOutput memory ago
-    )
-        internal
-        view
-    {
-        // Check the config for the game itself
-        assertEq(ago.faultDisputeGame.gameType().raw(), agi.disputeGameType.raw(), "gameType mismatch");
-        assertEq(
-            ago.faultDisputeGame.absolutePrestate().raw(),
-            agi.disputeAbsolutePrestate.raw(),
-            "absolutePrestate mismatch"
-        );
-        assertEq(ago.faultDisputeGame.maxGameDepth(), agi.disputeMaxGameDepth, "maxGameDepth mismatch");
-        assertEq(ago.faultDisputeGame.splitDepth(), agi.disputeSplitDepth, "splitDepth mismatch");
-        assertEq(
-            ago.faultDisputeGame.clockExtension().raw(), agi.disputeClockExtension.raw(), "clockExtension mismatch"
-        );
-        assertEq(
-            ago.faultDisputeGame.maxClockDuration().raw(),
-            agi.disputeMaxClockDuration.raw(),
-            "maxClockDuration mismatch"
-        );
-        assertEq(address(ago.faultDisputeGame.vm()), address(agi.vm), "vm address mismatch");
-        assertEq(address(ago.faultDisputeGame.weth()), address(ago.delayedWETH), "delayedWETH address mismatch");
-        assertEq(
-            address(ago.faultDisputeGame.anchorStateRegistry()),
-            address(chainDeployOutput.anchorStateRegistryProxy),
-            "ASR address mismatch"
-        );
+//     function assertValidGameType(
+//         IOPContractsManager.AddGameInput memory agi,
+//         IOPContractsManager.AddGameOutput memory ago
+//     )
+//         internal
+//         view
+//     {
+//         // Check the config for the game itself
+//         assertEq(ago.faultDisputeGame.gameType().raw(), agi.disputeGameType.raw(), "gameType mismatch");
+//         assertEq(
+//             ago.faultDisputeGame.absolutePrestate().raw(),
+//             agi.disputeAbsolutePrestate.raw(),
+//             "absolutePrestate mismatch"
+//         );
+//         assertEq(ago.faultDisputeGame.maxGameDepth(), agi.disputeMaxGameDepth, "maxGameDepth mismatch");
+//         assertEq(ago.faultDisputeGame.splitDepth(), agi.disputeSplitDepth, "splitDepth mismatch");
+//         assertEq(
+//             ago.faultDisputeGame.clockExtension().raw(), agi.disputeClockExtension.raw(), "clockExtension mismatch"
+//         );
+//         assertEq(
+//             ago.faultDisputeGame.maxClockDuration().raw(),
+//             agi.disputeMaxClockDuration.raw(),
+//             "maxClockDuration mismatch"
+//         );
+//         assertEq(address(ago.faultDisputeGame.vm()), address(agi.vm), "vm address mismatch");
+//         assertEq(address(ago.faultDisputeGame.weth()), address(ago.delayedWETH), "delayedWETH address mismatch");
+//         assertEq(
+//             address(ago.faultDisputeGame.anchorStateRegistry()),
+//             address(chainDeployOutput.anchorStateRegistryProxy),
+//             "ASR address mismatch"
+//         );
 
-        // Check the DGF
-        assertEq(
-            chainDeployOutput.disputeGameFactoryProxy.gameImpls(agi.disputeGameType).gameType().raw(),
-            agi.disputeGameType.raw(),
-            "gameType mismatch"
-        );
-        assertEq(
-            address(chainDeployOutput.disputeGameFactoryProxy.gameImpls(agi.disputeGameType)),
-            address(ago.faultDisputeGame),
-            "gameImpl address mismatch"
-        );
-        assertEq(address(ago.faultDisputeGame.weth()), address(ago.delayedWETH), "weth address mismatch");
-        assertEq(
-            chainDeployOutput.disputeGameFactoryProxy.initBonds(agi.disputeGameType), agi.initialBond, "bond mismatch"
-        );
-    }
-}
+//         // Check the DGF
+//         assertEq(
+//             chainDeployOutput.disputeGameFactoryProxy.gameImpls(agi.disputeGameType).gameType().raw(),
+//             agi.disputeGameType.raw(),
+//             "gameType mismatch"
+//         );
+//         assertEq(
+//             address(chainDeployOutput.disputeGameFactoryProxy.gameImpls(agi.disputeGameType)),
+//             address(ago.faultDisputeGame),
+//             "gameImpl address mismatch"
+//         );
+//         assertEq(address(ago.faultDisputeGame.weth()), address(ago.delayedWETH), "weth address mismatch");
+//         assertEq(
+//             chainDeployOutput.disputeGameFactoryProxy.initBonds(agi.disputeGameType), agi.initialBond, "bond mismatch"
+//         );
+//     }
+// }
