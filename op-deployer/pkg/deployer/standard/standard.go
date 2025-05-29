@@ -329,7 +329,8 @@ func ManagerImplementationAddrFor(chainID uint64, tag string) (common.Address, e
 			// Alfajores
 			// return common.HexToAddress("0x83cccf6d865ea06d103dcc9cf10d56b17dd4e74e"), nil
 			// Baklava
-			return common.HexToAddress("0xAF66Cb99Fb7f632394269B7d746CD4c37D736678"), nil
+			// return common.HexToAddress("0xAF66Cb99Fb7f632394269B7d746CD4c37D736678"), nil
+			return common.HexToAddress("0x216e0Bd7F565A0bbb1d09F04bE39650Da2697339"), nil
 		default:
 			return common.Address{}, fmt.Errorf("unsupported holesky tag: %s", tag)
 		}
