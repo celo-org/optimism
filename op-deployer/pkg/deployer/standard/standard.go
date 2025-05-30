@@ -163,6 +163,8 @@ func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 		return common.HexToAddress("0x543bA4AADBAb8f9025686Bd03993043599c6fB04"), nil
 	case 11155111:
 		return common.HexToAddress("0x189aBAAaa82DfC015A588A7dbaD6F13b1D3485Bc"), nil
+	case 17000:
+		return common.HexToAddress("0xBF101Bd81fb69aB00ab261465454dF1a171726Bf"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
