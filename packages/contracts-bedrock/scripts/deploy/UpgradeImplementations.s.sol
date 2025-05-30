@@ -206,160 +206,19 @@ contract UpgradeImplementations is Script {
         console.log("ProxyAdmin owner:", proxyAdminOwner);
         console.log("Transaction sender:", msg.sender);
 
-        if (proxyAdminOwner != msg.sender) {
-            console.log("ProxyAdmin is owned by a different address (likely Gnosis Safe)");
-            console.log("Generating transaction data for Safe submission instead of direct execution...");
+        console.log("ProxyAdmin is owned by a different address (likely Gnosis Safe)");
+        console.log("Generating transaction data for Safe submission instead of direct execution...");
 
-            // Generate Safe transaction data instead of executing directly
-            generateSafeTransactionData(_uii, _dio);
-
-            _uio.set(_uio.upgradeComplete.selector, true);
-            console.log("Transaction data generated successfully! Submit to Gnosis Safe for execution.");
-
-            address superchainConfigImpl = address(_dio.superchainConfigImpl());
-            address superchainConfigProxy = _uii.superchainConfigProxy();
-
-            sendFirstUpgradeToGnosisSafe(address(proxyAdmin), superchainConfigProxy, superchainConfigImpl);
-            return;
-        }
-
-        console.log("ProxyAdmin is owned by caller - proceeding with direct execution...");
-
-        // Cache critical addresses to avoid static calls after broadcast
-        // Split into smaller groups to avoid stack too deep error
-
-        // Cache superchain proxy addresses
-        address superchainConfigProxy = _uii.superchainConfigProxy();
-        address protocolVersionsProxy = _uii.protocolVersionsProxy();
-        address delayedWETHProxy = _uii.delayedWETHProxy();
-
-        // Cache superchain implementation addresses
-        address superchainConfigImpl = address(_dio.superchainConfigImpl());
-        address protocolVersionsImpl = address(_dio.protocolVersionsImpl());
-        address delayedWETHImpl = address(_dio.delayedWETHImpl());
-
-        vm.startBroadcast();
-
-        // Upgrade SuperchainConfig if proxy address is provided
-        if (superchainConfigProxy != address(0)) {
-            console.log("Upgrading SuperchainConfig proxy...");
-            proxyAdmin.upgrade(
-                payable(superchainConfigProxy),
-                superchainConfigImpl
-            );
-            console.log("SuperchainConfig upgraded to:", superchainConfigImpl);
-        }
-
-        // Upgrade ProtocolVersions if proxy address is provided
-        if (protocolVersionsProxy != address(0)) {
-            console.log("Upgrading ProtocolVersions proxy...");
-            proxyAdmin.upgrade(
-                payable(protocolVersionsProxy),
-                protocolVersionsImpl
-            );
-            console.log("ProtocolVersions upgraded to:", protocolVersionsImpl);
-        }
-
-        // Upgrade OptimismPortal
-        console.log("Upgrading OptimismPortal proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.optimismPortalProxy()),
-            address(_dio.optimismPortalImpl())
-        );
-        console.log("OptimismPortal upgraded to:", address(_dio.optimismPortalImpl()));
-
-        // Upgrade SystemConfig
-        console.log("Upgrading SystemConfig proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.systemConfigProxy()),
-            address(_dio.systemConfigImpl())
-        );
-        console.log("SystemConfig upgraded to:", address(_dio.systemConfigImpl()));
-
-        // Upgrade L1CrossDomainMessenger
-        console.log("Upgrading L1CrossDomainMessenger proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.l1CrossDomainMessengerProxy()),
-            address(_dio.l1CrossDomainMessengerImpl())
-        );
-        console.log("L1CrossDomainMessenger upgraded to:", address(_dio.l1CrossDomainMessengerImpl()));
-
-        // Upgrade L1ERC721Bridge
-        console.log("Upgrading L1ERC721Bridge proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.l1ERC721BridgeProxy()),
-            address(_dio.l1ERC721BridgeImpl())
-        );
-        console.log("L1ERC721Bridge upgraded to:", address(_dio.l1ERC721BridgeImpl()));
-
-        // Upgrade L1StandardBridge
-        console.log("Upgrading L1StandardBridge proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.l1StandardBridgeProxy()),
-            address(_dio.l1StandardBridgeImpl())
-        );
-        console.log("L1StandardBridge upgraded to:", address(_dio.l1StandardBridgeImpl()));
-
-        // Upgrade OptimismMintableERC20Factory
-        console.log("Upgrading OptimismMintableERC20Factory proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.optimismMintableERC20FactoryProxy()),
-            address(_dio.optimismMintableERC20FactoryImpl())
-        );
-        console.log("OptimismMintableERC20Factory upgraded to:", address(_dio.optimismMintableERC20FactoryImpl()));
-
-        // Upgrade DisputeGameFactory
-        console.log("Upgrading DisputeGameFactory proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.disputeGameFactoryProxy()),
-            address(_dio.disputeGameFactoryImpl())
-        );
-        console.log("DisputeGameFactory upgraded to:", address(_dio.disputeGameFactoryImpl()));
-
-        // Upgrade AnchorStateRegistry
-        console.log("Upgrading AnchorStateRegistry proxy...");
-        proxyAdmin.upgrade(
-            payable(_uii.anchorStateRegistryProxy()),
-            address(_dio.anchorStateRegistryImpl())
-        );
-        console.log("AnchorStateRegistry upgraded to:", address(_dio.anchorStateRegistryImpl()));
-
-        // Upgrade DelayedWETH if proxy address is provided
-        if (delayedWETHProxy != address(0)) {
-            console.log("Upgrading DelayedWETH proxy...");
-            proxyAdmin.upgrade(
-                payable(delayedWETHProxy),
-                delayedWETHImpl
-            );
-            console.log("DelayedWETH upgraded to:", delayedWETHImpl);
-        }
-
-        vm.stopBroadcast();
+        // Generate Safe transaction data instead of executing directly
+        generateSafeTransactionData(_uii, _dio);
 
         _uio.set(_uio.upgradeComplete.selector, true);
-        console.log("All implementation upgrades completed successfully!");
-    }
+        console.log("Transaction data generated successfully! Submit to Gnosis Safe for execution.");
 
-    function etchIOContracts() public returns (UpgradeImplementationsInput uii_, UpgradeImplementationsOutput uio_) {
-        (uii_, uio_) = getIOContracts();
+        address superchainConfigImpl = address(_dio.superchainConfigImpl());
+        address superchainConfigProxy = _uii.superchainConfigProxy();
 
-        DeployUtils.etchLabelAndAllowCheatcodes({
-            _etchTo: address(uii_),
-            _cname: "UpgradeImplementationsInput",
-            _artifactPath: "UpgradeImplementations.s.sol:UpgradeImplementationsInput"
-        });
-
-        DeployUtils.etchLabelAndAllowCheatcodes({
-            _etchTo: address(uio_),
-            _cname: "UpgradeImplementationsOutput",
-            _artifactPath: "UpgradeImplementations.s.sol:UpgradeImplementationsOutput"
-        });
-    }
-
-    function getIOContracts() public view returns (UpgradeImplementationsInput uii_, UpgradeImplementationsOutput uio_) {
-        // Use tx.origin instead of msg.sender to avoid wallet mismatch issues
-        uii_ = UpgradeImplementationsInput(DeployUtils.toIOAddress(tx.origin, "optimism.UpgradeImplementationsInput"));
-        uio_ = UpgradeImplementationsOutput(DeployUtils.toIOAddress(tx.origin, "optimism.UpgradeImplementationsOutput"));
+        sendFirstUpgradeToGnosisSafe(address(proxyAdmin), superchainConfigProxy, superchainConfigImpl);
     }
 
     /// @notice Helper function to generate transaction data for Gnosis Safe execution
