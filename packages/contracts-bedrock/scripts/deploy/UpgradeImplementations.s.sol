@@ -181,6 +181,16 @@ contract BaklavaUpgradeImplementations is Script {
 }
 
 contract UpgradeImplementations is Script {
+    // Multicall3 delegatecall contract address
+    address public constant MULTICALL_ADDRESS = 0xcA11bde05977b3631167028862bE2a173976CA11;
+    // GnosisSafe address (consistent with BaklavaUpgradeImplementations and sendFirstUpgradeToGnosisSafe)
+    address private constant GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+
+    struct UpgradeAction {
+        address proxy;
+        address implementation;
+        string name;
+    }
 
     function run(
         UpgradeImplementationsInput _uii,
@@ -212,13 +222,16 @@ contract UpgradeImplementations is Script {
         // Generate Safe transaction data instead of executing directly
         generateSafeTransactionData(_uii, _dio);
 
+        // Generate multicall batch transaction data
+        generateMulticallBatchData(_uii, _dio);
+
         _uio.set(_uio.upgradeComplete.selector, true);
         console.log("Transaction data generated successfully! Submit to Gnosis Safe for execution.");
 
         address superchainConfigImpl = address(_dio.superchainConfigImpl());
         address superchainConfigProxy = _uii.superchainConfigProxy();
 
-        sendFirstUpgradeToGnosisSafe(address(proxyAdmin), superchainConfigProxy, superchainConfigImpl);
+        // sendFirstUpgradeToGnclosisSafe(address(proxyAdmin), superchainConfigProxy, superchainConfigImpl);
     }
 
     /// @notice Helper function to generate transaction data for Gnosis Safe execution
@@ -390,9 +403,10 @@ contract UpgradeImplementations is Script {
         _logUpgradeInfo(proxyAdminAddress, proxyAddress, implementationAddress);
 
         bytes memory upgradeData = _encodeUpgradeData(proxyAddress, implementationAddress);
-        bytes32 safeTxHash = _generateSafeTxHash(proxyAdminAddress, upgradeData);
+        // For standard upgrade call, operation is 0 (CALL)
+        bytes32 safeTxHash = _generateSafeTxHash(proxyAdminAddress, upgradeData, 0);
         bytes memory signature = _signTransaction(safeTxHash);
-        _executeTransaction(proxyAdminAddress, upgradeData, signature);
+        _executeTransaction(proxyAdminAddress, upgradeData, signature, 0);
     }
 
     /// @notice Log upgrade information
@@ -400,11 +414,9 @@ contract UpgradeImplementations is Script {
         address proxyAdminAddress,
         address proxyAddress,
         address implementationAddress
-    ) internal {
-        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
-
+    ) internal view { // Added view as GNOSIS_SAFE is now a constant
         console.log("=== SENDING FIRST UPGRADE TO GNOSIS SAFE ===");
-        console.log("GnosisSafe address:", gnosisSafe);
+        console.log("GnosisSafe address:", GNOSIS_SAFE);
         console.log("ProxyAdmin address:", proxyAdminAddress);
         console.log("Proxy address:", proxyAddress);
         console.log("Implementation address:", implementationAddress);
@@ -425,20 +437,19 @@ contract UpgradeImplementations is Script {
 
      /// @notice Generate Safe transaction hash
     function _generateSafeTxHash(
-        address proxyAdminAddress,
-        bytes memory upgradeData
-    ) internal returns (bytes32) {
-        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+        address targetAddress, // Renamed from proxyAdminAddress for generality
+        bytes memory callData,    // Renamed from upgradeData for generality
+        uint8 operation          // Added operation parameter
+    ) internal view returns (bytes32) { // Added view
+        console.log("Transaction data length:", callData.length);
 
-        console.log("Transaction data length:", upgradeData.length);
-
-        (bool success, bytes memory result) = gnosisSafe.staticcall(
+        (bool success, bytes memory result) = GNOSIS_SAFE.staticcall(
             abi.encodeWithSignature("nonce()")
         );
         uint256 nonce = success ? abi.decode(result, (uint256)) : 0;
         console.log("Safe nonce:", nonce);
 
-        (success, result) = gnosisSafe.staticcall(
+        (success, result) = GNOSIS_SAFE.staticcall(
             abi.encodeWithSignature("domainSeparator()")
         );
         bytes32 domainSeparator = success ? abi.decode(result, (bytes32)) : bytes32(0);
@@ -452,15 +463,15 @@ contract UpgradeImplementations is Script {
                 keccak256(
                     abi.encode(
                         keccak256("SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"),
-                        proxyAdminAddress,
-                        0,
-                        keccak256(upgradeData),
-                        0,
-                        0,
-                        0,
-                        0,
-                        address(0),
-                        address(0),
+                        targetAddress,
+                        0, // value
+                        keccak256(callData),
+                        operation,
+                        0, // safeTxGas
+                        0, // baseGas
+                        0, // gasPrice
+                        address(0), // gasToken
+                        address(0), // refundReceiver
                         nonce
                     )
                 )
@@ -472,7 +483,7 @@ contract UpgradeImplementations is Script {
     }
 
     /// @notice Sign the transaction hash
-    function _signTransaction(bytes32 safeTxHash) internal returns (bytes memory) {
+    function _signTransaction(bytes32 safeTxHash) internal view returns (bytes memory) { // Added view
         uint256 privateKey = 0xa76702cf707f31b7a7b0eaebf228bcc92f22b70b7a8db278ddf0372de0a0531d;//vm.envUint("PRIVATE_KEY");
         console.log("private key", privateKey);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, safeTxHash);
@@ -487,27 +498,23 @@ contract UpgradeImplementations is Script {
     /// @dev Uses call() which is correct for executing contract functions with data.
     /// send() would be inappropriate here as it only transfers ETH with limited gas.
     function _executeTransaction(
-        address proxyAdminAddress,
-        bytes memory upgradeData,
-        bytes memory signature
+        address targetAddress, // Renamed from proxyAdminAddress
+        bytes memory callData,    // Renamed from upgradeData
+        bytes memory signature,
+        uint8 operation          // Added operation parameter
     ) internal {
-        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
-
         // Verify the Safe contract exists at the expected address
-        require(gnosisSafe.code.length > 0, "Gnosis Safe contract not found at expected address");
+        require(GNOSIS_SAFE.code.length > 0, "Gnosis Safe contract not found at expected address");
 
         vm.startBroadcast();
 
-        // Use low-level call to execute transaction on Gnosis Safe
-        // call() is the correct method for executing contract functions with custom data
-        // send() would be inappropriate as it only transfers ETH with 2300 gas stipend
-        (bool execSuccess, bytes memory returnData) = gnosisSafe.call(
+        (bool execSuccess, bytes memory returnData) = GNOSIS_SAFE.call(
             abi.encodeWithSignature(
                 "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
-                proxyAdminAddress,
-                0,
-                upgradeData,
-                0,  // operation: 0 = CALL (actual execution)
+                targetAddress,
+                0, // value
+                callData,
+                operation,
                 0,  // safeTxGas
                 0,  // baseGas
                 0,  // gasPrice
@@ -520,7 +527,7 @@ contract UpgradeImplementations is Script {
         vm.stopBroadcast();
 
         if (execSuccess) {
-            console.log("Successfully executed upgrade transaction through Gnosis Safe on-chain!");
+            console.log("Successfully executed transaction via Gnosis Safe on-chain!");
             console.log("Transaction has been broadcast and will be mined in the next block.");
         } else {
             console.log("Failed to execute transaction through Gnosis Safe");
@@ -539,5 +546,194 @@ contract UpgradeImplementations is Script {
         }
 
         console.log("=== UPGRADE TRANSACTION EXECUTION COMPLETE ===");
+    }
+
+    /// @notice Collect all upgrade actions into a structured array
+    /// @dev This function deduplicates the upgrade action collection logic
+    /// @param _uii Input configuration for the upgrade
+    /// @param _dio Output from DeployImplementations containing new implementation addresses
+    /// @return actions Array of UpgradeAction structs containing proxy, implementation, and name
+    function _collectUpgradeActions(
+        UpgradeImplementationsInput _uii,
+        DeployImplementationsOutput _dio
+    ) internal view returns (UpgradeAction[] memory actions) {
+        // Count valid actions first
+        uint256 actionCount = 0;
+        if (_uii.superchainConfigProxy() != address(0)) actionCount++;
+        if (_uii.protocolVersionsProxy() != address(0)) actionCount++;
+        actionCount += 8; // Required proxies
+        if (_uii.delayedWETHProxy() != address(0)) actionCount++;
+
+        actions = new UpgradeAction[](actionCount);
+        uint256 index = 0;
+
+        // Add optional upgrades
+        if (_uii.superchainConfigProxy() != address(0)) {
+            actions[index++] = UpgradeAction({
+                proxy: _uii.superchainConfigProxy(),
+                implementation: address(_dio.superchainConfigImpl()),
+                name: "SuperchainConfig"
+            });
+        }
+
+        if (_uii.protocolVersionsProxy() != address(0)) {
+            actions[index++] = UpgradeAction({
+                proxy: _uii.protocolVersionsProxy(),
+                implementation: address(_dio.protocolVersionsImpl()),
+                name: "ProtocolVersions"
+            });
+        }
+
+        // Add required upgrades
+        actions[index++] = UpgradeAction({
+            proxy: _uii.optimismPortalProxy(),
+            implementation: address(_dio.optimismPortalImpl()),
+            name: "OptimismPortal"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.systemConfigProxy(),
+            implementation: address(_dio.systemConfigImpl()),
+            name: "SystemConfig"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.l1CrossDomainMessengerProxy(),
+            implementation: address(_dio.l1CrossDomainMessengerImpl()),
+            name: "L1CrossDomainMessenger"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.l1ERC721BridgeProxy(),
+            implementation: address(_dio.l1ERC721BridgeImpl()),
+            name: "L1ERC721Bridge"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.l1StandardBridgeProxy(),
+            implementation: address(_dio.l1StandardBridgeImpl()),
+            name: "L1StandardBridge"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.optimismMintableERC20FactoryProxy(),
+            implementation: address(_dio.optimismMintableERC20FactoryImpl()),
+            name: "OptimismMintableERC20Factory"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.disputeGameFactoryProxy(),
+            implementation: address(_dio.disputeGameFactoryImpl()),
+            name: "DisputeGameFactory"
+        });
+
+        actions[index++] = UpgradeAction({
+            proxy: _uii.anchorStateRegistryProxy(),
+            implementation: address(_dio.anchorStateRegistryImpl()),
+            name: "AnchorStateRegistry"
+        });
+
+        if (_uii.delayedWETHProxy() != address(0)) {
+            actions[index++] = UpgradeAction({
+                proxy: _uii.delayedWETHProxy(),
+                implementation: address(_dio.delayedWETHImpl()),
+                name: "DelayedWETH"
+            });
+        }
+
+        return actions;
+    }
+
+    /// @notice Generate multicall batch transaction data for all upgrades
+    /// @dev This function creates a single multicall transaction that batches all upgrades
+    /// @param _uii Input configuration for the upgrade
+    /// @param _dio Output from DeployImplementations containing new implementation addresses
+    function generateMulticallBatchData(
+        UpgradeImplementationsInput _uii,
+        DeployImplementationsOutput _dio
+    ) public {
+        IProxyAdmin proxyAdmin = _uii.proxyAdmin();
+        UpgradeAction[] memory actions = _collectUpgradeActions(_uii, _dio);
+
+        console.log("\n=== MULTICALL BATCH TRANSACTION DATA ===");
+        console.log("Multicall3Delegatecall address:", MULTICALL_ADDRESS);
+        console.log("ProxyAdmin address:", address(proxyAdmin));
+        console.log("Total upgrade actions:", actions.length);
+        console.log("");
+
+        bytes memory multicallData = getMulticall3Calldata(actions, address(proxyAdmin));
+
+        console.log("Multicall batch transaction:");
+        console.log("  To:", MULTICALL_ADDRESS);
+        console.log("  Data:", LibString.toHexString(multicallData));
+        console.log("  Value: 0");
+        console.log("");
+
+        console.log("=== MULTICALL BATCH INSTRUCTIONS ===");
+        console.log("1. Copy the transaction data above");
+        console.log("2. Submit to Gnosis Safe with target address:", MULTICALL_ADDRESS);
+        console.log("3. Set value to 0");
+        console.log("4. This single transaction will execute all", actions.length, "upgrades atomically");
+        console.log("5. If any upgrade fails, the entire batch will revert");
+        console.log("");
+
+        // Log individual actions for reference
+        console.log("Batch contains the following upgrades:");
+        for (uint256 i = 0; i < actions.length; i++) {
+            console.log(string.concat(
+                "  ",
+                LibString.toString(i + 1),
+                ". ",
+                actions[i].name,
+                " (",
+                LibString.toHexStringChecksummed(actions[i].proxy),
+                " -> ",
+                LibString.toHexStringChecksummed(actions[i].implementation),
+                ")"
+            ));
+        }
+
+        console.log("\n=== END MULTICALL BATCH DATA ===");
+
+        console.log("\n=== EXECUTING MULTICALL BATCH VIA GNOSIS SAFE (DELEGATECALL) ===");
+        // For multicall via delegatecall, operation is 1 (DELEGATECALL)
+        // The target for the Gnosis Safe transaction is the MULTICALL_ADDRESS
+        bytes32 safeTxHash = _generateSafeTxHash(MULTICALL_ADDRESS, multicallData, 1);
+        bytes memory signature = _signTransaction(safeTxHash);
+        _executeTransaction(MULTICALL_ADDRESS, multicallData, signature, 1);
+        console.log("=== MULTICALL BATCH EXECUTION VIA GNOSIS SAFE COMPLETE ===");
+    }
+
+    /// @notice Generate multicall3 calldata for upgrade actions
+    /// @dev Based on the pattern from Multicall3Delegatecall.sol
+    /// @param actions Array of upgrade actions to batch
+    /// @param proxyAdminAddress Address of the ProxyAdmin contract
+    /// @return data Encoded calldata for aggregate3 function
+    function getMulticall3Calldata(
+        UpgradeAction[] memory actions,
+        address proxyAdminAddress
+    ) public pure returns (bytes memory data) {
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](actions.length);
+
+        for (uint256 i = 0; i < calls.length; i++) {
+            require(actions[i].proxy != address(0), "Invalid proxy address for multicall");
+            require(actions[i].implementation != address(0), "Invalid implementation address for multicall");
+
+            // Encode the upgrade call for ProxyAdmin
+            bytes memory upgradeCalldata = abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                actions[i].proxy,
+                actions[i].implementation
+            );
+
+            calls[i] = IMulticall3.Call({
+                target: proxyAdminAddress,
+                callData: upgradeCalldata
+            });
+        }
+
+        // Use aggregate function which expects IMulticall3.Call[]
+        // The aggregate function itself will revert if any sub-call fails.
+        data = abi.encodeWithSignature("aggregate((address,bytes)[])", calls);
     }
 }
