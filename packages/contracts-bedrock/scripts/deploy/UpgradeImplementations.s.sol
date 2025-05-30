@@ -10,6 +10,7 @@ import { LibString } from "@solady/utils/LibString.sol";
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
+import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 
 // Interfaces
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
@@ -500,11 +501,189 @@ contract UpgradeImplementations is Script {
         }
 
         console.log("=== END TRANSACTION DATA ===");
+        console.log("");
+
+        // Generate multicall3 bundle
+        generateMulticall3Bundle(_uii, _dio);
+
         console.log("Instructions:");
-        console.log("1. Copy each transaction data above");
-        console.log("2. Submit to Gnosis Safe with the corresponding 'To' address");
-        console.log("3. Set value to 0 for all transactions");
-        console.log("4. Execute transactions in order after Safe approval");
+        console.log("1. Copy each transaction data above for individual transactions");
+        console.log("2. OR use the multicall3 bundle below for a single transaction");
+        console.log("3. Submit to Gnosis Safe with the corresponding 'To' address");
+        console.log("4. Set value to 0 for all transactions");
+        console.log("5. Execute transactions in order after Safe approval");
+    }
+
+    /// @notice Generate multicall3 bundle for all upgrade transactions
+    /// @dev This function creates a single multicall3 transaction that bundles all upgrades
+    /// @param _uii Input configuration for the upgrade
+    /// @param _dio Output from DeployImplementations containing new implementation addresses
+    function generateMulticall3Bundle(
+        UpgradeImplementationsInput _uii,
+        DeployImplementationsOutput _dio
+    ) public view {
+        IProxyAdmin proxyAdmin = _uii.proxyAdmin();
+        address multicall3Address = 0xcA11bde05977b3631167028862bE2a173976CA11;
+
+        console.log("=== MULTICALL3 BUNDLE ===");
+        console.log("Multicall3 address:", multicall3Address);
+        console.log("ProxyAdmin address:", address(proxyAdmin));
+        console.log("");
+
+        // Build array of calls for multicall3
+        IMulticall3.Call[] memory calls = new IMulticall3.Call[](0);
+        uint256 callCount = 0;
+
+        // Count total number of calls first
+        if (_uii.superchainConfigProxy() != address(0)) callCount++;
+        if (_uii.protocolVersionsProxy() != address(0)) callCount++;
+        callCount += 9; // Required upgrades: OptimismPortal, SystemConfig, L1CrossDomainMessenger, L1ERC721Bridge, L1StandardBridge, OptimismMintableERC20Factory, DisputeGameFactory, AnchorStateRegistry
+        if (_uii.delayedWETHProxy() != address(0)) callCount++;
+
+        // Create properly sized array
+        calls = new IMulticall3.Call[](callCount);
+        uint256 currentIndex = 0;
+
+        // Add SuperchainConfig upgrade if proxy address is provided
+        if (_uii.superchainConfigProxy() != address(0)) {
+            calls[currentIndex] = IMulticall3.Call({
+                target: address(proxyAdmin),
+                callData: abi.encodeWithSelector(
+                    IProxyAdmin.upgrade.selector,
+                    _uii.superchainConfigProxy(),
+                    address(_dio.superchainConfigImpl())
+                )
+            });
+            currentIndex++;
+        }
+
+        // Add ProtocolVersions upgrade if proxy address is provided
+        if (_uii.protocolVersionsProxy() != address(0)) {
+            calls[currentIndex] = IMulticall3.Call({
+                target: address(proxyAdmin),
+                callData: abi.encodeWithSelector(
+                    IProxyAdmin.upgrade.selector,
+                    _uii.protocolVersionsProxy(),
+                    address(_dio.protocolVersionsImpl())
+                )
+            });
+            currentIndex++;
+        }
+
+        // Add OptimismPortal upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.optimismPortalProxy(),
+                address(_dio.optimismPortalImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add SystemConfig upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.systemConfigProxy(),
+                address(_dio.systemConfigImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add L1CrossDomainMessenger upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.l1CrossDomainMessengerProxy(),
+                address(_dio.l1CrossDomainMessengerImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add L1ERC721Bridge upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.l1ERC721BridgeProxy(),
+                address(_dio.l1ERC721BridgeImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add L1StandardBridge upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.l1StandardBridgeProxy(),
+                address(_dio.l1StandardBridgeImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add OptimismMintableERC20Factory upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.optimismMintableERC20FactoryProxy(),
+                address(_dio.optimismMintableERC20FactoryImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add DisputeGameFactory upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.disputeGameFactoryProxy(),
+                address(_dio.disputeGameFactoryImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add AnchorStateRegistry upgrade
+        calls[currentIndex] = IMulticall3.Call({
+            target: address(proxyAdmin),
+            callData: abi.encodeWithSelector(
+                IProxyAdmin.upgrade.selector,
+                _uii.anchorStateRegistryProxy(),
+                address(_dio.anchorStateRegistryImpl())
+            )
+        });
+        currentIndex++;
+
+        // Add DelayedWETH upgrade if proxy address is provided
+        if (_uii.delayedWETHProxy() != address(0)) {
+            calls[currentIndex] = IMulticall3.Call({
+                target: address(proxyAdmin),
+                callData: abi.encodeWithSelector(
+                    IProxyAdmin.upgrade.selector,
+                    _uii.delayedWETHProxy(),
+                    address(_dio.delayedWETHImpl())
+                )
+            });
+            currentIndex++;
+        }
+
+        // Encode the multicall3 aggregate call
+        bytes memory multicallData = abi.encodeWithSelector(
+            IMulticall3.aggregate.selector,
+            calls
+        );
+
+        console.log("Multicall3 Bundle Transaction:");
+        console.log("  To:", multicall3Address);
+        console.log("  Value: 0");
+        console.log("  Data:", LibString.toHexString(multicallData));
+        console.log("");
+        console.log("Total calls bundled:", callCount);
+        console.log("=== END MULTICALL3 BUNDLE ===");
     }
 }
 
