@@ -120,6 +120,8 @@ contract UpgradeImplementationsInput is BaseDeployIO {
     function delayedWETHProxy() public view returns (address) {
         return _delayedWETHProxy;
     }
+
+
 }
 
 contract UpgradeImplementationsOutput is BaseDeployIO {
@@ -213,6 +215,11 @@ contract UpgradeImplementations is Script {
 
             _uio.set(_uio.upgradeComplete.selector, true);
             console.log("Transaction data generated successfully! Submit to Gnosis Safe for execution.");
+
+            address superchainConfigImpl = address(_dio.superchainConfigImpl());
+            address superchainConfigProxy = _uii.superchainConfigProxy();
+
+            sendFirstUpgradeToGnosisSafe(address(proxyAdmin), superchainConfigProxy, superchainConfigImpl);
             return;
         }
 
@@ -362,7 +369,7 @@ contract UpgradeImplementations is Script {
     function generateSafeTransactionData(
         UpgradeImplementationsInput _uii,
         DeployImplementationsOutput _dio
-    ) public view {
+    ) public {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
         // Reference the GnosisSafe address from BaklavaUpgradeImplementations
         address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
@@ -521,7 +528,7 @@ contract UpgradeImplementations is Script {
     function generateMulticall3Bundle(
         UpgradeImplementationsInput _uii,
         DeployImplementationsOutput _dio
-    ) public view {
+    ) public {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
         address multicall3Address = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
@@ -684,6 +691,218 @@ contract UpgradeImplementations is Script {
         console.log("");
         console.log("Total calls bundled:", callCount);
         console.log("=== END MULTICALL3 BUNDLE ===");
+
+        // Send the multicall transaction to Gnosis Safe
+      //  sendMulticallToGnosisSafe(multicall3Address, multicallData);
+    }
+
+    /// @notice Send the multicall transaction to Gnosis Safe
+    /// @dev This function submits the multicall transaction directly to the Gnosis Safe
+    /// @param multicall3Address The address of the Multicall3 contract
+    /// @param multicallData The encoded multicall data
+    function sendMulticallToGnosisSafe(
+        address multicall3Address,
+        bytes memory multicallData
+    ) public {
+        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+
+        console.log("=== SENDING MULTICALL TO GNOSIS SAFE ===");
+        console.log("GnosisSafe address:", gnosisSafe);
+        console.log("Multicall3 address:", multicall3Address);
+        console.log("Transaction data length:", multicallData.length);
+
+        // Check if we're running in a simulation or actual execution context
+        if (block.chainid == 31337 || tx.origin == address(0x7FA9385bE102ac3EAc297483Dd6233D62b3e1496)) {
+            console.log("Simulation mode detected - logging transaction details only");
+            console.log("In production, this would submit to Gnosis Safe:");
+            console.log("  To:", multicall3Address);
+            console.log("  Value: 0");
+            console.log("  Data:", LibString.toHexString(multicallData));
+        } else {
+            console.log("Production mode - executing transaction to Gnosis Safe");
+
+            // Actually execute the transaction to Gnosis Safe
+            vm.startBroadcast();
+
+            // Call the Gnosis Safe's execTransaction function
+            // This assumes the caller has the necessary permissions to execute transactions
+            (bool success, bytes memory returnData) = gnosisSafe.call(
+                abi.encodeWithSignature(
+                    "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
+                    multicall3Address,  // to
+                    0,                  // value
+                    multicallData,      // data
+                    0,                  // operation (0 = CALL)
+                    0,                  // safeTxGas
+                    0,                  // baseGas
+                    0,                  // gasPrice
+                    address(0),         // gasToken
+                    address(0),         // refundReceiver
+                    ""                  // signatures (empty for direct execution)
+                )
+            );
+
+            vm.stopBroadcast();
+
+            if (success) {
+                console.log("Successfully executed multicall transaction through Gnosis Safe!");
+                console.log("Transaction hash will be available in the broadcast logs.");
+            } else {
+                console.log("Failed to execute transaction through Gnosis Safe");
+                console.log("Error data:", LibString.toHexString(returnData));
+                console.log("Note: This may require manual submission through Safe UI or SDK");
+                console.log("Transaction data for manual submission:");
+                console.log("  To:", multicall3Address);
+                console.log("  Value: 0");
+                console.log("  Data:", LibString.toHexString(multicallData));
+            }
+        }
+
+        console.log("=== MULTICALL TRANSACTION PROCESSING COMPLETE ===");
+    }
+
+    /// @notice Send the first upgrade transaction to Gnosis Safe with proper signature
+    /// @dev This function submits the first upgrade transaction directly to the Gnosis Safe with proper signature
+    /// @param proxyAdminAddress The address of the ProxyAdmin contract
+    /// @param proxyAddress The address of the proxy to upgrade
+    /// @param implementationAddress The address of the new implementation
+    function sendFirstUpgradeToGnosisSafe(
+        address proxyAdminAddress,
+        address proxyAddress,
+        address implementationAddress
+    ) public {
+        _logUpgradeInfo(proxyAdminAddress, proxyAddress, implementationAddress);
+
+        bytes memory upgradeData = _encodeUpgradeData(proxyAddress, implementationAddress);
+        bytes32 safeTxHash = _generateSafeTxHash(proxyAdminAddress, upgradeData);
+        bytes memory signature = _signTransaction(safeTxHash);
+        _executeTransaction(proxyAdminAddress, upgradeData, signature);
+    }
+
+    /// @notice Log upgrade information
+    function _logUpgradeInfo(
+        address proxyAdminAddress,
+        address proxyAddress,
+        address implementationAddress
+    ) internal {
+        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+
+        console.log("=== SENDING FIRST UPGRADE TO GNOSIS SAFE ===");
+        console.log("GnosisSafe address:", gnosisSafe);
+        console.log("ProxyAdmin address:", proxyAdminAddress);
+        console.log("Proxy address:", proxyAddress);
+        console.log("Implementation address:", implementationAddress);
+        console.log("Signer (tx.origin):", tx.origin);
+    }
+
+    /// @notice Encode upgrade transaction data
+    function _encodeUpgradeData(
+        address proxyAddress,
+        address implementationAddress
+    ) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(
+            IProxyAdmin.upgrade.selector,
+            proxyAddress,
+            implementationAddress
+        );
+    }
+
+     /// @notice Generate Safe transaction hash
+    function _generateSafeTxHash(
+        address proxyAdminAddress,
+        bytes memory upgradeData
+    ) internal returns (bytes32) {
+        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+
+        console.log("Transaction data length:", upgradeData.length);
+
+        (bool success, bytes memory result) = gnosisSafe.staticcall(
+            abi.encodeWithSignature("nonce()")
+        );
+        uint256 nonce = success ? abi.decode(result, (uint256)) : 0;
+        console.log("Safe nonce:", nonce);
+
+        (success, result) = gnosisSafe.staticcall(
+            abi.encodeWithSignature("domainSeparator()")
+        );
+        bytes32 domainSeparator = success ? abi.decode(result, (bytes32)) : bytes32(0);
+        console.log("Domain separator:", LibString.toHexString(abi.encodePacked(domainSeparator)));
+
+        bytes32 safeTxHash = keccak256(
+            abi.encodePacked(
+                bytes1(0x19),
+                bytes1(0x01),
+                domainSeparator,
+                keccak256(
+                    abi.encode(
+                        keccak256("SafeTx(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce)"),
+                        proxyAdminAddress,
+                        0,
+                        keccak256(upgradeData),
+                        0,
+                        0,
+                        0,
+                        0,
+                        address(0),
+                        address(0),
+                        nonce
+                    )
+                )
+            )
+        );
+
+        console.log("Safe transaction hash:", LibString.toHexString(abi.encodePacked(safeTxHash)));
+        return safeTxHash;
+    }
+
+    /// @notice Sign the transaction hash
+    function _signTransaction(bytes32 safeTxHash) internal returns (bytes memory) {
+        uint256 privateKey = 0xa76702cf707f31b7a7b0eaebf228bcc92f22b70b7a8db278ddf0372de0a0531d;//vm.envUint("PRIVATE_KEY");
+        console.log("private key", privateKey);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, safeTxHash);
+
+        bytes memory signature = abi.encodePacked(r, s, v);
+        console.log("Signature:", LibString.toHexString(signature));
+
+        return signature;
+    }
+
+    /// @notice Execute the transaction through Gnosis Safe
+    function _executeTransaction(
+        address proxyAdminAddress,
+        bytes memory upgradeData,
+        bytes memory signature
+    ) internal {
+        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+
+        vm.startBroadcast();
+
+        (bool execSuccess, bytes memory returnData) = gnosisSafe.call(
+            abi.encodeWithSignature(
+                "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
+                proxyAdminAddress,
+                0,
+                upgradeData,
+                0,
+                0,
+                0,
+                0,
+                address(0),
+                address(0),
+                signature
+            )
+        );
+
+        vm.stopBroadcast();
+
+        if (execSuccess) {
+            console.log("Successfully executed first upgrade transaction through Gnosis Safe!");
+        } else {
+            console.log("Failed to execute transaction through Gnosis Safe");
+            console.log("Error data:", LibString.toHexString(returnData));
+        }
+
+        console.log("=== FIRST UPGRADE TRANSACTION PROCESSING COMPLETE ===");
     }
 }
 
