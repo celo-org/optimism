@@ -135,9 +135,13 @@ contract UpgradeImplementationsOutput is BaseDeployIO {
 }
 
 contract BaklavaUpgradeImplementations is Script {
+    // GnosisSafe address
+    address constant GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+
     function run() external {
         // setup
         console.log("Setup started!");
+        console.log("GnosisSafe address:", GNOSIS_SAFE);
         DeployImplementationsInput dii = new DeployImplementationsInput();
         dii.set(DeployImplementationsInput.withdrawalDelaySeconds.selector, 302400);
         dii.set(DeployImplementationsInput.minProposalSizeBytes.selector, 126000);
@@ -359,8 +363,11 @@ contract UpgradeImplementations is Script {
         DeployImplementationsOutput _dio
     ) public view {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
+        // Reference the GnosisSafe address from BaklavaUpgradeImplementations
+        address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
 
         console.log("=== GNOSIS SAFE TRANSACTION DATA ===");
+        console.log("GnosisSafe address:", gnosisSafe);
         console.log("ProxyAdmin address:", address(proxyAdmin));
         console.log("ProxyAdmin owner (should be Gnosis Safe):", proxyAdmin.owner());
         console.log("");
@@ -505,6 +512,7 @@ contract UpgradeImplementations is Script {
 contract GenerateSafeUpgradeData is Script {
     function run() external {
         console.log("Generating Gnosis Safe transaction data for upgrades...");
+        console.log("GnosisSafe address:", 0xd542f3328ff2516443FE4db1c89E427F67169D94);
 
         // Set up the same configuration as BaklavaUpgradeImplementations
         DeployImplementationsInput dii = new DeployImplementationsInput();
