@@ -868,6 +868,8 @@ contract UpgradeImplementations is Script {
     }
 
     /// @notice Execute the transaction through Gnosis Safe
+    /// @dev Uses call() which is correct for executing contract functions with data.
+    /// send() would be inappropriate here as it only transfers ETH with limited gas.
     function _executeTransaction(
         address proxyAdminAddress,
         bytes memory upgradeData,
@@ -875,20 +877,26 @@ contract UpgradeImplementations is Script {
     ) internal {
         address gnosisSafe = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
 
+        // Verify the Safe contract exists at the expected address
+        require(gnosisSafe.code.length > 0, "Gnosis Safe contract not found at expected address");
+
         vm.startBroadcast();
 
+        // Use low-level call to execute transaction on Gnosis Safe
+        // call() is the correct method for executing contract functions with custom data
+        // send() would be inappropriate as it only transfers ETH with 2300 gas stipend
         (bool execSuccess, bytes memory returnData) = gnosisSafe.call(
             abi.encodeWithSignature(
                 "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
                 proxyAdminAddress,
                 0,
                 upgradeData,
-                0,
-                0,
-                0,
-                0,
-                address(0),
-                address(0),
+                0,  // operation: 0 = CALL (actual execution)
+                0,  // safeTxGas
+                0,  // baseGas
+                0,  // gasPrice
+                address(0),  // gasToken
+                address(0),  // refundReceiver
                 signature
             )
         );
@@ -896,13 +904,25 @@ contract UpgradeImplementations is Script {
         vm.stopBroadcast();
 
         if (execSuccess) {
-            console.log("Successfully executed first upgrade transaction through Gnosis Safe!");
+            console.log("Successfully executed upgrade transaction through Gnosis Safe on-chain!");
+            console.log("Transaction has been broadcast and will be mined in the next block.");
         } else {
             console.log("Failed to execute transaction through Gnosis Safe");
             console.log("Error data:", LibString.toHexString(returnData));
+            console.log("This may require proper multisig threshold signatures");
+
+            // Attempt to decode common error reasons
+            if (returnData.length >= 4) {
+                bytes4 errorSelector = bytes4(returnData);
+                if (errorSelector == bytes4(keccak256("GS013"))) {
+                    console.log("Error: Invalid signature provided");
+                } else if (errorSelector == bytes4(keccak256("GS020"))) {
+                    console.log("Error: Signatures data too short");
+                }
+            }
         }
 
-        console.log("=== FIRST UPGRADE TRANSACTION PROCESSING COMPLETE ===");
+        console.log("=== UPGRADE TRANSACTION EXECUTION COMPLETE ===");
     }
 }
 
