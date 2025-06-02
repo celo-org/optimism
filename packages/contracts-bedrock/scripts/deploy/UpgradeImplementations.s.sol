@@ -139,12 +139,12 @@ contract UpgradeImplementationsOutput is BaseDeployIO {
 
 contract BaklavaUpgradeImplementations is Script {
     // GnosisSafe address
-    address constant GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+    address constant _GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
 
     function run() external {
         // setup
         console.log("Setup started!");
-        console.log("GnosisSafe address:", GNOSIS_SAFE);
+        console.log("GnosisSafe address:", _GNOSIS_SAFE);
         DeployImplementationsInput dii = new DeployImplementationsInput();
         dii.set(DeployImplementationsInput.withdrawalDelaySeconds.selector, 302400);
         dii.set(DeployImplementationsInput.minProposalSizeBytes.selector, 126000);
@@ -183,7 +183,7 @@ contract BaklavaUpgradeImplementations is Script {
 contract UpgradeImplementations is Script {
     // Multicall3 delegatecall contract address
     address public constant MULTICALL_ADDRESS = 0xcA11bde05977b3631167028862bE2a173976CA11;
-    address private constant GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
+    address private constant _GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
 
     struct UpgradeAction {
         address proxy;
@@ -347,13 +347,13 @@ contract UpgradeImplementations is Script {
     ) internal view returns (bytes32) { // Added view
         console.log("Transaction data length:", callData.length);
 
-        (bool success, bytes memory result) = GNOSIS_SAFE.staticcall(
+        (bool success, bytes memory result) = _GNOSIS_SAFE.staticcall(
             abi.encodeWithSignature("nonce()")
         );
         uint256 nonce = success ? abi.decode(result, (uint256)) : 0;
         console.log("Safe nonce:", nonce);
 
-        (success, result) = GNOSIS_SAFE.staticcall(
+        (success, result) = _GNOSIS_SAFE.staticcall(
             abi.encodeWithSignature("domainSeparator()")
         );
         bytes32 domainSeparator = success ? abi.decode(result, (bytes32)) : bytes32(0);
@@ -388,12 +388,16 @@ contract UpgradeImplementations is Script {
 
     /// @notice Sign the transaction hash
     function _signTransaction(bytes32 safeTxHash) internal view returns (bytes memory) { // Added view
-        uint256 privateKey = 0xa76702cf707f31b7a7b0eaebf228bcc92f22b70b7a8db278ddf0372de0a0531d;//vm.envUint("PRIVATE_KEY");
-        console.log("private key", privateKey);
+        uint256 privateKey = vm.envUint("PRIVATE_KEY");
+        // Basic validation: private keys shouldn't be zero and should parse correctly.
+        require(privateKey != 0, "Failed to parse PRIVATE_KEY, or it resolved to zero. Ensure it's a valid hex string (e.g., 0x...).");
+
+        console.log("Private key for Gnosis Safe message signing loaded successfully from PRIVATE_KEY."); // Avoid logging the key itself
+
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, safeTxHash);
 
         bytes memory signature = abi.encodePacked(r, s, v);
-        console.log("Signature:", LibString.toHexString(signature));
+        console.log("Signature for Gnosis Safe message:", LibString.toHexString(signature));
 
         return signature;
     }
@@ -408,11 +412,11 @@ contract UpgradeImplementations is Script {
         uint8 operation          // Added operation parameter
     ) internal {
         // Verify the Safe contract exists at the expected address
-        require(GNOSIS_SAFE.code.length > 0, "Gnosis Safe contract not found at expected address");
+        require(_GNOSIS_SAFE.code.length > 0, "Gnosis Safe contract not found at expected address");
 
         vm.startBroadcast();
 
-        (bool execSuccess, bytes memory returnData) = GNOSIS_SAFE.call(
+        (bool execSuccess, bytes memory returnData) = _GNOSIS_SAFE.call(
             abi.encodeWithSignature(
                 "execTransaction(address,uint256,bytes,uint8,uint256,uint256,uint256,address,address,bytes)",
                 targetAddress,
@@ -599,13 +603,27 @@ contract UpgradeImplementations is Script {
 
         console.log("\n=== END MULTICALL BATCH DATA ===");
 
-        console.log("\n=== EXECUTING MULTICALL BATCH VIA GNOSIS SAFE (DELEGATECALL) ===");
+        bool ledgerMode = vm.envBool("FOUNDRY_LEDGER_MODE");
+
+        if (ledgerMode) {
+            console.log("\nFOUNDRY_LEDGER_MODE detected.");
+            console.log("Implementations have been deployed (if this script instance is deploying them).");
+            console.log("The multicall batch data is printed above. Please submit it to Gnosis Safe manually using your Ledger.");
+            console.log("Skipping on-chain signing and execution steps from this script.");
+            return; // Exit before attempting to sign/execute
+        }
+
+        // If not in ledgerMode, proceed to attempt signing and execution
+        console.log("\n=== ATTEMPTING TO EXECUTE MULTICALL BATCH VIA GNOSIS SAFE (DELEGATECALL) ===");
+        console.log("This requires PRIVATE_KEY env var to be set for signing the Safe message,");
+        console.log("and the transaction broadcaster (e.g., from --private-key flag) to be a Safe owner or have permissions.");
+
         // For multicall via delegatecall, operation is 1 (DELEGATECALL)
         // The target for the Gnosis Safe transaction is the MULTICALL_ADDRESS
         bytes32 safeTxHash = _generateSafeTxHash(MULTICALL_ADDRESS, multicallData, 1);
         bytes memory signature = _signTransaction(safeTxHash);
         _executeTransaction(MULTICALL_ADDRESS, multicallData, signature, 1);
-        console.log("=== MULTICALL BATCH EXECUTION VIA GNOSIS SAFE COMPLETE ===");
+        console.log("=== MULTICALL BATCH EXECUTION ATTEMPT VIA GNOSIS SAFE COMPLETE ===");
     }
 
     /// @notice Generate multicall3 calldata for upgrade actions
