@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.15;
+pragma solidity ^0.8.15;
 
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
@@ -11,6 +11,7 @@ import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
+import { Constants } from "src/libraries/Constants.sol";
 
 // Interfaces
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
@@ -224,8 +225,70 @@ contract UpgradeImplementations is Script {
         // Generate multicall batch transaction data
         generateMulticallBatchData(_uii, _dio);
 
+        bool ledgerMode = vm.envBool("FOUNDRY_LEDGER_MODE");
+        if (!ledgerMode) {
+            console.log("\nAttempting post-upgrade validations...");
+            console.log("Note: These validations assume the Gnosis Safe transaction has been or will be executed successfully.");
+            _validateAllCollectedUpgrades(_uii, _dio);
+        } else {
+            console.log("\nLedger mode: Skipping automated post-upgrade validations in this script run.");
+            console.log("Please execute the Gnosis Safe transaction manually using the data above.");
+            console.log("After confirmation, ensure to verify the upgrades on-chain.");
+        }
+
         _uio.set(_uio.upgradeComplete.selector, true);
-        console.log("Transaction data generated successfully! Submit to Gnosis Safe for execution.");
+        console.log("Transaction data generated and validation (if applicable) attempted. Submit to Gnosis Safe for execution if not done by script.");
+    }
+
+    /// @notice Validates a single proxy upgrade.
+    function _validateSingleUpgrade(
+        string memory _contractName,
+        address _proxyAddress,
+        address _expectedImplementation
+    ) internal view {
+        // Ensure proxy address is not zero before attempting to load storage
+        if (_proxyAddress == address(0)) {
+            console.log("[WARN] Validation SKIPPED for since proxy is 0 ", _contractName);
+            return;
+        }
+        // Ensure expected implementation is not zero
+        if (_expectedImplementation == address(0)) {
+            console.log("[WARN] Validation SKIPPED for - Expected implementation is zero.", _contractName);
+            return;
+        }
+
+        address currentImplementation = address(uint160(uint256(vm.load(_proxyAddress, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
+
+        if (currentImplementation == _expectedImplementation) {
+            console.log("[PASS] Validation PASSED for", _contractName, "at", _proxyAddress);
+            console.log("   Implementation is correctly set to:", currentImplementation);
+        } else {
+            console.log("[FAIL] Validation FAILED for", _contractName, "at", _proxyAddress);
+            console.log("     Expected implementation:", _expectedImplementation);
+            console.log("     Actual implementation  :", currentImplementation);
+            // Consider reverting if a failure should stop the script, though for a deploy script, logging might be preferred.
+            // revert(string.concat("Validation FAILED for ", _contractName));
+        }
+    }
+
+    /// @notice Validates all upgrades defined by the collected actions.
+    function _validateAllCollectedUpgrades(
+        UpgradeImplementationsInput _uii,
+        DeployImplementationsOutput _dio
+    ) internal view {
+        console.log("\n=== STARTING POST-UPGRADE VALIDATIONS ===");
+        UpgradeAction[] memory actions = _collectUpgradeActions(_uii, _dio);
+
+        if (actions.length == 0) {
+            console.log("No upgrade actions found to validate.");
+            console.log("=== POST-UPGRADE VALIDATIONS COMPLETE ===");
+            return;
+        }
+
+        for (uint256 i = 0; i < actions.length; i++) {
+            _validateSingleUpgrade(actions[i].name, actions[i].proxy, actions[i].implementation);
+        }
+        console.log("=== POST-UPGRADE VALIDATIONS COMPLETE ===");
     }
 
     /// @notice Helper function to generate transaction data for Gnosis Safe execution
