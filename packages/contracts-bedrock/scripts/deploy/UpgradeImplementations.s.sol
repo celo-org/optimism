@@ -183,7 +183,6 @@ contract BaklavaUpgradeImplementations is Script {
 contract UpgradeImplementations is Script {
     // Multicall3 delegatecall contract address
     address public constant MULTICALL_ADDRESS = 0xcA11bde05977b3631167028862bE2a173976CA11;
-    // GnosisSafe address (consistent with BaklavaUpgradeImplementations and sendFirstUpgradeToGnosisSafe)
     address private constant GNOSIS_SAFE = 0xd542f3328ff2516443FE4db1c89E427F67169D94;
 
     struct UpgradeAction {
@@ -227,11 +226,6 @@ contract UpgradeImplementations is Script {
 
         _uio.set(_uio.upgradeComplete.selector, true);
         console.log("Transaction data generated successfully! Submit to Gnosis Safe for execution.");
-
-        address superchainConfigImpl = address(_dio.superchainConfigImpl());
-        address superchainConfigProxy = _uii.superchainConfigProxy();
-
-        // sendFirstUpgradeToGnclosisSafe(address(proxyAdmin), superchainConfigProxy, superchainConfigImpl);
     }
 
     /// @notice Helper function to generate transaction data for Gnosis Safe execution
@@ -261,10 +255,6 @@ contract UpgradeImplementations is Script {
                 _uii.superchainConfigProxy(),
                 address(_dio.superchainConfigImpl())
             );
-            console.log("SuperchainConfig upgrade:");
-            console.log("  To:", address(proxyAdmin));
-            console.log("  Data:", LibString.toHexString(data));
-            console.log("");
         }
 
         if (_uii.protocolVersionsProxy() != address(0)) {
@@ -273,10 +263,6 @@ contract UpgradeImplementations is Script {
                 _uii.protocolVersionsProxy(),
                 address(_dio.protocolVersionsImpl())
             );
-            console.log("ProtocolVersions upgrade:");
-            console.log("  To:", address(proxyAdmin));
-            console.log("  Data:", LibString.toHexString(data));
-            console.log("");
         }
 
         // OptimismPortal upgrade
@@ -285,10 +271,6 @@ contract UpgradeImplementations is Script {
             _uii.optimismPortalProxy(),
             address(_dio.optimismPortalImpl())
         );
-        console.log("OptimismPortal upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // SystemConfig upgrade
         data = abi.encodeWithSelector(
@@ -296,10 +278,6 @@ contract UpgradeImplementations is Script {
             _uii.systemConfigProxy(),
             address(_dio.systemConfigImpl())
         );
-        console.log("SystemConfig upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // L1CrossDomainMessenger upgrade
         data = abi.encodeWithSelector(
@@ -307,10 +285,6 @@ contract UpgradeImplementations is Script {
             _uii.l1CrossDomainMessengerProxy(),
             address(_dio.l1CrossDomainMessengerImpl())
         );
-        console.log("L1CrossDomainMessenger upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // L1ERC721Bridge upgrade
         data = abi.encodeWithSelector(
@@ -318,10 +292,6 @@ contract UpgradeImplementations is Script {
             _uii.l1ERC721BridgeProxy(),
             address(_dio.l1ERC721BridgeImpl())
         );
-        console.log("L1ERC721Bridge upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // L1StandardBridge upgrade
         data = abi.encodeWithSelector(
@@ -329,10 +299,6 @@ contract UpgradeImplementations is Script {
             _uii.l1StandardBridgeProxy(),
             address(_dio.l1StandardBridgeImpl())
         );
-        console.log("L1StandardBridge upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // OptimismMintableERC20Factory upgrade
         data = abi.encodeWithSelector(
@@ -340,10 +306,6 @@ contract UpgradeImplementations is Script {
             _uii.optimismMintableERC20FactoryProxy(),
             address(_dio.optimismMintableERC20FactoryImpl())
         );
-        console.log("OptimismMintableERC20Factory upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // DisputeGameFactory upgrade
         data = abi.encodeWithSelector(
@@ -351,10 +313,6 @@ contract UpgradeImplementations is Script {
             _uii.disputeGameFactoryProxy(),
             address(_dio.disputeGameFactoryImpl())
         );
-        console.log("DisputeGameFactory upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         // AnchorStateRegistry upgrade
         data = abi.encodeWithSelector(
@@ -362,10 +320,6 @@ contract UpgradeImplementations is Script {
             _uii.anchorStateRegistryProxy(),
             address(_dio.anchorStateRegistryImpl())
         );
-        console.log("AnchorStateRegistry upgrade:");
-        console.log("  To:", address(proxyAdmin));
-        console.log("  Data:", LibString.toHexString(data));
-        console.log("");
 
         if (_uii.delayedWETHProxy() != address(0)) {
             data = abi.encodeWithSelector(
@@ -373,10 +327,6 @@ contract UpgradeImplementations is Script {
                 _uii.delayedWETHProxy(),
                 address(_dio.delayedWETHImpl())
             );
-            console.log("DelayedWETH upgrade:");
-            console.log("  To:", address(proxyAdmin));
-            console.log("  Data:", LibString.toHexString(data));
-            console.log("");
         }
 
         console.log("=== END TRANSACTION DATA ===");
@@ -387,52 +337,6 @@ contract UpgradeImplementations is Script {
         console.log("3. Submit to Gnosis Safe with the corresponding 'To' address");
         console.log("4. Set value to 0 for all transactions");
         console.log("5. Execute transactions in order after Safe approval");
-    }
-
-
-    /// @notice Send the first upgrade transaction to Gnosis Safe with proper signature
-    /// @dev This function submits the first upgrade transaction directly to the Gnosis Safe with proper signature
-    /// @param proxyAdminAddress The address of the ProxyAdmin contract
-    /// @param proxyAddress The address of the proxy to upgrade
-    /// @param implementationAddress The address of the new implementation
-    function sendFirstUpgradeToGnosisSafe(
-        address proxyAdminAddress,
-        address proxyAddress,
-        address implementationAddress
-    ) public {
-        _logUpgradeInfo(proxyAdminAddress, proxyAddress, implementationAddress);
-
-        bytes memory upgradeData = _encodeUpgradeData(proxyAddress, implementationAddress);
-        // For standard upgrade call, operation is 0 (CALL)
-        bytes32 safeTxHash = _generateSafeTxHash(proxyAdminAddress, upgradeData, 0);
-        bytes memory signature = _signTransaction(safeTxHash);
-        _executeTransaction(proxyAdminAddress, upgradeData, signature, 0);
-    }
-
-    /// @notice Log upgrade information
-    function _logUpgradeInfo(
-        address proxyAdminAddress,
-        address proxyAddress,
-        address implementationAddress
-    ) internal view { // Added view as GNOSIS_SAFE is now a constant
-        console.log("=== SENDING FIRST UPGRADE TO GNOSIS SAFE ===");
-        console.log("GnosisSafe address:", GNOSIS_SAFE);
-        console.log("ProxyAdmin address:", proxyAdminAddress);
-        console.log("Proxy address:", proxyAddress);
-        console.log("Implementation address:", implementationAddress);
-        console.log("Signer (tx.origin):", tx.origin);
-    }
-
-    /// @notice Encode upgrade transaction data
-    function _encodeUpgradeData(
-        address proxyAddress,
-        address implementationAddress
-    ) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            proxyAddress,
-            implementationAddress
-        );
     }
 
      /// @notice Generate Safe transaction hash
@@ -732,8 +636,6 @@ contract UpgradeImplementations is Script {
             });
         }
 
-        // Use aggregate function which expects IMulticall3.Call[]
-        // The aggregate function itself will revert if any sub-call fails.
         data = abi.encodeWithSignature("aggregate((address,bytes)[])", calls);
     }
 }
