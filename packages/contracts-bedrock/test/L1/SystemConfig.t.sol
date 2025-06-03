@@ -337,8 +337,6 @@ contract SystemConfig_Init_CustomGasToken is SystemConfig_TestInit {
     ERC20 token;
 
     function setUp() public override {
-        vm.skip(true, "Custom gas token not supported");
-
         token = new ERC20("Silly", "SIL");
         super.enableCustomGasToken(address(token));
 

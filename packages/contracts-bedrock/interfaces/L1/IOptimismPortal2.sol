@@ -13,7 +13,6 @@ import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 
 interface IOptimismPortal2 is IProxyAdminOwnedBase {
     error OnlyCustomGasToken();
-    error CustomGasTokenNotSupported();
     error ContentLengthMismatch();
     error EmptyItem();
     error InvalidDataRemainder();

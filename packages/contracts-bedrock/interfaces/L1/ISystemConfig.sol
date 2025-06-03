@@ -7,8 +7,6 @@ import { IProxyAdminOwnedBase } from "interfaces/L1/IProxyAdminOwnedBase.sol";
 
 /// @notice This interface corresponds to the Custom Gas Token version of the SystemConfig contract.
 interface ISystemConfig is IProxyAdminOwnedBase {
-    error CustomGasTokenNotSupported();
-
     enum UpdateType {
         BATCHER,
         FEE_SCALARS,
