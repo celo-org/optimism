@@ -30,6 +30,7 @@ import { IDelayedWETH } from "interfaces/dispute/IDelayedWETH.sol";
 
 // Import the DeployImplementations script and its input/output contracts
 import { DeployImplementations, DeployImplementationsInput, DeployImplementationsOutput } from "scripts/deploy/DeployImplementations.s.sol";
+import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
 
 contract UpgradeImplementationsInput is BaseDeployIO {
     IProxyAdmin internal _proxyAdmin;
@@ -230,6 +231,13 @@ contract UpgradeImplementations is Script {
             console.log("\nAttempting post-upgrade validations...");
             console.log("Note: These validations assume the Gnosis Safe transaction has been or will be executed successfully.");
             _validateAllCollectedUpgrades(_uii, _dio);
+
+            console.log("\nAttempting custom post-upgrade validations for gas token...");
+            _validateCustomGasTokenOptimismPortal(_uii, _dio);
+            _validateCustomGasTokenSystemConfig(_uii, _dio);
+
+            console.log("\nAttempting custom post-upgrade validations for Celo SuperchainConfig references...");
+            _validateCeloSuperchainConfigReferences(_uii);
         } else {
             console.log("\nLedger mode: Skipping automated post-upgrade validations in this script run.");
             console.log("Please execute the Gnosis Safe transaction manually using the data above.");
@@ -251,7 +259,6 @@ contract UpgradeImplementations is Script {
             console.log("[WARN] Validation SKIPPED for since proxy is 0 ", _contractName);
             return;
         }
-        // Ensure expected implementation is not zero
         if (_expectedImplementation == address(0)) {
             console.log("[WARN] Validation SKIPPED for - Expected implementation is zero.", _contractName);
             return;
@@ -266,8 +273,6 @@ contract UpgradeImplementations is Script {
             console.log("[FAIL] Validation FAILED for", _contractName, "at", _proxyAddress);
             console.log("     Expected implementation:", _expectedImplementation);
             console.log("     Actual implementation  :", currentImplementation);
-            // Consider reverting if a failure should stop the script, though for a deploy script, logging might be preferred.
-            // revert(string.concat("Validation FAILED for ", _contractName));
         }
     }
 
@@ -718,5 +723,145 @@ contract UpgradeImplementations is Script {
         }
 
         data = abi.encodeWithSignature("aggregate((address,bytes)[])", calls);
+    }
+
+    /// @notice Validates that contracts holding a reference to ISuperchainConfig
+    ///         are pointing to a CeloSuperchainConfig which in turn points to the
+    ///         correct global SuperchainConfig proxy.
+    function _validateCeloSuperchainConfigReferences(UpgradeImplementationsInput _uii) internal view {
+        console.log("\n=== STARTING CELO SUPERCHAINCONFIG REFERENCE VALIDATION ===");
+
+        address globalSuperchainConfigProxy = _uii.superchainConfigProxy();
+        require(globalSuperchainConfigProxy != address(0), "Global SuperchainConfig proxy address is 0 in input");
+
+        address proxyToValidate;
+
+        proxyToValidate = _uii.optimismPortalProxy();
+        _validateCeloScSlot("OptimismPortal", address(IOptimismPortal2(payable(proxyToValidate)).superchainConfig()), globalSuperchainConfigProxy);
+
+        proxyToValidate = _uii.l1CrossDomainMessengerProxy();
+        _validateCeloScSlot("L1CrossDomainMessenger", address(IL1CrossDomainMessenger(proxyToValidate).superchainConfig()), globalSuperchainConfigProxy);
+
+        proxyToValidate = _uii.l1StandardBridgeProxy();
+        _validateCeloScSlot("L1StandardBridge", address(IL1StandardBridge(payable(proxyToValidate)).superchainConfig()), globalSuperchainConfigProxy);
+
+        proxyToValidate = _uii.l1ERC721BridgeProxy();
+        _validateCeloScSlot("L1ERC721Bridge", address(IL1ERC721Bridge(proxyToValidate).superchainConfig()), globalSuperchainConfigProxy);
+
+        console.log("=== CELO SUPERCHAINCONFIG REFERENCE VALIDATION COMPLETE ===");
+    }
+
+    /// @notice Helper function to validate a single Celo SuperchainConfig reference.
+    /// @param _contractName The name of the contract being validated (for logging).
+    /// @param _celoScProxyAddr The address of the CeloSuperchainConfig proxy obtained from the L1 contract.
+    /// @param _expectedGlobalScAddr The expected address of the global SuperchainConfig.
+    function _validateCeloScSlot(string memory _contractName, address _celoScProxyAddr, address _expectedGlobalScAddr) internal view {
+        if (_celoScProxyAddr == address(0)) {
+            string memory errorMsg = string.concat("[FAIL] ", _contractName, ": L1 contract's superchainConfig() returned address(0)");
+            console.log(errorMsg);
+            revert(errorMsg);
+        }
+
+        // Call superchainConfig() on the _celoScProxyAddr, assuming it's a CeloSuperchainConfig
+        address globalSuperchainConfigAddrFromCeloSCGetter = CeloSuperchainConfig(_celoScProxyAddr).superchainConfig();
+
+        if (globalSuperchainConfigAddrFromCeloSCGetter == _expectedGlobalScAddr) {
+            console.log("[PASS]", _contractName, "correctly references global SuperchainConfig via CeloSuperchainConfig's getter");
+        } else {
+            string memory errorMsgPart1 = string.concat("[FAIL] ", _contractName, ": CeloSuperchainConfig's superchainConfig() getter does not point to global SuperchainConfig. ");
+            string memory errorMsgPart2 = string.concat("L1Contract's SC (CeloSCProxy): ", LibString.toHexStringChecksummed(_celoScProxyAddr));
+            string memory errorMsgPart3 = string.concat(", Value from CeloSC.superchainConfig(): ", LibString.toHexStringChecksummed(globalSuperchainConfigAddrFromCeloSCGetter));
+            string memory errorMsgPart4 = string.concat(", Expected Global SC: ", LibString.toHexStringChecksummed(_expectedGlobalScAddr));
+            string memory fullErrorMsg = string.concat(errorMsgPart1, errorMsgPart2, errorMsgPart3, errorMsgPart4);
+            console.log(fullErrorMsg);
+            revert(fullErrorMsg);
+        }
+    }
+
+    /// @notice Validates custom gas token functionality on OptimismPortal2.
+    function _validateCustomGasTokenOptimismPortal(
+        UpgradeImplementationsInput _uii,
+        DeployImplementationsOutput _dio
+    ) internal view {
+        console.log("\n=== STARTING CUSTOM GAS TOKEN VALIDATION: OptimismPortal2 (View-Only Checks) ===");
+        address portalProxy = _uii.optimismPortalProxy();
+        address systemConfigProxy = _uii.systemConfigProxy();
+
+        require(portalProxy != address(0), "OptimismPortal proxy address is 0");
+        require(systemConfigProxy != address(0), "SystemConfig proxy address is 0");
+
+        ISystemConfig systemConfig = ISystemConfig(systemConfigProxy);
+        IOptimismPortal2 portal = IOptimismPortal2(payable(portalProxy)); // No payable cast needed for view functions
+
+        address expectedPortalImpl = address(_dio.optimismPortalImpl());
+        address currentPortalImpl = address(uint160(uint256(vm.load(portalProxy, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
+
+        require(currentPortalImpl == expectedPortalImpl, "OptimismPortal implementation not upgraded to expected version");
+
+        (address configuredGasToken, ) = systemConfig.gasPayingToken();
+        address expectedCustomTokenAddr = 0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B;
+
+        require(configuredGasToken == expectedCustomTokenAddr, "SystemConfig not configured with expected CELO custom gas token");
+
+        console.log("  [INFO] SystemConfig reports a custom gas token is configured:", configuredGasToken);
+        console.log("         Expected OptimismPortal behavior:");
+        console.log("           - `depositTransaction` (with value): Should revert with 'NoValue'.");
+        console.log("           - `depositERC20Transaction`: Should NOT revert with 'OnlyCustomGasToken' (but may revert for other reasons like allowance).");
+
+        bool isPaused = portal.paused();
+        require(!isPaused, "OptimismPortal: Portal is PAUSED");
+        console.log("  [INFO] OptimismPortal is NOT PAUSED. Behavior depends on gas token configuration.");
+
+        console.log("  === CUSTOM GAS TOKEN VALIDATION COMPLETE: OptimismPortal2 ===");
+    }
+
+    /// @notice Validates custom gas token functionality on SystemConfig.
+    function _validateCustomGasTokenSystemConfig(
+        UpgradeImplementationsInput _uii,
+        DeployImplementationsOutput _dio
+    ) internal view {
+        console.log("\n=== STARTING CUSTOM GAS TOKEN VALIDATION: SystemConfig ===");
+        address systemConfigProxy = _uii.systemConfigProxy();
+        require(systemConfigProxy != address(0), "SystemConfig proxy address is 0");
+
+        ISystemConfig systemConfig = ISystemConfig(systemConfigProxy);
+        address expectedSystemConfigImpl = address(_dio.systemConfigImpl());
+        address currentSystemConfigImpl = address(uint160(uint256(vm.load(systemConfigProxy, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
+
+        require(currentSystemConfigImpl == expectedSystemConfigImpl, "SystemConfig implementation not upgraded to expected version");
+
+        address expectedCustomTokenAddr = 0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B;
+        string memory expectedTokenName = "Celo native asset";
+        string memory expectedTokenSymbol = "CELO";
+
+        require(systemConfig.isCustomGasToken(), "SystemConfig: Expected custom gas token to be active");
+        console.log("  [INFO] SystemConfig reports a custom gas token is active.");
+
+        (address tokenAddress, uint8 decimals) = systemConfig.gasPayingToken();
+        console.log("     Token Address:", tokenAddress);
+        console.log("     Decimals:", decimals);
+
+        require(tokenAddress == expectedCustomTokenAddr, "SystemConfig: Unexpected custom gas token address");
+        require(tokenAddress != address(0), "SystemConfig: Custom gas token address is address(0)");
+        require(tokenAddress != Constants.ETHER, "SystemConfig: Custom gas token address is Constants.ETHER, but isCustomGasToken is true");
+
+        require(decimals == 18, "SystemConfig: Unexpected custom gas token decimals");
+
+        string memory name = systemConfig.gasPayingTokenName();
+        string memory symbol = systemConfig.gasPayingTokenSymbol();
+        console.log("     Name from SystemConfig:", name);
+        console.log("     Symbol from SystemConfig:", symbol);
+
+        require(keccak256(abi.encodePacked(name)) == keccak256(abi.encodePacked(expectedTokenName)), "SystemConfig: Unexpected token name");
+
+        require(keccak256(abi.encodePacked(symbol)) == keccak256(abi.encodePacked(expectedTokenSymbol)), "SystemConfig: Unexpected token symbol");
+
+        console.log("  [PASS] Custom gas token address is not address(0).");
+        console.log("  [PASS] Custom gas token address is not Constants.ETHER.");
+        console.log("  [PASS] Custom gas token decimals are 18.");
+        console.log("  [PASS] Custom gas token name is not empty.");
+        console.log("  [PASS] Custom gas token symbol is not empty.");
+
+        console.log("  === CUSTOM GAS TOKEN VALIDATION COMPLETE: SystemConfig ===");
     }
 }
