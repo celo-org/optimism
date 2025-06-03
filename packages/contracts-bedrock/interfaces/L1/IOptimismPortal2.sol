@@ -9,7 +9,6 @@ import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 
 interface IOptimismPortal2 {
-    error CustomGasTokenNotSupported();
     error AlreadyFinalized();
     error BadTarget();
     error Blacklisted();
