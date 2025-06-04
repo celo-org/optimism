@@ -12,7 +12,7 @@ OP_GETH_BRANCH="celo-rebase-13"
 echo "Preparing optimism repository in $OPTIMISM_CONTRACT_DIRECTORY"
 if [ ! -d $OPTIMISM_CONTRACT_DIRECTORY ]; then
     echo "Cloning optimism into $OPTIMISM_CONTRACT_DIRECTORY"
-    git clone --single-branch --branch $OPTIMISN_CONTRACT_BRANCH git@github.com:celo-org/optimism.git $OPTIMISM_CONTRACT_DIRECTORY
+    git clone --single-branch --branch $OPTIMISN_CONTRACT_BRANCH https://github.com/celo-org/optimism.git $OPTIMISM_CONTRACT_DIRECTORY
 fi
 
 (
@@ -27,7 +27,7 @@ fi
 echo "Preparing op-geth reository in $OP_GETH_DIRECTORY"
 if [ ! -d $OP_GETH_DIRECTORY ]; then
     echo "Cloning op-geth into $OP_GETH_DIRECTORY"
-    git clone --single-branch --branch $OP_GETH_BRANCH git@github.com:celo-org/op-geth.git $OP_GETH_DIRECTORY
+    git clone --single-branch --branch $OP_GETH_BRANCH https://github.com/celo-org/op-geth.git $OP_GETH_DIRECTORY
 fi
 
 (
