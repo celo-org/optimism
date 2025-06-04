@@ -24,7 +24,7 @@ import {
     DeployImplementationsOutput
 } from "scripts/deploy/DeployImplementations.s.sol";
 
-import {CeloTokenL1} from "src/celo/CeloTokenL1.sol";
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 
 import { Proxy } from "src/universal/Proxy.sol";
 
@@ -1033,7 +1033,7 @@ contract Deploy is Deployer {
         addr_ = address(customGasToken);
     }
 
-     /// @notice Initialize the CustomGasToken
+    /// @notice Initialize the CustomGasToken
     function initializeCustomGasToken() public broadcast {
         console.log("Upgrading and initializing CustomGasToken proxy");
         address customGasTokenProxyAddress = artifacts.mustGetAddress("CustomGasTokenProxy");
@@ -1043,8 +1043,7 @@ contract Deploy is Deployer {
         Proxy customGasTokenProxy = Proxy(payable(customGasTokenProxyAddress));
 
         customGasTokenProxy.upgradeToAndCall(
-            customGasTokenAddress,
-            abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
+            customGasTokenAddress, abi.encodeCall(CeloTokenL1.initialize, (portalProxyAddress))
         );
 
         // _upgradeAndCallViaSafe({
