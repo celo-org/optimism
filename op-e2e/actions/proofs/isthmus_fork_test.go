@@ -31,7 +31,7 @@ import (
 )
 
 var (
-	isthmusL1BlockCodeHash          = common.HexToHash("0x8e3fe7a416d3e5f3b7be74ddd4e7e58e516fa3f80b67c6d930e3cd7297da4a4b")
+	isthmusL1BlockCodeHash          = common.HexToHash("0x3df0db3bfa482161b4e815804668f8f293288d5afad3bc20fb699383c145ef26")
 	isthmusGasPriceOracleCodeHash   = common.HexToHash("0x4d195a9d7caf9fb6d4beaf80de252c626c853afd5868c4f4f8d19c9d301c2679")
 	isthmusOperatorFeeVaultCodeHash = common.HexToHash("0x57dc55c9c09ca456fa728f253fe7b895d3e6aae0706104935fe87c7721001971")
 )
