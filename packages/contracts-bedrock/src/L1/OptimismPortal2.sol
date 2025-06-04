@@ -48,9 +48,6 @@ import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol"
 import { IDisputeGame } from "interfaces/dispute/IDisputeGame.sol";
 import { IL1Block } from "interfaces/L2/IL1Block.sol";
 
-/// @notice This is temporary. Error thrown when a chain uses a custom gas token.
-error CustomGasTokenNotSupported();
-
 /// @custom:proxied true
 /// @title OptimismPortal2
 /// @notice The OptimismPortal is a low-level contract responsible for passing messages between L1
