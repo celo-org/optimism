@@ -250,6 +250,7 @@ contract UpgradeImplementations is Script {
 
     /// @notice Validates a single proxy upgrade.
     function _validateSingleUpgrade(
+        IProxyAdmin _proxyAdmin,
         string memory _contractName,
         address _proxyAddress,
         address _expectedImplementation
@@ -264,7 +265,7 @@ contract UpgradeImplementations is Script {
             return;
         }
 
-        address currentImplementation = address(uint160(uint256(vm.load(_proxyAddress, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
+        address currentImplementation = _proxyAdmin.getProxyImplementation(_proxyAddress);
 
         if (currentImplementation == _expectedImplementation) {
             console.log("[PASS] Validation PASSED for", _contractName, "at", _proxyAddress);
@@ -273,6 +274,8 @@ contract UpgradeImplementations is Script {
             console.log("[FAIL] Validation FAILED for", _contractName, "at", _proxyAddress);
             console.log("     Expected implementation:", _expectedImplementation);
             console.log("     Actual implementation  :", currentImplementation);
+            require(currentImplementation == _expectedImplementation,
+                string(abi.encodePacked("Upgrade validation failed for ", _contractName, " at ", LibString.toHexStringChecksummed(_proxyAddress))));
         }
     }
 
@@ -282,6 +285,7 @@ contract UpgradeImplementations is Script {
         DeployImplementationsOutput _dio
     ) internal view {
         console.log("\n=== STARTING POST-UPGRADE VALIDATIONS ===");
+        IProxyAdmin proxyAdmin = _uii.proxyAdmin();
         UpgradeAction[] memory actions = _collectUpgradeActions(_uii, _dio);
 
         if (actions.length == 0) {
@@ -291,7 +295,7 @@ contract UpgradeImplementations is Script {
         }
 
         for (uint256 i = 0; i < actions.length; i++) {
-            _validateSingleUpgrade(actions[i].name, actions[i].proxy, actions[i].implementation);
+            _validateSingleUpgrade(proxyAdmin, actions[i].name, actions[i].proxy, actions[i].implementation);
         }
         console.log("=== POST-UPGRADE VALIDATIONS COMPLETE ===");
     }
