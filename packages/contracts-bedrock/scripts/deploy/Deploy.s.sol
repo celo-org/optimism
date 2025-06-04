@@ -312,6 +312,7 @@ contract Deploy is Deployer {
         artifacts.save("MipsSingleton", address(dio.mipsSingleton()));
         artifacts.save("OPContractsManager", address(dio.opcm()));
         artifacts.save("DelayedWETHImpl", address(dio.delayedWETHImpl()));
+        artifacts.save("SystemConfigImpl", address(dio.systemConfigImpl()));
 
         // Get a contract set from the implementation addresses which were just deployed.
         Types.ContractSet memory impls = Types.ContractSet({
