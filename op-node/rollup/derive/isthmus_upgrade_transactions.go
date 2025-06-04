@@ -53,7 +53,7 @@ func IsthmusNetworkUpgradeTransactions() ([]hexutil.Bytes, error) {
 		To:                  nil,
 		Mint:                big.NewInt(0),
 		Value:               big.NewInt(0),
-		Gas:                 425_000,
+		Gas:                 675_000,
 		IsSystemTransaction: false,
 		Data:                l1BlockIsthmusDeploymentBytecode,
 	}).MarshalBinary()
