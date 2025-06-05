@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import { Script } from "forge-std/Script.sol";
-import { console2 as console } from "forge-std/console2.sol";
 import { OPContractsManager, ISystemConfig, IProxyAdmin, Claim } from "src/L1/OPContractsManager.sol";
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
 
@@ -48,50 +47,6 @@ contract CeloUpgradeOPChain is Script {
         assembly {
             claim_ := _claim
         }
-    }
-}
-
-contract CeloUpgradeAlfajores is CeloUpgradeOPChain {
-    function run() external {
-        // setup
-        console.log("Setup started!");
-        UpgradeOPChainInput uoci = new UpgradeOPChainInput();
-        OPContractsManager.OpChainConfig[] memory config = new OPContractsManager.OpChainConfig[](1);
-        config[0] = OPContractsManager.OpChainConfig(
-            ISystemConfig(0x499b0C1F4BDC76d61b1D13b03384eac65FAF50c7),
-            IProxyAdmin(0x4630583d066520aF0E3fda0de2C628EEd2888683),
-            convert(bytes32(hex"03b357b30095022ecbb44ef00d1de19df39cf69ee92a60683a6be2c6f8fe6a3e"))
-        );
-        uoci.set(UpgradeOPChainInput.prank.selector, address(0xf05f102e890E713DC9dc0a5e13A8879D5296ee48));
-        uoci.set(UpgradeOPChainInput.opcm.selector, address(0x83cccf6d865EA06d103dcc9CF10D56B17Dd4e74E));
-        uoci.set(UpgradeOPChainInput.opChainConfigs.selector, config);
-
-        // execution
-        console.log("Execution!");
-        UpgradeOPChain upgrade = new UpgradeOPChain();
-        upgrade.run(uoci);
-    }
-}
-
-contract CeloUpgradeBaklava is CeloUpgradeOPChain {
-    function run() external {
-        // setup
-        console.log("Setup started!");
-        UpgradeOPChainInput uoci = new UpgradeOPChainInput();
-        OPContractsManager.OpChainConfig[] memory config = new OPContractsManager.OpChainConfig[](1);
-        config[0] = OPContractsManager.OpChainConfig(
-            ISystemConfig(0x3ee24bF404e4a5D27A437d910F56E1eD999B1De8),
-            IProxyAdmin(0xBF101Bd81fb69aB00ab261465454dF1a171726Bf),
-            convert(bytes32(hex"03b357b30095022ecbb44ef00d1de19df39cf69ee92a60683a6be2c6f8fe6a3e"))
-        );
-        uoci.set(UpgradeOPChainInput.prank.selector, address(0xd542f3328ff2516443FE4db1c89E427F67169D94));
-        uoci.set(UpgradeOPChainInput.opcm.selector, address(0xAF66Cb99Fb7f632394269B7d746CD4c37D736678));
-        uoci.set(UpgradeOPChainInput.opChainConfigs.selector, config);
-
-        // execution
-        console.log("Execution!");
-        UpgradeOPChain upgrade = new UpgradeOPChain();
-        upgrade.run(uoci);
     }
 }
 
