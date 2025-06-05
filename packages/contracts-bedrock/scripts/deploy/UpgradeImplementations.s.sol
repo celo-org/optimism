@@ -235,7 +235,6 @@ contract UpgradeImplementations is Script {
 
             // Call the new validation script
             ValidateImplementations validator = new ValidateImplementations();
-            // TODO: These token details should ideally be configurable or passed via DeployImplementationsInput
             // For now, using Celo mainnet token details as a placeholder.
             address expectedCustomTokenAddr = 0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B;
             string memory expectedTokenName = "Celo native asset";
@@ -330,7 +329,6 @@ contract UpgradeImplementations is Script {
                 _uii.superchainConfigProxy(),
                 address(_dio.superchainConfigImpl())
             );
-            // TODO: Do something with superchainConfigData, like logging or adding to a list
         }
 
         if (_uii.protocolVersionsProxy() != address(0)) {
@@ -339,7 +337,6 @@ contract UpgradeImplementations is Script {
                 _uii.protocolVersionsProxy(),
                 address(_dio.protocolVersionsImpl())
             );
-            // TODO: Do something with protocolVersionsData
         }
 
         // OptimismPortal upgrade
@@ -348,7 +345,6 @@ contract UpgradeImplementations is Script {
             _uii.optimismPortalProxy(),
             address(_dio.optimismPortalImpl())
         );
-        // TODO: Do something with optimismPortalData
 
         // SystemConfig upgrade
         bytes memory systemConfigData = abi.encodeWithSelector(
@@ -356,7 +352,6 @@ contract UpgradeImplementations is Script {
             _uii.systemConfigProxy(),
             address(_dio.systemConfigImpl())
         );
-        // TODO: Do something with systemConfigData
 
         // L1CrossDomainMessenger upgrade
         bytes memory l1CrossDomainMessengerData = abi.encodeWithSelector(
@@ -364,7 +359,6 @@ contract UpgradeImplementations is Script {
             _uii.l1CrossDomainMessengerProxy(),
             address(_dio.l1CrossDomainMessengerImpl())
         );
-        // TODO: Do something with l1CrossDomainMessengerData
 
         // L1ERC721Bridge upgrade
         bytes memory l1ERC721BridgeData = abi.encodeWithSelector(
@@ -372,7 +366,6 @@ contract UpgradeImplementations is Script {
             _uii.l1ERC721BridgeProxy(),
             address(_dio.l1ERC721BridgeImpl())
         );
-        // TODO: Do something with l1ERC721BridgeData
 
         // L1StandardBridge upgrade
         bytes memory l1StandardBridgeData = abi.encodeWithSelector(
@@ -380,7 +373,6 @@ contract UpgradeImplementations is Script {
             _uii.l1StandardBridgeProxy(),
             address(_dio.l1StandardBridgeImpl())
         );
-        // TODO: Do something with l1StandardBridgeData
 
         // OptimismMintableERC20Factory upgrade
         bytes memory optimismMintableERC20FactoryData = abi.encodeWithSelector(
@@ -388,7 +380,6 @@ contract UpgradeImplementations is Script {
             _uii.optimismMintableERC20FactoryProxy(),
             address(_dio.optimismMintableERC20FactoryImpl())
         );
-        // TODO: Do something with optimismMintableERC20FactoryData
 
         // DisputeGameFactory upgrade
         bytes memory disputeGameFactoryData = abi.encodeWithSelector(
@@ -396,7 +387,6 @@ contract UpgradeImplementations is Script {
             _uii.disputeGameFactoryProxy(),
             address(_dio.disputeGameFactoryImpl())
         );
-        // TODO: Do something with disputeGameFactoryData
 
         // AnchorStateRegistry upgrade
         bytes memory anchorStateRegistryData = abi.encodeWithSelector(
@@ -404,7 +394,6 @@ contract UpgradeImplementations is Script {
             _uii.anchorStateRegistryProxy(),
             address(_dio.anchorStateRegistryImpl())
         );
-        // TODO: Do something with anchorStateRegistryData
 
         if (_uii.delayedWETHProxy() != address(0)) {
             bytes memory delayedWETHData = abi.encodeWithSelector(
@@ -412,7 +401,6 @@ contract UpgradeImplementations is Script {
                 _uii.delayedWETHProxy(),
                 address(_dio.delayedWETHImpl())
             );
-            // TODO: Do something with delayedWETHData
         }
 
         console.log("=== END TRANSACTION DATA ===");
