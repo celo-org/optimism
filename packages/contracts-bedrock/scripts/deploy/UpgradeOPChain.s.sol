@@ -2,7 +2,7 @@
 pragma solidity ^0.8.0;
 
 import { Script } from "forge-std/Script.sol";
-import { OPContractsManager, ISystemConfig, IProxyAdmin, Claim } from "src/L1/OPContractsManager.sol";
+import { OPContractsManager } from "src/L1/OPContractsManager.sol";
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
 
 contract UpgradeOPChainInput is BaseDeployIO {
@@ -39,14 +39,6 @@ contract UpgradeOPChainInput is BaseDeployIO {
     function opChainConfigs() public view returns (bytes memory) {
         require(_opChainConfigs.length > 0, "UpgradeOPCMInput: not set");
         return _opChainConfigs;
-    }
-}
-
-contract CeloUpgradeOPChain is Script {
-    function convert(bytes32 _claim) internal pure returns (Claim claim_) {
-        assembly {
-            claim_ := _claim
-        }
     }
 }
 
