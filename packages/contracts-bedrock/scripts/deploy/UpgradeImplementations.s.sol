@@ -4,33 +4,34 @@ pragma solidity ^0.8.15;
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 
-import { LibString } from "@solady/utils/LibString.sol";
+import { LibString } from "../../lib/solady/src/utils/LibString.sol";
 
 // Libraries
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
-import { Solarray } from "scripts/libraries/Solarray.sol";
-import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
+import { DeployUtils } from "../libraries/DeployUtils.sol";
+import { Solarray } from "../libraries/Solarray.sol";
+import { BaseDeployIO } from "./BaseDeployIO.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
-import { Constants } from "src/libraries/Constants.sol";
+import { Constants } from "../../src/libraries/Constants.sol";
 
 // Interfaces
-import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
-import { IProxy } from "interfaces/universal/IProxy.sol";
-import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
-import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
-import { IOptimismPortal2 } from "interfaces/L1/IOptimismPortal2.sol";
-import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
-import { IL1CrossDomainMessenger } from "interfaces/L1/IL1CrossDomainMessenger.sol";
-import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
-import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
-import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
-import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
-import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.sol";
-import { IDelayedWETH } from "interfaces/dispute/IDelayedWETH.sol";
+import { IProxyAdmin } from "../../interfaces/universal/IProxyAdmin.sol";
+import { IProxy } from "../../interfaces/universal/IProxy.sol";
+import { ISuperchainConfig } from "../../interfaces/L1/ISuperchainConfig.sol";
+import { IProtocolVersions } from "../../interfaces/L1/IProtocolVersions.sol";
+import { IOptimismPortal2 } from "../../interfaces/L1/IOptimismPortal2.sol";
+import { ISystemConfig } from "../../interfaces/L1/ISystemConfig.sol";
+import { IL1CrossDomainMessenger } from "../../interfaces/L1/IL1CrossDomainMessenger.sol";
+import { IL1ERC721Bridge } from "../../interfaces/L1/IL1ERC721Bridge.sol";
+import { IL1StandardBridge } from "../../interfaces/L1/IL1StandardBridge.sol";
+import { IOptimismMintableERC20Factory } from "../../interfaces/universal/IOptimismMintableERC20Factory.sol";
+import { IDisputeGameFactory } from "../../interfaces/dispute/IDisputeGameFactory.sol";
+import { IAnchorStateRegistry } from "../../interfaces/dispute/IAnchorStateRegistry.sol";
+import { IDelayedWETH } from "../../interfaces/dispute/IDelayedWETH.sol";
 
 // Import the DeployImplementations script and its input/output contracts
-import { DeployImplementations, DeployImplementationsInput, DeployImplementationsOutput } from "scripts/deploy/DeployImplementations.s.sol";
-import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
+import { DeployImplementations, DeployImplementationsInput, DeployImplementationsOutput } from "./DeployImplementations.s.sol";
+import { CeloSuperchainConfig } from "../../src/celo/CeloSuperchainConfig.sol";
+import { ValidateImplementations } from "./ValidateImplementations.s.sol";
 
 contract UpgradeImplementationsInput is BaseDeployIO {
     IProxyAdmin internal _proxyAdmin;
@@ -232,12 +233,14 @@ contract UpgradeImplementations is Script {
             console.log("Note: These validations assume the Gnosis Safe transaction has been or will be executed successfully.");
             _validateAllCollectedUpgrades(_uii, _dio);
 
-            console.log("\nAttempting custom post-upgrade validations for gas token...");
-            _validateCustomGasTokenOptimismPortal(_uii, _dio);
-            _validateCustomGasTokenSystemConfig(_uii, _dio);
-
-            console.log("\nAttempting custom post-upgrade validations for Celo SuperchainConfig references...");
-            _validateCeloSuperchainConfigReferences(_uii);
+            // Call the new validation script
+            ValidateImplementations validator = new ValidateImplementations();
+            // TODO: These token details should ideally be configurable or passed via DeployImplementationsInput
+            // For now, using Celo mainnet token details as a placeholder.
+            address expectedCustomTokenAddr = 0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B;
+            string memory expectedTokenName = "Celo native asset";
+            string memory expectedTokenSymbol = "CELO";
+            validator.run(_uii, _dio, expectedCustomTokenAddr, expectedTokenName, expectedTokenSymbol);
         } else {
             console.log("\nLedger mode: Skipping automated post-upgrade validations in this script run.");
             console.log("Please execute the Gnosis Safe transaction manually using the data above.");
@@ -322,83 +325,94 @@ contract UpgradeImplementations is Script {
 
         // Generate transaction data for each upgrade
         if (_uii.superchainConfigProxy() != address(0)) {
-            bytes memory data = abi.encodeWithSelector(
+            bytes memory superchainConfigData = abi.encodeWithSelector(
                 IProxyAdmin.upgrade.selector,
                 _uii.superchainConfigProxy(),
                 address(_dio.superchainConfigImpl())
             );
+            // TODO: Do something with superchainConfigData, like logging or adding to a list
         }
 
         if (_uii.protocolVersionsProxy() != address(0)) {
-            bytes memory data = abi.encodeWithSelector(
+            bytes memory protocolVersionsData = abi.encodeWithSelector(
                 IProxyAdmin.upgrade.selector,
                 _uii.protocolVersionsProxy(),
                 address(_dio.protocolVersionsImpl())
             );
+            // TODO: Do something with protocolVersionsData
         }
 
         // OptimismPortal upgrade
-        bytes memory data = abi.encodeWithSelector(
+        bytes memory optimismPortalData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.optimismPortalProxy(),
             address(_dio.optimismPortalImpl())
         );
+        // TODO: Do something with optimismPortalData
 
         // SystemConfig upgrade
-        data = abi.encodeWithSelector(
+        bytes memory systemConfigData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.systemConfigProxy(),
             address(_dio.systemConfigImpl())
         );
+        // TODO: Do something with systemConfigData
 
         // L1CrossDomainMessenger upgrade
-        data = abi.encodeWithSelector(
+        bytes memory l1CrossDomainMessengerData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.l1CrossDomainMessengerProxy(),
             address(_dio.l1CrossDomainMessengerImpl())
         );
+        // TODO: Do something with l1CrossDomainMessengerData
 
         // L1ERC721Bridge upgrade
-        data = abi.encodeWithSelector(
+        bytes memory l1ERC721BridgeData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.l1ERC721BridgeProxy(),
             address(_dio.l1ERC721BridgeImpl())
         );
+        // TODO: Do something with l1ERC721BridgeData
 
         // L1StandardBridge upgrade
-        data = abi.encodeWithSelector(
+        bytes memory l1StandardBridgeData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.l1StandardBridgeProxy(),
             address(_dio.l1StandardBridgeImpl())
         );
+        // TODO: Do something with l1StandardBridgeData
 
         // OptimismMintableERC20Factory upgrade
-        data = abi.encodeWithSelector(
+        bytes memory optimismMintableERC20FactoryData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.optimismMintableERC20FactoryProxy(),
             address(_dio.optimismMintableERC20FactoryImpl())
         );
+        // TODO: Do something with optimismMintableERC20FactoryData
 
         // DisputeGameFactory upgrade
-        data = abi.encodeWithSelector(
+        bytes memory disputeGameFactoryData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.disputeGameFactoryProxy(),
             address(_dio.disputeGameFactoryImpl())
         );
+        // TODO: Do something with disputeGameFactoryData
 
         // AnchorStateRegistry upgrade
-        data = abi.encodeWithSelector(
+        bytes memory anchorStateRegistryData = abi.encodeWithSelector(
             IProxyAdmin.upgrade.selector,
             _uii.anchorStateRegistryProxy(),
             address(_dio.anchorStateRegistryImpl())
         );
+        // TODO: Do something with anchorStateRegistryData
 
         if (_uii.delayedWETHProxy() != address(0)) {
-            data = abi.encodeWithSelector(
+            bytes memory delayedWETHData = abi.encodeWithSelector(
                 IProxyAdmin.upgrade.selector,
                 _uii.delayedWETHProxy(),
                 address(_dio.delayedWETHImpl())
             );
+            // TODO: Do something with delayedWETHData
         }
 
         console.log("=== END TRANSACTION DATA ===");
@@ -729,143 +743,4 @@ contract UpgradeImplementations is Script {
         data = abi.encodeWithSignature("aggregate((address,bytes)[])", calls);
     }
 
-    /// @notice Validates that contracts holding a reference to ISuperchainConfig
-    ///         are pointing to a CeloSuperchainConfig which in turn points to the
-    ///         correct global SuperchainConfig proxy.
-    function _validateCeloSuperchainConfigReferences(UpgradeImplementationsInput _uii) internal view {
-        console.log("\n=== STARTING CELO SUPERCHAINCONFIG REFERENCE VALIDATION ===");
-
-        address globalSuperchainConfigProxy = _uii.superchainConfigProxy();
-        require(globalSuperchainConfigProxy != address(0), "Global SuperchainConfig proxy address is 0 in input");
-
-        address proxyToValidate;
-
-        proxyToValidate = _uii.optimismPortalProxy();
-        _validateCeloScSlot("OptimismPortal", address(IOptimismPortal2(payable(proxyToValidate)).superchainConfig()), globalSuperchainConfigProxy);
-
-        proxyToValidate = _uii.l1CrossDomainMessengerProxy();
-        _validateCeloScSlot("L1CrossDomainMessenger", address(IL1CrossDomainMessenger(proxyToValidate).superchainConfig()), globalSuperchainConfigProxy);
-
-        proxyToValidate = _uii.l1StandardBridgeProxy();
-        _validateCeloScSlot("L1StandardBridge", address(IL1StandardBridge(payable(proxyToValidate)).superchainConfig()), globalSuperchainConfigProxy);
-
-        proxyToValidate = _uii.l1ERC721BridgeProxy();
-        _validateCeloScSlot("L1ERC721Bridge", address(IL1ERC721Bridge(proxyToValidate).superchainConfig()), globalSuperchainConfigProxy);
-
-        console.log("=== CELO SUPERCHAINCONFIG REFERENCE VALIDATION COMPLETE ===");
-    }
-
-    /// @notice Helper function to validate a single Celo SuperchainConfig reference.
-    /// @param _contractName The name of the contract being validated (for logging).
-    /// @param _celoScProxyAddr The address of the CeloSuperchainConfig proxy obtained from the L1 contract.
-    /// @param _expectedGlobalScAddr The expected address of the global SuperchainConfig.
-    function _validateCeloScSlot(string memory _contractName, address _celoScProxyAddr, address _expectedGlobalScAddr) internal view {
-        if (_celoScProxyAddr == address(0)) {
-            string memory errorMsg = string.concat("[FAIL] ", _contractName, ": L1 contract's superchainConfig() returned address(0)");
-            console.log(errorMsg);
-            revert(errorMsg);
-        }
-
-        // Call superchainConfig() on the _celoScProxyAddr, assuming it's a CeloSuperchainConfig
-        address globalSuperchainConfigAddrFromCeloSCGetter = CeloSuperchainConfig(_celoScProxyAddr).superchainConfig();
-
-        if (globalSuperchainConfigAddrFromCeloSCGetter == _expectedGlobalScAddr) {
-            console.log("[PASS]", _contractName, "correctly references global SuperchainConfig via CeloSuperchainConfig's getter");
-        } else {
-            string memory errorMsgPart1 = string.concat("[FAIL] ", _contractName, ": CeloSuperchainConfig's superchainConfig() getter does not point to global SuperchainConfig. ");
-            string memory errorMsgPart2 = string.concat("L1Contract's SC (CeloSCProxy): ", LibString.toHexStringChecksummed(_celoScProxyAddr));
-            string memory errorMsgPart3 = string.concat(", Value from CeloSC.superchainConfig(): ", LibString.toHexStringChecksummed(globalSuperchainConfigAddrFromCeloSCGetter));
-            string memory errorMsgPart4 = string.concat(", Expected Global SC: ", LibString.toHexStringChecksummed(_expectedGlobalScAddr));
-            string memory fullErrorMsg = string.concat(errorMsgPart1, errorMsgPart2, errorMsgPart3, errorMsgPart4);
-            console.log(fullErrorMsg);
-            revert(fullErrorMsg);
-        }
-    }
-
-    /// @notice Validates custom gas token functionality on OptimismPortal2.
-    function _validateCustomGasTokenOptimismPortal(
-        UpgradeImplementationsInput _uii,
-        DeployImplementationsOutput _dio
-    ) internal view {
-        console.log("\n=== STARTING CUSTOM GAS TOKEN VALIDATION: OptimismPortal2 (View-Only Checks) ===");
-        address portalProxy = _uii.optimismPortalProxy();
-        address systemConfigProxy = _uii.systemConfigProxy();
-
-        require(portalProxy != address(0), "OptimismPortal proxy address is 0");
-        require(systemConfigProxy != address(0), "SystemConfig proxy address is 0");
-
-        ISystemConfig systemConfig = ISystemConfig(systemConfigProxy);
-        IOptimismPortal2 portal = IOptimismPortal2(payable(portalProxy)); // No payable cast needed for view functions
-
-        address expectedPortalImpl = address(_dio.optimismPortalImpl());
-        address currentPortalImpl = address(uint160(uint256(vm.load(portalProxy, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
-
-        require(currentPortalImpl == expectedPortalImpl, "OptimismPortal implementation not upgraded to expected version");
-
-        (address configuredGasToken, ) = systemConfig.gasPayingToken();
-        address expectedCustomTokenAddr = 0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B;
-
-        require(configuredGasToken == expectedCustomTokenAddr, "SystemConfig not configured with expected CELO custom gas token");
-
-        console.log("  [INFO] SystemConfig reports a custom gas token is configured:", configuredGasToken);
-        console.log("         Expected OptimismPortal behavior:");
-        console.log("           - `depositTransaction` (with value): Should revert with 'NoValue'.");
-        console.log("           - `depositERC20Transaction`: Should NOT revert with 'OnlyCustomGasToken' (but may revert for other reasons like allowance).");
-
-        bool isPaused = portal.paused();
-        require(!isPaused, "OptimismPortal: Portal is PAUSED");
-        console.log("  [INFO] OptimismPortal is NOT PAUSED. Behavior depends on gas token configuration.");
-
-        console.log("  === CUSTOM GAS TOKEN VALIDATION COMPLETE: OptimismPortal2 ===");
-    }
-
-    /// @notice Validates custom gas token functionality on SystemConfig.
-    function _validateCustomGasTokenSystemConfig(
-        UpgradeImplementationsInput _uii,
-        DeployImplementationsOutput _dio
-    ) internal view {
-        console.log("\n=== STARTING CUSTOM GAS TOKEN VALIDATION: SystemConfig ===");
-        address systemConfigProxy = _uii.systemConfigProxy();
-        require(systemConfigProxy != address(0), "SystemConfig proxy address is 0");
-
-        ISystemConfig systemConfig = ISystemConfig(systemConfigProxy);
-        address expectedSystemConfigImpl = address(_dio.systemConfigImpl());
-        address currentSystemConfigImpl = address(uint160(uint256(vm.load(systemConfigProxy, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
-
-        require(currentSystemConfigImpl == expectedSystemConfigImpl, "SystemConfig implementation not upgraded to expected version");
-
-        address expectedCustomTokenAddr = 0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B;
-        string memory expectedTokenName = "Celo native asset";
-        string memory expectedTokenSymbol = "CELO";
-
-        require(systemConfig.isCustomGasToken(), "SystemConfig: Expected custom gas token to be active");
-        console.log("  [INFO] SystemConfig reports a custom gas token is active.");
-
-        (address tokenAddress, uint8 decimals) = systemConfig.gasPayingToken();
-        console.log("     Token Address:", tokenAddress);
-        console.log("     Decimals:", decimals);
-
-        require(tokenAddress == expectedCustomTokenAddr, "SystemConfig: Unexpected custom gas token address");
-        require(tokenAddress != address(0), "SystemConfig: Custom gas token address is address(0)");
-        require(tokenAddress != Constants.ETHER, "SystemConfig: Custom gas token address is Constants.ETHER, but isCustomGasToken is true");
-
-        require(decimals == 18, "SystemConfig: Unexpected custom gas token decimals");
-
-        string memory name = systemConfig.gasPayingTokenName();
-        string memory symbol = systemConfig.gasPayingTokenSymbol();
-        console.log("     Name from SystemConfig:", name);
-        console.log("     Symbol from SystemConfig:", symbol);
-
-        require(keccak256(abi.encodePacked(name)) == keccak256(abi.encodePacked(expectedTokenName)), "SystemConfig: Unexpected token name");
-
-        require(keccak256(abi.encodePacked(symbol)) == keccak256(abi.encodePacked(expectedTokenSymbol)), "SystemConfig: Unexpected token symbol");
-
-        console.log("  [PASS] Custom gas token address is not address(0).");
-        console.log("  [PASS] Custom gas token address is not Constants.ETHER.");
-        console.log("  [PASS] Custom gas token decimals are 18.");
-        console.log("  [PASS] Custom gas token name is not empty.");
-        console.log("  [PASS] Custom gas token symbol is not empty.");
-
-        console.log("  === CUSTOM GAS TOKEN VALIDATION COMPLETE: SystemConfig ===");
-    }
 }
