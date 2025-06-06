@@ -187,6 +187,28 @@ contract StandardValidatorBase {
         _errors = internalRequire(outputConfig.systemTxMaxGas == 1_000_000, "SYSCON-80", _errors);
         _errors = internalRequire(outputConfig.minimumBaseFee == 1 gwei, "SYSCON-90", _errors);
         _errors = internalRequire(outputConfig.maximumBaseFee == type(uint128).max, "SYSCON-100", _errors);
+
+        // Celo extra validation: custom gas token
+        (address address_, uint8 decimals_) = _sysCfg.gasPayingToken();
+        address expected_;
+        if (address(_sysCfg) == address(0x499b0C1F4BDC76d61b1D13b03384eac65FAF50c7)) {
+            // alfajores
+            expected_ = address(0x3E3FEA3F31ff162a460f11Af4c53f39E743fd88c);
+        } else if (address(_sysCfg) == address(0x3ee24bF404e4a5D27A437d910F56E1eD999B1De8)) {
+            // baklava
+            expected_ = address(0xE692fD8305e097b0e73f1b61aCA8b74Cd921443B);
+        } else if (address(_sysCfg) == address(0x89E31965D844a309231B1f17759Ccaf1b7c09861)) {
+            // mainnet
+            expected_ = address(0x057898f3C43F129a17517B9056D23851F124b19f);
+        } else {
+            // no gas token for unsupported network
+            expected_ = address(0);
+        }
+        _errors = internalRequire(address_ == expected_, "SYSCON-CEL-10", _errors);
+        _errors = internalRequire(decimals_ == 18, "SYSCON-CEL-20", _errors);
+        _errors = internalRequire(stringEq(_sysCfg.gasPayingTokenName(), "Celo native asset") , "SYSCON-CEL-30", _errors);
+        _errors = internalRequire(stringEq(_sysCfg.gasPayingTokenSymbol(), "CELO") , "SYSCON-CEL-40", _errors);
+
         return _errors;
     }
 
