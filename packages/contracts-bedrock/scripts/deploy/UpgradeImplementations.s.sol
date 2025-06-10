@@ -48,6 +48,13 @@ import { IL2OutputOracle } from "../../src/L1/interfaces/IL2OutputOracle.sol";
 import { ICeloSuperchainConfig } from "../../src/L1/interfaces/ICeloSuperchainConfig.sol";
 import { StorageSetter } from "../../src/universal/StorageSetter.sol";
 
+struct Action {
+    address proxy;
+    address implementation;
+    string name;
+    bytes data;
+}
+
 contract UpgradeImplementationsInput {
     IProxyAdmin internal _proxyAdmin;
 
@@ -66,6 +73,16 @@ contract UpgradeImplementationsInput {
     address internal _permissionedDelayedWETHProxy;
     address internal _celoSuperchainConfigProxy;
     address internal _storageSetterProxy;
+
+    Action[] internal _customActions;
+
+    function addCustomAction(string memory _name, address _target, bytes memory _data) public {
+        _customActions.push(Action({name: _name, proxy: _target, implementation: address(0), data: _data}));
+    }
+
+    function getCustomActions() public view returns (Action[] memory) {
+        return _customActions;
+    }
 
     function set(bytes4 _sel, address _addr) public {
         require(_addr != address(0), "UpgradeImplementationsInput: cannot set zero address");
@@ -254,11 +271,6 @@ contract UpgradeImplementations is Script {
     address public constant MULTICALL_ADDRESS = 0xcA11bde05977b3631167028862bE2a173976CA11;
     address private constant _GNOSIS_SAFE = 0xf05f102e890E713DC9dc0a5e13A8879D5296ee48;
 
-    struct UpgradeAction {
-        address proxy;
-        address implementation;
-        string name;
-    }
 
     function run(
         UpgradeImplementationsInput _uii,
@@ -385,7 +397,7 @@ contract UpgradeImplementations is Script {
         LocallyDeployedImplementationsOutput memory _ldio
     ) internal view {
         console.log("\n=== STARTING POST-UPGRADE VALIDATIONS ===");
-        UpgradeAction[] memory actions = _collectUpgradeActions(_uii, _ldio);
+        Action[] memory actions = _collectUpgradeActions(_uii, _ldio);
 
         if (actions.length == 0) {
             console.log("No upgrade actions found to validate.");
@@ -394,7 +406,9 @@ contract UpgradeImplementations is Script {
         }
 
         for (uint256 i = 0; i < actions.length; i++) {
-            _validateSingleUpgrade(actions[i].name, actions[i].proxy, actions[i].implementation);
+            if (actions[i].data.length == 0) {
+                _validateSingleUpgrade(actions[i].name, actions[i].proxy, actions[i].implementation);
+            }
         }
         console.log("=== POST-UPGRADE VALIDATIONS COMPLETE ===");
     }
@@ -408,140 +422,26 @@ contract UpgradeImplementations is Script {
         LocallyDeployedImplementationsOutput memory _ldio
     ) public {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
-        // Reference the GnosisSafe address from AlfajoresUpgradeImplementations
-        address gnosisSafe = 0xf05f102e890E713DC9dc0a5e13A8879D5296ee48;
+        Action[] memory actions = _collectUpgradeActions(_uii, _ldio);
 
         console.log("=== GNOSIS SAFE TRANSACTION DATA ===");
-        console.log("GnosisSafe address:", gnosisSafe);
         console.log("ProxyAdmin address:", address(proxyAdmin));
         console.log("ProxyAdmin owner (should be Gnosis Safe):", proxyAdmin.owner());
         console.log("");
         console.log("Copy the following transaction data to submit to Gnosis Safe:");
         console.log("");
 
-        bytes memory data;
-
-        if (_uii.superchainConfigProxy() != address(0)) {
-            console.log("superchainConfigProxy address:", _uii.superchainConfigProxy());
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.superchainConfigProxy(),
-                address(_ldio.superchainConfigImpl)
-            );
-            console.logBytes(data);
-        }
-
-        if (_uii.protocolVersionsProxy() != address(0)) {
-            console.log("protocolVersionsProxy address:", _uii.protocolVersionsProxy());
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.protocolVersionsProxy(),
-                address(_ldio.protocolVersionsImpl)
-            );
-            console.logBytes(data);
-        }
-
-        // OptimismPortal upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.optimismPortalProxy(),
-            address(_ldio.optimismPortalImpl)
-        );
-        console.logBytes(data);
-
-        // SystemConfig upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.systemConfigProxy(),
-            address(_ldio.systemConfigImpl)
-        );
-        console.logBytes(data);
-
-        // L1CrossDomainMessenger upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.l1CrossDomainMessengerProxy(),
-            address(_ldio.l1CrossDomainMessengerImpl)
-        );
-        console.logBytes(data);
-
-        // L1ERC721Bridge upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.l1ERC721BridgeProxy(),
-            address(_ldio.l1ERC721BridgeImpl)
-        );
-        console.logBytes(data);
-
-        // L1StandardBridge upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.l1StandardBridgeProxy(),
-            address(_ldio.l1StandardBridgeImpl)
-        );
-        console.logBytes(data);
-
-        // OptimismMintableERC20Factory upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.optimismMintableERC20FactoryProxy(),
-            address(_ldio.optimismMintableERC20FactoryImpl)
-        );
-        console.logBytes(data);
-
-        // DisputeGameFactory upgrade
-        data = abi.encodeWithSelector(
-            IProxyAdmin.upgrade.selector,
-            _uii.disputeGameFactoryProxy(),
-            address(_ldio.disputeGameFactoryImpl)
-        );
-        console.logBytes(data);
-
-        // AnchorStateRegistry upgrade
-        if (_uii.anchorStateRegistryProxy() != address(0)) {
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.anchorStateRegistryProxy(),
-                address(_ldio.anchorStateRegistryImpl)
-            );
-            console.logBytes(data);
-        }
-
-
-        if (_uii.delayedWETHProxy() != address(0)) {
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.delayedWETHProxy(),
-                address(_ldio.delayedWETHImpl)
-            );
-            console.logBytes(data);
-        }
-
-        if (_uii.permissionedDelayedWETHProxy() != address(0)) {
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.permissionedDelayedWETHProxy(),
-                address(_ldio.delayedWETHImpl)
-            );
-            console.logBytes(data);
-        }
-
-        if (_uii.celoSuperchainConfigProxy() != address(0)) {
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.celoSuperchainConfigProxy(),
-                address(_ldio.celoSuperchainConfigImpl)
-            );
-            console.logBytes(data);
-        }
-
-        if (_uii.storageSetterProxy() != address(0)) {
-            data = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                _uii.storageSetterProxy(),
-                address(_ldio.storageSetterImpl)
-            );
-            console.logBytes(data);
+        for (uint256 i = 0; i < actions.length; i++) {
+            if (actions[i].data.length > 0) {
+                console.log(actions[i].name);
+                console.log("  Target:", actions[i].proxy);
+                console.logBytes(actions[i].data);
+            } else {
+                console.log(actions[i].name, "address:", actions[i].proxy);
+                bytes memory data =
+                    abi.encodeWithSelector(IProxyAdmin.upgrade.selector, actions[i].proxy, actions[i].implementation);
+                console.logBytes(data);
+            }
         }
 
         console.log("=== END TRANSACTION DATA ===");
@@ -679,140 +579,176 @@ contract UpgradeImplementations is Script {
     function _collectUpgradeActions(
         UpgradeImplementationsInput _uii,
         LocallyDeployedImplementationsOutput memory _ldio
-    ) internal view returns (UpgradeAction[] memory actions) {
+    ) internal view returns (Action[] memory actions) {
         // Count valid actions first
         uint256 actionCount = 0;
         if (_uii.superchainConfigProxy() != address(0)) actionCount++; // SuperchainConfig (not deployed here)
         if (_uii.protocolVersionsProxy() != address(0)) actionCount++; // ProtocolVersions (not deployed here)
         if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) actionCount++;
         if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) actionCount++;
-        if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) actionCount++;
+        if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) {
+            actionCount++;
+        }
         if (_uii.l1ERC721BridgeProxy() != address(0) && address(_ldio.l1ERC721BridgeImpl) != address(0)) actionCount++;
-        if (_uii.l1StandardBridgeProxy() != address(0) && address(_ldio.l1StandardBridgeImpl) != address(0)) actionCount++;
-        if (_uii.optimismMintableERC20FactoryProxy() != address(0) && address(_ldio.optimismMintableERC20FactoryImpl) != address(0)) actionCount++;
-        if (_uii.disputeGameFactoryProxy() != address(0) && address(_ldio.disputeGameFactoryImpl) != address(0)) actionCount++;
+        if (_uii.l1StandardBridgeProxy() != address(0) && address(_ldio.l1StandardBridgeImpl) != address(0)) {
+            actionCount++;
+        }
+        if (_uii.optimismMintableERC20FactoryProxy() != address(0)
+            && address(_ldio.optimismMintableERC20FactoryImpl) != address(0)) {
+            actionCount++;
+        }
+        if (_uii.disputeGameFactoryProxy() != address(0) && address(_ldio.disputeGameFactoryImpl) != address(0)) {
+            actionCount++;
+        }
         if (_uii.anchorStateRegistryProxy() != address(0)) actionCount++; // AnchorStateRegistry (not deployed here)
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount++;
-        if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount++;
-        if (_uii.celoSuperchainConfigProxy() != address(0) && address(_ldio.celoSuperchainConfigImpl) != address(0)) actionCount++;
+        if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
+            actionCount++;
+        }
+        if (_uii.celoSuperchainConfigProxy() != address(0) && address(_ldio.celoSuperchainConfigImpl) != address(0)) {
+            actionCount++;
+        }
         if (_uii.storageSetterProxy() != address(0) && address(_ldio.storageSetterImpl) != address(0)) actionCount++;
 
+        Action[] memory customActions = _uii.getCustomActions();
+        actionCount += customActions.length;
 
-        actions = new UpgradeAction[](actionCount);
+        actions = new Action[](actionCount);
         uint256 index = 0;
+
+        if (_uii.storageSetterProxy() != address(0) && address(_ldio.storageSetterImpl) != address(0)) {
+            actions[index++] = Action({
+                proxy: _uii.storageSetterProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "StorageSetter",
+                data: ""
+            });
+        }
 
         // Add optional upgrades (pointing to address(0) if not deployed by this script)
         if (_uii.superchainConfigProxy() != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.superchainConfigProxy(),
                 implementation: address(_ldio.superchainConfigImpl),
-                name: "SuperchainConfig"
+                name: "SuperchainConfig",
+                data: ""
             });
         }
 
         if (_uii.protocolVersionsProxy() != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.protocolVersionsProxy(),
                 implementation: address(_ldio.protocolVersionsImpl),
-                name: "ProtocolVersions"
+                name: "ProtocolVersions",
+                data: ""
             });
         }
 
         // Add required upgrades
         if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.optimismPortalProxy(),
                 implementation: address(_ldio.optimismPortalImpl),
-                name: "OptimismPortal"
+                name: "OptimismPortal",
+                data: ""
             });
         }
 
         if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.systemConfigProxy(),
                 implementation: address(_ldio.systemConfigImpl),
-                name: "SystemConfig"
+                name: "SystemConfig",
+                data: ""
             });
         }
 
         if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.l1CrossDomainMessengerProxy(),
                 implementation: address(_ldio.l1CrossDomainMessengerImpl),
-                name: "L1CrossDomainMessenger" // Corrected name
+                name: "L1CrossDomainMessenger", // Corrected name
+                data: ""
             });
         }
 
         if (_uii.l1ERC721BridgeProxy() != address(0) && address(_ldio.l1ERC721BridgeImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.l1ERC721BridgeProxy(),
                 implementation: address(_ldio.l1ERC721BridgeImpl),
-                name: "L1ERC721Bridge" // Corrected name
+                name: "L1ERC721Bridge", // Corrected name
+                data: ""
             });
         }
 
         if (_uii.l1StandardBridgeProxy() != address(0) && address(_ldio.l1StandardBridgeImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.l1StandardBridgeProxy(),
                 implementation: address(_ldio.l1StandardBridgeImpl),
-                name: "L1StandardBridge" // Corrected name
+                name: "L1StandardBridge", // Corrected name
+                data: ""
             });
         }
 
-        if (_uii.optimismMintableERC20FactoryProxy() != address(0) && address(_ldio.optimismMintableERC20FactoryImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+        if (_uii.optimismMintableERC20FactoryProxy() != address(0)
+            && address(_ldio.optimismMintableERC20FactoryImpl) != address(0)) {
+            actions[index++] = Action({
                 proxy: _uii.optimismMintableERC20FactoryProxy(),
                 implementation: address(_ldio.optimismMintableERC20FactoryImpl),
-                name: "OptimismMintableERC20Factory"
+                name: "OptimismMintableERC20Factory",
+                data: ""
             });
         }
 
         if (_uii.disputeGameFactoryProxy() != address(0) && address(_ldio.disputeGameFactoryImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.disputeGameFactoryProxy(),
                 implementation: address(_ldio.disputeGameFactoryImpl),
-                name: "DisputeGameFactory"
+                name: "DisputeGameFactory",
+                data: ""
             });
         }
 
         if (_uii.anchorStateRegistryProxy() != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.anchorStateRegistryProxy(),
                 implementation: address(_ldio.anchorStateRegistryImpl),
-                name: "AnchorStateRegistry"
+                name: "AnchorStateRegistry",
+                data: ""
             });
         }
 
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.delayedWETHProxy(),
                 implementation: address(_ldio.delayedWETHImpl),
-                name: "DelayedWETH"
+                name: "DelayedWETH",
+                data: ""
             });
         }
 
         if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.permissionedDelayedWETHProxy(),
                 implementation: address(_ldio.delayedWETHImpl),
-                name: "PermissionedDelayedWETH"
+                name: "PermissionedDelayedWETH",
+                data: ""
             });
         }
 
         if (_uii.celoSuperchainConfigProxy() != address(0) && address(_ldio.celoSuperchainConfigImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
+            actions[index++] = Action({
                 proxy: _uii.celoSuperchainConfigProxy(),
                 implementation: address(_ldio.celoSuperchainConfigImpl),
-                name: "CeloSuperchainConfig"
+                name: "CeloSuperchainConfig",
+                data: ""
             });
         }
 
-        if (_uii.storageSetterProxy() != address(0) && address(_ldio.storageSetterImpl) != address(0)) {
-            actions[index++] = UpgradeAction({
-                proxy: _uii.storageSetterProxy(),
-                implementation: address(_ldio.storageSetterImpl),
-                name: "StorageSetter"
-            });
+
+
+        for (uint256 i = 0; i < customActions.length; i++) {
+            actions[index++] = customActions[i];
         }
 
         return actions;
@@ -827,7 +763,7 @@ contract UpgradeImplementations is Script {
         LocallyDeployedImplementationsOutput memory _ldio
     ) public {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
-        UpgradeAction[] memory actions = _collectUpgradeActions(_uii, _ldio);
+        Action[] memory actions = _collectUpgradeActions(_uii, _ldio);
 
         console.log("\n=== MULTICALL BATCH TRANSACTION DATA ===");
         console.log("Multicall3Delegatecall address:", MULTICALL_ADDRESS);
@@ -888,28 +824,32 @@ contract UpgradeImplementations is Script {
     /// @param actions Array of upgrade actions to batch
     /// @param proxyAdminAddress Address of the ProxyAdmin contract
     /// @return data Encoded calldata for aggregate3 function
-    function getMulticall3Calldata(
-        UpgradeAction[] memory actions,
-        address proxyAdminAddress
-    ) public pure returns (bytes memory data) {
+    function getMulticall3Calldata(Action[] memory actions, address proxyAdminAddress)
+        public
+        pure
+        returns (bytes memory data)
+    {
         IMulticall3.Call[] memory calls = new IMulticall3.Call[](actions.length);
 
-        for (uint256 i = 0; i < calls.length; i++) {
-            console.log("Generating multicall for action:", actions[i].name);
-            require(actions[i].proxy != address(0), "Invalid proxy address for multicall");
-            require(actions[i].implementation != address(0),  "Invalid implementation address for multicall");
+        for (uint256 i = 0; i < actions.length; i++) {
+            bytes memory callData;
+            address target;
 
-            // Encode the upgrade call for ProxyAdmin
-            bytes memory upgradeCalldata = abi.encodeWithSelector(
-                IProxyAdmin.upgrade.selector,
-                actions[i].proxy,
-                actions[i].implementation
-            );
+            if (actions[i].data.length > 0) {
+                console.log("Generating multicall for custom action:", actions[i].name);
+                callData = actions[i].data;
+                target = actions[i].proxy;
+            } else {
+                console.log("Generating multicall for upgrade action:", actions[i].name);
+                require(actions[i].proxy != address(0), "Invalid proxy address for multicall");
+                require(actions[i].implementation != address(0), "Invalid implementation address for multicall");
 
-            calls[i] = IMulticall3.Call({
-                target: proxyAdminAddress,
-                callData: upgradeCalldata
-            });
+                callData =
+                    abi.encodeWithSelector(IProxyAdmin.upgrade.selector, actions[i].proxy, actions[i].implementation);
+                target = proxyAdminAddress;
+            }
+
+            calls[i] = IMulticall3.Call({target: target, callData: callData});
         }
 
         data = abi.encodeWithSignature("aggregate((address,bytes)[])", calls);
