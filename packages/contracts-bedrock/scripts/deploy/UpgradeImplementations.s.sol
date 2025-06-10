@@ -257,6 +257,7 @@ contract AlfajoresUpgradeImplementations is Script {
         // execution
         console.log("Execution!");
         UpgradeImplementations upgrade = new UpgradeImplementations();
+        upgrade.initializeCeloSuperchainConfig(uii);
         upgrade.run(uii, new UpgradeImplementationsOutput(), constructorArgs);
     }
 }
@@ -855,4 +856,16 @@ contract UpgradeImplementations is Script {
         data = abi.encodeWithSignature("aggregate((address,bytes)[])", calls);
     }
 
+    function initializeCeloSuperchainConfig(UpgradeImplementationsInput _uii) public {
+        address celoSuperchainConfigProxy = _uii.celoSuperchainConfigProxy();
+        address superchainConfigProxy = _uii.superchainConfigProxy();
+        bytes memory data = abi.encodeWithSelector(
+            ICeloSuperchainConfig.initialize.selector,
+            0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92,
+            false,
+            superchainConfigProxy
+        );
+
+        _uii.addCustomAction("InitializeCeloSuperchainConfig", celoSuperchainConfigProxy, data);
+    }
 }
