@@ -363,6 +363,7 @@ contract UpgradeImplementations is Script {
 
     /// @notice Validates a single proxy upgrade.
     function _validateSingleUpgrade(
+        IProxyAdmin _proxyAdmin,
         string memory _contractName,
         address _proxyAddress,
         address _expectedImplementation
@@ -378,17 +379,24 @@ contract UpgradeImplementations is Script {
             return;
         }
 
-        address currentImplementation = address(uint160(uint256(vm.load(_proxyAddress, Constants.PROXY_IMPLEMENTATION_ADDRESS))));
+        address currentImplementation = _proxyAdmin.getProxyImplementation(_proxyAddress);
 
         if (currentImplementation == _expectedImplementation) {
             console.log("[PASS] Validation PASSED for", _contractName, "at", _proxyAddress);
             console.log("   Implementation is correctly set to:", currentImplementation);
         } else {
-            console.log("[FAIL] Validation FAILED for", _contractName, "at", _proxyAddress);
-            console.log("     Expected implementation:", _expectedImplementation);
-            console.log("     Actual implementation  :", currentImplementation);
-            // Consider reverting if a failure should stop the script, though for a deploy script, logging might be preferred.
-            // revert(string.concat("Validation FAILED for ", _contractName));
+            revert(
+                string.concat(
+                    "Validation FAILED for ",
+                    _contractName,
+                    " at ",
+                    LibString.toHexString(_proxyAddress),
+                    ". Expected implementation: ",
+                    LibString.toHexString(_expectedImplementation),
+                    ", but got: ",
+                    LibString.toHexString(currentImplementation)
+                )
+            );
         }
     }
 
@@ -406,9 +414,10 @@ contract UpgradeImplementations is Script {
             return;
         }
 
+        IProxyAdmin proxyAdmin = _uii.proxyAdmin();
         for (uint256 i = 0; i < actions.length; i++) {
-            if (actions[i].data.length == 0) {
-                _validateSingleUpgrade(actions[i].name, actions[i].proxy, actions[i].implementation);
+            if (actions[i].data.length == 0 && !LibString.contains(actions[i].name, "StorageSetter")) {
+                _validateSingleUpgrade(proxyAdmin, actions[i].name, actions[i].proxy, actions[i].implementation);
             }
         }
         console.log("=== POST-UPGRADE VALIDATIONS COMPLETE ===");
@@ -585,14 +594,14 @@ contract UpgradeImplementations is Script {
         uint256 actionCount = 0;
         if (_uii.superchainConfigProxy() != address(0)) actionCount++; // SuperchainConfig (not deployed here)
         if (_uii.protocolVersionsProxy() != address(0)) actionCount++; // ProtocolVersions (not deployed here)
-        if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) actionCount++;
+        if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) actionCount += 3;
         if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) actionCount++;
         if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) {
-            actionCount++;
+            actionCount += 3;
         }
-        if (_uii.l1ERC721BridgeProxy() != address(0) && address(_ldio.l1ERC721BridgeImpl) != address(0)) actionCount++;
+        if (_uii.l1ERC721BridgeProxy() != address(0) && address(_ldio.l1ERC721BridgeImpl) != address(0)) actionCount += 3;
         if (_uii.l1StandardBridgeProxy() != address(0) && address(_ldio.l1StandardBridgeImpl) != address(0)) {
-            actionCount++;
+            actionCount += 3;
         }
         if (_uii.optimismMintableERC20FactoryProxy() != address(0)
             && address(_ldio.optimismMintableERC20FactoryImpl) != address(0)) {
@@ -601,8 +610,8 @@ contract UpgradeImplementations is Script {
         if (_uii.disputeGameFactoryProxy() != address(0) && address(_ldio.disputeGameFactoryImpl) != address(0)) {
             actionCount++;
         }
-        if (_uii.anchorStateRegistryProxy() != address(0)) actionCount++; // AnchorStateRegistry (not deployed here)
-        if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount++;
+        if (_uii.anchorStateRegistryProxy() != address(0)) actionCount += 3;
+        if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount += 3;
         if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
             actionCount++;
         }
@@ -649,8 +658,24 @@ contract UpgradeImplementations is Script {
         if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.optimismPortalProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade OptimismPortal2 to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.optimismPortalProxy(),
+                implementation: address(0),
+                name: "Set OptimismPortal2 storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    53,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.optimismPortalProxy(),
                 implementation: address(_ldio.optimismPortalImpl),
-                name: "OptimismPortal",
+                name: "Upgrade OptimismPortal2 to final implementation",
                 data: ""
             });
         }
@@ -667,8 +692,24 @@ contract UpgradeImplementations is Script {
         if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.l1CrossDomainMessengerProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade L1CrossDomainMessenger to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.l1CrossDomainMessengerProxy(),
+                implementation: address(0),
+                name: "Set L1CrossDomainMessenger storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    251,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.l1CrossDomainMessengerProxy(),
                 implementation: address(_ldio.l1CrossDomainMessengerImpl),
-                name: "L1CrossDomainMessenger", // Corrected name
+                name: "Upgrade L1CrossDomainMessenger to final implementation",
                 data: ""
             });
         }
@@ -676,8 +717,24 @@ contract UpgradeImplementations is Script {
         if (_uii.l1ERC721BridgeProxy() != address(0) && address(_ldio.l1ERC721BridgeImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.l1ERC721BridgeProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade L1ERC721Bridge to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.l1ERC721BridgeProxy(),
+                implementation: address(0),
+                name: "Set L1ERC721Bridge storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    50,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.l1ERC721BridgeProxy(),
                 implementation: address(_ldio.l1ERC721BridgeImpl),
-                name: "L1ERC721Bridge", // Corrected name
+                name: "Upgrade L1ERC721Bridge to final implementation",
                 data: ""
             });
         }
@@ -685,8 +742,24 @@ contract UpgradeImplementations is Script {
         if (_uii.l1StandardBridgeProxy() != address(0) && address(_ldio.l1StandardBridgeImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.l1StandardBridgeProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade L1StandardBridge to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.l1StandardBridgeProxy(),
+                implementation: address(0),
+                name: "Set L1StandardBridge storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    50,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.l1StandardBridgeProxy(),
                 implementation: address(_ldio.l1StandardBridgeImpl),
-                name: "L1StandardBridge", // Corrected name
+                name: "Upgrade L1StandardBridge to final implementation",
                 data: ""
             });
         }
@@ -713,8 +786,24 @@ contract UpgradeImplementations is Script {
         if (_uii.anchorStateRegistryProxy() != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.anchorStateRegistryProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade AnchorStateRegistry to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.anchorStateRegistryProxy(),
+                implementation: address(0),
+                name: "Set AnchorStateRegistry storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    2,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.anchorStateRegistryProxy(),
                 implementation: address(_ldio.anchorStateRegistryImpl),
-                name: "AnchorStateRegistry",
+                name: "Upgrade AnchorStateRegistry to final implementation",
                 data: ""
             });
         }
@@ -722,8 +811,24 @@ contract UpgradeImplementations is Script {
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.delayedWETHProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade DelayedWETH to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.delayedWETHProxy(),
+                implementation: address(0),
+                name: "Set DelayedWETH storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    104,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.delayedWETHProxy(),
                 implementation: address(_ldio.delayedWETHImpl),
-                name: "DelayedWETH",
+                name: "Upgrade DelayedWETH to final implementation",
                 data: ""
             });
         }
