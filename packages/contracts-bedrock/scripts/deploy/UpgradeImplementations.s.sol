@@ -4,7 +4,7 @@ pragma solidity ^0.8.15;
 import { Script } from "forge-std/Script.sol";
 import { console2 as console } from "forge-std/console2.sol";
 
-import { LibString } from "@solady/utils/LibString.sol";
+import { LibString } from "solady/utils/LibString.sol";
 
 // Libraries
 import { BaseDeployIO } from "./BaseDeployIO.sol";
@@ -258,6 +258,7 @@ contract AlfajoresUpgradeImplementations is Script {
         console.log("Execution!");
         UpgradeImplementations upgrade = new UpgradeImplementations();
         upgrade.initializeCeloSuperchainConfig(uii);
+        upgrade.setSystemConfigEIP1559Params(uii);
         upgrade.run(uii, new UpgradeImplementationsOutput(), constructorArgs);
     }
 }
@@ -972,5 +973,11 @@ contract UpgradeImplementations is Script {
         );
 
         _uii.addCustomAction("InitializeCeloSuperchainConfig", celoSuperchainConfigProxy, data);
+    }
+
+    function setSystemConfigEIP1559Params(UpgradeImplementationsInput _uii) public {
+        address systemConfigProxy = _uii.systemConfigProxy();
+        bytes memory data = abi.encodeWithSelector(ISystemConfig.setEIP1559Params.selector, 400, 5);
+        _uii.addCustomAction("Set EIP1559 params on SystemConfig", systemConfigProxy, data);
     }
 }
