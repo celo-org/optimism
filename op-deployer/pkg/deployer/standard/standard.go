@@ -104,9 +104,9 @@ func GuardianAddressFor(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesSepolia.Guardian), nil
 	case 17000:
 		// Alfajores
-		// return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
+		return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
 		// Baklava
-		return common.HexToAddress("0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"), nil
+		// return common.HexToAddress("0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -120,9 +120,9 @@ func ChallengerAddressFor(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesSepolia.Challenger), nil
 	case 17000:
 		// Alfajores
-		// return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
+		return common.HexToAddress("0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92"), nil
 		// Baklava
-		return common.HexToAddress("0xDc94436A193a827786270dD4F6cD4b35c3f0C8f8"), nil
+		// return common.HexToAddress("0xDc94436A193a827786270dD4F6cD4b35c3f0C8f8"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -163,9 +163,9 @@ func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 		return common.HexToAddress("0x189aBAAaa82DfC015A588A7dbaD6F13b1D3485Bc"), nil
 	case 17000:
 		// Alfajores
-		// return common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"), nil
+		return common.HexToAddress("0x4630583d066520aF0E3fda0de2C628EEd2888683"), nil
 		// Baklava
-		return common.HexToAddress("0xBF101Bd81fb69aB00ab261465454dF1a171726Bf"), nil
+		// return common.HexToAddress("0xBF101Bd81fb69aB00ab261465454dF1a171726Bf"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -179,9 +179,9 @@ func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesSepolia.L1ProxyAdminOwner), nil
 	case 17000:
 		// Alfajores
-		// return common.HexToAddress("0xf05f102e890E713DC9dc0a5e13A8879D5296ee48"), nil
+		return common.HexToAddress("0xf05f102e890E713DC9dc0a5e13A8879D5296ee48"), nil
 		// Baklava
-		return common.HexToAddress("0xd542f3328ff2516443FE4db1c89E427F67169D94"), nil
+		// return common.HexToAddress("0xd542f3328ff2516443FE4db1c89E427F67169D94"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}
@@ -195,9 +195,9 @@ func ProtocolVersionsOwner(chainID uint64) (common.Address, error) {
 		return common.Address(validation.StandardConfigRolesSepolia.ProtocolVersionsOwner), nil
 	case 17000:
 		// Alfajores
-		// return common.HexToAddress("0xe571b94cf7e95c46dfe6bea529335f4a11d15d92"), nil
+		return common.HexToAddress("0xe571b94cf7e95c46dfe6bea529335f4a11d15d92"), nil
 		// Baklava
-		return common.HexToAddress("0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"), nil
+		// return common.HexToAddress("0x22EaF69162ae49605441229EdbEF7D9FC5f4f094"), nil
 	default:
 		return common.Address{}, fmt.Errorf("unsupported chain ID: %d", chainID)
 	}

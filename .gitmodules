@@ -13,7 +13,7 @@
 [submodule "packages/contracts-bedrock/lib/safe-contracts"]
 	path = packages/contracts-bedrock/lib/safe-contracts
 	url = https://github.com/celo-org/safe-smart-account
-	branch = mc01/v1.4.0
+	branch = mc01/v1.3.0
 [submodule "packages/contracts-bedrock/lib/kontrol-cheatcodes"]
 	path = packages/contracts-bedrock/lib/kontrol-cheatcodes
 	url = https://github.com/runtimeverification/kontrol-cheatcodes
