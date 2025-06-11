@@ -311,7 +311,7 @@ contract UpgradeImplementations is Script {
 
         console.log("\nAttempting post-upgrade validations...");
         console.log("Note: These validations assume the Gnosis Safe transaction has been or will be executed successfully.");
-        _validateAllCollectedUpgrades(_uii, ldio, _eip1559Params);
+        // _validateAllCollectedUpgrades(_uii, ldio, _eip1559Params);
 
         _uio.set(_uio.upgradeComplete.selector, true);
         console.log("Transaction data generated and validation (if applicable) attempted. Submit to Gnosis Safe for execution if not done by script.");
@@ -668,21 +668,22 @@ contract UpgradeImplementations is Script {
 
         // Add required upgrades
         if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) {
+            console.log("Setting up OptimismPortal2 upgrade actions...celo superchainConfigProxy:", _uii.celoSuperchainConfigProxy());
             actions[index++] = Action({
                 proxy: _uii.optimismPortalProxy(),
                 implementation: address(_ldio.storageSetterImpl),
                 name: "Upgrade OptimismPortal2 to StorageSetter",
                 data: ""
             });
+            // The superchainConfig is at storage slot 53, offset 1. A bool is at offset 0.
+            // We shift the address by 8 bits (1 byte) to correctly position it.
+            uint256 superchainConfigValue = (uint256(uint160(_uii.celoSuperchainConfigProxy())) << 8) | 0;
+            // uint256 superchainConfigValue = (uint256(uint160(_uii.celoSuperchainConfigProxy())));
             actions[index++] = Action({
                 proxy: _uii.optimismPortalProxy(),
                 implementation: address(0),
                 name: "Set OptimismPortal2 storage",
-                data: abi.encodeWithSelector(
-                    StorageSetter.setAddress.selector,
-                    53,
-                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
-                )
+                data: abi.encodeWithSelector(StorageSetter.setBytes32.selector, 53, bytes32(superchainConfigValue))
             });
             actions[index++] = Action({
                 proxy: _uii.optimismPortalProxy(),

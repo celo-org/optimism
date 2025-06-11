@@ -26,7 +26,7 @@ contract StorageSetter is ISemver {
     }
 
     /// @notice Stores a bytes32 value at each key in `_slots`.
-    function setBytes32(Slot[] calldata _slots) public {
+    function setBytes32Array(Slot[] calldata _slots) public {
         uint256 length = _slots.length;
         for (uint256 i; i < length; i++) {
             Storage.setBytes32(_slots[i].key, _slots[i].value);
