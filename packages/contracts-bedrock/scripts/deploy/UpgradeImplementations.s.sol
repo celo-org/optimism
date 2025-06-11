@@ -175,6 +175,11 @@ contract UpgradeImplementationsInput {
     }
 }
 
+struct EIP1559Params {
+    uint32 denominator;
+    uint32 elasticity;
+}
+
 struct ConstructorArgs {
     uint256 optimismPortalProofMaturityDelaySeconds;
     uint256 optimismPortalDisputeGameFinalityDelaySeconds;
@@ -234,6 +239,8 @@ contract AlfajoresUpgradeImplementations is Script {
             preimageOracleChallengePeriod: 0
         });
 
+        EIP1559Params memory eip1559Params = EIP1559Params({denominator: 400, elasticity: 5});
+
         UpgradeImplementationsInput uii = new UpgradeImplementationsInput();
         uii.set(uii.proxyAdmin.selector, address(0x4630583d066520aF0E3fda0de2C628EEd2888683));
         uii.set(uii.superchainConfigProxy.selector, address(0xdf4Fb5371B706936527B877F616eAC0e47c9b785));
@@ -258,8 +265,7 @@ contract AlfajoresUpgradeImplementations is Script {
         console.log("Execution!");
         UpgradeImplementations upgrade = new UpgradeImplementations();
         upgrade.initializeCeloSuperchainConfig(uii);
-        // upgrade.setSystemConfigEIP1559Params(uii);
-        upgrade.run(uii, new UpgradeImplementationsOutput(), constructorArgs);
+        upgrade.run(uii, new UpgradeImplementationsOutput(), constructorArgs, eip1559Params);
     }
 }
 
@@ -277,7 +283,8 @@ contract UpgradeImplementations is Script {
     function run(
         UpgradeImplementationsInput _uii,
         UpgradeImplementationsOutput _uio,
-        ConstructorArgs memory _constructorArgs
+        ConstructorArgs memory _constructorArgs,
+        EIP1559Params memory _eip1559Params
     ) public {
         console.log("Deploying new implementations locally...");
 
@@ -297,14 +304,14 @@ contract UpgradeImplementations is Script {
         console.log("Generating transaction data for Safe submission instead of direct execution...");
 
         // Generate Safe transaction data instead of executing directly
-        generateSafeTransactionData(_uii, ldio);
+        generateSafeTransactionData(_uii, ldio, _eip1559Params);
 
         // Generate multicall batch transaction data
-        generateMulticallBatchData(_uii, ldio);
+        generateMulticallBatchData(_uii, ldio, _eip1559Params);
 
         console.log("\nAttempting post-upgrade validations...");
         console.log("Note: These validations assume the Gnosis Safe transaction has been or will be executed successfully.");
-        _validateAllCollectedUpgrades(_uii, ldio);
+        _validateAllCollectedUpgrades(_uii, ldio, _eip1559Params);
 
         _uio.set(_uio.upgradeComplete.selector, true);
         console.log("Transaction data generated and validation (if applicable) attempted. Submit to Gnosis Safe for execution if not done by script.");
@@ -405,10 +412,11 @@ contract UpgradeImplementations is Script {
     /// @notice Validates all upgrades defined by the collected actions.
     function _validateAllCollectedUpgrades(
         UpgradeImplementationsInput _uii,
-        LocallyDeployedImplementationsOutput memory _ldio
+        LocallyDeployedImplementationsOutput memory _ldio,
+        EIP1559Params memory _eip1559Params
     ) internal view {
         console.log("\n=== STARTING POST-UPGRADE VALIDATIONS ===");
-        Action[] memory actions = _collectUpgradeActions(_uii, _ldio);
+        Action[] memory actions = _collectUpgradeActions(_uii, _ldio, _eip1559Params);
 
         if (actions.length == 0) {
             console.log("No upgrade actions found to validate.");
@@ -431,10 +439,11 @@ contract UpgradeImplementations is Script {
     /// @param _ldio Output from local implementation deployments
     function generateSafeTransactionData(
         UpgradeImplementationsInput _uii,
-        LocallyDeployedImplementationsOutput memory _ldio
+        LocallyDeployedImplementationsOutput memory _ldio,
+        EIP1559Params memory _eip1559Params
     ) public {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
-        Action[] memory actions = _collectUpgradeActions(_uii, _ldio);
+        Action[] memory actions = _collectUpgradeActions(_uii, _ldio, _eip1559Params);
 
         console.log("=== GNOSIS SAFE TRANSACTION DATA ===");
         console.log("ProxyAdmin address:", address(proxyAdmin));
@@ -590,14 +599,15 @@ contract UpgradeImplementations is Script {
     /// @return actions Array of UpgradeAction structs containing proxy, implementation, and name
     function _collectUpgradeActions(
         UpgradeImplementationsInput _uii,
-        LocallyDeployedImplementationsOutput memory _ldio
+        LocallyDeployedImplementationsOutput memory _ldio,
+        EIP1559Params memory _eip1559Params
     ) internal view returns (Action[] memory actions) {
         // Count valid actions first
         uint256 actionCount = 0;
         if (_uii.superchainConfigProxy() != address(0)) actionCount++; // SuperchainConfig (not deployed here)
         if (_uii.protocolVersionsProxy() != address(0)) actionCount++; // ProtocolVersions (not deployed here)
         if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) actionCount += 3;
-        if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) actionCount++;
+        if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) actionCount += 3;
         if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) {
             actionCount += 3;
         }
@@ -685,8 +695,22 @@ contract UpgradeImplementations is Script {
         if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.systemConfigProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade SystemConfig to StorageSetter",
+                data: ""
+            });
+            // Set eip1559Denominator and eip1559Elasticity by writing to storage slot 106.
+            uint256 eip1559Value = (uint256(_eip1559Params.elasticity) << 32) | _eip1559Params.denominator;
+            actions[index++] = Action({
+                proxy: _uii.systemConfigProxy(),
+                implementation: address(0),
+                name: "Set SystemConfig EIP1559 params",
+                data: abi.encodeWithSelector(StorageSetter.setAddress.selector, 106, bytes32(eip1559Value))
+            });
+            actions[index++] = Action({
+                proxy: _uii.systemConfigProxy(),
                 implementation: address(_ldio.systemConfigImpl),
-                name: "SystemConfig",
+                name: "Upgrade SystemConfig to final implementation",
                 data: ""
             });
         }
@@ -868,10 +892,11 @@ contract UpgradeImplementations is Script {
     /// @param _ldio Output from local implementation deployments
     function generateMulticallBatchData(
         UpgradeImplementationsInput _uii,
-        LocallyDeployedImplementationsOutput memory _ldio
+        LocallyDeployedImplementationsOutput memory _ldio,
+        EIP1559Params memory _eip1559Params
     ) public {
         IProxyAdmin proxyAdmin = _uii.proxyAdmin();
-        Action[] memory actions = _collectUpgradeActions(_uii, _ldio);
+        Action[] memory actions = _collectUpgradeActions(_uii, _ldio, _eip1559Params);
 
         console.log("\n=== MULTICALL BATCH TRANSACTION DATA ===");
         console.log("Multicall3Delegatecall address:", MULTICALL_ADDRESS);
@@ -976,9 +1001,4 @@ contract UpgradeImplementations is Script {
         _uii.addCustomAction("InitializeCeloSuperchainConfig", celoSuperchainConfigProxy, data);
     }
 
-    // function setSystemConfigEIP1559Params(UpgradeImplementationsInput _uii) public {
-    //     address systemConfigProxy = _uii.systemConfigProxy();
-    //     bytes memory data = abi.encodeWithSelector(ISystemConfig.setEIP1559Params.selector, 400, 5);
-    //     _uii.addCustomAction("Set EIP1559 params on SystemConfig", systemConfigProxy, data);
-    // }
 }
