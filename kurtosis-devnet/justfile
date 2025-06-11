@@ -29,6 +29,7 @@ _docker_build TAG TARGET CONTEXT DOCKERFILE *ARGS:
 _docker_build_stack TAG TARGET *ARGS: (_docker_build TAG TARGET "../" "ops/docker/op-stack-go/Dockerfile" ARGS)
 _docker_build_stack_deployer TAG TARGET *ARGS: (_docker_build TAG TARGET "./optimism-contracts/" "ops/docker/op-stack-go/Dockerfile" ARGS)
 _docker_build_stack_op_geth TAG TARGET *ARGS: (_docker_build TAG TARGET "./op-geth/" "Dockerfile" ARGS)
+_docker_build_stack_da_proxy TAG TARGET *ARGS: (_docker_build TAG TARGET "./da-proxy" "Dockerfile" ARGS)
 
 cannon-image TAG='cannon:devnet': (_docker_build_stack TAG "cannon-target")
 da-server-image TAG='da-server:devnet': (_docker_build_stack TAG "da-server-target")
@@ -48,6 +49,7 @@ op-supervisor-image TAG='op-supervisor:devnet': (_docker_build_stack TAG "op-sup
 op-wheel-image TAG='op-wheel:devnet': (_docker_build_stack TAG "op-wheel-target")
 
 op-geth-image TAG='op-geth:devnet': (_docker_build_stack_op_geth TAG "")
+da-proxy-image TAG='da-proxy:devnet': (_docker_build_stack_da_proxy TAG "")
 
 op-program-builder-image TAG='op-program-builder:devnet':
     just op-program-svc/op-program-svc {{TAG}}
@@ -101,8 +103,12 @@ isthmus-devnet: (devnet "isthmus.yaml")
 
 # Celo Isthmus devnet
 celo-isthmus-devnet:
-	./setup-local-repo.sh
-	{{just_executable()}} devnet celo-isthmus.yaml
+    ./setup-local-repo-rebase-13.sh Kourin1996/celo-rebase-13-contracts-devnet celo-rebase-13
+    {{just_executable()}} devnet celo-isthmus.yaml
+
+celo-isthmus-devnet-minimal:
+    ./setup-local-repo-rebase-13.sh Kourin1996/celo-rebase-13-contracts-devnet karlb/only-transfer-precompile
+    {{just_executable()}} devnet celo-isthmus-minimal.yaml
 
 # subshells
 enter-devnet DEVNET CHAIN='Ethereum' NODE_INDEX='0':
