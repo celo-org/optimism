@@ -232,11 +232,11 @@ contract AlfajoresUpgradeImplementations is Script {
         console.log("GnosisSafe address:", _GNOSIS_SAFE);
 
         ConstructorArgs memory constructorArgs = ConstructorArgs({
-            optimismPortalProofMaturityDelaySeconds: 0,
-            optimismPortalDisputeGameFinalityDelaySeconds: 0,
-            delayedWETHDelay: 0,
-            preimageOracleMinProposalSize: 0,
-            preimageOracleChallengePeriod: 0
+            optimismPortalProofMaturityDelaySeconds: 604800,
+            optimismPortalDisputeGameFinalityDelaySeconds: 302400,
+            delayedWETHDelay: 604800,
+            preimageOracleMinProposalSize: 126000,
+            preimageOracleChallengePeriod: 86400
         });
 
         EIP1559Params memory eip1559Params = EIP1559Params({denominator: 400, elasticity: 5});
