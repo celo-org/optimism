@@ -207,6 +207,7 @@ struct LocallyDeployedImplementationsOutput {
     IDisputeGame permissionedCannonFaultDisputeGameImpl;
     IOptimismPortal2 optimismPortalImpl;
     IDelayedWETH delayedWETHImpl;
+    IDelayedWETH permissionedDelayedWETHImpl;
     IPreimageOracle preimageOracleSingleton;
     IMIPS mipsSingleton;
     ISystemConfig systemConfigImpl;
@@ -373,6 +374,9 @@ contract UpgradeImplementations is Script {
         console.log("Deployed OptimismPortal2 at:", address(ldio.optimismPortalImpl));
         ldio.delayedWETHImpl = IDelayedWETH(payable(address(new DelayedWETH(_constructorArgs.delayedWETHDelay))));
         console.log("Deployed DelayedWETH at:", address(ldio.delayedWETHImpl));
+        ldio.permissionedDelayedWETHImpl =
+            IDelayedWETH(payable(address(new DelayedWETH(_constructorArgs.delayedWETHDelay))));
+        console.log("Deployed PermissionedDelayedWETH at:", address(ldio.permissionedDelayedWETHImpl));
         ldio.preimageOracleSingleton =
             IPreimageOracle(address(new PreimageOracle(_constructorArgs.preimageOracleMinProposalSize, _constructorArgs.preimageOracleChallengePeriod)));
         console.log("Deployed PreimageOracle at:", address(ldio.preimageOracleSingleton));
@@ -695,7 +699,7 @@ contract UpgradeImplementations is Script {
         }
         if (_uii.anchorStateRegistryProxy() != address(0)) actionCount += 3;
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount += 3;
-        if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
+        if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.permissionedDelayedWETHImpl) != address(0)) {
             actionCount += 2;
         }
         if (_uii.celoSuperchainConfigProxy() != address(0) && address(_ldio.celoSuperchainConfigImpl) != address(0)) {
@@ -970,10 +974,10 @@ contract UpgradeImplementations is Script {
             });
         }
 
-        if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) {
+        if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.permissionedDelayedWETHImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.permissionedDelayedWETHProxy(),
-                implementation: address(_ldio.delayedWETHImpl),
+                implementation: address(_ldio.permissionedDelayedWETHImpl),
                 name: "PermissionedDelayedWETH",
                 data: ""
             });
