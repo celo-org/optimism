@@ -606,7 +606,7 @@ contract UpgradeImplementations is Script {
         uint256 actionCount = 0;
         if (_uii.superchainConfigProxy() != address(0)) actionCount++; // SuperchainConfig (not deployed here)
         if (_uii.protocolVersionsProxy() != address(0)) actionCount++; // ProtocolVersions (not deployed here)
-        if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) actionCount += 3;
+        if (_uii.optimismPortalProxy() != address(0) && address(_ldio.optimismPortalImpl) != address(0)) actionCount += 5;
         if (_uii.systemConfigProxy() != address(0) && address(_ldio.systemConfigImpl) != address(0)) actionCount += 3;
         if (_uii.l1CrossDomainMessengerProxy() != address(0) && address(_ldio.l1CrossDomainMessengerImpl) != address(0)) {
             actionCount += 3;
@@ -684,6 +684,25 @@ contract UpgradeImplementations is Script {
                 implementation: address(0),
                 name: "Set OptimismPortal2 storage",
                 data: abi.encodeWithSelector(StorageSetter.setBytes32.selector, 53, bytes32(superchainConfigValue))
+            });
+            // Set disputeGameFactory to disputeGameFactoryProxy address
+            actions[index++] = Action({
+                proxy: _uii.optimismPortalProxy(),
+                implementation: address(0),
+                name: "Set OptimismPortal2 disputeGameFactory",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    56,
+                    bytes32(uint256(uint160(_uii.disputeGameFactoryProxy())))
+                )
+            });
+            // Set respectedGameType to 1 and respectedGameTypeUpdatedAt to current block timestamp
+            uint256 respectedGameTypeValue = (block.timestamp << 32) | 1;
+            actions[index++] = Action({
+                proxy: _uii.optimismPortalProxy(),
+                implementation: address(0),
+                name: "Set OptimismPortal2 respectedGameType and timestamp",
+                data: abi.encodeWithSelector(StorageSetter.setBytes32.selector, 59, bytes32(respectedGameTypeValue))
             });
             actions[index++] = Action({
                 proxy: _uii.optimismPortalProxy(),
