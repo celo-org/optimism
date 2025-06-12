@@ -34,6 +34,11 @@ import { OptimismMintableERC20Factory } from "../../src/universal/OptimismMintab
 import { DisputeGameFactory } from "../../src/dispute/DisputeGameFactory.sol";
 import { AnchorStateRegistry } from "../../src/dispute/AnchorStateRegistry.sol";
 import { DelayedWETH } from "../../src/dispute/DelayedWETH.sol";
+import { FaultDisputeGame } from "../../src/dispute/FaultDisputeGame.sol";
+import { PermissionedDisputeGame } from "../../src/dispute/PermissionedDisputeGame.sol";
+import { GameType, Claim, Duration, GameTypes } from "../../src/dispute/lib/Types.sol";
+import { IDisputeGame } from "../../src/dispute/interfaces/IDisputeGame.sol";
+import { IBigStepper } from "../../src/dispute/interfaces/IBigStepper.sol";
 import { CeloSuperchainConfig } from "../../src/L1/CeloSuperchainConfig.sol";
 import { IOptimismPortal2 } from "../../src/L1/interfaces/IOptimismPortal2.sol";
 import { ISystemConfig } from "../../src/L1/interfaces/ISystemConfig.sol";
@@ -186,10 +191,20 @@ struct ConstructorArgs {
     uint256 delayedWETHDelay;
     uint256 preimageOracleMinProposalSize;
     uint256 preimageOracleChallengePeriod;
+    uint256 faultGameMaxDepth;
+    uint256 faultGameMaxClockDuration;
+    uint256 faultGameSplitDepth;
+    uint256 faultGameClockExtension;
+    bytes32 faultGameAbsolutePrestate;
+    uint256 l2ChainID;
+    address l2OutputOracleProposer;
+    address l2OutputOracleChallenger;
 }
 
 // New struct to hold locally deployed implementation addresses
 struct LocallyDeployedImplementationsOutput {
+    IDisputeGame cannonFaultDisputeGameImpl;
+    IDisputeGame permissionedCannonFaultDisputeGameImpl;
     IOptimismPortal2 optimismPortalImpl;
     IDelayedWETH delayedWETHImpl;
     IPreimageOracle preimageOracleSingleton;
@@ -236,7 +251,15 @@ contract AlfajoresUpgradeImplementations is Script {
             optimismPortalDisputeGameFinalityDelaySeconds: 302400,
             delayedWETHDelay: 604800,
             preimageOracleMinProposalSize: 126000,
-            preimageOracleChallengePeriod: 86400
+            preimageOracleChallengePeriod: 86400,
+            faultGameMaxDepth: 73,
+            faultGameMaxClockDuration: 302400,
+            faultGameSplitDepth: 30,
+            faultGameClockExtension: 10800,
+            faultGameAbsolutePrestate: 0x03c7ae758795765c6664a5d39bf63841c71ff191e9189522bad8ebff5d4eca98,
+            l2ChainID: 44787,
+            l2OutputOracleProposer: 0x06d010A07D9076d6E7af80E54E26036941221bFA,
+            l2OutputOracleChallenger: 0xe571b94CF7e95C46DFe6bEa529335f4A11d15D92
         });
 
         EIP1559Params memory eip1559Params = EIP1559Params({denominator: 400, elasticity: 5});
@@ -288,7 +311,7 @@ contract UpgradeImplementations is Script {
     ) public {
         console.log("Deploying new implementations locally...");
 
-        LocallyDeployedImplementationsOutput memory ldio = _deployImplementations(_constructorArgs);
+        LocallyDeployedImplementationsOutput memory ldio = _deployImplementations(_uii, _constructorArgs);
 
         console.log("New implementations deployed locally successfully!");
         console.log("Starting implementation upgrades...");
@@ -318,6 +341,7 @@ contract UpgradeImplementations is Script {
     }
 
     function _deployImplementations(
+        UpgradeImplementationsInput _uii,
         ConstructorArgs memory _constructorArgs
     ) internal returns (LocallyDeployedImplementationsOutput memory ldio) {
         vm.startBroadcast();
@@ -366,6 +390,49 @@ contract UpgradeImplementations is Script {
         console.log("Deployed CeloSuperchainConfig at:", address(ldio.celoSuperchainConfigImpl));
         ldio.storageSetterImpl = new StorageSetter();
         console.log("Deployed StorageSetter at:", address(ldio.storageSetterImpl));
+
+        IDelayedWETH weth = IDelayedWETH(payable(_uii.delayedWETHProxy()));
+        IDelayedWETH permissionedWeth = IDelayedWETH(payable(_uii.permissionedDelayedWETHProxy()));
+        IAnchorStateRegistry anchorStateRegistry = IAnchorStateRegistry(_uii.anchorStateRegistryProxy());
+
+        ldio.cannonFaultDisputeGameImpl = IDisputeGame(
+            address(
+                new FaultDisputeGame(
+                    GameTypes.CANNON,
+                    Claim.wrap(_constructorArgs.faultGameAbsolutePrestate),
+                    _constructorArgs.faultGameMaxDepth,
+                    _constructorArgs.faultGameSplitDepth,
+                    Duration.wrap(uint64(_constructorArgs.faultGameClockExtension)),
+                    Duration.wrap(uint64(_constructorArgs.faultGameMaxClockDuration)),
+                    IBigStepper(address(ldio.mipsSingleton)),
+                    weth,
+                    anchorStateRegistry,
+                    _constructorArgs.l2ChainID
+                )
+            )
+        );
+        console.log("Deployed FaultDisputeGame at:", address(ldio.cannonFaultDisputeGameImpl));
+
+        ldio.permissionedCannonFaultDisputeGameImpl = IDisputeGame(
+            address(
+                new PermissionedDisputeGame(
+                    GameTypes.PERMISSIONED_CANNON,
+                    Claim.wrap(_constructorArgs.faultGameAbsolutePrestate),
+                    _constructorArgs.faultGameMaxDepth,
+                    _constructorArgs.faultGameSplitDepth,
+                    Duration.wrap(uint64(_constructorArgs.faultGameClockExtension)),
+                    Duration.wrap(uint64(_constructorArgs.faultGameMaxClockDuration)),
+                    IBigStepper(address(ldio.mipsSingleton)),
+                    permissionedWeth,
+                    anchorStateRegistry,
+                    _constructorArgs.l2ChainID,
+                    _constructorArgs.l2OutputOracleProposer,
+                    _constructorArgs.l2OutputOracleChallenger
+                )
+            )
+        );
+        console.log("Deployed PermissionedDisputeGame at:", address(ldio.permissionedCannonFaultDisputeGameImpl));
+
         vm.stopBroadcast();
     }
 
@@ -621,6 +688,7 @@ contract UpgradeImplementations is Script {
         }
         if (_uii.disputeGameFactoryProxy() != address(0) && address(_ldio.disputeGameFactoryImpl) != address(0)) {
             actionCount++;
+            actionCount += 2;
         }
         if (_uii.anchorStateRegistryProxy() != address(0)) actionCount += 3;
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount += 3;
@@ -826,6 +894,26 @@ contract UpgradeImplementations is Script {
                 implementation: address(_ldio.disputeGameFactoryImpl),
                 name: "DisputeGameFactory",
                 data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.disputeGameFactoryProxy(),
+                implementation: address(0),
+                name: "SetCannonFaultGameImplementation",
+                data: abi.encodeWithSelector(
+                    IDisputeGameFactory.setImplementation.selector,
+                    GameTypes.CANNON,
+                    _ldio.cannonFaultDisputeGameImpl
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.disputeGameFactoryProxy(),
+                implementation: address(0),
+                name: "SetPermissionedCannonFaultGameImplementation",
+                data: abi.encodeWithSelector(
+                    IDisputeGameFactory.setImplementation.selector,
+                    GameTypes.PERMISSIONED_CANNON,
+                    _ldio.permissionedCannonFaultDisputeGameImpl
+                )
             });
         }
 
