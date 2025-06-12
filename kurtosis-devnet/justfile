@@ -103,11 +103,11 @@ isthmus-devnet: (devnet "isthmus.yaml")
 
 # Celo Isthmus devnet
 celo-isthmus-devnet:
-    ./setup-local-repo-rebase-13.sh Kourin1996/celo-rebase-13-contracts-devnet celo-rebase-13
+    ./setup-local-repos.sh Kourin1996/celo-rebase-13-contracts-devnet celo-rebase-13-no-HF-overrides
     {{just_executable()}} devnet celo-isthmus.yaml
 
 celo-isthmus-devnet-minimal:
-    ./setup-local-repo-rebase-13.sh Kourin1996/celo-rebase-13-contracts-devnet karlb/only-transfer-precompile
+    ./setup-local-repos.sh Kourin1996/celo-rebase-13-contracts-devnet karlb/only-transfer-precompile
     {{just_executable()}} devnet celo-isthmus-minimal.yaml
 
 # subshells
