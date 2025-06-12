@@ -281,12 +281,12 @@ contract AlfajoresUpgradeImplementations is Script {
 
         vm.startBroadcast();
         Proxy celoSuperchainConfigProxy = new Proxy(0x4630583d066520aF0E3fda0de2C628EEd2888683);
-        Proxy permissionedDelayedWETHProxy = new Proxy(0x4630583d066520aF0E3fda0de2C628EEd2888683);
         vm.stopBroadcast();
         console.log("Deployed CeloSuperchainConfigProxy at:", address(celoSuperchainConfigProxy));
         uii.set(uii.celoSuperchainConfigProxy.selector, address(celoSuperchainConfigProxy));
-        console.log("Deployed PermissionedDelayedWETHProxy at:", address(permissionedDelayedWETHProxy));
-        uii.set(uii.permissionedDelayedWETHProxy.selector, address(permissionedDelayedWETHProxy));
+        uii.set(
+            uii.permissionedDelayedWETHProxy.selector, address(0xB1A97AB7C0c1507Ea0e55A76e34EF4C86793ef28)
+        );
 
         // execution
         console.log("Execution!");
@@ -700,7 +700,7 @@ contract UpgradeImplementations is Script {
         if (_uii.anchorStateRegistryProxy() != address(0)) actionCount += 3;
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount += 3;
         if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.permissionedDelayedWETHImpl) != address(0)) {
-            actionCount += 2;
+            actionCount++;
         }
         if (_uii.celoSuperchainConfigProxy() != address(0) && address(_ldio.celoSuperchainConfigImpl) != address(0)) {
             actionCount++;
@@ -980,16 +980,6 @@ contract UpgradeImplementations is Script {
                 implementation: address(_ldio.permissionedDelayedWETHImpl),
                 name: "PermissionedDelayedWETH",
                 data: ""
-            });
-            actions[index++] = Action({
-                proxy: _uii.permissionedDelayedWETHProxy(),
-                implementation: address(0),
-                name: "InitializePermissionedDelayedWETH",
-                data: abi.encodeWithSelector(
-                    IDelayedWETH.initialize.selector,
-                    _GNOSIS_SAFE,
-                    ICeloSuperchainConfig(_uii.celoSuperchainConfigProxy())
-                )
             });
         }
 
