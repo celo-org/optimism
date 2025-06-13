@@ -78,6 +78,7 @@ contract UpgradeImplementationsInput {
     address internal _permissionedDelayedWETHProxy;
     address internal _celoSuperchainConfigProxy;
     address internal _storageSetterProxy;
+    address internal _l2OutputOracleProxy;
 
     Action[] internal _customActions;
 
@@ -107,6 +108,7 @@ contract UpgradeImplementationsInput {
         else if (_sel == this.permissionedDelayedWETHProxy.selector) _permissionedDelayedWETHProxy = _addr;
         else if (_sel == this.celoSuperchainConfigProxy.selector) _celoSuperchainConfigProxy = _addr;
         else if (_sel == this.storageSetterProxy.selector) _storageSetterProxy = _addr;
+        else if (_sel == this.l2OutputOracleProxy.selector) _l2OutputOracleProxy = _addr;
         else revert("UpgradeImplementationsInput: unknown selector");
     }
 
@@ -177,6 +179,10 @@ contract UpgradeImplementationsInput {
 
     function storageSetterProxy() public view returns (address) {
         return _storageSetterProxy;
+    }
+
+    function l2OutputOracleProxy() public view returns (address) {
+        return _l2OutputOracleProxy;
     }
 }
 
@@ -278,6 +284,7 @@ contract AlfajoresUpgradeImplementations is Script {
         uii.set(uii.disputeGameFactoryProxy.selector, address(0xE28AAdcd9883746c0e5068F58f9ea06027b214cb));
         uii.set(uii.anchorStateRegistryProxy.selector, address(0x235CCA09E27697230ae7c1C671760d6eEB92b12B));
         uii.set(uii.delayedWETHProxy.selector, address(0x8e2a6D372557c9661045f26B140E7A189C38D80C));
+        uii.set(uii.l2OutputOracleProxy.selector, address(0x4a2635e9e4f6e45817b1D402ac4904c1d1752438));
 
         vm.startBroadcast();
         Proxy celoSuperchainConfigProxy = new Proxy(0x4630583d066520aF0E3fda0de2C628EEd2888683);
@@ -706,6 +713,7 @@ contract UpgradeImplementations is Script {
             actionCount++;
         }
         if (_uii.storageSetterProxy() != address(0) && address(_ldio.storageSetterImpl) != address(0)) actionCount++;
+        if (_uii.l2OutputOracleProxy() != address(0) && address(_ldio.l2OutputOracleImpl) != address(0)) actionCount++;
 
         Action[] memory customActions = _uii.getCustomActions();
         actionCount += customActions.length;
@@ -992,7 +1000,14 @@ contract UpgradeImplementations is Script {
             });
         }
 
-
+        if (_uii.l2OutputOracleProxy() != address(0) && address(_ldio.l2OutputOracleImpl) != address(0)) {
+            actions[index++] = Action({
+                proxy: _uii.l2OutputOracleProxy(),
+                implementation: address(_ldio.l2OutputOracleImpl),
+                name: "L2OutputOracle",
+                data: ""
+            });
+        }
 
         for (uint256 i = 0; i < customActions.length; i++) {
             actions[index++] = customActions[i];
