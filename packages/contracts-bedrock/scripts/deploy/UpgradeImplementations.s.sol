@@ -707,7 +707,7 @@ contract UpgradeImplementations is Script {
         if (_uii.anchorStateRegistryProxy() != address(0)) actionCount += 3;
         if (_uii.delayedWETHProxy() != address(0) && address(_ldio.delayedWETHImpl) != address(0)) actionCount += 3;
         if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.permissionedDelayedWETHImpl) != address(0)) {
-            actionCount++;
+            actionCount += 3;
         }
         if (_uii.celoSuperchainConfigProxy() != address(0) && address(_ldio.celoSuperchainConfigImpl) != address(0)) {
             actionCount++;
@@ -985,8 +985,24 @@ contract UpgradeImplementations is Script {
         if (_uii.permissionedDelayedWETHProxy() != address(0) && address(_ldio.permissionedDelayedWETHImpl) != address(0)) {
             actions[index++] = Action({
                 proxy: _uii.permissionedDelayedWETHProxy(),
+                implementation: address(_ldio.storageSetterImpl),
+                name: "Upgrade PermissionedDelayedWETH to StorageSetter",
+                data: ""
+            });
+            actions[index++] = Action({
+                proxy: _uii.permissionedDelayedWETHProxy(),
+                implementation: address(0),
+                name: "Set PermissionedDelayedWETH storage",
+                data: abi.encodeWithSelector(
+                    StorageSetter.setAddress.selector,
+                    104,
+                    bytes32(uint256(uint160(_uii.celoSuperchainConfigProxy())))
+                )
+            });
+            actions[index++] = Action({
+                proxy: _uii.permissionedDelayedWETHProxy(),
                 implementation: address(_ldio.permissionedDelayedWETHImpl),
-                name: "PermissionedDelayedWETH",
+                name: "Upgrade PermissionedDelayedWETH to final implementation",
                 data: ""
             });
         }
