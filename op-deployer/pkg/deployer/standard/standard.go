@@ -112,7 +112,10 @@ func L1VersionsFor(chainID uint64) (validation.Versions, error) {
 func GuardianAddressFor(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.Address(validation.StandardConfigRolesMainnet.Guardian), nil
+		// Celo Mainnet
+		return common.HexToAddress("0x6E226fa22e5F19363d231D3FA048aaBa73CC1f47"), nil
+		// Superchain
+		// return common.Address(validation.StandardConfigRolesMainnet.Guardian), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.Guardian), nil
 	default:
@@ -123,7 +126,10 @@ func GuardianAddressFor(chainID uint64) (common.Address, error) {
 func ChallengerAddressFor(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.Address(validation.StandardConfigRolesMainnet.Challenger), nil
+		// Celo Mainnet
+		return common.HexToAddress("0x6b145ebf66602ec524b196426b46631259689583"), nil
+		// Superchain
+		// return common.Address(validation.StandardConfigRolesMainnet.Challenger), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.Challenger), nil
 	default:
@@ -160,7 +166,10 @@ func ManagerImplementationAddrFor(chainID uint64, tag string) (common.Address, e
 func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.HexToAddress("0x543bA4AADBAb8f9025686Bd03993043599c6fB04"), nil
+		// Celo Mainnet
+		return common.HexToAddress("0x783A434532Ee94667979213af1711505E8bFE374"), nil
+		// Superchain
+		// return common.HexToAddress("0x543bA4AADBAb8f9025686Bd03993043599c6fB04"), nil
 	case 11155111:
 		return common.HexToAddress("0x189aBAAaa82DfC015A588A7dbaD6F13b1D3485Bc"), nil
 	case 17000:
@@ -173,7 +182,10 @@ func SuperchainProxyAdminAddrFor(chainID uint64) (common.Address, error) {
 func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.Address(validation.StandardConfigRolesMainnet.L1ProxyAdminOwner), nil
+		// Celo Mainnet
+		return common.HexToAddress("0x4092A77bAF58fef0309452cEaCb09221e556E112"), nil
+		// Superchain
+		// return common.Address(validation.StandardConfigRolesMainnet.L1ProxyAdminOwner), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.L1ProxyAdminOwner), nil
 	default:
@@ -184,7 +196,10 @@ func L1ProxyAdminOwner(chainID uint64) (common.Address, error) {
 func ProtocolVersionsOwner(chainID uint64) (common.Address, error) {
 	switch chainID {
 	case 1:
-		return common.Address(validation.StandardConfigRolesMainnet.ProtocolVersionsOwner), nil
+		// Celo Mainnet
+		return common.HexToAddress("0x4092A77bAF58fef0309452cEaCb09221e556E112"), nil
+		// Superchain
+		// return common.Address(validation.StandardConfigRolesMainnet.ProtocolVersionsOwner), nil
 	case 11155111:
 		return common.Address(validation.StandardConfigRolesSepolia.ProtocolVersionsOwner), nil
 	default:
