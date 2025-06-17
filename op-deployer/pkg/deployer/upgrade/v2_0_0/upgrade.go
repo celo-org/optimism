@@ -13,9 +13,10 @@ import (
 )
 
 type UpgradeOPChainInput struct {
-	Prank               common.Address  `json:"prank"`
-	Opcm                common.Address  `json:"opcm"`
-	EncodedChainConfigs []OPChainConfig `evm:"-" json:"chainConfigs"`
+	Prank               	common.Address  `json:"prank"`
+	Opcm                	common.Address  `json:"opcm"`
+	EncodedChainConfigs 	[]OPChainConfig `evm:"-" json:"chainConfigs"`
+	UpgradeSuperchainConfig	bool			`json:"upgradeSuperchainConfig"`
 }
 
 type OPChainConfig struct {

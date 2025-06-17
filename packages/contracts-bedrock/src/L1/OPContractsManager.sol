@@ -456,10 +456,20 @@ contract OPContractsManager is ISemver {
         assertValidContractAddress(address(_config.proxyAdmin));
     }
 
+    /// @notice Celo: Performs upgrade with default control flag for upgrading superchain config
+    function upgrade(OpChainConfig[] memory _opChainConfigs) external virtual {
+        _upgrade(_opChainConfigs, true);
+    }
+
+    /// @notice Celo: Performs upgrade with explicit control flag for upgrading superchain config
+    function upgrade(OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external virtual {
+        _upgrade(_opChainConfigs, _upgradeSuperchainConfig);
+    }
+
     /// @notice Upgrades a set of chains to the latest implementation contracts
     /// @param _opChainConfigs Array of OpChain structs, one per chain to upgrade
     /// @dev This function is intended to be called via DELEGATECALL from the Upgrade Controller Safe
-    function upgrade(OpChainConfig[] memory _opChainConfigs) external virtual {
+    function _upgrade(OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) internal virtual {
         if (address(this) == address(thisOPCM)) revert OnlyDelegatecall();
 
         // If this is delegatecalled by the upgrade controller, set isRC to false first, else, continue execution.
@@ -472,10 +482,13 @@ contract OPContractsManager is ISemver {
         Implementations memory impls = getImplementations();
         Blueprints memory bps = getBlueprints();
 
-        // If the SuperchainConfig is not already upgraded, upgrade it.
-        if (superchainProxyAdmin.getProxyImplementation(address(superchainConfig)) != impls.superchainConfigImpl) {
+        // Celo: some chains (like Celo Mainnet) follow external superchain config that is not desired to be upgraded
+        if (_upgradeSuperchainConfig) {
+            // If the SuperchainConfig is not already upgraded, upgrade it.
+            if (superchainProxyAdmin.getProxyImplementation(address(superchainConfig)) != impls.superchainConfigImpl) {
             // Attempt to upgrade. If the ProxyAdmin is not the SuperchainConfig's admin, this will revert.
             upgradeTo(superchainProxyAdmin, address(superchainConfig), impls.superchainConfigImpl);
+        }
         }
 
         // If the ProtocolVersions contract is not already upgraded, upgrade it.

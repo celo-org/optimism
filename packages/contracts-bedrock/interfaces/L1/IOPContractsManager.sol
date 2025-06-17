@@ -236,7 +236,8 @@ interface IOPContractsManager {
 
     /// @notice Upgrades the implementation of all proxies in the specified chains
     /// @param _opChainConfigs The chains to upgrade
-    function upgrade(OpChainConfig[] memory _opChainConfigs) external;
+    /// @param _upgradeSuperchainConfig Flag to optionally upgrade superchain config
+    function upgrade(OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external;
 
     /// @notice addGameType deploys a new dispute game and links it to the DisputeGameFactory. The inputted _gameConfigs
     /// must be added in ascending GameType order.
