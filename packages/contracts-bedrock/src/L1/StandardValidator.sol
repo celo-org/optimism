@@ -335,14 +335,25 @@ contract StandardValidatorBase {
             internalRequire(_admin.getProxyImplementation(address(_portal)) == optimismPortalImpl, "PORTAL-20", _errors);
 
         IDisputeGameFactory _dgf = IDisputeGameFactory(_sysCfg.disputeGameFactory());
+        address celoSuperchainConfig_ = address(_portal.superchainConfig());
         _errors = internalRequire(address(_portal.disputeGameFactory()) == address(_dgf), "PORTAL-30", _errors);
         _errors = internalRequire(address(_portal.systemConfig()) == address(_sysCfg), "PORTAL-40", _errors);
+        _errors = internalRequire(celoSuperchainConfig(celoSuperchainConfig_) == address(superchainConfig), "PORTAL-50", _errors);
         _errors = internalRequire(
-            celoSuperchainConfig(address(_portal.superchainConfig())) == address(superchainConfig), "PORTAL-50", _errors
-        );
-        _errors = internalRequire(_portal.guardian() == superchainConfig.guardian(), "PORTAL-60", _errors);
+            _portal.guardian() == superchainConfig.guardian(), "PORTAL-60", _errors
+        ); // True only for Celo Testnets
         _errors = internalRequire(_portal.paused() == superchainConfig.paused(), "PORTAL-70", _errors);
         _errors = internalRequire(_portal.l2Sender() == Constants.DEFAULT_L2_SENDER, "PORTAL-80", _errors);
+
+        // Celo extra validation: celo superchain config vs external superchain config
+        _errors = internalRequire(
+            _portal.guardian() != superchainConfig.guardian(), "PORTAL-CEL-10", _errors
+        ); // True only for Celo Mainnet
+        _errors = internalRequire(
+            _portal.guardian() == ISuperchainConfig(celoSuperchainConfig_).guardian(), "SYSCON-CEL-20", _errors
+        ); // True for Celo Mainnet & Celo Testnets
+
+
         return _errors;
     }
 
