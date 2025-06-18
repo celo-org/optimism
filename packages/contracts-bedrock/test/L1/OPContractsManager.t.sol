@@ -349,7 +349,7 @@ contract OPContractsManager_Upgrade_Harness is CommonTest {
         vm.etch(_delegateCaller, vm.getDeployedCode("test/mocks/Callers.sol:DelegateCaller"));
 
         DelegateCaller(_delegateCaller).dcForward(
-            address(deployedOPCM), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs))
+            address(deployedOPCM), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, true))
         );
 
         VmSafe.Gas memory gas = vm.lastCallGas();
@@ -427,7 +427,7 @@ contract OPContractsManager_Upgrade_Harness is CommonTest {
         vm.etch(_delegateCaller, vm.getDeployedCode("test/mocks/Callers.sol:DelegateCaller"));
 
         DelegateCaller(_delegateCaller).dcForward(
-            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs))
+            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, true))
         );
 
         VmSafe.Gas memory gas = vm.lastCallGas();
@@ -537,7 +537,7 @@ contract OPContractsManager_Upgrade_TestFails is OPContractsManager_Upgrade_Harn
     function test_upgrade_notDelegateCalled_reverts() public {
         vm.prank(upgrader);
         vm.expectRevert(IOPContractsManager.OnlyDelegatecall.selector);
-        opcm.upgrade(opChainConfigs);
+        opcm.upgrade(opChainConfigs, true);
     }
 
     function test_upgrade_notProxyAdminOwner_reverts() public {
@@ -549,14 +549,14 @@ contract OPContractsManager_Upgrade_TestFails is OPContractsManager_Upgrade_Harn
 
         vm.expectRevert("Ownable: caller is not the owner");
         DelegateCaller(delegateCaller).dcForward(
-            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs))
+            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, true))
         );
     }
 
     function test_upgrade_absolutePrestateNotSet_reverts() public {
         opChainConfigs[0].absolutePrestate = Claim.wrap(bytes32(0));
         vm.expectRevert(IOPContractsManager.PrestateNotSet.selector);
-        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs)));
+        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, true)));
     }
 }
 

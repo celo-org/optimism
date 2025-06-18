@@ -185,9 +185,9 @@ contract ForkLive is Deployer {
         bytes memory upgraderCode = address(upgrader).code;
         vm.etch(upgrader, vm.getDeployedCode("test/mocks/Callers.sol:DelegateCaller"));
         DelegateCaller(upgrader).dcForward(
-            address(0x026b2F158255Beac46c1E7c6b8BbF29A4b6A7B76), abi.encodeCall(IOPContractsManager.upgrade, (opChains))
+            address(0x026b2F158255Beac46c1E7c6b8BbF29A4b6A7B76), abi.encodeCall(IOPContractsManager.upgrade, (opChains, true))
         );
-        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChains)));
+        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChains, true)));
         vm.etch(upgrader, upgraderCode);
 
         console.log("ForkLive: Saving newly deployed contracts");
