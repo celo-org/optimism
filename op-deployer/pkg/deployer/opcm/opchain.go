@@ -69,6 +69,7 @@ type DeployOPChainOutput struct {
 	PermissionedDisputeGame            common.Address
 	DelayedWETHPermissionedGameProxy   common.Address
 	DelayedWETHPermissionlessGameProxy common.Address
+	CeloSuperchainConfigProxy          common.Address
 }
 
 func (output *DeployOPChainOutput) CheckOutput(input common.Address) error {

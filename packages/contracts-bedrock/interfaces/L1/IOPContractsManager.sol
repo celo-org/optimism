@@ -21,6 +21,7 @@ import { IL1CrossDomainMessenger } from "interfaces/L1/IL1CrossDomainMessenger.s
 import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
+import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
 
 interface IOPContractsManagerContractsContainer {
     function __constructor__(
@@ -123,6 +124,7 @@ interface IOPContractsManager {
         IOptimismMintableERC20Factory optimismMintableERC20FactoryProxy;
         IL1StandardBridge l1StandardBridgeProxy;
         IL1CrossDomainMessenger l1CrossDomainMessengerProxy;
+        CeloSuperchainConfig celoSuperchainConfigProxy;
         // Fault proof contracts below.
         IOptimismPortal2 optimismPortalProxy;
         IDisputeGameFactory disputeGameFactoryProxy;

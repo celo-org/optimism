@@ -129,6 +129,7 @@ func makeChainState(chainID common.Hash, dco opcm.DeployOPChainOutput) *state.Ch
 		PermissionedDisputeGameAddress:            dco.PermissionedDisputeGame,
 		DelayedWETHPermissionedGameProxyAddress:   dco.DelayedWETHPermissionedGameProxy,
 		DelayedWETHPermissionlessGameProxyAddress: dco.DelayedWETHPermissionlessGameProxy,
+		CeloSuperchainConfigProxyAddress:          dco.CeloSuperchainConfigProxy,
 	}
 }
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.15;
+pragma solidity ^0.8.15;
 
 import { Script } from "forge-std/Script.sol";
 
@@ -14,6 +14,7 @@ import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IBigStepper } from "interfaces/dispute/IBigStepper.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Constants } from "src/libraries/Constants.sol";
+import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
 import { Constants as ScriptConstants } from "scripts/libraries/Constants.sol";
 
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
@@ -246,6 +247,7 @@ contract DeployOPChainOutput is BaseDeployIO {
     IPermissionedDisputeGame internal _permissionedDisputeGame;
     IDelayedWETH internal _delayedWETHPermissionedGameProxy;
     IDelayedWETH internal _delayedWETHPermissionlessGameProxy;
+    CeloSuperchainConfig internal _celoSuperchainConfigProxy;
 
     function set(bytes4 _sel, address _addr) public virtual {
         require(_addr != address(0), "DeployOPChainOutput: cannot set zero address");
@@ -264,6 +266,7 @@ contract DeployOPChainOutput is BaseDeployIO {
         else if (_sel == this.permissionedDisputeGame.selector) _permissionedDisputeGame = IPermissionedDisputeGame(_addr) ;
         else if (_sel == this.delayedWETHPermissionedGameProxy.selector) _delayedWETHPermissionedGameProxy = IDelayedWETH(payable(_addr)) ;
         else if (_sel == this.delayedWETHPermissionlessGameProxy.selector) _delayedWETHPermissionlessGameProxy = IDelayedWETH(payable(_addr)) ;
+        else if (_sel == this.celoSuperchainConfigProxy.selector) _celoSuperchainConfigProxy = CeloSuperchainConfig(payable(_addr));
         else revert("DeployOPChainOutput: unknown selector");
         // forgefmt: disable-end
     }
@@ -347,6 +350,11 @@ contract DeployOPChainOutput is BaseDeployIO {
         // DeployUtils.assertValidContractAddress(address(_delayedWETHPermissionlessGameProxy));
         return _delayedWETHPermissionlessGameProxy;
     }
+
+    function celoSuperchainConfigProxy() public view returns (CeloSuperchainConfig) {
+        DeployUtils.assertValidContractAddress(address(_celoSuperchainConfigProxy));
+        return _celoSuperchainConfigProxy;
+    }
 }
 
 contract DeployOPChain is Script {
@@ -395,6 +403,7 @@ contract DeployOPChain is Script {
         // vm.label(address(deployOutput.faultDisputeGame), "faultDisputeGame");
         vm.label(address(deployOutput.permissionedDisputeGame), "permissionedDisputeGame");
         vm.label(address(deployOutput.delayedWETHPermissionedGameProxy), "delayedWETHPermissionedGameProxy");
+        vm.label(address(deployOutput.celoSuperchainConfigProxy), "celoSuperchainConfigProxy");
         // TODO: Eventually switch from Permissioned to Permissionless.
         // vm.label(address(deployOutput.delayedWETHPermissionlessGameProxy), "delayedWETHPermissionlessGameProxy");
 
@@ -413,6 +422,7 @@ contract DeployOPChain is Script {
         // _doo.set(_doo.faultDisputeGame.selector, address(deployOutput.faultDisputeGame));
         _doo.set(_doo.permissionedDisputeGame.selector, address(deployOutput.permissionedDisputeGame));
         _doo.set(_doo.delayedWETHPermissionedGameProxy.selector, address(deployOutput.delayedWETHPermissionedGameProxy));
+        _doo.set(_doo.celoSuperchainConfigProxy.selector, address(deployOutput.celoSuperchainConfigProxy));
         // TODO: Eventually switch from Permissioned to Permissionless.
         // _doo.set(
         //     _doo.delayedWETHPermissionlessGameProxy.selector,
@@ -440,7 +450,8 @@ contract DeployOPChain is Script {
             address(_doo.anchorStateRegistryProxy()),
             address(_doo.permissionedDisputeGame()),
             // address(_doo.faultDisputeGame()),
-            address(_doo.delayedWETHPermissionedGameProxy())
+            address(_doo.delayedWETHPermissionedGameProxy()),
+            address(_doo.celoSuperchainConfigProxy())
         );
         // TODO: Eventually switch from Permissioned to Permissionless. Add this address back in.
         // address(_delayedWETHPermissionlessGameProxy)
@@ -463,6 +474,7 @@ contract DeployOPChain is Script {
         assertValidSystemConfig(_doi, _doo);
         assertValidAddressManager(_doi, _doo);
         assertValidOPChainProxyAdmin(_doi, _doo);
+        assertValidCeloSuperchainConfig(_doi, _doo);
     }
 
     function assertValidPermissionedDisputeGame(DeployOPChainInput _doi, DeployOPChainOutput _doo) internal {
@@ -569,7 +581,7 @@ contract DeployOPChain is Script {
 
         require(address(messenger.PORTAL()) == address(_doo.optimismPortalProxy()), "L1xDM-30");
         require(address(messenger.portal()) == address(_doo.optimismPortalProxy()), "L1xDM-40");
-        require(address(messenger.superchainConfig()) == address(_doi.opcm().superchainConfig()), "L1xDM-50");
+        require(address(messenger.superchainConfig()) == address(_doo.celoSuperchainConfigProxy()), "L1xDM-50");
 
         bytes32 xdmSenderSlot = vm.load(address(messenger), bytes32(uint256(204)));
         require(address(uint160(uint256(xdmSenderSlot))) == Constants.DEFAULT_L2_SENDER, "L1xDM-60");
@@ -585,7 +597,7 @@ contract DeployOPChain is Script {
         require(address(bridge.messenger()) == address(messenger), "L1SB-20");
         require(address(bridge.OTHER_BRIDGE()) == Predeploys.L2_STANDARD_BRIDGE, "L1SB-30");
         require(address(bridge.otherBridge()) == Predeploys.L2_STANDARD_BRIDGE, "L1SB-40");
-        require(address(bridge.superchainConfig()) == address(_doi.opcm().superchainConfig()), "L1SB-50");
+        require(address(bridge.superchainConfig()) == address(_doo.celoSuperchainConfigProxy()), "L1SB-50");
     }
 
     function assertValidOptimismMintableERC20Factory(DeployOPChainInput, DeployOPChainOutput _doo) internal {
@@ -607,7 +619,7 @@ contract DeployOPChain is Script {
 
         require(address(bridge.MESSENGER()) == address(_doo.l1CrossDomainMessengerProxy()), "L721B-30");
         require(address(bridge.messenger()) == address(_doo.l1CrossDomainMessengerProxy()), "L721B-40");
-        require(address(bridge.superchainConfig()) == address(_doi.opcm().superchainConfig()), "L721B-50");
+        require(address(bridge.superchainConfig()) == address(_doo.celoSuperchainConfigProxy()), "L721B-50");
     }
 
     function assertValidOptimismPortal(DeployOPChainInput _doi, DeployOPChainOutput _doo) internal {
@@ -616,7 +628,7 @@ contract DeployOPChain is Script {
 
         require(address(portal.disputeGameFactory()) == address(_doo.disputeGameFactoryProxy()), "PORTAL-10");
         require(address(portal.systemConfig()) == address(_doo.systemConfigProxy()), "PORTAL-20");
-        require(address(portal.superchainConfig()) == address(superchainConfig), "PORTAL-30");
+        require(address(portal.superchainConfig()) == address(_doo.celoSuperchainConfigProxy()), "PORTAL-30");
         require(portal.guardian() == superchainConfig.guardian(), "PORTAL-40");
         require(portal.paused() == superchainConfig.paused(), "PORTAL-50");
         require(portal.l2Sender() == Constants.DEFAULT_L2_SENDER, "PORTAL-60");
@@ -651,6 +663,12 @@ contract DeployOPChain is Script {
 
     function assertValidAddressManager(DeployOPChainInput, DeployOPChainOutput _doo) internal view {
         require(_doo.addressManager().owner() == address(_doo.opChainProxyAdmin()), "AM-10");
+    }
+
+    function assertValidCeloSuperchainConfig(DeployOPChainInput _doi, DeployOPChainOutput _doo) internal {
+        CeloSuperchainConfig celoConfig = _doo.celoSuperchainConfigProxy();
+        DeployUtils.assertInitialized({ _contractAddress: address(celoConfig), _isProxy: true, _slot: 0, _offset: 0 });
+        require(celoConfig.superchainConfig() == address(_doi.opcm().superchainConfig()), "CELOSC-10");
     }
 
     function assertValidOPChainProxyAdmin(DeployOPChainInput _doi, DeployOPChainOutput _doo) internal {

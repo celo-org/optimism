@@ -57,6 +57,7 @@ type L2OpchainDeployment struct {
 	PermissionedDisputeGame            common.Address `json:"PermissionedDisputeGame"`
 	DelayedWETHPermissionedGameProxy   common.Address `json:"DelayedWETHPermissionedGameProxy"`
 	DelayedWETHPermissionlessGameProxy common.Address `json:"DelayedWETHPermissionlessGameProxy"`
+	CeloSuperchainConfigProxy          common.Address `json:"CeloSuperchainConfigProxy"`
 }
 
 type L2Deployment struct {

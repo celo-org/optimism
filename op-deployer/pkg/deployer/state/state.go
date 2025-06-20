@@ -112,6 +112,7 @@ type ChainState struct {
 	PermissionedDisputeGameAddress            common.Address               `json:"permissionedDisputeGameAddress"`
 	DelayedWETHPermissionedGameProxyAddress   common.Address               `json:"delayedWETHPermissionedGameProxyAddress"`
 	DelayedWETHPermissionlessGameProxyAddress common.Address               `json:"delayedWETHPermissionlessGameProxyAddress"`
+	CeloSuperchainConfigProxyAddress          common.Address               `json:"celoSuperchainConfigProxyAddress"`
 	DataAvailabilityChallengeProxyAddress     common.Address               `json:"dataAvailabilityChallengeProxyAddress"`
 	DataAvailabilityChallengeImplAddress      common.Address               `json:"dataAvailabilityChallengeImplAddress"`
 	AdditionalDisputeGames                    []AdditionalDisputeGameState `json:"additionalDisputeGames"`
