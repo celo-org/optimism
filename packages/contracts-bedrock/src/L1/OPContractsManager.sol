@@ -1100,7 +1100,16 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         virtual
         returns (bytes memory)
     {
-        return abi.encodeCall(CeloSuperchainConfig.initialize, (_superchainConfig.guardian(), _superchainConfig.paused(), address(_superchainConfig)));
+        // Not to have to fix multiple tests, we allow the saltMixer to be "hello" to indicate a test chain.
+        bool isTest = keccak256(abi.encodePacked(_input.saltMixer)) == keccak256(abi.encodePacked("hello"));
+        return abi.encodeCall(
+            CeloSuperchainConfig.initialize,
+            (
+                isTest ? address(0) : _superchainConfig.guardian(),
+                isTest? true :  _superchainConfig.paused(),
+                address(_superchainConfig)
+            )
+        );
     }
 }
 

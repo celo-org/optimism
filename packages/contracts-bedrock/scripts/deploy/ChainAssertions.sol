@@ -32,6 +32,7 @@ import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMin
 import { IPreimageOracle } from "interfaces/cannon/IPreimageOracle.sol";
 import { IMIPS } from "interfaces/cannon/IMIPS.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
 
 library ChainAssertions {
     Vm internal constant vm = Vm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
@@ -300,7 +301,7 @@ library ChainAssertions {
         if (_isProxy) {
             require(weth.owner() == _expectedOwner, "CHECK-PDWETH-20");
             require(weth.delay() == _cfg.faultGameWithdrawalDelay(), "CHECK-PDWETH-30");
-            require(weth.config() == ISuperchainConfig(_contracts.SuperchainConfig), "CHECK-PDWETH-40");
+            require(CeloSuperchainConfig((address(weth.config()))).superchainConfig() == _contracts.SuperchainConfig, "CHECK-PDWETH-40");
         } else {
             require(weth.owner() == _expectedOwner, "CHECK-PDWETH-50");
             require(weth.delay() == _cfg.faultGameWithdrawalDelay(), "CHECK-PDWETH-60");
