@@ -20,8 +20,9 @@ optimism_package:
         cl_log_level: ""
         cl_extra_env_vars: {}
         cl_extra_labels: {}
-        cl_extra_params: 
-        - "use-finalized=true"
+        cl_extra_params:
+        - "--sequencer.use-finalized=true"
+        - "--safedb.path=/safe-db"
         cl_tolerations: []
         cl_volume_size: 0
         cl_min_cpu: 0
@@ -45,7 +46,7 @@ optimism_package:
         use_custom_gas_token: true
       batcher_params:
         image: {{ localDockerImage "op-batcher" }}
-        extra_params: []
+        extra_params: ["--batch-type=1"]
       challenger_params:
         image: {{ localDockerImage "op-challenger" }}
         cannon_prestate_path: ""
