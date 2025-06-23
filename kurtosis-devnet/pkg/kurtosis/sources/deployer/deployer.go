@@ -249,6 +249,11 @@ func parseStateFile(r io.Reader) (*DeployerState, error) {
 	mapDeployment := func(deployment map[string]interface{}) DeploymentAddresses {
 		addresses := make(DeploymentAddresses)
 		for key, value := range deployment {
+			if strings.HasSuffix(key, "Address") {
+				key = strings.TrimSuffix(key, "Address")
+				addresses[key] = common.HexToAddress(value.(string))
+				continue
+			}
 			if strings.HasSuffix(key, "Proxy") || strings.HasSuffix(key, "Impl") {
 				addresses[key] = common.HexToAddress(value.(string))
 			}
