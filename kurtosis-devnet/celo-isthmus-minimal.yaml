@@ -53,9 +53,9 @@ optimism_package:
         - '--throttle-threshold=500_000'
         - '--throttle-block-size=1000'
     proposer_params:
-      disabled: true
+      enabled: false
     challenger_params:
-      disabled: true
+      enabled: false
   op_contract_deployer_params:
     image: {{ localDockerImage "op-deployer" }}
     image_inspect: {{ localDockerImage "op-deployer" }}
