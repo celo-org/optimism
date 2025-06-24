@@ -6,7 +6,7 @@ test:
     go test --tags=testonly ./...
 
 _kurtosis-run PACKAGE_NAME ARG_FILE ENCLAVE:
-	kurtosis run {{PACKAGE_NAME}} --args-file {{ARG_FILE}} --enclave {{ENCLAVE}} --show-enclave-inspect=false --image-download=missing
+	kurtosis run {{PACKAGE_NAME}} --args-file {{ARG_FILE}} --enclave {{ENCLAVE}} --show-enclave-inspect=true --image-download=missing
 
 _prestate-build PATH='.':
     docker buildx build --output {{PATH}} --progress plain -f ../op-program/Dockerfile.repro ../
@@ -106,10 +106,20 @@ celo-isthmus-devnet:
     ./setup-local-repos.sh Kourin1996/celo-rebase-13-contracts-devnet celo-rebase-13-no-HF-overrides
     {{just_executable()}} devnet celo-isthmus.yaml
 
-celo-isthmus-devnet-minimal:
+celo-isthmus-minimal-devnet:
     ./setup-local-repos.sh Kourin1996/celo-rebase-13-contracts-devnet karlb/only-transfer-precompile
     {{just_executable()}} devnet celo-isthmus-minimal.yaml
 
 # subshells
 enter-devnet DEVNET CHAIN='Ethereum' NODE_INDEX='0':
     exec go run ../devnet-sdk/shell/cmd/enter/main.go --devnet kt://{{DEVNET}} --chain {{CHAIN}} --node-index {{NODE_INDEX}}
+
+eigenda-devnet-failover ENCLAVE_NAME="celo-isthmus-minimal-devnet":
+  #!/usr/bin/env bash
+  PROXY_ENDPOINT=$(kurtosis port print {{ENCLAVE_NAME}} da-server-op-kurtosis http)
+  curl -X PATCH $PROXY_ENDPOINT/memstore/config -d '{"PutReturnsFailoverError": true}'
+
+eigenda-devnet-failback ENCLAVE_NAME="celo-isthmus-minimal-devnet":
+  #!/usr/bin/env bash
+  PROXY_ENDPOINT=$(kurtosis port print {{ENCLAVE_NAME}} da-server-op-kurtosis http)
+  curl -X PATCH $PROXY_ENDPOINT/memstore/config -d '{"PutReturnsFailoverError": false}'
