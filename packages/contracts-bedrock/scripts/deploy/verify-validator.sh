@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# V2
+# Baklava: V2
 # VALIDATOR=0xbaf913435088651429154dc2e2caa031f3b75c90
 
-# V3
+# Baklava: V3
 # VALIDATOR=0x9df52e41189e89485bb7aee1e5cc93874dd89712
+
+# Alfajores: V2
+# VALIDATOR=0x14271661be501d640701a9a59bdc105f6ab4bce9
+
+# Alfajores: V3
+# VALIDATOR=0xc6bacfa8421117677e03c3eb81d44b37a9ceef31
 
 # Require env vars
 [ -z "${VERSION:-}" ] && echo "Need to set the VERSION via env" && exit 1;
