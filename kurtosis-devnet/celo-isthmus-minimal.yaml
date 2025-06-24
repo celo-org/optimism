@@ -14,7 +14,8 @@ optimism_package:
       el_image: {{ localDockerImage "op-geth" }}
       cl_type: op-node
       cl_image: {{ localDockerImage "op-node" }}
-      # cl_extra_params: 
+      cl_extra_params:
+      - "--safedb.path=/safe-db"
       # - "--sequencer.use-finalized=true"
       count: 1
     network_params:
