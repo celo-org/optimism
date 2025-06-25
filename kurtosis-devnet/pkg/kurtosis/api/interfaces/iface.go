@@ -57,6 +57,7 @@ type PortSpec interface {
 type ServiceContext interface {
 	GetServiceUUID() services.ServiceUUID
 	GetMaybePublicIPAddress() string
+	GetPrivateIPAddress() string
 	GetPublicPorts() map[string]PortSpec
 	GetPrivatePorts() map[string]PortSpec
 }

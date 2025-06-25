@@ -71,6 +71,7 @@ func (e *Inspector) ExtractData(ctx context.Context) (*InspectData, error) {
 
 		for port, portSpec := range svcCtx.GetPublicPorts() {
 			portMap[port] = &descriptors.PortInfo{
+				PrivateHost: svcCtx.GetPrivateIPAddress(),
 				Host: svcCtx.GetMaybePublicIPAddress(),
 				Port: int(portSpec.GetNumber()),
 			}
