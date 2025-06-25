@@ -13,6 +13,7 @@ type PortInfo struct {
 	Host        string `json:"host"`
 	Scheme      string `json:"scheme,omitempty"`
 	Port        int    `json:"port,omitempty"`
+	PrivateHost string `json:"private_host,omitempty"`
 	PrivatePort int    `json:"private_port,omitempty"`
 
 	ReverseProxyHeader http.Header `json:"reverse_proxy_header,omitempty"`
