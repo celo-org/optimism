@@ -31,7 +31,7 @@ jobs:
     env:
       GIT_COMMIT: ${{ github.sha }}
       GIT_DATE: ${{ github.event.release.created_at }}
-      IMAGE_TAGS: ${{ needs.set-tags.outputs.tags }}
+      IMAGE_TAGS: ${{ needs.Set-Tags.outputs.tags }}
       REGISTRY: us-west1-docker.pkg.dev
       REPOSITORY: devopsre/celo-blockchain-public
       PLATFORMS: linux/amd64,linux/arm64
