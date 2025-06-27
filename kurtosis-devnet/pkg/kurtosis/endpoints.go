@@ -203,6 +203,7 @@ func (f *ServiceFinder) triage() {
 		"supervisor": f.triageSuperchainService("op-supervisor-"),
 		"challenger": f.triageMultiL2Service("op-challenger-"),
 		"faucet":     f.triageUniversalL2Service("op-faucet"),
+		"da-server":  f.triageExclusiveL2Service("da-server-"),
 	}
 
 	triagedServices := []*triagedService{}
