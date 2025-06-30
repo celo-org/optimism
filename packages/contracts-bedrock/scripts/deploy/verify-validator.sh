@@ -13,6 +13,12 @@ set -euo pipefail
 # Alfajores: V3
 # VALIDATOR=0xc6bacfa8421117677e03c3eb81d44b37a9ceef31
 
+# Mainnet: V2
+# VALIDATOR=0x3c7433651845b795cf45eda81dc5ba20ebacc5e6
+
+# Mainnet: V3
+VALIDATOR=0x1ef2aa0d3d08d320a9d6bf23661bfcb6bf1ce6fa
+
 # Require env vars
 [ -z "${VERSION:-}" ] && echo "Need to set the VERSION via env" && exit 1;
 [ -z "${VALIDATOR:-}" ] && echo "Need to set the VERSION via env" && exit 1;
@@ -22,6 +28,9 @@ if [ -z "${CHAIN_ID:-}" ]; then
     # Fallback to Holesky
     CHAIN_ID=17000
 fi
+
+# BLOCKSCOUT_URL=https://eth-holesky.blockscout.com/api/
+BLOCKSCOUT_URL=https://eth.blockscout.com/api/
 
 # Check version
 case $VERSION in
@@ -42,7 +51,7 @@ if [ "${BLOCKSCOUT_API_KEY:-}" ]; then
     forge verify-contract $VALIDATOR $CONTRACT \
         --chain-id $CHAIN_ID \
         --etherscan-api-key=$BLOCKSCOUT_API_KEY \
-        --verifier-url=https://eth-holesky.blockscout.com/api/ \
+        --verifier-url=$BLOCKSCOUT_URL \
         --watch
 fi
 if [ "${ETHERSCAN_API_KEY:-}" ]; then
@@ -52,7 +61,7 @@ if [ "${ETHERSCAN_API_KEY:-}" ]; then
     #     --etherscan-api-key=$ETHERSCAN_API_KEY \
     #     --watch
 fi
-if [ "${TENDERLY_URL:-}" && "${TENDERLY_API_KEY:-}" ]; then
+if [ "${TENDERLY_URL:-}" ] && [ "${TENDERLY_API_KEY:-}" ]; then
     forge verify-contract $VALIDATOR $CONTRACT \
         --chain-id $CHAIN_ID \
         --verifier-url=$TENDERLY_URL \
