@@ -21,7 +21,7 @@ optimism_package:
         cl_extra_env_vars: {}
         cl_extra_labels: {}
         cl_extra_params: 
-        - "use-finalized=true"
+        - "--sequencer.use-finalized=true"
         cl_tolerations: []
         cl_volume_size: 0
         cl_min_cpu: 0
@@ -45,7 +45,15 @@ optimism_package:
         use_custom_gas_token: true
       batcher_params:
         image: {{ localDockerImage "op-batcher" }}
-        extra_params: []
+        extra_params:
+          - --max-channel-duration=10
+          - --altda.max-concurrent-da-requests=10
+          - --max-pending-tx=10
+          - --target-num-frames=5
+          - --max-l1-tx-size-bytes=1000
+          - --batch-type=1
+          - --throttle-threshold=500_000
+          - --throttle-block-size=1000
       challenger_params:
         image: {{ localDockerImage "op-challenger" }}
         cannon_prestate_path: ""
@@ -62,20 +70,31 @@ optimism_package:
         builder_port: ""
       additional_services:
       - "da_server"
+      da_server_params:
+        cmd:
+          - --addr=0.0.0.0
+          - --port=3100
+          - --storage.backends-to-enable=V1,V2
+          - --storage.dispersal-backend=v2
+          - --api-enabled=admin
+          - --eigenda.v2.max-blob-length=1MiB
+          - --memstore.enabled
+          - --memstore.expiration=180m
+        image: ghcr.io/layr-labs/eigenda-proxy:v1.7.0
   op_contract_deployer_params:
     image: {{ localDockerImage "op-deployer" }}
-    image_inspect: {{ localDockerImage "op-deployer-inspect" }}
+    image_genesis: {{ localDockerImage "op-deployer-genesis" }}
     l1_artifacts_locator: {{ localContractArtifacts "l1" }}
     l2_artifacts_locator: {{ localContractArtifacts "l2" }}
     global_deploy_overrides:
       faultGameAbsolutePrestate: {{ localPrestate.Hashes.prestate }}
   altda_deploy_config:
-    use_altda: true
-    da_commitment_type: KeccakCommitment
-    da_challenge_window: 100
-    da_resolve_window: 100
     da_bond_size: 0
+    da_challenge_window: 16
+    da_commitment_type: GenericCommitment
+    da_resolve_window: 16
     da_resolver_refund_percentage: 0
+    use_altda: true
   global_log_level: "info"
   global_node_selectors: {}
   global_tolerations: []
@@ -86,6 +105,7 @@ ethereum_package:
       el_extra_params:
       - "--miner.gasprice=1"
       cl_type: teku
+      cl_image: consensys/teku:25.5.0
   network_params:
     preset: minimal
     genesis_delay: 5

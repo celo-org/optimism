@@ -29,7 +29,6 @@ _docker_build TAG TARGET CONTEXT DOCKERFILE *ARGS:
 _docker_build_stack TAG TARGET *ARGS: (_docker_build TAG TARGET "../" "ops/docker/op-stack-go/Dockerfile" ARGS)
 _docker_build_stack_deployer TAG TARGET *ARGS: (_docker_build TAG TARGET "./optimism-contracts/" "ops/docker/op-stack-go/Dockerfile" ARGS)
 _docker_build_stack_op_geth TAG TARGET *ARGS: (_docker_build TAG TARGET "./op-geth/" "Dockerfile" ARGS)
-_docker_build_stack_da_proxy TAG TARGET *ARGS: (_docker_build TAG TARGET "./da-proxy" "Dockerfile" ARGS)
 
 cannon-image TAG='cannon:devnet': (_docker_build_stack TAG "cannon-target")
 da-server-image TAG='da-server:devnet': (_docker_build_stack TAG "da-server-target")
@@ -40,7 +39,7 @@ op-batcher-image TAG='op-batcher:devnet': (_docker_build_stack TAG "op-batcher-t
 op-challenger-image TAG='op-challenger:devnet': (_docker_build_stack TAG "op-challenger-target" "--build-arg" "KONA_VERSION=0.1.0-beta.15" "--build-arg" "ASTERISC_VERSION=v1.2.0")
 op-conductor-image TAG='op-conductor:devnet': (_docker_build_stack TAG "op-conductor-target")
 op-deployer-image TAG='op-deployer:devnet':(_docker_build_stack_deployer TAG "op-deployer-target")
-op-deployer-inspect-image TAG='op-deployer-inspect:devnet':(_docker_build_stack TAG "op-deployer-target")
+op-deployer-genesis-image TAG='op-deployer-genesis:devnet':(_docker_build_stack TAG "op-deployer-target")
 op-dispute-mon-image TAG='op-dispute-mon:devnet': (_docker_build_stack TAG "op-dispute-mon-target")
 op-node-image TAG='op-node:devnet': (_docker_build_stack TAG "op-node-target")
 op-program-image TAG='op-program:devnet': (_docker_build_stack TAG "op-program-target")
@@ -49,7 +48,6 @@ op-supervisor-image TAG='op-supervisor:devnet': (_docker_build_stack TAG "op-sup
 op-wheel-image TAG='op-wheel:devnet': (_docker_build_stack TAG "op-wheel-target")
 
 op-geth-image TAG='op-geth:devnet': (_docker_build_stack_op_geth TAG "")
-da-proxy-image TAG='da-proxy:devnet': (_docker_build_stack_da_proxy TAG "")
 
 op-program-builder-image TAG='op-program-builder:devnet':
     just op-program-svc/op-program-svc {{TAG}}
