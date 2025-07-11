@@ -1678,10 +1678,6 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
             - discord
-      - diff-asterisc-bytecode:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
       - semgrep-scan:
           name: semgrep-scan-local
           scan_command: semgrep scan --timeout=100 --config .semgrep/rules/ --error .
@@ -1712,15 +1708,6 @@ workflows:
                 - op-node
                 - op-service
                 - op-chain-ops
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-      - fuzz-golang:
-          name: cannon-fuzz
-          package_name: cannon
-          on_changes: cannon,packages/contracts-bedrock/src/cannon
-          uses_artifacts: true
-          requires: ["contracts-bedrock-build"]
           context:
             - circleci-repo-readonly-authenticated-github-token
             - discord
@@ -1769,10 +1756,6 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
             - discord
-      - analyze-op-program-client:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
       # TODO(#15353) - Need to regenerate data used in op-program-compat and then reenable this test
       #   See: https://github.com/ethereum-optimism/chain-test-data?tab=readme-ov-file#generating-new-data
 #      - op-program-compat:
@@ -1782,9 +1765,6 @@ workflows:
       - bedrock-go-tests:
           requires:
             - go-lint
-            - cannon-build-test-vectors
-            - cannon-go-lint-and-test-32-bit
-            - cannon-go-lint-and-test-64-bit
             - check-generated-mocks-op-node
             - check-generated-mocks-op-service
             # TODO(#15353) - Need to regenerate data used in op-program-compat
@@ -1807,22 +1787,6 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
             - discord
       - check-generated-mocks-op-service:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-      - cannon-go-lint-and-test:
-          name: cannon-go-lint-and-test-<<matrix.mips_word_size>>-bit
-          requires:
-            - contracts-bedrock-build
-          skip_slow_tests: true
-          notify: true
-          matrix:
-            parameters:
-              mips_word_size: [32, 64]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-      - cannon-build-test-vectors:
           context:
             - circleci-repo-readonly-authenticated-github-token
             - discord
