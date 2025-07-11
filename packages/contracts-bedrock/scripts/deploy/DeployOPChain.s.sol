@@ -15,6 +15,7 @@ import { IBigStepper } from "interfaces/dispute/IBigStepper.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Constants } from "src/libraries/Constants.sol";
 import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 import { Constants as ScriptConstants } from "scripts/libraries/Constants.sol";
 
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
@@ -568,7 +569,8 @@ contract DeployOPChain is Script {
             "SYSCON-210"
         );
         (address gasPayingToken,) = systemConfig.gasPayingToken();
-        require(gasPayingToken == Constants.ETHER, "SYSCON-220");
+        require(gasPayingToken != Constants.ETHER, "CELO-220");
+        require(gasPayingToken != address(0), "CELO-221");
     }
 
     function assertValidL1CrossDomainMessenger(DeployOPChainInput _doi, DeployOPChainOutput _doo) internal {
@@ -635,7 +637,7 @@ contract DeployOPChain is Script {
 
         // This slot is the custom gas token _balance and this check ensures
         // that it stays unset for forwards compatibility with custom gas token.
-        require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(0), "PORTAL-70");
+        require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(uint256(1000000000e18)), "PORTAL-70");
     }
 
     function assertValidDisputeGameFactory(DeployOPChainInput _doi, DeployOPChainOutput _doo) internal {

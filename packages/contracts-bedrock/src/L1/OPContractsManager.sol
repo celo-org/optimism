@@ -33,6 +33,7 @@ import { IHasSuperchainConfig } from "interfaces/L1/IHasSuperchainConfig.sol";
 import { ISystemConfigInterop } from "interfaces/L1/ISystemConfigInterop.sol";
 
 import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 
 contract OPContractsManagerContractsContainer {
     /// @notice Addresses of the Blueprint contracts.
@@ -724,6 +725,12 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
                 deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloSuperchainConfig")
             )
         );
+
+        output.celoTokenProxy = CeloTokenL1(
+            payable(
+                deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloTokenL1")
+            )
+        );
         // Set the AddressManager on the ProxyAdmin.
         output.opChainProxyAdmin.setAddressManager(output.addressManager);
         // Transfer ownership of the AddressManager to the ProxyAdmin.
@@ -807,6 +814,19 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
 
         // -------- Set and Initialize Proxy Implementations --------
         bytes memory data;
+
+        address CeloTokenL1Impl= Blueprint.deployFrom(
+                                    blueprint.celoTokenL1,
+                                    computeSalt(_input.l2ChainId, _input.saltMixer, "CeloTokenL1")
+                                );
+
+        data = encodeCeloTokenL1Initializer(_input, address(output.optimismPortalProxy));
+        upgradeToAndCall(
+            output.opChainProxyAdmin,
+            address(output.celoTokenProxy),
+            CeloTokenL1Impl,
+            data
+        );
 
         data = encodeL1ERC721BridgeInitializer(output, ISuperchainConfig(address(output.celoSuperchainConfigProxy)));
         upgradeToAndCall(
@@ -914,7 +934,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             disputeGameFactory: address(_output.disputeGameFactoryProxy),
             optimismPortal: address(_output.optimismPortalProxy),
             optimismMintableERC20Factory: address(_output.optimismMintableERC20FactoryProxy),
-            gasPayingToken: Constants.ETHER
+            gasPayingToken: address(_output.celoTokenProxy)//Constants.ETHER
         });
 
         assertValidContractAddress(opChainAddrs_.l1CrossDomainMessenger);
@@ -1111,6 +1131,23 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             )
         );
     }
+
+    function encodeCeloTokenL1Initializer(
+        OPContractsManager.DeployInput memory _input,
+        address portalAddress
+    )
+        internal
+        view
+        virtual
+        returns (bytes memory)
+    {
+        return abi.encodeCall(
+            CeloTokenL1.initialize,
+            (
+              portalAddress
+            )
+        );
+    }
 }
 
 contract OPContractsManagerDeployerInterop is OPContractsManagerDeployer {
@@ -1209,6 +1246,8 @@ contract OPContractsManager is ISemver {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+
+        CeloTokenL1 celoTokenProxy;
     }
 
     /// @notice Addresses of ERC-5202 Blueprint contracts. There are used for deploying full size
@@ -1226,6 +1265,7 @@ contract OPContractsManager is ISemver {
         address permissionedDisputeGame2;
         address permissionlessDisputeGame1;
         address permissionlessDisputeGame2;
+        address celoTokenL1;
     }
 
     /// @notice The latest implementation contracts for the OP Stack.

@@ -22,6 +22,7 @@ import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { CeloSuperchainConfig } from "src/celo/CeloSuperchainConfig.sol";
+import { CeloTokenL1 } from "src/celo/CeloTokenL1.sol";
 
 interface IOPContractsManagerContractsContainer {
     function __constructor__(
@@ -133,6 +134,7 @@ interface IOPContractsManager {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        CeloTokenL1 celoTokenProxy;
     }
 
     /// @notice Addresses of ERC-5202 Blueprint contracts. There are used for deploying full size
@@ -150,6 +152,7 @@ interface IOPContractsManager {
         address permissionedDisputeGame2;
         address permissionlessDisputeGame1;
         address permissionlessDisputeGame2;
+        address celoTokenL1;
     }
 
     /// @notice The latest implementation contracts for the OP Stack.

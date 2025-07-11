@@ -215,6 +215,8 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ISemver {
         systemConfig = _systemConfig;
         superchainConfig = _superchainConfig;
 
+        _balance = 1000000000e18; // 1 billion CELO
+
         // Set the `l2Sender` slot, only if it is currently empty. This signals the first initialization of the
         // contract.
         if (l2Sender == address(0)) {
