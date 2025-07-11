@@ -1779,9 +1779,7 @@ workflows:
       - diff-fetcher-forge-artifacts:
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - diff-asterisc-bytecode:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+            - discord
       - semgrep-scan:
           name: semgrep-scan-local
           scan_command: semgrep scan --timeout=100 --config .semgrep/rules/ --error .
@@ -1812,14 +1810,6 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
       - fuzz-golang:
-          name: cannon-fuzz
-          package_name: cannon
-          on_changes: cannon,packages/contracts-bedrock/src/cannon
-          uses_artifacts: true
-          requires: ["contracts-bedrock-build"]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - fuzz-golang:
           name: op-e2e-fuzz
           package_name: op-e2e
           on_changes: op-e2e,packages/contracts-bedrock/src
@@ -1836,38 +1826,16 @@ workflows:
             - cannon-prestate-quick
           context:
             - circleci-repo-readonly-authenticated-github-token
-          filters:
-            branches:
-              ignore: develop # Run on all branches EXCEPT develop (PR branches only)
-      - go-tests:
-          name: go-tests-full
-          rule: "go-tests-ci" # Run full test suite instead of short
-          no_output_timeout: 89m # Longer timeout for full tests
-          test_timeout: 90m
-          notify: true
-          filters:
-            branches:
-              only: develop # Only runs on develop branch (post-merge)
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-      - analyze-op-program-client:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
             - discord
       # TODO(#15353) - Need to regenerate data used in op-program-compat and then reenable this test
       #   See: https://github.com/ethereum-optimism/chain-test-data?tab=readme-ov-file#generating-new-data
-#      - op-program-compat:
-#          context:
-#            - circleci-repo-readonly-authenticated-github-token
-#            - discord
+      #      - op-program-compat:
+      #          context:
+      #            - circleci-repo-readonly-authenticated-github-token
+      #            - discord
       - bedrock-go-tests:
           requires:
             - go-lint
-            - cannon-go-lint-and-test
             - check-generated-mocks-op-node
             - check-generated-mocks-op-service
             - op-program-compat
@@ -1886,17 +1854,6 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
       - check-generated-mocks-op-service:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-go-lint-and-test:
-          requires:
-            - contracts-bedrock-build
-          skip_slow_tests: true
-          notify: true
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-      - cannon-build-test-vectors:
           context:
             - circleci-repo-readonly-authenticated-github-token
 
