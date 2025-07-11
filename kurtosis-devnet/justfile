@@ -101,12 +101,10 @@ isthmus-devnet: (devnet "isthmus.yaml")
 
 # Celo Isthmus devnet
 celo-isthmus-devnet:
+    # Use the celo-rebase-13-no-HF-overrides branch to avoid forcibly setting the activation times of Holocene and Isthmus upgrades
     ./setup-local-repos.sh Kourin1996/celo-rebase-13-contracts-devnet celo-rebase-13-no-HF-overrides
+    kurtosis clean -a
     {{just_executable()}} devnet celo-isthmus.yaml
-
-celo-isthmus-minimal-devnet:
-    ./setup-local-repos.sh Kourin1996/celo-rebase-13-contracts-devnet karlb/only-transfer-precompile
-    {{just_executable()}} devnet celo-isthmus-minimal.yaml
 
 # subshells
 enter-devnet DEVNET CHAIN='Ethereum' NODE_INDEX='0':
