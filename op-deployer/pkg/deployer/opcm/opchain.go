@@ -61,6 +61,8 @@ type DeployOPChainOutput struct {
 	OptimismMintableERC20FactoryProxy common.Address
 	L1StandardBridgeProxy             common.Address
 	L1CrossDomainMessengerProxy       common.Address
+	CeloSuperchainConfigProxy         common.Address
+	CeloTokenProxy                    common.Address
 	// Fault proof contracts below.
 	OptimismPortalProxy                common.Address
 	DisputeGameFactoryProxy            common.Address
@@ -69,7 +71,6 @@ type DeployOPChainOutput struct {
 	PermissionedDisputeGame            common.Address
 	DelayedWETHPermissionedGameProxy   common.Address
 	DelayedWETHPermissionlessGameProxy common.Address
-	CeloSuperchainConfigProxy          common.Address
 }
 
 func (output *DeployOPChainOutput) CheckOutput(input common.Address) error {
@@ -101,6 +102,7 @@ type ReadImplementationAddressesOutput struct {
 	DisputeGameFactory           common.Address
 	MipsSingleton                common.Address
 	PreimageOracleSingleton      common.Address
+	CeloTokenL1                  common.Address
 }
 
 type ReadImplementationAddressesScript struct {

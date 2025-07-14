@@ -207,8 +207,8 @@ contract StandardValidatorBase {
         }
         _errors = internalRequire(address_ == expected_, "SYSCON-CEL-10", _errors);
         _errors = internalRequire(decimals_ == 18, "SYSCON-CEL-20", _errors);
-        _errors = internalRequire(stringEq(_sysCfg.gasPayingTokenName(), "Celo native asset") , "SYSCON-CEL-30", _errors);
-        _errors = internalRequire(stringEq(_sysCfg.gasPayingTokenSymbol(), "CELO") , "SYSCON-CEL-40", _errors);
+        _errors = internalRequire(stringEq(_sysCfg.gasPayingTokenName(), "Celo native asset"), "SYSCON-CEL-30", _errors);
+        _errors = internalRequire(stringEq(_sysCfg.gasPayingTokenSymbol(), "CELO"), "SYSCON-CEL-40", _errors);
 
         return _errors;
     }
@@ -243,7 +243,9 @@ contract StandardValidatorBase {
         _errors = internalRequire(address(_messenger.PORTAL()) == address(_portal), "L1xDM-50", _errors);
         _errors = internalRequire(address(_messenger.portal()) == address(_portal), "L1xDM-60", _errors);
         _errors = internalRequire(
-            celoSuperchainConfig(address(_messenger.superchainConfig())) == address(superchainConfig), "L1xDM-70", _errors
+            celoSuperchainConfig(address(_messenger.superchainConfig())) == address(superchainConfig),
+            "L1xDM-70",
+            _errors
         );
         return _errors;
     }

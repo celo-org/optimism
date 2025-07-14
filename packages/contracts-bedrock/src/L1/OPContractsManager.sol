@@ -721,15 +721,11 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             )
         );
         output.celoSuperchainConfigProxy = CeloSuperchainConfig(
-            payable(
-                deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloSuperchainConfig")
-            )
+            payable(deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloSuperchainConfig"))
         );
 
         output.celoTokenProxy = CeloTokenL1(
-            payable(
-                deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloTokenL1")
-            )
+            payable(deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloTokenL1"))
         );
         // Set the AddressManager on the ProxyAdmin.
         output.opChainProxyAdmin.setAddressManager(output.addressManager);
@@ -815,18 +811,11 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         // -------- Set and Initialize Proxy Implementations --------
         bytes memory data;
 
-        address CeloTokenL1Impl= Blueprint.deployFrom(
-                                    blueprint.celoTokenL1,
-                                    computeSalt(_input.l2ChainId, _input.saltMixer, "CeloTokenL1")
-                                );
+        address CeloTokenL1Impl =
+            Blueprint.deployFrom(blueprint.celoTokenL1, computeSalt(_input.l2ChainId, _input.saltMixer, "CeloTokenL1"));
 
         data = encodeCeloTokenL1Initializer(_input, address(output.optimismPortalProxy));
-        upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.celoTokenProxy),
-            CeloTokenL1Impl,
-            data
-        );
+        upgradeToAndCall(output.opChainProxyAdmin, address(output.celoTokenProxy), CeloTokenL1Impl, data);
 
         data = encodeL1ERC721BridgeInitializer(output, ISuperchainConfig(address(output.celoSuperchainConfigProxy)));
         upgradeToAndCall(
@@ -851,7 +840,9 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             data
         );
 
-        data = encodeL1CrossDomainMessengerInitializer(output, ISuperchainConfig(address(output.celoSuperchainConfigProxy)));
+        data = encodeL1CrossDomainMessengerInitializer(
+            output, ISuperchainConfig(address(output.celoSuperchainConfigProxy))
+        );
         upgradeToAndCall(
             output.opChainProxyAdmin,
             address(output.l1CrossDomainMessengerProxy),
@@ -889,7 +880,9 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
 
         transferOwnership(address(output.disputeGameFactoryProxy), address(_input.roles.opChainProxyAdminOwner));
 
-        data = encodeAnchorStateRegistryInitializer(_input, ISuperchainConfig(address(output.celoSuperchainConfigProxy)), output);
+        data = encodeAnchorStateRegistryInitializer(
+            _input, ISuperchainConfig(address(output.celoSuperchainConfigProxy)), output
+        );
         upgradeToAndCall(
             output.opChainProxyAdmin,
             address(output.anchorStateRegistryProxy),
@@ -900,10 +893,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         address celoSuperchainConfigImpl = address(new CeloSuperchainConfig());
         data = encodeCeloSuperchainConfigInitializer(_input, _superchainConfig);
         upgradeToAndCall(
-            output.opChainProxyAdmin,
-            address(output.celoSuperchainConfigProxy),
-            celoSuperchainConfigImpl,
-            data
+            output.opChainProxyAdmin, address(output.celoSuperchainConfigProxy), celoSuperchainConfigImpl, data
         );
 
         // -------- Finalize Deployment --------
@@ -934,8 +924,8 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             disputeGameFactory: address(_output.disputeGameFactoryProxy),
             optimismPortal: address(_output.optimismPortalProxy),
             optimismMintableERC20Factory: address(_output.optimismMintableERC20FactoryProxy),
-            gasPayingToken: address(_output.celoTokenProxy)//Constants.ETHER
-        });
+            gasPayingToken: address(_output.celoTokenProxy) //Constants.ETHER
+         });
 
         assertValidContractAddress(opChainAddrs_.l1CrossDomainMessenger);
         assertValidContractAddress(opChainAddrs_.l1ERC721Bridge);
@@ -1060,7 +1050,10 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         virtual
         returns (bytes memory)
     {
-        return abi.encodeCall(IL1CrossDomainMessenger.initialize, (_superchainConfig, _output.optimismPortalProxy, _output.systemConfigProxy));
+        return abi.encodeCall(
+            IL1CrossDomainMessenger.initialize,
+            (_superchainConfig, _output.optimismPortalProxy, _output.systemConfigProxy)
+        );
     }
 
     /// @notice Helper method for encoding the L1StandardBridge initializer data.
@@ -1073,7 +1066,10 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         virtual
         returns (bytes memory)
     {
-        return abi.encodeCall(IL1StandardBridge.initialize, (_output.l1CrossDomainMessengerProxy, _superchainConfig, _output.systemConfigProxy));
+        return abi.encodeCall(
+            IL1StandardBridge.initialize,
+            (_output.l1CrossDomainMessengerProxy, _superchainConfig, _output.systemConfigProxy)
+        );
     }
 
     function encodeDisputeGameFactoryInitializer() internal view virtual returns (bytes memory) {
@@ -1126,7 +1122,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             CeloSuperchainConfig.initialize,
             (
                 isTest ? address(0) : _superchainConfig.guardian(),
-                isTest? true :  _superchainConfig.paused(),
+                isTest ? true : _superchainConfig.paused(),
                 address(_superchainConfig)
             )
         );
@@ -1141,12 +1137,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         virtual
         returns (bytes memory)
     {
-        return abi.encodeCall(
-            CeloTokenL1.initialize,
-            (
-              portalAddress
-            )
-        );
+        return abi.encodeCall(CeloTokenL1.initialize, (portalAddress));
     }
 }
 
@@ -1246,7 +1237,6 @@ contract OPContractsManager is ISemver {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
-
         CeloTokenL1 celoTokenProxy;
     }
 

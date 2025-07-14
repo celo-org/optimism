@@ -37,6 +37,12 @@ func DeployOPChain(env *Env, intent *state.Intent, st *state.State, chainID comm
 		return fmt.Errorf("error deploying OP chain: %w", err)
 	}
 
+	lgr.Info("OP chain deployed successfully",
+		"celoTokenProxy", dco.CeloTokenProxy,
+		"systemConfigProxy", dco.SystemConfigProxy,
+		"optimismPortalProxy", dco.OptimismPortalProxy,
+	)
+
 	st.Chains = append(st.Chains, makeChainState(chainID, dco))
 
 	var release string
@@ -56,6 +62,12 @@ func DeployOPChain(env *Env, intent *state.Intent, st *state.State, chainID comm
 		return fmt.Errorf("failed to read implementation addresses: %w", err)
 	}
 
+	lgr.Info("implementation addresses read",
+		"celoTokenL1Impl", impls.CeloTokenL1,
+		"systemConfigImpl", impls.SystemConfig,
+		"optimismPortalImpl", impls.OptimismPortal,
+	)
+
 	st.ImplementationsDeployment.DelayedWETHImplAddress = impls.DelayedWETH
 	st.ImplementationsDeployment.OptimismPortalImplAddress = impls.OptimismPortal
 	st.ImplementationsDeployment.SystemConfigImplAddress = impls.SystemConfig
@@ -66,6 +78,7 @@ func DeployOPChain(env *Env, intent *state.Intent, st *state.State, chainID comm
 	st.ImplementationsDeployment.DisputeGameFactoryImplAddress = impls.DisputeGameFactory
 	st.ImplementationsDeployment.MipsSingletonAddress = impls.MipsSingleton
 	st.ImplementationsDeployment.PreimageOracleSingletonAddress = impls.PreimageOracleSingleton
+	st.ImplementationsDeployment.CeloTokenL1ImplAddress = impls.CeloTokenL1
 
 	return nil
 }
@@ -130,6 +143,7 @@ func makeChainState(chainID common.Hash, dco opcm.DeployOPChainOutput) *state.Ch
 		DelayedWETHPermissionedGameProxyAddress:   dco.DelayedWETHPermissionedGameProxy,
 		DelayedWETHPermissionlessGameProxyAddress: dco.DelayedWETHPermissionlessGameProxy,
 		CeloSuperchainConfigProxyAddress:          dco.CeloSuperchainConfigProxy,
+		CeloTokenProxyAddress:                     dco.CeloTokenProxy,
 	}
 }
 

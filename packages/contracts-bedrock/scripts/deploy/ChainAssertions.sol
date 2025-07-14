@@ -301,7 +301,10 @@ library ChainAssertions {
         if (_isProxy) {
             require(weth.owner() == _expectedOwner, "CHECK-PDWETH-20");
             require(weth.delay() == _cfg.faultGameWithdrawalDelay(), "CHECK-PDWETH-30");
-            require(CeloSuperchainConfig((address(weth.config()))).superchainConfig() == _contracts.SuperchainConfig, "CHECK-PDWETH-40");
+            require(
+                CeloSuperchainConfig((address(weth.config()))).superchainConfig() == _contracts.SuperchainConfig,
+                "CHECK-PDWETH-40"
+            );
         } else {
             require(weth.owner() == _expectedOwner, "CHECK-PDWETH-50");
             require(weth.delay() == _cfg.faultGameWithdrawalDelay(), "CHECK-PDWETH-60");

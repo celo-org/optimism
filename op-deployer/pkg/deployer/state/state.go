@@ -85,6 +85,7 @@ type ImplementationsDeployment struct {
 	OptimismMintableERC20FactoryImplAddress common.Address `json:"optimismMintableERC20FactoryImplAddress"`
 	DisputeGameFactoryImplAddress           common.Address `json:"disputeGameFactoryImplAddress"`
 	AnchorStateRegistryImplAddress          common.Address `json:"anchorStateRegistryImplAddress"`
+	CeloTokenL1ImplAddress                  common.Address `json:"celoTokenL1ImplAddress"`
 }
 
 type AdditionalDisputeGameState struct {
@@ -113,6 +114,7 @@ type ChainState struct {
 	DelayedWETHPermissionedGameProxyAddress   common.Address               `json:"delayedWETHPermissionedGameProxyAddress"`
 	DelayedWETHPermissionlessGameProxyAddress common.Address               `json:"delayedWETHPermissionlessGameProxyAddress"`
 	CeloSuperchainConfigProxyAddress          common.Address               `json:"celoSuperchainConfigProxyAddress"`
+	CeloTokenProxyAddress                     common.Address               `json:"celoTokenProxyAddress"`
 	DataAvailabilityChallengeProxyAddress     common.Address               `json:"dataAvailabilityChallengeProxyAddress"`
 	DataAvailabilityChallengeImplAddress      common.Address               `json:"dataAvailabilityChallengeImplAddress"`
 	AdditionalDisputeGames                    []AdditionalDisputeGameState `json:"additionalDisputeGames"`

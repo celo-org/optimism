@@ -71,6 +71,7 @@ type OpChainDeployment struct {
 	PermissionedDisputeGameAddress           common.Address `json:"permissionedDisputeGameAddress"`
 	DelayedWETHPermissionedGameProxyAddress  common.Address `json:"delayedWETHPermissionedGameProxyAddress"`
 	// DelayedWETHPermissionlessGameProxyAddress common.Address `json:"delayedWETHPermissionlessGameProxyAddress"`
+	CeloTokenProxyAddress                 common.Address `json:"celoTokenProxyAddress"`
 	DataAvailabilityChallengeProxyAddress common.Address `json:"dataAvailabilityChallengeProxyAddress"`
 	DataAvailabilityChallengeImplAddress  common.Address `json:"dataAvailabilityChallengeImplAddress"`
 }
@@ -87,6 +88,7 @@ type ImplementationsDeployment struct {
 	L1StandardBridgeImplAddress             common.Address `json:"l1StandardBridgeImplAddress"`
 	OptimismMintableERC20FactoryImplAddress common.Address `json:"optimismMintableERC20FactoryImplAddress"`
 	DisputeGameFactoryImplAddress           common.Address `json:"disputeGameFactoryImplAddress"`
+	CeloTokenL1ImplAddress                  common.Address `json:"celoTokenL1ImplAddress"`
 }
 
 func L1CLI(cliCtx *cli.Context) error {
@@ -140,6 +142,7 @@ func L1(globalState *state.State, chainID common.Hash) (*L1Contracts, error) {
 			FaultDisputeGameAddress:                  chainState.FaultDisputeGameAddress,
 			PermissionedDisputeGameAddress:           chainState.PermissionedDisputeGameAddress,
 			DelayedWETHPermissionedGameProxyAddress:  chainState.DelayedWETHPermissionedGameProxyAddress,
+			CeloTokenProxyAddress:                    chainState.CeloTokenProxyAddress,
 			DataAvailabilityChallengeProxyAddress:    chainState.DataAvailabilityChallengeProxyAddress,
 			DataAvailabilityChallengeImplAddress:     chainState.DataAvailabilityChallengeImplAddress,
 			// DelayedWETHPermissionlessGameProxyAddress: chainState.DelayedWETHPermissionlessGameProxyAddress,

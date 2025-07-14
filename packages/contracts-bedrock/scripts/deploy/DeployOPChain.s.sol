@@ -249,6 +249,7 @@ contract DeployOPChainOutput is BaseDeployIO {
     IDelayedWETH internal _delayedWETHPermissionedGameProxy;
     IDelayedWETH internal _delayedWETHPermissionlessGameProxy;
     CeloSuperchainConfig internal _celoSuperchainConfigProxy;
+    CeloTokenL1 internal _celoTokenProxy;
 
     function set(bytes4 _sel, address _addr) public virtual {
         require(_addr != address(0), "DeployOPChainOutput: cannot set zero address");
@@ -268,6 +269,7 @@ contract DeployOPChainOutput is BaseDeployIO {
         else if (_sel == this.delayedWETHPermissionedGameProxy.selector) _delayedWETHPermissionedGameProxy = IDelayedWETH(payable(_addr)) ;
         else if (_sel == this.delayedWETHPermissionlessGameProxy.selector) _delayedWETHPermissionlessGameProxy = IDelayedWETH(payable(_addr)) ;
         else if (_sel == this.celoSuperchainConfigProxy.selector) _celoSuperchainConfigProxy = CeloSuperchainConfig(payable(_addr));
+        else if (_sel == this.celoTokenProxy.selector) _celoTokenProxy = CeloTokenL1(payable(_addr));
         else revert("DeployOPChainOutput: unknown selector");
         // forgefmt: disable-end
     }
@@ -356,6 +358,12 @@ contract DeployOPChainOutput is BaseDeployIO {
         DeployUtils.assertValidContractAddress(address(_celoSuperchainConfigProxy));
         return _celoSuperchainConfigProxy;
     }
+
+    function celoTokenProxy() public returns (CeloTokenL1) {
+        DeployUtils.assertValidContractAddress(address(_celoTokenProxy));
+        DeployUtils.assertERC1967ImplementationSet(address(_celoTokenProxy));
+        return _celoTokenProxy;
+    }
 }
 
 contract DeployOPChain is Script {
@@ -405,6 +413,7 @@ contract DeployOPChain is Script {
         vm.label(address(deployOutput.permissionedDisputeGame), "permissionedDisputeGame");
         vm.label(address(deployOutput.delayedWETHPermissionedGameProxy), "delayedWETHPermissionedGameProxy");
         vm.label(address(deployOutput.celoSuperchainConfigProxy), "celoSuperchainConfigProxy");
+        vm.label(address(deployOutput.celoTokenProxy), "celoTokenProxy");
         // TODO: Eventually switch from Permissioned to Permissionless.
         // vm.label(address(deployOutput.delayedWETHPermissionlessGameProxy), "delayedWETHPermissionlessGameProxy");
 
@@ -424,6 +433,7 @@ contract DeployOPChain is Script {
         _doo.set(_doo.permissionedDisputeGame.selector, address(deployOutput.permissionedDisputeGame));
         _doo.set(_doo.delayedWETHPermissionedGameProxy.selector, address(deployOutput.delayedWETHPermissionedGameProxy));
         _doo.set(_doo.celoSuperchainConfigProxy.selector, address(deployOutput.celoSuperchainConfigProxy));
+        _doo.set(_doo.celoTokenProxy.selector, address(deployOutput.celoTokenProxy));
         // TODO: Eventually switch from Permissioned to Permissionless.
         // _doo.set(
         //     _doo.delayedWETHPermissionlessGameProxy.selector,
@@ -452,7 +462,8 @@ contract DeployOPChain is Script {
             address(_doo.permissionedDisputeGame()),
             // address(_doo.faultDisputeGame()),
             address(_doo.delayedWETHPermissionedGameProxy()),
-            address(_doo.celoSuperchainConfigProxy())
+            address(_doo.celoSuperchainConfigProxy()),
+            address(_doo.celoTokenProxy())
         );
         // TODO: Eventually switch from Permissioned to Permissionless. Add this address back in.
         // address(_delayedWETHPermissionlessGameProxy)

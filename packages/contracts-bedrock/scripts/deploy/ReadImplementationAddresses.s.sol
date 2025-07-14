@@ -38,6 +38,7 @@ contract ReadImplementationAddressesOutput is BaseDeployIO {
     address internal _disputeGameFactory;
     address internal _mipsSingleton;
     address internal _preimageOracleSingleton;
+    address internal _celoTokenL1;
 
     function set(bytes4 _sel, address _addr) public {
         require(_addr != address(0), "ReadImplementationAddressesOutput: cannot set zero address");
@@ -51,6 +52,7 @@ contract ReadImplementationAddressesOutput is BaseDeployIO {
         else if (_sel == this.disputeGameFactory.selector) _disputeGameFactory = _addr;
         else if (_sel == this.mipsSingleton.selector) _mipsSingleton = _addr;
         else if (_sel == this.preimageOracleSingleton.selector) _preimageOracleSingleton = _addr;
+        else if (_sel == this.celoTokenL1.selector) _celoTokenL1 = _addr;
         else revert("ReadImplementationAddressesOutput: unknown selector");
     }
 
@@ -110,26 +112,33 @@ contract ReadImplementationAddressesOutput is BaseDeployIO {
         );
         return _preimageOracleSingleton;
     }
+
+    function celoTokenL1() public view returns (address) {
+        require(_celoTokenL1 != address(0), "ReadImplementationAddressesOutput: celoTokenL1 not set");
+        return _celoTokenL1;
+    }
 }
 
 contract ReadImplementationAddresses is Script {
     function run(ReadImplementationAddressesInput _rii, ReadImplementationAddressesOutput _rio) public {
-        address[6] memory eip1967Proxies = [
+        address[7] memory eip1967Proxies = [
             address(_rii.delayedWETHPermissionedGameProxy()),
             address(_rii.optimismPortalProxy()),
             address(_rii.systemConfigProxy()),
             address(_rii.l1ERC721BridgeProxy()),
             address(_rii.optimismMintableERC20FactoryProxy()),
-            address(_rii.disputeGameFactoryProxy())
+            address(_rii.disputeGameFactoryProxy()),
+            address(_rii.celoTokenProxy())
         ];
 
-        bytes4[6] memory sels = [
+        bytes4[7] memory sels = [
             _rio.delayedWETH.selector,
             _rio.optimismPortal.selector,
             _rio.systemConfig.selector,
             _rio.l1ERC721Bridge.selector,
             _rio.optimismMintableERC20Factory.selector,
-            _rio.disputeGameFactory.selector
+            _rio.disputeGameFactory.selector,
+            _rio.celoTokenL1.selector
         ];
 
         for (uint256 i = 0; i < eip1967Proxies.length; i++) {

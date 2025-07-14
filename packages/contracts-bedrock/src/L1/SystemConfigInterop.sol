@@ -82,7 +82,6 @@ contract SystemConfigInterop is SystemConfig {
     /// @param _token Address of the gas paying token.
     function _setGasPayingToken(address _token) internal override {
         if (_token != address(0) && _token != Constants.ETHER && !isCustomGasToken()) {
-
             require(
                 ERC20(_token).decimals() == GAS_PAYING_TOKEN_DECIMALS, "SystemConfig: bad decimals of gas paying token"
             );
