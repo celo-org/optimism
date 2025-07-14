@@ -52,9 +52,9 @@ func TestGetAPIEndpoint(t *testing.T) {
 		expected      string
 		expectedError bool
 	}{
-		{"Mainnet", 1, "https://api.etherscan.io/api", false},
-		{"Sepolia", 11155111, "https://api-sepolia.etherscan.io/api", false},
-		{"Unknown", 999, "", true},
+		{"Mainnet", 1, "https://api.etherscan.io/v2/api?chainid=1", false},
+		{"Sepolia", 11155111, "https://api.etherscan.io/v2/api?chainid=11155111", false},
+		{"Unknown", 999, "https://api.etherscan.io/v2/api?chainid=999", false},
 	}
 
 	for _, tt := range tests {

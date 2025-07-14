@@ -36,12 +36,8 @@ type EtherscanClient struct {
 
 func getAPIEndpoint(l1ChainID uint64) (string, error) {
 	switch l1ChainID {
-	case 1:
-		return "https://api.etherscan.io/api", nil // mainnet
-	case 11155111:
-		return "https://api-sepolia.etherscan.io/api", nil // sepolia
 	default:
-		return "", fmt.Errorf("unsupported L1 chain ID: %d", l1ChainID)
+		return fmt.Sprintf("https://api.etherscan.io/v2/api?chainid=%d", l1ChainID), nil
 	}
 }
 
