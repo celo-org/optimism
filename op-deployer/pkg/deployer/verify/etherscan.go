@@ -61,7 +61,7 @@ func (c *EtherscanClient) sendRateLimitedRequest(req *http.Request) (*http.Respo
 // getContractCreation returns the txHash of the contract creation tx
 // (useful for extracting constructor args)
 func (c *EtherscanClient) getContractCreation(address common.Address) (common.Hash, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s?module=contract&action=getcontractcreation&contractaddresses=%s&apikey=%s",
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s&module=contract&action=getcontractcreation&contractaddresses=%s&apikey=%s",
 		c.url, address.Hex(), c.apiKey), nil)
 	if err != nil {
 		return common.Hash{}, fmt.Errorf("failed to create contract creation request: %w", err)
@@ -137,7 +137,7 @@ func (c *EtherscanClient) verifySourceCode(address common.Address, artifact *con
 }
 
 func (c *EtherscanClient) isVerified(address common.Address) (bool, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s?module=contract&action=getabi&address=%s&apikey=%s",
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s&module=contract&action=getabi&address=%s&apikey=%s",
 		c.url, address.Hex(), c.apiKey), nil)
 	if err != nil {
 		return false, err
@@ -158,7 +158,7 @@ func (c *EtherscanClient) isVerified(address common.Address) (bool, error) {
 }
 
 func (c *EtherscanClient) pollVerificationStatus(reqId string) error {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s?apikey=%s&module=contract&action=checkverifystatus&guid=%s",
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s&apikey=%s&module=contract&action=checkverifystatus&guid=%s",
 		c.url, c.apiKey, reqId), nil)
 	if err != nil {
 		return fmt.Errorf("failed to create checkverifystatus request: %w", err)
