@@ -114,6 +114,18 @@ library Predeploys {
     /// @notice Address of the CeloRegistry predeploy.
     address internal constant CELO_REGISTRY = 0x000000000000000000000000000000000000ce10;
 
+    /// @notice Address of the FeeCurrencyDirectory predeploy.
+    address internal constant CELO_FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
+
+    /// @notice Address of the CeloToken predeploy.
+    address internal constant CELO_TOKEN = 0x471EcE3750Da237f93B8E339c536989b8978a438;
+
+    /// @notice Address of the CeloFeeHandler predeploy.
+    address internal constant CELO_FEE_HANDLER = 0xcD437749E43A154C07F3553504c68fBfD56B8778;
+
+    /// @notice Address of the CeloUnreleasedTrasury predeploy.
+    address internal constant CELO_UNRELEASED_TREASURY = 0xB76D502Ad168F9D545661ea628179878DcA92FD5;
+
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {
         require(isPredeployNamespace(_addr), "Predeploys: address must be a predeploy");

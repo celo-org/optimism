@@ -285,7 +285,7 @@ contract L2Genesis is Deployer {
             setETHLiquidity(); // 25
             setSuperchainTokenBridge(); // 28
         }
-        setCeloRegistry();
+        setCeloContracts();
     }
 
     function setProxyAdmin() public {
@@ -611,9 +611,9 @@ contract L2Genesis is Deployer {
         _setImplementationCode(Predeploys.SUPERCHAIN_TOKEN_BRIDGE);
     }
 
+    /// @notice Generic function to deploy a CeloProxy to any predeploy address.
     /// @notice This predeploy is following the safety invariant #2.
-    function setCeloRegistry() internal {
-        address celoRegistry = Predeploys.CELO_REGISTRY;
+    function setCeloProxy(string memory name, address proxyAddress) internal {
         // address targetOwner = cfg.proxyAdminOwner();
         address targetOwner = address(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
         require(targetOwner != address(0), "Target owner cannot be address(0)");
@@ -628,25 +628,36 @@ contract L2Genesis is Deployer {
         bytes memory initializedCode = address(proxy).code;
 
         // Deploy the initialized code to the predeploy address
-        console.log("Setting CeloProxy implementation at: %s. Owner: %s", celoRegistry, targetOwner);
-        vm.etch(celoRegistry, initializedCode);
+        console.log("Setting %s CeloProxy at: %s. Owner: %s", name, proxyAddress, targetOwner);
+        vm.etch(proxyAddress, initializedCode);
 
         // Copy the owner storage from the temporary contract to the predeploy
         bytes32 ownerSlot = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
         bytes32 ownerValue = vm.load(address(proxy), ownerSlot);
-        vm.store(celoRegistry, ownerSlot, ownerValue);
+        vm.store(proxyAddress, ownerSlot, ownerValue);
 
         /// Reset so its not included in state dump
         vm.etch(address(proxy), "");
         vm.resetNonce(address(proxy));
 
         // Verify the owner was set correctly
-        try ICeloProxy(celoRegistry)._getOwner() returns (address actualOwner) {
-            console.log("Verified CeloProxy owner: %s", actualOwner);
+        try ICeloProxy(proxyAddress)._getOwner() returns (address actualOwner) {
+            console.log("Verified %s CeloProxy owner: %s", name, actualOwner);
             require(actualOwner == targetOwner, "Owner verification failed");
         } catch {
-            console.log("Warning: Could not verify owner, but proxy was initialized properly");
+            console.log("Warning: Could not verify %s owner, but proxy was initialized properly", name);
         }
+    }
+
+    /// @notice Sets up all Celo contract predeploys.
+    function setCeloContracts() internal {
+        setCeloProxy("CeloRegistry", Predeploys.CELO_REGISTRY);
+        setCeloProxy("FeeCurrencyDirectory", Predeploys.CELO_FEE_CURRENCY_DIRECTORY);
+        setCeloProxy("CeloToken", Predeploys.CELO_TOKEN);
+        setCeloProxy("CeloFeeHandler", Predeploys.CELO_FEE_HANDLER);
+        setCeloProxy("CeloUnreleasedTreasury", Predeploys.CELO_UNRELEASED_TREASURY);
+        console.log("Funding CELO Treasury %s with %s ETH", Predeploys.CELO_UNRELEASED_TREASURY, 1_000_000 ether / 1e18);
+        vm.deal(Predeploys.CELO_UNRELEASED_TREASURY, 1_000_000 ether / 1e18);
     }
 
     /// @notice Sets all the preinstalls.
