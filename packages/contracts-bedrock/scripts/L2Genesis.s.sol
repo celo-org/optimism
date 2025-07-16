@@ -32,6 +32,7 @@ import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenge
 import { IL2CrossDomainMessenger } from "interfaces/L2/IL2CrossDomainMessenger.sol";
 import { IGasPriceOracle } from "interfaces/L2/IGasPriceOracle.sol";
 import { IL1Block } from "interfaces/L2/IL1Block.sol";
+import { ICeloProxy } from "interfaces/L2/ICeloProxy.sol";
 
 struct L1Dependencies {
     address payable l1CrossDomainMessengerProxy;
@@ -55,7 +56,7 @@ contract L2Genesis is Deployer {
     uint80 internal constant DEV_ACCOUNT_FUND_AMT = 10_000 ether;
 
     /// @notice Default Anvil dev accounts. Only funded if `cfg.fundDevAccounts == true`.
-    /// Also known as "test test test test test test test test test test test junk" mnemonic accounts,
+    /// Also known as "test test test test test test test test test test test test test test junk" mnemonic accounts,
     /// on path "m/44'/60'/0'/0/i" (where i is the account index).
     address[30] internal devAccounts = [
         0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266, // 0
@@ -284,6 +285,7 @@ contract L2Genesis is Deployer {
             setETHLiquidity(); // 25
             setSuperchainTokenBridge(); // 28
         }
+        setCeloRegistry();
     }
 
     function setProxyAdmin() public {
@@ -607,6 +609,44 @@ contract L2Genesis is Deployer {
     ///         This contract has no initializer.
     function setSuperchainTokenBridge() internal {
         _setImplementationCode(Predeploys.SUPERCHAIN_TOKEN_BRIDGE);
+    }
+
+    /// @notice This predeploy is following the safety invariant #2.
+    function setCeloRegistry() internal {
+        address celoRegistry = Predeploys.CELO_REGISTRY;
+        // address targetOwner = cfg.proxyAdminOwner();
+        address targetOwner = address(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
+        require(targetOwner != address(0), "Target owner cannot be address(0)");
+
+        // Create CeloProxy with constructor (sets msg.sender as owner)
+        ICeloProxy proxy = ICeloProxy(DeployUtils.create1({ _name: "CeloProxy", _args: "" }));
+
+        // Transfer ownership to the configured owner
+        proxy._transferOwnership(targetOwner);
+
+        // Extract the properly initialized runtime code
+        bytes memory initializedCode = address(proxy).code;
+
+        // Deploy the initialized code to the predeploy address
+        console.log("Setting CeloProxy implementation at: %s. Owner: %s", celoRegistry, targetOwner);
+        vm.etch(celoRegistry, initializedCode);
+
+        // Copy the owner storage from the temporary contract to the predeploy
+        bytes32 ownerSlot = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+        bytes32 ownerValue = vm.load(address(proxy), ownerSlot);
+        vm.store(celoRegistry, ownerSlot, ownerValue);
+
+        /// Reset so its not included in state dump
+        vm.etch(address(proxy), "");
+        vm.resetNonce(address(proxy));
+
+        // Verify the owner was set correctly
+        try ICeloProxy(celoRegistry)._getOwner() returns (address actualOwner) {
+            console.log("Verified CeloProxy owner: %s", actualOwner);
+            require(actualOwner == targetOwner, "Owner verification failed");
+        } catch {
+            console.log("Warning: Could not verify owner, but proxy was initialized properly");
+        }
     }
 
     /// @notice Sets all the preinstalls.

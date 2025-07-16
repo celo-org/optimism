@@ -49,6 +49,8 @@ type L2OpchainDeployment struct {
 	OptimismMintableERC20FactoryProxy common.Address `json:"OptimismMintableERC20FactoryProxy"`
 	L1StandardBridgeProxy             common.Address `json:"L1StandardBridgeProxy"`
 	L1CrossDomainMessengerProxy       common.Address `json:"L1CrossDomainMessengerProxy"`
+	CeloSuperchainConfigProxy         common.Address `json:"CeloSuperchainConfigProxy"`
+	CeloTokenProxy                    common.Address `json:"CeloTokenProxy"`
 	// Fault proof contracts below.
 	OptimismPortalProxy                common.Address `json:"OptimismPortalProxy"`
 	DisputeGameFactoryProxy            common.Address `json:"DisputeGameFactoryProxy"`
@@ -57,7 +59,6 @@ type L2OpchainDeployment struct {
 	PermissionedDisputeGame            common.Address `json:"PermissionedDisputeGame"`
 	DelayedWETHPermissionedGameProxy   common.Address `json:"DelayedWETHPermissionedGameProxy"`
 	DelayedWETHPermissionlessGameProxy common.Address `json:"DelayedWETHPermissionlessGameProxy"`
-	CeloSuperchainConfigProxy          common.Address `json:"CeloSuperchainConfigProxy"`
 }
 
 type L2Deployment struct {
