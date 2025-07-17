@@ -42,7 +42,7 @@ optimism_package:
         isthmus_time_offset: 0
         fund_dev_accounts: true
         deploy_celo_contracts: true
-        use_custom_gas_token: true
+        use_dev_celo_token_l1: true
       batcher_params:
         image: {{ localDockerImage "op-batcher" }}
         extra_params:
