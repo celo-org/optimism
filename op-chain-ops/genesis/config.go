@@ -657,6 +657,16 @@ func (d *AltDADeployConfig) Check(log log.Logger) error {
 	return nil
 }
 
+type CeloDeployConfig struct {
+	DeployCeloContracts bool `json:"deployCeloContracts" toml:"deployCeloContracts"`
+}
+
+var _ ConfigChecker = (*CeloDeployConfig)(nil)
+
+func (d *CeloDeployConfig) Check(log log.Logger) error {
+	return nil
+}
+
 // L2InitializationConfig represents all L2 configuration
 // data that can be configured before the deployment of any L1 contracts.
 type L2InitializationConfig struct {
@@ -672,6 +682,7 @@ type L2InitializationConfig struct {
 	UpgradeScheduleDeployConfig
 	L2CoreDeployConfig
 	AltDADeployConfig
+	CeloDeployConfig
 }
 
 func (d *L2InitializationConfig) Check(log log.Logger) error {

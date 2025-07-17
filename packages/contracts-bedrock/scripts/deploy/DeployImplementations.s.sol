@@ -56,6 +56,8 @@ contract DeployImplementationsInput is BaseDeployIO {
     IProxyAdmin internal _superchainProxyAdmin;
     address internal _upgradeController;
 
+    bool internal _useDevCeloTokenL1;
+
     function set(bytes4 _sel, uint256 _value) public {
         require(_value != 0, "DeployImplementationsInput: cannot set zero value");
 
@@ -89,6 +91,11 @@ contract DeployImplementationsInput is BaseDeployIO {
         else if (_sel == this.protocolVersionsProxy.selector) _protocolVersionsProxy = IProtocolVersions(_addr);
         else if (_sel == this.superchainProxyAdmin.selector) _superchainProxyAdmin = IProxyAdmin(_addr);
         else if (_sel == this.upgradeController.selector) _upgradeController = _addr;
+        else revert("DeployImplementationsInput: unknown selector");
+    }
+
+    function set(bytes4 _sel, bool _value) public {
+        if (_sel == this.useDevCeloTokenL1.selector) _useDevCeloTokenL1 = _value;
         else revert("DeployImplementationsInput: unknown selector");
     }
 
@@ -148,6 +155,10 @@ contract DeployImplementationsInput is BaseDeployIO {
     function upgradeController() public view returns (address) {
         require(address(_upgradeController) != address(0), "DeployImplementationsInput: not set");
         return _upgradeController;
+    }
+
+    function useDevCeloTokenL1() public view returns (bool) {
+        return _useDevCeloTokenL1;
     }
 }
 
@@ -581,7 +592,13 @@ contract DeployImplementations is Script {
         require(checkAddress == address(0), "OPCM-40");
         (blueprints.resolvedDelegateProxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("ResolvedDelegateProxy"), _salt);
         require(checkAddress == address(0), "OPCM-50");
-        (blueprints.celoTokenL1, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("CeloTokenL1"), _salt);
+
+        string memory celoTokenL1Contract = "CeloTokenL1";
+        if (_dii.useDevCeloTokenL1()) {
+            celoTokenL1Contract = "DevCeloTokenL1";
+        }
+
+        (blueprints.celoTokenL1, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode(celoTokenL1Contract), _salt);
         require(checkAddress == address(0), "CELO_50");
         // The max initcode/runtimecode size is 48KB/24KB.
         // But for Blueprint, the initcode is stored as runtime code, that's why it's necessary to split into 2 parts.

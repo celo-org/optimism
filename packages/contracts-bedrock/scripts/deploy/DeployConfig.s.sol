@@ -93,6 +93,8 @@ contract DeployConfig is Script {
     bool public useInterop;
     bool public useUpgradedFork;
 
+    bool public deployCeloContracts;
+
     function read(string memory _path) public {
         console.log("DeployConfig: reading file %s", _path);
         try vm.readFile(_path) returns (string memory data_) {
@@ -180,6 +182,8 @@ contract DeployConfig is Script {
 
         useInterop = _readOr(_json, "$.useInterop", false);
         useUpgradedFork;
+
+        deployCeloContracts = _readOr(_json, "$.deployCeloContracts", false);
     }
 
     function fork() public view returns (Fork fork_) {

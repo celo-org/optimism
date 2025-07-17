@@ -27,6 +27,11 @@ forge-build-dev *ARGS:
 build-source:
   forge build --skip "/**/test/**" --skip "/**/scripts/**"
 
+# Builds source contracts and scripts, skipping tests.
+build-no-tests:
+  forge build --skip "/**/test/**" --libraries \
+  "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol:AddressSortedLinkedListWithMedian:0xED477A99035d0c1e11369F1D7A4e587893cc002B"
+
 # Builds the contracts.
 build *ARGS: lint-fix-no-fail
   just forge-build {{ARGS}}

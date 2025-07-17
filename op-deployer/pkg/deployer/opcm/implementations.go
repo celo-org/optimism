@@ -23,6 +23,8 @@ type DeployImplementationsInput struct {
 	SuperchainProxyAdmin  common.Address
 	UpgradeController     common.Address
 	UseInterop            bool // if true, deploy Interop implementations
+	// For Celo Kurtosis Devent
+	UseDevCeloTokenL1 bool // Deploy DevCeloTokenL1 instead of CeloTokenL1
 }
 
 func (input *DeployImplementationsInput) InputSet() bool {

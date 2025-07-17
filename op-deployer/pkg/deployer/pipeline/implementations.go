@@ -44,6 +44,11 @@ func DeployImplementations(env *Env, intent *state.Intent, st *state.State) erro
 		return fmt.Errorf("error merging proof params from overrides: %w", err)
 	}
 
+	var useDevCeloTokenL1 bool
+	if shouldDeployDevCeloTokenL1, ok := intent.GlobalDeployOverrides["useDevCeloTokenL1"].(bool); ok {
+		useDevCeloTokenL1 = shouldDeployDevCeloTokenL1
+	}
+
 	dio, err := opcm.DeployImplementations(
 		env.L1ScriptHost,
 		opcm.DeployImplementationsInput{
@@ -59,6 +64,7 @@ func DeployImplementations(env *Env, intent *state.Intent, st *state.State) erro
 			SuperchainProxyAdmin:            st.SuperchainDeployment.ProxyAdminAddress,
 			UpgradeController:               intent.SuperchainRoles.ProxyAdminOwner,
 			UseInterop:                      intent.UseInterop,
+			UseDevCeloTokenL1:               useDevCeloTokenL1,
 		},
 	)
 	if err != nil {
