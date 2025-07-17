@@ -53,7 +53,7 @@ contract L2Genesis is Deployer {
 
     uint256 public constant PRECOMPILE_COUNT = 256;
 
-    uint80 internal constant DEV_ACCOUNT_FUND_AMT = 10_000 ether;
+    uint80 internal constant DEV_ACCOUNT_FUND_AMT = 25_000 ether;
 
     /// @notice Default Anvil dev accounts. Only funded if `cfg.fundDevAccounts == true`.
     /// Also known as "test test test test test test test test test test test test test test junk" mnemonic accounts,
@@ -159,6 +159,7 @@ contract L2Genesis is Deployer {
         if (cfg.fundDevAccounts()) {
             fundDevAccounts();
         }
+        setCeloContracts();
         vm.stopPrank();
 
         if (writeForkGenesisAllocs(_fork, Fork.DELTA, _mode)) {
@@ -285,7 +286,6 @@ contract L2Genesis is Deployer {
             setETHLiquidity(); // 25
             setSuperchainTokenBridge(); // 28
         }
-        setCeloContracts();
     }
 
     function setProxyAdmin() public {
@@ -615,7 +615,8 @@ contract L2Genesis is Deployer {
     /// @notice This predeploy is following the safety invariant #2.
     function setCeloProxy(string memory name, address proxyAddress) internal {
         // address targetOwner = cfg.proxyAdminOwner();
-        address targetOwner = address(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
+        // address targetOwner = address(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
+        address targetOwner = devAccounts[0];
         require(targetOwner != address(0), "Target owner cannot be address(0)");
 
         // Create CeloProxy with constructor (sets msg.sender as owner)
@@ -649,6 +650,20 @@ contract L2Genesis is Deployer {
         }
     }
 
+    function fundCeloAccounts() internal {
+        address[] memory accounts = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+
+        accounts[0] = Predeploys.CELO_UNRELEASED_TREASURY;
+        amounts[0] = 400_000_000 ether;
+        accounts[1] = devAccounts[0];
+        amounts[1] = 200_000_000 ether;
+
+        for (uint256 i = 0; i < accounts.length; i++) {
+            vm.deal(accounts[i], amounts[i]);
+        }
+    }
+
     /// @notice Sets up all Celo contract predeploys.
     function setCeloContracts() internal {
         setCeloProxy("CeloRegistry", Predeploys.CELO_REGISTRY);
@@ -657,7 +672,7 @@ contract L2Genesis is Deployer {
         setCeloProxy("CeloFeeHandler", Predeploys.CELO_FEE_HANDLER);
         setCeloProxy("CeloUnreleasedTreasury", Predeploys.CELO_UNRELEASED_TREASURY);
         console.log("Funding CELO Treasury %s with %s ETH", Predeploys.CELO_UNRELEASED_TREASURY, 1_000_000 ether / 1e18);
-        vm.deal(Predeploys.CELO_UNRELEASED_TREASURY, 1_000_000 ether / 1e18);
+        fundCeloAccounts();
     }
 
     /// @notice Sets all the preinstalls.
