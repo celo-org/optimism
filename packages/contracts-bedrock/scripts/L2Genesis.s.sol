@@ -616,7 +616,7 @@ contract L2Genesis is Deployer {
     function setCeloProxy(string memory name, address proxyAddress) internal {
         // address targetOwner = cfg.proxyAdminOwner();
         // address targetOwner = address(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
-        address targetOwner = devAccounts[0];
+        address targetOwner = address(0x95a40aA01d2d72b4122C19c86160710D01224ada);
         require(targetOwner != address(0), "Target owner cannot be address(0)");
 
         // Create CeloProxy with constructor (sets msg.sender as owner)
@@ -650,16 +650,37 @@ contract L2Genesis is Deployer {
         }
     }
 
+    /// @notice Funds the Celo accounts with the specified amounts.
     function fundCeloAccounts() internal {
-        address[] memory accounts = new address[](2);
-        uint256[] memory amounts = new uint256[](2);
+        address[] memory accounts = new address[](11);
+        uint256[] memory amounts = new uint256[](11);
+        uint256 count = 0;
 
-        accounts[0] = Predeploys.CELO_UNRELEASED_TREASURY;
-        amounts[0] = 400_000_000 ether;
-        accounts[1] = devAccounts[0];
-        amounts[1] = 200_000_000 ether;
+        accounts[count] = Predeploys.CELO_UNRELEASED_TREASURY;
+        amounts[count++] = 400_000_000 ether;
+        accounts[count] = address(0x95a40aA01d2d72b4122C19c86160710D01224ada);
+        amounts[count++] = 599_775_000 ether;
+        accounts[count] = address(0xCFc6b063227A1cBA667F017044eA1C476f0869cB);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0x73b3307111b6fA70933A636a8dD939293FdFDF27);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0x822aEF6Ee28185117386Cc96Bff5523C8C57c1E7);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0x941B3d1c9778DF9Ec5E72cD38038BF11890E4542);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0x31F737b55d50C31C3993fA3BECEa8561B20D25A9);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0xA223b73Bfc642e1C08154FC150B8Ea975c656252);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0xB347EE81Af3e66405b71b4E23B2C8354980253D4);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0x06F6b03020692bC2c62362568FC251fA392834F6);
+        amounts[count++] = 25_000 ether;
+        accounts[count] = address(0xeDeDE206fD98A100b8d4F96716A344534a89d506);
+        amounts[count++] = 25_000 ether;
 
-        for (uint256 i = 0; i < accounts.length; i++) {
+        for (uint256 i = 0; i < count; i++) {
+            console.log("Funding %s with %s ETH", accounts[i], amounts[i]);
             vm.deal(accounts[i], amounts[i]);
         }
     }
@@ -671,7 +692,6 @@ contract L2Genesis is Deployer {
         setCeloProxy("CeloToken", Predeploys.CELO_TOKEN);
         setCeloProxy("CeloFeeHandler", Predeploys.CELO_FEE_HANDLER);
         setCeloProxy("CeloUnreleasedTreasury", Predeploys.CELO_UNRELEASED_TREASURY);
-        console.log("Funding CELO Treasury %s with %s ETH", Predeploys.CELO_UNRELEASED_TREASURY, 1_000_000 ether / 1e18);
         fundCeloAccounts();
     }
 
