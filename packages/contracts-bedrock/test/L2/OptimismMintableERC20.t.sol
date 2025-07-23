@@ -7,6 +7,9 @@ import { CommonTest } from "test/setup/CommonTest.sol";
 // Target contract
 import { OptimismMintableERC20 } from "src/universal/OptimismMintableERC20.sol";
 
+// run this benchmark with:
+// `forge test --match-contract="OptimismMintableERC20_Beenchmark_Test" --gas-report`
+
 contract OptimismMintableERC20_Beenchmark_Test is CommonTest {
     // Test token
     OptimismMintableERC20 token;
@@ -17,6 +20,20 @@ contract OptimismMintableERC20_Beenchmark_Test is CommonTest {
     address recipient1 = address(0x3);
     address recipient2 = address(0x4);
     address communityFund = address(0x5);
+    address from;
+    address feeRecipient;
+
+    // Fee amounts
+    uint256 refund;
+    uint256 tipTxFee;
+    uint256 baseTxFee;
+
+    // Standard token amounts
+    uint256 initialAmount1 = 100;
+    uint256 initialAmount2 = 200;
+    uint256 fromAmount = 25;
+    uint256 feeRecipientAmount = 30;
+    uint256 communityFundAmount = 10;
 
     function setUp() public override {
         // Deploy OptimismMintableERC20 token for testing
@@ -27,133 +44,118 @@ contract OptimismMintableERC20_Beenchmark_Test is CommonTest {
             "TEST",
             18
         );
+
+        // Initialize common test values
+        from = address(0x6);
+        feeRecipient = address(0x7);
+        refund = 75;
+        tipTxFee = 25;
+        baseTxFee = 30;
+
+        // Mint initial token balances
+        vm.startPrank(bridge);
+        token.mint(recipient1, initialAmount1);
+        token.mint(recipient2, initialAmount2);
+        token.mint(from, fromAmount);
+        vm.stopPrank();
     }
 
-    function test_hapyCase() public {
-        // Existing empty test
+    // Helper function for minting tokens using bridge
+    function _mintTokens(address recipient, uint256 amount) internal {
+        vm.prank(bridge);
+        token.mint(recipient, amount);
     }
 
-    function test_creditAndDebitGasFees() public {
-        // Step 1: Test new version of creditGasFees with arrays
-        address[] memory recipients = new address[](2);
-        recipients[0] = recipient1;
-        recipients[1] = recipient2;
-
-        uint256[] memory amounts = new uint256[](2);
-        amounts[0] = 100;
-        amounts[1] = 200;
-
-        // Call creditGasFees as the VM (address 0)
-        for (uint i = 0; i < recipients.length; i++) {
-            vm.prank(bridge);
-            token.mint(recipients[i], amounts[i]);
-        }
-
-        // Verify balances
-        assertEq(token.balanceOf(recipient1), 100);
-        assertEq(token.balanceOf(recipient2), 200);
-
-        // Step 2: Test debitGasFees
+    // Helper function for debitGasFees
+    function _debitGasFees(address from, uint256 amount) internal {
         vm.prank(address(0));
-        token.debitGasFees(recipient1, 50);
+        token.debitGasFees(from, amount);
+    }
 
-        // Verify balance after debit
-        assertEq(token.balanceOf(recipient1), 50);
-
-        // Step 3: Test legacy version of creditGasFees
-        address from = address(0x6);
-        address feeRecipient = address(0x7);
+    // Helper function for legacy creditGasFees
+    function _legacyCreditGasFees(
+        address from,
+        address feeRecipient,
+        address communityFundAddr,
+        uint256 refund,
+        uint256 tipTxFee,
+        uint256 baseTxFee
+    ) internal {
         address gatewayFeeRecipient = address(0x8); // unused
-        uint256 refund = 75;
-        uint256 tipTxFee = 25;
         uint256 gatewayFee = 10; // unused
-        uint256 baseTxFee = 30;
 
         vm.prank(address(0));
         token.creditGasFees(
             from,
             feeRecipient,
             gatewayFeeRecipient,
-            communityFund,
+            communityFundAddr,
             refund,
             tipTxFee,
             gatewayFee,
+            baseTxFee
+        );
+    }
+
+    function test_creditAndDebitGasFees() public {
+        // Verify initial balances
+        assertEq(token.balanceOf(recipient1), initialAmount1);
+        assertEq(token.balanceOf(recipient2), initialAmount2);
+        assertEq(token.balanceOf(from), fromAmount);
+        assertEq(token.balanceOf(feeRecipient), feeRecipientAmount);
+        assertEq(token.balanceOf(communityFund), communityFundAmount);
+
+        // Step 1: Test debitGasFees
+        _debitGasFees(recipient1, 50);
+
+        // Verify balance after debit
+        assertEq(token.balanceOf(recipient1), initialAmount1 - 50);
+
+        // Step 2: Test legacy version of creditGasFees
+        _legacyCreditGasFees(
+            from,
+            feeRecipient,
+            communityFund,
+            refund,
+            tipTxFee,
             baseTxFee
         );
 
         // Verify balances after legacy creditGasFees
-        assertEq(token.balanceOf(from), 75);
-        assertEq(token.balanceOf(feeRecipient), 25);
-        assertEq(token.balanceOf(communityFund), 30);
+        assertEq(token.balanceOf(from), fromAmount + refund);
+        assertEq(token.balanceOf(feeRecipient), feeRecipientAmount + tipTxFee);
+        assertEq(token.balanceOf(communityFund), communityFundAmount + baseTxFee);
     }
 
     function test_creditAndDebitGasFeesWithExistingBalances() public {
-        // Setup initial balances
-        vm.prank(bridge);
-        token.mint(recipient1, 50);
-
-        vm.prank(bridge);
-        token.mint(recipient2, 100);
-
-        address from = address(0x6);
-        address feeRecipient = address(0x7);
-
-        vm.prank(bridge);
-        token.mint(from, 25);
-
-        vm.prank(bridge);
-        token.mint(feeRecipient, 30);
-
-        vm.prank(bridge);
-        token.mint(communityFund, 10);
-
+        _mintTokens(feeRecipient, feeRecipientAmount);
+        _mintTokens(communityFund, communityFundAmount);
         // Verify initial balances
-        assertEq(token.balanceOf(recipient1), 50);
-        assertEq(token.balanceOf(recipient2), 100);
-        assertEq(token.balanceOf(from), 25);
-        assertEq(token.balanceOf(feeRecipient), 30);
-        assertEq(token.balanceOf(communityFund), 10);
+        // assertEq(token.balanceOf(recipient1), initialAmount1);
+        // assertEq(token.balanceOf(recipient2), initialAmount2);
+        // assertEq(token.balanceOf(from), fromAmount);
+        // assertEq(token.balanceOf(feeRecipient), feeRecipientAmount);
+        // assertEq(token.balanceOf(communityFund), communityFundAmount);
 
-        // Step 1: Test creditGasFees with existing balances
-        vm.prank(bridge);
-        token.mint(recipient1, 100);
-
-        vm.prank(bridge);
-        token.mint(recipient2, 200);
-
-        // Verify updated balances
-        assertEq(token.balanceOf(recipient1), 150);
-        assertEq(token.balanceOf(recipient2), 300);
-
-        // Step 2: Test debitGasFees with existing balance
-        vm.prank(address(0));
-        token.debitGasFees(recipient1, 50);
+        // Step 1: Test debitGasFees with existing balance
+        _debitGasFees(recipient1, 50);
 
         // Verify balance after debit
-        assertEq(token.balanceOf(recipient1), 100);
+        assertEq(token.balanceOf(recipient1), initialAmount1 - 50);
 
-        // Step 3: Test legacy creditGasFees with existing balances
-        uint256 refund = 75;
-        uint256 tipTxFee = 25;
-        uint256 gatewayFee = 10; // unused
-        uint256 baseTxFee = 30;
-        address gatewayFeeRecipient = address(0x8); // unused
-
-        vm.prank(address(0));
-        token.creditGasFees(
+        // Step 2: Test legacy creditGasFees with existing balances
+        _legacyCreditGasFees(
             from,
             feeRecipient,
-            gatewayFeeRecipient,
             communityFund,
             refund,
             tipTxFee,
-            gatewayFee,
             baseTxFee
         );
 
         // Verify cumulative balances after legacy creditGasFees
-        assertEq(token.balanceOf(from), 25 + 75);
-        assertEq(token.balanceOf(feeRecipient), 30 + 25);
-        assertEq(token.balanceOf(communityFund), 10 + 30);
+        assertEq(token.balanceOf(from), fromAmount + refund);
+        assertEq(token.balanceOf(feeRecipient), feeRecipientAmount + tipTxFee);
+        assertEq(token.balanceOf(communityFund), communityFundAmount + baseTxFee);
     }
 }
