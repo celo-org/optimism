@@ -53,11 +53,9 @@ contract OptimismMintableERC20_Beenchmark_Test is CommonTest {
         baseTxFee = 30;
 
         // Mint initial token balances for all addresses
-        vm.startPrank(bridge);
-        token.mint(recipient1, initialAmount1);
-        token.mint(recipient2, initialAmount2);
-        token.mint(from, fromAmount);
-        vm.stopPrank();
+        _mintTokens(recipient1, initialAmount1);
+        _mintTokens(recipient2, initialAmount2);
+        _mintTokens(from, fromAmount);
     }
 
     // Helper function for minting tokens using bridge
@@ -122,10 +120,8 @@ contract OptimismMintableERC20_Beenchmark_Test is CommonTest {
 
     function test_creditAndDebitGasFeesWithExistingBalances() public {
         // Initial balances were already set in setUp
-        vm.startPrank(bridge);
-        token.mint(feeRecipient, feeRecipientAmount);
-        token.mint(communityFund, communityFundAmount);
-        vm.stopPrank();
+        _mintTokens(feeRecipient, feeRecipientAmount);
+        _mintTokens(communityFund, communityFundAmount);
 
         // Step 1: Test debitGasFees with existing balance
         _debitGasFees(recipient1, 50);
@@ -142,6 +138,5 @@ contract OptimismMintableERC20_Beenchmark_Test is CommonTest {
             tipTxFee,
             baseTxFee
         );
-
     }
 }
