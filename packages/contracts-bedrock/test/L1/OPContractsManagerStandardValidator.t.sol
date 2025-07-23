@@ -147,6 +147,20 @@ contract OPContractsManagerStandardValidator_TestInit is CommonTest {
         } else {
             l2ChainId = deployInput.l2ChainId;
             absolutePrestate = deployInput.disputeAbsolutePrestate;
+
+            // Add missing mock for OptimismMintableERC20Factory implementation in non-fork tests
+            vm.mockCall(
+                address(proxyAdmin),
+                abi.encodeCall(IProxyAdmin.getProxyImplementation, (address(l1OptimismMintableERC20Factory))),
+                abi.encode(opcm.opcmStandardValidator().optimismMintableERC20FactoryImpl())
+            );
+
+            // Also mock the version to match the expected version
+            vm.mockCall(
+                address(l1OptimismMintableERC20Factory),
+                abi.encodeCall(ISemver.version, ()),
+                abi.encode(opcm.opcmStandardValidator().optimismMintableERC20FactoryVersion())
+            );
         }
 
         // Deploy the BadDisputeGameFactoryReturner once.
