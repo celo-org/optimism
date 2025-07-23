@@ -185,6 +185,20 @@ abstract contract OPContractsManagerStandardValidator_TestInit is CommonTest, Di
             cannonPrestate = deployInput.disputeAbsolutePrestate;
             proposer = deployInput.roles.proposer;
             challenger = deployInput.roles.challenger;
+
+            // Add missing mock for OptimismMintableERC20Factory implementation in non-fork tests
+            vm.mockCall(
+                address(proxyAdmin),
+                abi.encodeCall(IProxyAdmin.getProxyImplementation, (address(l1OptimismMintableERC20Factory))),
+                abi.encode(standardValidator.optimismMintableERC20FactoryImpl())
+            );
+
+            // Also mock the version to match the expected version
+            vm.mockCall(
+                address(l1OptimismMintableERC20Factory),
+                abi.encodeCall(ISemver.version, ()),
+                abi.encode(ISemver(standardValidator.optimismMintableERC20FactoryImpl()).version())
+            );
         }
 
         // Deploy the BadDisputeGameFactoryReturner once.
