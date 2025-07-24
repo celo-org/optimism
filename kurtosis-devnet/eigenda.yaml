@@ -1,19 +1,19 @@
-# This devnet uses an eigenda-proxy to interact with the eigenda holesky testnet network.
+# This devnet uses an eigenda-proxy to interact with the eigenda sepolia testnet network.
 # As a requirement, you must first create and populate the eigenda-secrets.json file
 # 1. cp eigenda-secrets.example.json eigenda-secrets.json
 # 2. Populate the file with the required values
-# TODO: Connect this with an eigenda v1 kurtosis devnet instead of using our holesky testnet.
+# TODO: Connect this with an eigenda v1 kurtosis devnet instead of using our sepolia testnet.
 #       See https://github.com/Layr-Labs/avs-devnet/blob/main/examples/eigenda.yaml
 {{- $context := or . (dict)}}
 # TODO: I hate yaml templating... should really move to something more reasonable. CUE perhaps?
-# use proxy by default, otherwise connect with eigenda holesky backend
+# use proxy by default, otherwise connect with eigenda sepolia backend
 {{- $useProxyMemstore := dig "eigenda-proxy" "useMemstore" true $context }}
 {{- $proxyDispersalBackend := dig "eigenda-proxy" "dispersalBackend" "v1" $context }}
 {{- $eigendaV1SignerKey := dig "eigenda-proxy" "secrets" "eigenda.signer-private-key-hex" "" $context }}
 {{- $eigendaV2SignerKey := dig "eigenda-proxy" "secrets" "eigenda.v2.signer-payment-key-hex" "" $context }}
 {{- $eigendaBackendEthRpc := dig "eigenda-proxy" "secrets" "eigenda.eth_rpc" "" $context }}
 {{- if not $useProxyMemstore}}
-  # make sure the secrets are populated when using eigenda-holesky backend
+  # make sure the secrets are populated when using eigenda-sepolia backend
   {{- if or (eq $eigendaV1SignerKey "") (eq $eigendaV2SignerKey "") (eq $eigendaBackendEthRpc "") }}
     {{- fail "Missing required eigenda-proxy eigenda-backend secrets." }}
   {{- end }}
@@ -35,27 +35,31 @@ optimism_package:
     da_bond_size: 0
     da_resolver_refund_percentage: 0
   chains:
-    - participants:
-      - el_type: op-geth
-        # latest tag is currently broken until the next stable release, see https://github.com/ethereum-optimism/op-geth/pull/515
-        # Also see discussion in https://discord.com/channels/1244729134312198194/1260624141497798706/1342556343495692320
-        el_image: "us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:optimism"
-        el_log_level: ""
-        el_extra_env_vars: {}
-        el_extra_labels: {}
-        el_extra_params: []
-        cl_type: op-node
-        cl_image: {{ localDockerImage "op-node" }}
-        cl_log_level: "debug"
-        cl_extra_env_vars: {}
-        cl_extra_labels: {}
-        cl_extra_params: []
-        count: 1
+    op-kurtosis:
+      participants:
+        node0:
+          el:
+            type: op-geth
+            # latest tag is currently broken until the next stable release, see https://github.com/ethereum-optimism/op-geth/pull/515
+            # Also see discussion in https://discord.com/channels/1244729134312198194/1260624141497798706/1342556343495692320
+            image: "us-docker.pkg.dev/oplabs-tools-artifacts/images/op-geth:v1.101602.1-rc.1"
+            log_level: ""
+            extra_env_vars: {}
+            extra_labels: {}
+            extra_params: []
+          cl:
+            type: op-node
+            # pinned to op-node v1.13.7 until tests are compatible with v1.14.1+
+            # TODO(iquidus): Update devnet framework to support rollup.l1-chain-config
+            image: "us-docker.pkg.dev/oplabs-tools-artifacts/images/op-node:v1.13.7"
+            log_level: "debug"
+            extra_env_vars: {}
+            extra_labels: {}
+            extra_params: []
       network_params:
         network: "kurtosis"
         network_id: "2151908"
         seconds_per_slot: 2
-        name: "op-kurtosis"
         fjord_time_offset: 0
         granite_time_offset: 0
         holocene_time_offset: 0
@@ -82,40 +86,43 @@ optimism_package:
         extra_params: []
         game_type: 1
         proposal_interval: 10m
-      challenger_params:
-        # TODO: reenable once we start testing secure integrations
-        enabled: false
-        image: {{ localDockerImage "op-challenger" }}
-        cannon_prestate_path: ""
-        cannon_prestates_url: "http://fileserver/proofs/op-program/cannon"
-        extra_params: []
-      da_server_params:
-        image: ghcr.io/layr-labs/eigenda-proxy:v1.7.0
+      da_params:
+        enabled: true
+        image: ghcr.io/layr-labs/eigenda-proxy:2.4.0
         cmd:
           - --addr=0.0.0.0
           - --port=3100
           - --storage.backends-to-enable=V1,V2
           - --storage.dispersal-backend={{ $proxyDispersalBackend }} #v1 or v2
-          - --api-enabled=admin # to enable changing dispersal-backend to v2 without restarting
+          - --apis.enabled=admin,op-generic,op-keccak # admin to enable changing dispersal-backend to v2 without restarting
           - --eigenda.v2.max-blob-length=1MiB # makes startup faster by only loading 1MiB/2MiB of G1/G2 SRS points.
+          - --eigenda.v2.network=sepolia_testnet
         {{- if $useProxyMemstore }}
           - --memstore.enabled
           - --memstore.expiration=30m
-        {{- else }} # connect to eigenda holesky backend
+        {{- else }} # connect to eigenda sepolia backend
           # V1 flags
-          - --eigenda.disperser-rpc=disperser-holesky.eigenda.xyz:443
-          - --eigenda.svc-manager-addr=0xD4A7E1Bd8015057293f0D0A557088c286942e84b
+          - --eigenda.disperser-rpc=disperser-testnet-sepolia.eigenda.xyz:443
+          - --eigenda.svc-manager-addr=0x3a5acf46ba6890B8536420F4900AC9BC45Df4764
           # The two params below are loaded from the eigenda-secrets.json file
           - --eigenda.signer-private-key-hex={{ $eigendaV1SignerKey }}
           - --eigenda.eth-rpc={{ $eigendaBackendEthRpc }}
           # V2 flags
-          - --eigenda.v2.disperser-rpc=disperser-holesky.eigenda.xyz:443
-          - --eigenda.v2.cert-verifier-addr=0xFe52fE1940858DCb6e12153E2104aD0fDFbE1162
+          - --eigenda.v2.cert-verifier-router-or-immutable-verifier-addr=0x17ec4112c4BbD540E2c1fE0A49D264a280176F0D
+          - --eigenda.v2.disperser-rpc=disperser-testnet-sepolia.eigenda.xyz:443
           - --eigenda.v2.signer-payment-key-hex={{ $eigendaV2SignerKey }}
           - --eigenda.v2.eth-rpc={{ $eigendaBackendEthRpc }}
         {{- end }}
-      additional_services:
-        - da_server
+
+  challengers:
+    challenger:
+      # TODO: reenable once we start testing secure integrations
+      enabled: false
+      image: {{ localDockerImage "op-challenger" }}
+      participants: "*"
+      cannon_prestates_url: {{ localPrestate.URL }}
+      cannon_trace_types: ["cannon", "permissioned"]
+      extra_params: []
   global_log_level: "info"
   global_node_selectors: {}
   global_tolerations: []
@@ -126,6 +133,7 @@ ethereum_package:
       el_extra_params:
         - --graphql # needed to query for batcher-inbox txs to test failover working correctly
       cl_type: teku
+      cl_image: consensys/teku:25.7.1
   network_params:
     preset: minimal
     genesis_delay: 5
