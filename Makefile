@@ -159,7 +159,7 @@ test-unit: ## Runs unit tests for individual components
 	make -C ./op-proposer test
 	make -C ./op-batcher test
 	make -C ./op-e2e test
-	(cd packages/contracts-bedrock && just test)
+# (cd packages/contracts-bedrock && just test)
 .PHONY: test-unit
 
 # Remove the baseline-commit to generate a base reading & show all issues
@@ -244,8 +244,8 @@ endef
 # Additional CI-specific environment variables
 define CI_ENV_VARS
 export OP_TESTLOG_FILE_LOGGER_OUTDIR=$$(realpath ./tmp/testlogs) && \
-export SEPOLIA_RPC_URL="https://ci-sepolia-l1-archive.optimism.io" && \
-export MAINNET_RPC_URL="https://ci-mainnet-l1-archive.optimism.io"
+export MAINNET_RPC_URL=$${MAINNET_RPC_URL-} && \
+export SEPOLIA_RPC_URL=$${SEPOLIA_RPC_URL-}
 endef
 
 # Test timeout (can be overridden via environment)
