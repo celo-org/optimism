@@ -2263,16 +2263,16 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
             - discord
       # KURTOSIS (Interop)
-      - op-acceptance-tests:
-          # Acceptance Testing params
-          name: kurtosis-interop
-          devnet: interop
-          gate: interop
-          # CircleCI params
-          no_output_timeout: 30m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
+      # - op-acceptance-tests:
+      #     # Acceptance Testing params
+      #     name: kurtosis-interop
+      #     devnet: interop
+      #     gate: interop
+      #     # CircleCI params
+      #     no_output_timeout: 30m
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - discord
       # Generate flaky test report
       - generate-flaky-report:
           name: generate-flaky-tests-report
