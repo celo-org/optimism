@@ -83,6 +83,24 @@ var excludeSourceContracts = []string{
 
 	// FIXME
 	"WETH", "MIPS64",
+
+	// Celo
+	"AbstractFeeCurrency",
+	"CalledByVm",
+	"CeloRegistry",
+	"FeeCurrency",
+	"FeeCurrencyDirectory",
+	"FeeHandler",
+	"FeeHandlerSeller",
+	"Freezable",
+	"GoldToken",
+	"Initializable",
+	"MentoFeeHandlerSeller",
+	"MockSortedOracles",
+	"SortedOracles",
+	"StableTokenV2",
+	"UniswapFeeHandlerSeller",
+	"UsingRegistry",
 }
 
 type ContractDefinition struct {
