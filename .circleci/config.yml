@@ -178,6 +178,25 @@ commands:
     steps:
       - run:
           command: "true" # No notifications setup up for celo-org fork
+      - slack/notify:
+          channel: << parameters.channel >>
+          event: fail
+          template: basic_fail_1
+          branch_pattern: develop
+          mentions: "<< parameters.mentions >>"
+
+  discord-notification-failures-on-develop:
+    description: "Notify Discord"
+    parameters:
+      message:
+        type: string
+        default: ""
+      mentions:
+        type: string
+        default: ""
+    steps:
+      - run:
+          command: "true" # No notifications setup up for celo-org fork
       - run:
           name: "Notify Discord"
           command: |
@@ -735,7 +754,7 @@ jobs:
     circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: xlarge
     parameters:
       test_flags:
         description: Additional flags to pass to the test command
@@ -1838,9 +1857,11 @@ workflows:
             - go-lint
             - check-generated-mocks-op-node
             - check-generated-mocks-op-service
-            - op-program-compat
+            # TODO(#15353) - Need to regenerate data used in op-program-compat
+            #   See: https://github.com/ethereum-optimism/chain-test-data?tab=readme-ov-file#generating-new-data
+            # - op-program-compat # Temporarily disable this requirement
             # Not needed for the devnet but we want to make sure they build successfully
-            - go-tests
+            - go-tests-short
             - sanitize-op-program
           context:
             - circleci-repo-readonly-authenticated-github-tokens
