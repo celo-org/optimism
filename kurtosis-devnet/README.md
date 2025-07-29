@@ -6,6 +6,25 @@ Running a Kurtosis Devnet has the following prerequisites:
 
 Docker Desktop may be substituted by an alternative like Orbstack if you have that installed.
 
+# Celo-specific Guideliness
+
+To run devnet use:
+```sh
+just celo-isthmus-devnet
+```
+
+> Note: above command uses op-contracts & op-geth at particular branches checked out in Justfile
+
+To correctly connect Celo Monorepo to EL client (op-geth) start port forwarding:
+```sh
+./forward-l2-port.py
+```
+
+To display logs for EL client run:
+```sh
+just celo-el-logs
+```
+
 # Running A Devnet
 
 To see available devnets, consult the `justfile` to see what `.*-devnet` targets exist, currently
