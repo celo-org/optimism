@@ -14,6 +14,7 @@ library CeloPredeploys {
     address internal constant FEE_CURRENCY = 0x4200000000000000000000000000000000001022;
     address internal constant FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
     address internal constant cUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
+    address internal constant TREASURY = 0xB76D502Ad168F9D545661ea628179878DcA92FD5;
 
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {
@@ -29,6 +30,7 @@ library CeloPredeploys {
         if (_addr == FEE_CURRENCY) return "FeeCurrency";
         if (_addr == FEE_CURRENCY_DIRECTORY) return "FeeCurrencyDirectory";
         if (_addr == cUSD) return "cUSD";
+        if (_addr == TREASURY) return "TREASURY";
 
         revert("Predeploys: unnamed predeploy");
     }
