@@ -153,6 +153,7 @@ contract L2Genesis is Deployer {
     /// @notice Sets up the script and ensures the deployer account is used to make calls.
     function setUp() public override {
         deployer = makeAddr("deployer");
+        vm.allowCheatcodes(deployer);
         _celoL2Outfile = celoL2Outfile();
 
         super.setUp();
