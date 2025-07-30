@@ -153,7 +153,6 @@ contract L2Genesis is Deployer {
     /// @notice Sets up the script and ensures the deployer account is used to make calls.
     function setUp() public override {
         deployer = makeAddr("deployer");
-        vm.allowCheatcodes(deployer);
         _celoL2Outfile = celoL2Outfile();
 
         super.setUp();
@@ -629,6 +628,7 @@ contract L2Genesis is Deployer {
     /// @notice Sets all the preinstalls.
     function setPreinstalls() public {
         address tmpSetPreinstalls = address(uint160(uint256(keccak256("SetPreinstalls"))));
+        vm.allowCheatcodes(tmpSetPreinstalls);
         vm.etch(tmpSetPreinstalls, vm.getDeployedCode("SetPreinstalls.s.sol:SetPreinstalls"));
         SetPreinstalls(tmpSetPreinstalls).setPreinstalls();
         vm.etch(tmpSetPreinstalls, "");
