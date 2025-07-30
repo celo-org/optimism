@@ -204,6 +204,15 @@ contract L2Genesis is Deployer {
         runWithOptions(OutputMode.NONE, LATEST_FORK, _l1Dependencies);
     }
 
+    /// @notice This is used by Celo CLI to run e2e tests.
+    function runCeloDevnet() public {
+        runWithOptions(OutputMode.ALL, LATEST_FORK, L1Dependencies({
+            l1CrossDomainMessengerProxy: payable(address(0)),
+            l1StandardBridgeProxy: payable(address(0)),
+            l1ERC721BridgeProxy: payable(address(0))
+        }));
+    }
+
     /// @notice Build the L2 genesis.
     function runWithOptions(OutputMode _mode, Fork _fork, L1Dependencies memory _l1Dependencies) public {
         console.log("L2Genesis: outputMode: %s, fork: %s", _mode.toString(), _fork.toString());
