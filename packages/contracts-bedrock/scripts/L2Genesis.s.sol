@@ -55,8 +55,6 @@ interface IInitializable {
     function initialize(address _addr) external;
 }
 
-
-
 struct L1Dependencies {
     address payable l1CrossDomainMessengerProxy;
     address payable l1StandardBridgeProxy;
@@ -152,7 +150,7 @@ contract L2Genesis is Deployer {
 
     /// @notice Sets up the script and ensures the deployer account is used to make calls.
     function setUp() public override {
-        deployer = makeAddr("deployer");
+        deployer = defaultOwner;
         _celoL2Outfile = celoL2Outfile();
 
         super.setUp();
@@ -710,19 +708,14 @@ contract L2Genesis is Deployer {
 
     /// @notice Sets up a proxy for the given impl address
     function _setupProxy(address addr, address impl) internal returns (address) {
-        // bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
         bytes memory code = vm.getDeployedCode("CeloProxy.sol:CeloProxy");
         vm.etch(addr, code);
 
         console.log("Owner of Celo proxy is:", ICeloProxy(addr)._getOwner());
-        vm.startPrank(ICeloProxy(addr)._getOwner());
-        ICeloProxy(addr)._transferOwnership(defaultOwner);
+        vm.store(addr, bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1), bytes32(uint256(uint160(defaultOwner))));
+        console.log("Owner of Celo proxy is:", ICeloProxy(addr)._getOwner());
 
-        vm.stopPrank();
-        // EIP1967Helper.setAdmin(addr, Predeploys.PROXY_ADMIN);
-
-        console.log("Setting proxy %s with implementation: %s", addr, impl);
-
+        console.log("Setting proxy: ", addr);
         return addr;
     }
 
@@ -737,7 +730,7 @@ contract L2Genesis is Deployer {
 
         address precompile = CeloPredeploys.CELO_REGISTRY;
 
-        string memory cname = CeloPredeploys.getName(precompile);
+        // string memory cname = CeloPredeploys.getName(precompile);
         // console.log("Deploying %s implementation at: %s", cname, address(contract_));
 
         // vm.resetNonce(address(contract_));
