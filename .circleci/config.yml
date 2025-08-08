@@ -1702,30 +1702,6 @@ jobs:
             ./devnet-sdk/scripts/metrics-collect-authorship.sh op-acceptance-tests/tests > .metrics--authorship--op-acceptance-tests
             echo "Wrote file .metrics--authorship--op-acceptance-tests"
       - gcp-cli/install
-      - run:
-          name: Debug GCP
-          command: |
-            # 1) OIDCトークンが来ているか確認（中身は出さない）
-            echo -n "CIRCLE_OIDC_TOKEN set? "; [ -n "$CIRCLE_OIDC_TOKEN" ] && echo yes || echo no
-            echo -n "CIRCLE_OIDC_TOKEN_V2 set? "; [ -n "$CIRCLE_OIDC_TOKEN_V2" ] && echo yes || echo no
-
-            # 2) 使うトークンを決定（V2優先）
-            OIDC_TOKEN="${CIRCLE_OIDC_TOKEN_V2:-$CIRCLE_OIDC_TOKEN}"
-            if [ -z "$OIDC_TOKEN" ]; then
-              echo "ERROR: OIDC token is empty. Is this a fork PR? Or OIDC/secrets from forks disabled?"
-              exit 1
-            fi
-
-            # 3) 形式チェック（JWTっぽいかだけ）
-            echo "$OIDC_TOKEN" | awk -F. '{print $1}' | base64 -d 2>/dev/null | head -c 200 || true
-            echo
-            echo "(printed JWT header preview above)"
-
-            # 4) 変数チェック
-            echo "GCP_PROJECT_ID=$GCP_PROJECT_ID"
-            echo "GCP_WIP_ID=$GCP_WIP_ID"
-            echo "GCP_WIP_PROVIDER_ID=$GCP_WIP_PROVIDER_ID"
-            echo "GCP_SERVICE_ACCOUNT_EMAIL=$GCP_SERVICE_ACCOUNT_EMAIL"
       - gcp-oidc-authenticate:
           gcp_cred_config_file_path: /tmp/gcp_cred_config.json
           oidc_token_file_path: /tmp/oidc_token.json
