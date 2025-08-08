@@ -71,6 +71,10 @@ func (tc *hardforkScheduledTest) fork(fork string) **hexutil.Uint64 {
 }
 
 func TestCrossLayerUser_Default(t *testing.T) {
+	// NOTE: This test is flaky. It was later skipped upstream as well,
+	// so we skip it here to stay consistent.
+	// Ref: https://github.com/ethereum-optimism/optimism/pull/16855
+	t.Skip("flaky; skipped to match upstream")
 	testCrossLayerUser(t, config.DefaultAllocType)
 }
 
