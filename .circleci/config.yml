@@ -751,7 +751,7 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-coverage:
-    circleci_ip_ranges: true
+    circleci_ip_ranges: false
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: celo-org/2xlarge
