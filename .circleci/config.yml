@@ -1712,7 +1712,7 @@ jobs:
             FOLDER_NAME="dt=$CURRENT_DATE"
 
             # Upload to the date-partitioned folder structure
-            gsutil cp .metrics--authorship--op-acceptance-tests gs://oplabs-tools-data-public-metrics/metrics-authorship/$FOLDER_NAME/metrics-$CIRCLE_SHA1.csv
+            gsutil cp .metrics--authorship--op-acceptance-tests gs://optimism-devnet-metrics-collect-authorship/metrics-authorship/$FOLDER_NAME/metrics-$CIRCLE_SHA1.csv
 
   generate-flaky-report:
     machine: true
