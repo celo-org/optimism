@@ -172,6 +172,13 @@ contract Deploy is Deployer {
         );
         vm.stopPrank();
 
+        if (cfg.useCustomGasToken()) {
+            // Reset the systemconfig then reinitialize it with the custom gas token
+            // resetInitializedProxy("SystemConfig");
+            // initializeSystemConfig();
+            require(false, "Deploy: Custom gas token not supported in this script. Please use the deploy script with the custom gas token flag.");
+        }
+
         if (cfg.useAltDA()) {
             bytes32 typeHash = keccak256(bytes(cfg.daCommitmentType()));
             bytes32 keccakHash = keccak256(bytes("KeccakCommitment"));

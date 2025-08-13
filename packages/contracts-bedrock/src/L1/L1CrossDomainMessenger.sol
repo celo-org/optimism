@@ -8,6 +8,7 @@ import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
+import { Constants } from "src/libraries/Constants.sol";
 
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
@@ -79,6 +80,13 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ProxyAdminOwnedBase, Re
     /// @return ISuperchainConfig The SuperchainConfig contract.
     function superchainConfig() public view returns (ISuperchainConfig) {
         return systemConfig.superchainConfig();
+    }
+
+    /// @inheritdoc CrossDomainMessenger
+    /// @dev This is added to maintain compatibility with the CrossDomainMessenger abstract contract and should always
+    /// return the ether address and 18 decimals.
+    function gasPayingToken() internal pure override returns (address addr_, uint8 decimals_) {
+        return (Constants.ETHER, 18);
     }
 
     /// @notice Getter function for the OptimismPortal contract on this chain.
