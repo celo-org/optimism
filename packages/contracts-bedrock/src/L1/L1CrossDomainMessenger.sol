@@ -31,17 +31,12 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ProxyAdminOwnedBase, Re
     /// @custom:network-specific
     IOptimismPortal public portal;
 
-    /// @custom:legacy
-    /// @custom:spacer systemConfig
-    /// @notice Spacer taking up the legacy `systemConfig` slot.
-    address private spacer_253_0_20;
+    /// @notice Address of the SystemConfig contract.
+    ISystemConfig public systemConfig;
 
     /// @notice Semantic version.
     /// @custom:semver 2.9.0
     string public constant version = "2.9.0";
-
-    /// @notice Contract of the SystemConfig.
-    ISystemConfig public systemConfig;
 
     /// @notice Constructs the L1CrossDomainMessenger contract.
     constructor() ReinitializableBase(2) {
@@ -58,6 +53,7 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ProxyAdminOwnedBase, Re
         // Now perform initialization logic.
         systemConfig = _systemConfig;
         portal = _portal;
+        systemConfig = _systemConfig;
         __CrossDomainMessenger_init({ _otherMessenger: CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER) });
     }
 

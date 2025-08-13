@@ -15,6 +15,7 @@ import { ISemver } from "interfaces/universal/ISemver.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 
 /// @custom:proxied true
 /// @title L1StandardBridge
@@ -85,11 +86,6 @@ contract L1StandardBridge is StandardBridge, ProxyAdminOwnedBase, Reinitializabl
     /// @custom:spacer superchainConfig
     /// @notice Spacer taking up the legacy `superchainConfig` slot.
     address private spacer_50_0_20;
-
-    /// @custom:legacy
-    /// @custom:spacer systemConfig
-    /// @notice Spacer taking up the legacy `systemConfig` slot.
-    address private spacer_51_0_20;
 
     /// @notice Address of the SystemConfig contract.
     ISystemConfig public systemConfig;

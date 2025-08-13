@@ -240,6 +240,11 @@
         "internalType": "contract IOptimismPortal2",
         "name": "_portal",
         "type": "address"
+      },
+      {
+        "internalType": "contract ISystemConfig",
+        "name": "_systemConfig",
+        "type": "address"
       }
     ],
     "name": "initialize",
