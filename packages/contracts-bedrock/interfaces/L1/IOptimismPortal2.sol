@@ -13,6 +13,10 @@ import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 
 interface IOptimismPortal2 is IProxyAdminOwnedBase {
     error OptimismPortal_Unauthorized();
+    error AlreadyFinalized();
+    error BadTarget();
+    error Blacklisted();
+    error CallPaused();
     error ContentLengthMismatch();
     error EmptyItem();
     error InvalidDataRemainder();
@@ -38,11 +42,25 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
     error OptimismPortal_InvalidOutputRootChainId();
     error OptimismPortal_WrongProofMethod();
     error OptimismPortal_MigratingToSameRegistry();
+    error OptimismPortal_OnlyCustomGasToken();
+    error OptimismPortal_TransferFailed();
+    error OptimismPortal_NoValue();
     error Encoding_EmptySuperRoot();
     error Encoding_InvalidSuperRootVersion();
     error OutOfGas();
+    error InvalidMerkleProof();
+    error InvalidProof();
+    error LargeCalldata();
+    error TransferFailed();
+    error NoValue();
+    error NonReentrant();
+    error OnlyCustomGasToken();
+    error ProposalNotValidated();
+    error SmallGasLimit();
+    error Unauthorized();
     error UnexpectedList();
     error UnexpectedString();
+    error OptimismPortal_CustomGasTokenNotSupported();
 
     event Initialized(uint8 version);
     event TransactionDeposited(address indexed from, address indexed to, uint256 indexed version, bytes opaqueData);
@@ -56,7 +74,18 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
 
     function anchorStateRegistry() external view returns (IAnchorStateRegistry);
     function ethLockbox() external view returns (IETHLockbox);
+    function balance() external view returns (uint256);
+    function blacklistDisputeGame(IDisputeGame _disputeGame) external;
     function checkWithdrawal(bytes32 _withdrawalHash, address _proofSubmitter) external view;
+    function depositERC20Transaction(
+        address _to,
+        uint256 _mint,
+        uint256 _value,
+        uint64 _gasLimit,
+        bool _isCreation,
+        bytes memory _data
+    )
+        external;
     function depositTransaction(
         address _to,
         uint256 _value,
@@ -70,7 +99,6 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
     function disputeGameFactory() external view returns (IDisputeGameFactory);
     function disputeGameFinalityDelaySeconds() external view returns (uint256);
     function donateETH() external payable;
-    function superchainConfig() external view returns (ISuperchainConfig);
     function migrateToSuperRoots(IETHLockbox _newLockbox, IAnchorStateRegistry _newAnchorStateRegistry) external;
     function finalizeWithdrawalTransaction(Types.WithdrawalTransaction memory _tx) external;
     function finalizeWithdrawalTransactionExternalProof(
@@ -120,6 +148,9 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
     function respectedGameType() external view returns (GameType);
     function respectedGameTypeUpdatedAt() external view returns (uint64);
     function superRootsActive() external view returns (bool);
+    function setGasPayingToken(address _token, uint8 _decimals, bytes32 _name, bytes32 _symbol) external;
+    function setRespectedGameType(GameType _gameType) external;
+    function superchainConfig() external view returns (ISuperchainConfig);
     function systemConfig() external view returns (ISystemConfig);
     function upgrade(IAnchorStateRegistry _anchorStateRegistry, IETHLockbox _ethLockbox) external;
     function version() external pure returns (string memory);

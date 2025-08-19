@@ -8,7 +8,6 @@ import { StandardBridge } from "src/universal/StandardBridge.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
-import { Constants } from "src/libraries/Constants.sol";
 
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
@@ -143,10 +142,8 @@ contract L1StandardBridge is StandardBridge, ProxyAdminOwnedBase, Reinitializabl
     }
 
     /// @inheritdoc StandardBridge
-    /// @dev This is added to maintain compatibility with the CrossDomainMessenger abstract contract and should always
-    /// return the ether address and 18 decimals.
-    function gasPayingToken() internal pure override returns (address addr_, uint8 decimals_) {
-        return (Constants.ETHER, 18);
+    function gasPayingToken() internal view override returns (address addr_, uint8 decimals_) {
+        (addr_, decimals_) = systemConfig.gasPayingToken();
     }
 
     /// @custom:legacy

@@ -54,6 +54,44 @@
       },
       {
         "internalType": "uint256",
+        "name": "_mint",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "_value",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint64",
+        "name": "_gasLimit",
+        "type": "uint64"
+      },
+      {
+        "internalType": "bool",
+        "name": "_isCreation",
+        "type": "bool"
+      },
+      {
+        "internalType": "bytes",
+        "name": "_data",
+        "type": "bytes"
+      }
+    ],
+    "name": "depositERC20Transaction",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "_to",
+        "type": "address"
+      },
+      {
+        "internalType": "uint256",
         "name": "_value",
         "type": "uint256"
       },
@@ -973,6 +1011,11 @@
   },
   {
     "inputs": [],
+    "name": "CustomGasTokenNotSupported",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "EmptyItem",
     "type": "error"
   },
@@ -1099,6 +1142,11 @@
   {
     "inputs": [],
     "name": "OptimismPortal_WrongProofMethod",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OnlyCustomGasToken",
     "type": "error"
   },
   {

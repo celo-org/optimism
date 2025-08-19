@@ -21,6 +21,8 @@ import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol"
 import { ProtocolVersion } from "interfaces/L1/IProtocolVersions.sol";
 import { IOptimismPortal2 } from "interfaces/L1/IOptimismPortal2.sol";
 
+import { Constants } from "src/libraries/Constants.sol";
+
 /// @title Initializer_Test
 /// @dev Ensures that the `initialize()` function on contracts cannot be called more than
 ///      once. This contract inherits from `ERC721Bridge_Initializer` because it is the
@@ -163,7 +165,8 @@ contract Initializer_Test is CommonTest {
                             l1ERC721Bridge: address(0),
                             l1StandardBridge: address(0),
                             optimismPortal: address(0),
-                            optimismMintableERC20Factory: address(0)
+                            optimismMintableERC20Factory: address(0),
+                            gasPayingToken: Constants.ETHER
                         }),
                         0,
                         ISuperchainConfig(address(0))
@@ -199,7 +202,8 @@ contract Initializer_Test is CommonTest {
                             l1ERC721Bridge: address(0),
                             l1StandardBridge: address(0),
                             optimismPortal: address(0),
-                            optimismMintableERC20Factory: address(0)
+                            optimismMintableERC20Factory: address(0),
+                            gasPayingToken: Constants.ETHER
                         }),
                         0,
                         ISuperchainConfig(address(0))

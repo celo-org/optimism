@@ -280,6 +280,12 @@ contract Specification_Test is CommonTest {
         // ProxyAdminOwnedBase
         _addSpec({ _name: "ProxyAdminOwnedBase", _sel: _getSel("proxyAdminOwner()") });
         _addSpec({ _name: "ProxyAdminOwnedBase", _sel: _getSel("proxyAdmin()") });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("balance()") });
+        _addSpec({
+            _name: "OptimismPortal2",
+            _sel: _getSel("depositERC20Transaction(address,uint256,uint256,uint64,bool,bytes)")
+        });
+        _addSpec({ _name: "OptimismPortal2", _sel: _getSel("setGasPayingToken(address,uint8,bytes32,bytes32)") });
 
         // ProtocolVersions
         _addSpec({ _name: "ProtocolVersions", _sel: _getSel("RECOMMENDED_SLOT()") });
@@ -391,6 +397,10 @@ contract Specification_Test is CommonTest {
         _addSpec({ _name: "SystemConfig", _sel: _getSel("OPTIMISM_PORTAL_SLOT()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("OPTIMISM_MINTABLE_ERC20_FACTORY_SLOT()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("BATCH_INBOX_SLOT()") });
+        _addSpec({ _name: "SystemConfig", _sel: _getSel("gasPayingToken()") });
+        _addSpec({ _name: "SystemConfig", _sel: _getSel("gasPayingTokenName()") });
+        _addSpec({ _name: "SystemConfig", _sel: _getSel("gasPayingTokenSymbol()") });
+        _addSpec({ _name: "SystemConfig", _sel: _getSel("isCustomGasToken()") });
         _addSpec({ _name: "SystemConfig", _sel: _getSel("disputeGameFactory()") });
         _addSpec({
             _name: "SystemConfig",
