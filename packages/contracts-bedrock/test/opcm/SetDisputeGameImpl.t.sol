@@ -15,6 +15,7 @@ import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.sol";
 import { IResourceMetering } from "interfaces/L1/IResourceMetering.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { Constants } from "src/libraries/Constants.sol";
 
 contract SetDisputeGameImplInput_Test is Test {
     SetDisputeGameImplInput input;
@@ -193,7 +194,7 @@ contract SetDisputeGameImpl_Test is Test {
                     l1StandardBridge: address(5),
                     optimismPortal: address(6),
                     optimismMintableERC20Factory: address(7),
-                    gasPayingToken: address(8)
+                    gasPayingToken: Constants.ETHER
                 }),
                 10,
                 ISuperchainConfig(address(supConfigProxy))
