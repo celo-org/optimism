@@ -36,6 +36,12 @@ import { IMIPS } from "interfaces/cannon/IMIPS.sol";
 import { IPreimageOracle } from "interfaces/cannon/IPreimageOracle.sol";
 import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
 
+import { StorageSlot, ForgeArtifacts } from "scripts/libraries/ForgeArtifacts.sol";
+
+import { Constants } from "src/libraries/Constants.sol";
+
+import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+
 /// @title Deploy
 /// @notice Script used to deploy a bedrock system. The entire system is deployed within the `run` function.
 ///         To add a new contract to the system, add a public function that deploys that individual contract.
@@ -160,7 +166,7 @@ contract Deploy is Deployer {
             deploySuperchain();
         }
 
-        deployImplementations({ _isInterop: cfg.useInterop() });
+        Types.ContractSet memory deployImplementations = deployImplementations({ _isInterop: cfg.useInterop() });
 
         // Deploy Current OPChain Contracts
         deployOpChain();
@@ -174,9 +180,9 @@ contract Deploy is Deployer {
 
         if (cfg.useCustomGasToken()) {
             // Reset the systemconfig then reinitialize it with the custom gas token
-            // resetInitializedProxy("SystemConfig");
-            // initializeSystemConfig();
-            require(false, "Deploy: Custom gas token not supported in this script. Please use the deploy script with the custom gas token flag.");
+            resetInitializedProxy("SystemConfig");
+            initializeSystemConfig(deployImplementations.SystemConfig);
+            // require(false, "Deploy: Custom gas token not supported in this script. Please use the deploy script with the custom gas token flag.");
         }
 
         if (cfg.useAltDA()) {
@@ -254,7 +260,7 @@ contract Deploy is Deployer {
 
     /// @notice Deploy all of the implementations
     /// @param _isInterop Whether to use interop
-    function deployImplementations(bool _isInterop) public {
+    function deployImplementations(bool _isInterop) public returns (Types.ContractSet memory) {
         require(_isInterop == cfg.useInterop(), "Deploy: Interop setting mismatch.");
 
         console.log("Deploying implementations");
@@ -325,6 +331,8 @@ contract Deploy is Deployer {
             _superchainProxyAdmin: superchainProxyAdmin
         });
         ChainAssertions.checkSystemConfig({ _contracts: impls, _cfg: cfg, _isProxy: false });
+
+        return impls;
     }
 
     /// @notice Deploy all of the OP Chain specific contracts
@@ -435,5 +443,71 @@ contract Deploy is Deployer {
             disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
             disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration()))
         });
+    }
+
+     /// @notice Reset the initialized value on a proxy contract so that it can be initialized again
+    function resetInitializedProxy(string memory _contractName) internal {
+        console.log("resetting initialized value on %s Proxy", _contractName);
+        address proxy = artifacts.mustGetAddress(string.concat(_contractName, "Proxy"));
+        StorageSlot memory slot = ForgeArtifacts.getInitializedSlot(_contractName);
+        bytes32 slotVal = vm.load(proxy, bytes32(slot.slot));
+        uint256 value = uint256(slotVal);
+        value = value & ~(0xFF << (slot.offset * 8));
+        slotVal = bytes32(value);
+        vm.store(proxy, bytes32(slot.slot), slotVal);
+    }
+
+     /// @notice Initialize the SystemConfig
+    function initializeSystemConfig(address systemConfig) public {
+        console.log("Upgrading and initializing SystemConfig proxy");
+        address systemConfigProxy = artifacts.mustGetAddress("SystemConfigProxy");
+
+        bytes32 batcherHash = bytes32(uint256(uint160(cfg.batchSenderAddress())));
+
+        address customGasTokenAddress = Constants.ETHER;
+        if (cfg.useCustomGasToken()) {
+            customGasTokenAddress = cfg.customGasTokenAddress();
+        }
+
+        console.log("customGasTokenAddress", customGasTokenAddress);
+
+        IProxyAdmin proxyAdmin = IProxyAdmin(payable(artifacts.mustGetAddress("ProxyAdmin")));
+        vm.startBroadcast(proxyAdmin.owner());
+
+        proxyAdmin.upgradeAndCall({
+            _proxy: payable(systemConfigProxy),
+            _implementation: systemConfig,
+            _data: abi.encodeCall(
+                ISystemConfig.initialize,
+                (
+                    cfg.finalSystemOwner(),
+                    cfg.basefeeScalar(),
+                    cfg.blobbasefeeScalar(),
+                    batcherHash,
+                    uint64(cfg.l2GenesisBlockGasLimit()),
+                    cfg.p2pSequencerAddress(),
+                    Constants.DEFAULT_RESOURCE_CONFIG(),
+                    cfg.batchInboxAddress(),
+                    ISystemConfig.Addresses({
+                        l1CrossDomainMessenger: artifacts.mustGetAddress("L1CrossDomainMessengerProxy"),
+                        l1ERC721Bridge: artifacts.mustGetAddress("L1ERC721BridgeProxy"),
+                        l1StandardBridge: artifacts.mustGetAddress("L1StandardBridgeProxy"),
+                        optimismPortal: artifacts.mustGetAddress("OptimismPortalProxy"),
+                        optimismMintableERC20Factory: artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy"),
+                        gasPayingToken: customGasTokenAddress
+                    }),
+                    1234,
+                    ISuperchainConfig(artifacts.getAddress("SuperchainConfigProxy"))
+                )
+            )
+        });
+
+        vm.stopBroadcast();
+
+        ISystemConfig config = ISystemConfig(systemConfigProxy);
+        string memory version = config.version();
+        console.log("SystemConfig version: %s", version);
+
+        ChainAssertions.checkSystemConfig({ _contracts: _proxies(), _cfg: cfg, _isProxy: true });
     }
 }

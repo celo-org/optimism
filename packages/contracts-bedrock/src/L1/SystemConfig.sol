@@ -21,9 +21,6 @@ import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-/// @dev This is temporary. Error thrown when a chain uses a custom gas token.
-error CustomGasTokenNotSupported();
-
 /// @custom:proxied true
 /// @title SystemConfig
 /// @notice The SystemConfig contract is used to manage configuration of an Optimism network.
@@ -356,9 +353,6 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
     /// @param _token Address of the gas paying token.
     function _setGasPayingToken(address _token) internal virtual {
         if (_token != address(0) && _token != Constants.ETHER && !isCustomGasToken()) {
-            // Temporary revert till we support custom gas tokens
-            if (true) revert CustomGasTokenNotSupported();
-
             require(
                 ERC20(_token).decimals() == GAS_PAYING_TOKEN_DECIMALS, "SystemConfig: bad decimals of gas paying token"
             );

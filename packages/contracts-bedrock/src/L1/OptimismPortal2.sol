@@ -247,9 +247,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
     /// @notice Error for when a withdrawal transfer fails.
     error OptimismPortal_TransferFailed();
 
-    /// @notice Error for when a custom gas token is not supported.
-    error OptimismPortal_CustomGasTokenNotSupported();
-
     /// @notice Error for when a value is not provided.
     error OptimismPortal_NoValue();
 
@@ -320,9 +317,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
         if (token == Constants.ETHER) {
             return address(this).balance;
         } else {
-            // Temporary revert till we support custom gas tokens
-            if (true) revert OptimismPortal_CustomGasTokenNotSupported();
-
             return _balance;
         }
     }
@@ -711,9 +705,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
             //      to accomplish this, `callWithMinGas` will revert.
             success = SafeCall.callWithMinGas(_tx.target, _tx.gasLimit, _tx.value, _tx.data);
         } else {
-            // Temporary revert till we support custom gas tokens
-            if (true) revert OptimismPortal_CustomGasTokenNotSupported();
-
             // Cannot call the token contract directly from the portal. This would allow an attacker
             // to call approve from a withdrawal and drain the balance of the portal.
             if (_tx.target == token) revert OptimismPortal_BadTarget();
@@ -828,9 +819,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
         public
         metered(_gasLimit)
     {
-        // Temporary revert till we support custom gas tokens
-        if (true) revert OptimismPortal_CustomGasTokenNotSupported();
-
         // Can only be called if an ERC20 token is used for gas paying on L2
         (address token,) = gasPayingToken();
         if (token == Constants.ETHER) revert OptimismPortal_OnlyCustomGasToken();
@@ -882,9 +870,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
         metered(_gasLimit)
     {
         (address token,) = gasPayingToken();
-
-        // Temporary revert till we support custom gas tokens
-        if (token != Constants.ETHER) revert OptimismPortal_CustomGasTokenNotSupported();
 
         if (token != Constants.ETHER && msg.value != 0) revert OptimismPortal_NoValue();
 
@@ -957,9 +942,6 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
     /// @notice Sets the gas paying token for the L2 system. This token is used as the
     ///         L2 native asset. Only the SystemConfig contract can call this function.
     function setGasPayingToken(address _token, uint8 _decimals, bytes32 _name, bytes32 _symbol) external {
-        // Temporary revert till we support custom gas tokens
-        if (true) revert OptimismPortal_CustomGasTokenNotSupported();
-
         if (msg.sender != address(systemConfig)) revert OptimismPortal_Unauthorized();
 
         // Set L2 deposit gas as used without paying burning gas. Ensures that deposits cannot use too much L2 gas.

@@ -60,7 +60,6 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
     error Unauthorized();
     error UnexpectedList();
     error UnexpectedString();
-    error OptimismPortal_CustomGasTokenNotSupported();
 
     event Initialized(uint8 version);
     event TransactionDeposited(address indexed from, address indexed to, uint256 indexed version, bytes opaqueData);
