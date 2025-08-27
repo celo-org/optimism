@@ -115,7 +115,7 @@ library Predeploys {
     address internal constant CELO_REGISTRY = 0x000000000000000000000000000000000000ce10;
 
     /// @notice Address of the FeeCurrencyDirectory predeploy.
-    address internal constant CELO_FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
+    address internal constant CELO_FEE_CURRENCY_DIRECTORY = 0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276;
 
     /// @notice Address of the CeloToken predeploy.
     address internal constant CELO_TOKEN = 0x471EcE3750Da237f93B8E339c536989b8978a438;
