@@ -33,7 +33,7 @@ jobs:
       - name: Run the update-geth script
         id: geth-update-script
         run: |
-          GETH_COMMIT=$(git ls-remote https://github.com/celo-org/op-geth/ "$OP_GETH_BASE_BRANCH" | awk '{print $1}')
+          GETH_COMMIT=$(git ls-remote https://github.com/celo-org/op-geth/ "refs/heads/$OP_GETH_BASE_BRANCH" | awk '{print $1}')
           if [ -z "$GETH_COMMIT" ]; then
             echo "Could not find branch '$OP_GETH_BASE_BRANCH' in 'celo-org/op-geth'" >&2
             exit 1
