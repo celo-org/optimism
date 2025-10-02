@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/stretchr/testify/require"
@@ -76,7 +77,7 @@ func newMiniL2BlockWithNumberParentAndL1Information(numTx int, l2Number *big.Int
 		Number:     big.NewInt(l1Number),
 		Time:       blockTime,
 	}, nil, nil, trie.NewStackTrie(nil), types.DefaultBlockConfig)
-	l1InfoTx, err := derive.L1InfoDeposit(defaultTestRollupConfig, eth.SystemConfig{}, 0, eth.BlockToInfo(l1Block), blockTime)
+	l1InfoTx, err := derive.L1InfoDeposit(defaultTestRollupConfig, params.MergedTestChainConfig, eth.SystemConfig{}, 0, eth.BlockToInfo(l1Block), blockTime)
 	if err != nil {
 		panic(err)
 	}

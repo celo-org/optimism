@@ -82,10 +82,11 @@ func setupTwoChains(opts ...func(*chainSetupOpts)) (*staticConfigSource, *eth.Su
 		})
 	}
 	configSource := &staticConfigSource{
-		rollupCfgs:   []*rollup.Config{&rollupCfg1, &rollupCfg2},
-		chainConfigs: []*params.ChainConfig{&chainCfg1, &chainCfg2},
-		depset:       ds,
-		chainIDs:     []eth.ChainID{eth.ChainIDFromBig(rollupCfg1.L2ChainID), eth.ChainIDFromBig(rollupCfg2.L2ChainID)},
+		rollupCfgs:    []*rollup.Config{&rollupCfg1, &rollupCfg2},
+		chainConfigs:  []*params.ChainConfig{&chainCfg1, &chainCfg2},
+		l1ChainConfig: params.SepoliaChainConfig,
+		depset:        ds,
+		chainIDs:      []eth.ChainID{eth.ChainIDFromBig(rollupCfg1.L2ChainID), eth.ChainIDFromBig(rollupCfg2.L2ChainID)},
 	}
 	tasksStub := &stubTasks{
 		l2SafeHead: eth.L2BlockRef{Number: 918429823450218}, // Past the claimed block
@@ -774,6 +775,7 @@ var _ taskExecutor = (*stubTasks)(nil)
 func (t *stubTasks) RunDerivation(
 	_ log.Logger,
 	_ *rollup.Config,
+	_ *params.ChainConfig,
 	_ depset.DependencySet,
 	_ *params.ChainConfig,
 	_ common.Hash,
@@ -835,10 +837,11 @@ func (t *stubTasks) ExpectBuildDepositOnlyBlock(
 }
 
 type staticConfigSource struct {
-	rollupCfgs   []*rollup.Config
-	chainConfigs []*params.ChainConfig
-	depset       *depset.StaticConfigDependencySet
-	chainIDs     []eth.ChainID
+	rollupCfgs    []*rollup.Config
+	chainConfigs  []*params.ChainConfig
+	l1ChainConfig *params.ChainConfig
+	depset        *depset.StaticConfigDependencySet
+	chainIDs      []eth.ChainID
 }
 
 func (s *staticConfigSource) RollupConfig(chainID eth.ChainID) (*rollup.Config, error) {
@@ -857,6 +860,10 @@ func (s *staticConfigSource) ChainConfig(chainID eth.ChainID) (*params.ChainConf
 		}
 	}
 	panic(fmt.Sprintf("no chain config found for chain %d", chainID))
+}
+
+func (s *staticConfigSource) L1ChainConfig(l1ChainID eth.ChainID) (*params.ChainConfig, error) {
+	return s.l1ChainConfig, nil
 }
 
 func (s *staticConfigSource) DependencySet(chainID eth.ChainID) (depset.DependencySet, error) {

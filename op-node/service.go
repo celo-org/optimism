@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/big"
 	"os"
 	"strings"
 
@@ -23,7 +24,9 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/engine"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/interop"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	opflags "github.com/ethereum-optimism/optimism/op-service/flags"
+	"github.com/ethereum-optimism/optimism/op-service/jsonutil"
 	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/oppprof"
 	"github.com/ethereum-optimism/optimism/op-service/rpc"
@@ -38,6 +41,11 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*config.Config, error) {
 	}
 
 	rollupConfig, err := NewRollupConfigFromCLI(log, ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	l1ChainConfig, err := NewL1ChainConfig(rollupConfig.L1ChainID, ctx, log)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +100,7 @@ func NewConfig(ctx *cli.Context, log log.Logger) (*config.Config, error) {
 	cfg := &config.Config{
 		L1:                          l1Endpoint,
 		L2:                          l2Endpoint,
+		L1ChainConfig:               l1ChainConfig,
 		Rollup:                      *rollupConfig,
 		DependencySet:               depSet,
 		Driver:                      *driverConfig,
@@ -311,6 +320,50 @@ func applyCeloHardforks(rollupConfig *rollup.Config) {
 	default:
 		// No Celo hardforks for other chains, do nothing.
 	}
+}
+
+func NewL1ChainConfig(chainId *big.Int, ctx *cli.Context, log log.Logger) (*params.ChainConfig, error) {
+	if chainId == nil {
+		panic("l1 chain id is nil")
+	}
+
+	if cfg := eth.L1ChainConfigByChainID(eth.ChainIDFromBig(chainId)); cfg != nil {
+		return cfg, nil
+	}
+
+	// if the chain id is not known, we fallback to the CLI config
+	cf, err := NewL1ChainConfigFromCLI(log, ctx)
+	if err != nil {
+		return nil, err
+	}
+	if cf.ChainID.Cmp(chainId) != 0 {
+		return nil, fmt.Errorf("l1 chain config chain ID mismatch: %v != %v", cf.ChainID, chainId)
+	}
+	if cf.BlobScheduleConfig == nil {
+		return nil, fmt.Errorf("L1 chain config does not have a blob schedule config")
+	}
+	return cf, nil
+}
+
+func NewL1ChainConfigFromCLI(log log.Logger, ctx *cli.Context) (*params.ChainConfig, error) {
+	l1ChainConfigPath := ctx.String(flags.L1ChainConfig.Name)
+	file, err := os.Open(l1ChainConfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read chain spec: %w", err)
+	}
+	defer file.Close()
+
+	// Attempt to decode directly as a ChainConfig
+	var chainConfig params.ChainConfig
+	dec := json.NewDecoder(file)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&chainConfig); err == nil {
+		return &chainConfig, nil
+	}
+
+	// If that fails, try to load the config from the .config property.
+	// This should work if the provided file is a genesis file / chainspec
+	return jsonutil.LoadJSONFieldStrict[params.ChainConfig](l1ChainConfigPath, "config")
 }
 
 func NewDependencySetFromCLI(ctx *cli.Context) (depset.DependencySet, error) {

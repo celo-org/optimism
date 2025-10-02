@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	gnode "github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/ethereum-optimism/optimism/op-node/node"
@@ -73,7 +74,8 @@ type L2Verifier struct {
 	L2PipelineIdle bool
 	l2Building     bool
 
-	RollupCfg *rollup.Config
+	L1ChainConfig *params.ChainConfig
+	RollupCfg     *rollup.Config
 
 	rpc *rpc.Server
 
@@ -109,7 +111,8 @@ type safeDB interface {
 
 func NewL2Verifier(t Testing, log log.Logger, l1 derive.L1Fetcher,
 	blobsSrc derive.L1BlobsFetcher, altDASrc driver.AltDAIface,
-	eng L2API, cfg *rollup.Config, depSet depset.DependencySet, syncCfg *sync.Config, safeHeadListener safeDB,
+	eng L2API, cfg *rollup.Config, l1ChainConfig *params.ChainConfig,
+	depSet depset.DependencySet, syncCfg *sync.Config, safeHeadListener safeDB,
 ) *L2Verifier {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -162,7 +165,7 @@ func NewL2Verifier(t Testing, log log.Logger, l1 derive.L1Fetcher,
 		attributes.NewAttributesHandler(log, cfg, ctx, eng), opts)
 
 	indexingMode := interopSys != nil
-	pipeline := derive.NewDerivationPipeline(log, cfg, depSet, l1, blobsSrc, altDASrc, eng, metrics, indexingMode)
+	pipeline := derive.NewDerivationPipeline(log, cfg, depSet, l1, blobsSrc, altDASrc, eng, metrics, indexingMode, l1ChainConfig)
 	sys.Register("pipeline", derive.NewPipelineDeriver(ctx, pipeline), opts)
 
 	testActionEmitter := sys.Register("test-action", nil, opts)
@@ -200,6 +203,7 @@ func NewL2Verifier(t Testing, log log.Logger, l1 derive.L1Fetcher,
 		syncStatus:        syncStatusTracker,
 		L2PipelineIdle:    true,
 		l2Building:        false,
+		L1ChainConfig:     l1ChainConfig,
 		RollupCfg:         cfg,
 		rpc:               rpc.NewServer(),
 		synchronousEvents: testActionEmitter,

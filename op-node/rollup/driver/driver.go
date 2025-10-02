@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/sync"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/event"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // aliases to not disrupt op-conductor code
@@ -162,6 +163,7 @@ func NewDriver(
 	drain Drain,
 	driverCfg *Config,
 	cfg *rollup.Config,
+	l1ChainConfig *params.ChainConfig,
 	depSet derive.DependencySet,
 	l2 L2Chain,
 	l1 L1Chain,
@@ -208,7 +210,7 @@ func NewDriver(
 	sys.Register("attributes-handler",
 		attributes.NewAttributesHandler(log, cfg, driverCtx, l2))
 
-	derivationPipeline := derive.NewDerivationPipeline(log, cfg, depSet, verifConfDepth, l1Blobs, altDA, l2, metrics, indexingMode)
+	derivationPipeline := derive.NewDerivationPipeline(log, cfg, depSet, verifConfDepth, l1Blobs, altDA, l2, metrics, indexingMode, l1ChainConfig)
 
 	sys.Register("pipeline",
 		derive.NewPipelineDeriver(driverCtx, derivationPipeline))
@@ -236,7 +238,7 @@ func NewDriver(
 	var sequencer sequencing.SequencerIface
 	if driverCfg.SequencerEnabled {
 		asyncGossiper := async.NewAsyncGossiper(driverCtx, network, log, metrics)
-		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, depSet, l1, l2)
+		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ChainConfig, depSet, l1, l2)
 		var seqL1Blocks sequencing.L1Blocks
 		if driverCfg.SequencerUseFinalized {
 			seqL1Blocks = finalized.NewFinalized(statusTracker.L1Finalized, l1, log)
