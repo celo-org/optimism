@@ -4,11 +4,8 @@ on:
     - cron: "00 8 * * Mon"
   workflow_dispatch:
 
-env:
-  OP_GETH_BASE_BRANCH: "celo-rebase-14"
-
 jobs:
-  job_id:
+  update-geth-pr:
     # Add "id-token" with the intended permissions.
     permissions:
       contents: write
@@ -28,15 +25,20 @@ jobs:
         uses: "google-github-actions/setup-gcloud@v2"
         with:
           version: ">= 363.0.0"
+      - name: Get op-geth base branch
+        id: get-base-branch
+        run: |
+          OP_GETH_BASE_BRANCH=$(curl https://api.github.com/repos/celo-org/op-geth | jq .default_branch -r)
+          echo "OP_GETH_BASE_BRANCH=$OP_GETH_BASE_BRANCH" >> "$GITHUB_ENV"
       - name: Run the update-geth script
         id: geth-update-script
         run: |
-          GETH_COMMIT=$(git ls-remote https://github.com/celo-org/op-geth/ "$OP_GETH_BASE_BRANCH" | awk '{print $1}')
+          GETH_COMMIT=$(git ls-remote https://github.com/celo-org/op-geth/ "refs/heads/$OP_GETH_BASE_BRANCH" | awk '{print $1}')
           if [ -z "$GETH_COMMIT" ]; then
             echo "Could not find branch '$OP_GETH_BASE_BRANCH' in 'celo-org/op-geth'" >&2
             exit 1
           fi
-          echo "GETH_COMMIT=${GETH_COMMIT}" >> $GITHUB_OUTPUT
+          echo "GETH_COMMIT=${GETH_COMMIT}" >> "$GITHUB_OUTPUT"
           python3 ops/scripts/celo-update-op-geth.py "$OP_GETH_BASE_BRANCH"
       - name: Create pull request
         uses: peter-evans/create-pull-request@v7
