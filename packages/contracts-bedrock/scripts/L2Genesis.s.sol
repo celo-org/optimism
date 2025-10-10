@@ -614,9 +614,7 @@ contract L2Genesis is Deployer {
     /// @notice Generic function to deploy a CeloProxy to any predeploy address.
     /// @notice This predeploy is following the safety invariant #2.
     function setCeloProxy(string memory name, address proxyAddress) internal {
-        // address targetOwner = cfg.proxyAdminOwner();
-        // address targetOwner = address(0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266);
-        address targetOwner = address(0x95a40aA01d2d72b4122C19c86160710D01224ada);
+        address targetOwner = cfg.proxyAdminOwner();
         require(targetOwner != address(0), "Target owner cannot be address(0)");
 
         // Create CeloProxy with constructor (sets msg.sender as owner)
@@ -652,64 +650,22 @@ contract L2Genesis is Deployer {
 
     /// @notice Funds the Celo accounts with the specified amounts.
     function fundCeloAccounts() internal {
-
-        if (!cfg.fundDevAccounts()) {
-            // Celo-sepolia config
-            address[] memory accounts = new address[](15);
-            uint256[] memory amounts = new uint256[](15);
-            uint256 count = 0;
-
-            accounts[count] = Predeploys.CELO_UNRELEASED_TREASURY;
-            amounts[count++] = 500_000_000 ether;
-            // Deployer
-            accounts[count] = address(0x95a40aA01d2d72b4122C19c86160710D01224ada);
-            amounts[count++] = 99_775_000 ether;
-            // Validator Groups and Validators
-            accounts[count] = address(0xCFc6b063227A1cBA667F017044eA1C476f0869cB);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0x73b3307111b6fA70933A636a8dD939293FdFDF27);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0x822aEF6Ee28185117386Cc96Bff5523C8C57c1E7);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0x941B3d1c9778DF9Ec5E72cD38038BF11890E4542);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0x31F737b55d50C31C3993fA3BECEa8561B20D25A9);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0xA223b73Bfc642e1C08154FC150B8Ea975c656252);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0xB347EE81Af3e66405b71b4E23B2C8354980253D4);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0x06F6b03020692bC2c62362568FC251fA392834F6);
-            amounts[count++] = 25_000 ether;
-            accounts[count] = address(0xeDeDE206fD98A100b8d4F96716A344534a89d506);
-            amounts[count++] = 25_000 ether;
-            // Banking accounts
-            accounts[count] = address(0xAa23e5A16F9C922B6Ca72e0705EfC036E692DDf3);
-            amounts[count++] = 100_000_000 ether;
-            accounts[count] = address(0x3d832920BA65ad60A615e2721B7fC6500C054cF6);
-            amounts[count++] = 100_000_000 ether;
-            accounts[count] = address(0x53b3b2B132230e96556db41e4f96876E7F299DCC);
-            amounts[count++] = 100_000_000 ether;
-            accounts[count] = address(0xD74Eb065c7000a71b85faF2f2eD49EbD4c6530f2);
-            amounts[count++] = 100_000_000 ether;
-
-            for (uint256 i = 0; i < count; i++) {
-                console.log("Funding %s with %s ETH", accounts[i], amounts[i]);
-                vm.deal(accounts[i], amounts[i]);
-            }
+        address[] memory accounts = new address[](2);
+        uint256[] memory amounts = new uint256[](2);
+        uint256 count = 0;
+        accounts[count] = Predeploys.CELO_UNRELEASED_TREASURY;
+        amounts[count++] = 500_000_000 ether;
+        // accounts[count] = address(cfg.proxyAdminOwner());
+        accounts[count] = 0xa3A3a43E2de78070129C697A5CdCa0618B1f574d;
+        if (cfg.fundDevAccounts()) {
+            amounts[count++] = 500_000_000 ether - devAccounts.length * DEV_ACCOUNT_FUND_AMT;
         } else {
-            address[] memory accounts = new address[](2);
-            uint256[] memory amounts = new uint256[](2);
-            uint256 count = 0;
-            accounts[count] = Predeploys.CELO_UNRELEASED_TREASURY;
             amounts[count++] = 500_000_000 ether;
-            accounts[count] = address(cfg.proxyAdminOwner());
-            amounts[count++] = 425_000_000 ether;
+        }
 
-            for (uint256 i = 0; i < count; i++) {
-                console.log("Funding %s with %s ETH", accounts[i], amounts[i]);
-                vm.deal(accounts[i], amounts[i]);
-            }
+        for (uint256 i = 0; i < count; i++) {
+            console.log("Funding %s with %s ETH", accounts[i], amounts[i]);
+            vm.deal(accounts[i], amounts[i]);
         }
     }
 
