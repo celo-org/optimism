@@ -69,7 +69,7 @@ contract L2Genesis is Deployer {
 
     // Define here to use mainnet fee currency directory address
     // (CeloPredeploy's fee currency directory address is for Alfajores)
-    address internal constant FEE_CURRENCY_DIRECTORY = 0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276;
+    // address internal constant FEE_CURRENCY_DIRECTORY = 0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276;
 
     /// @notice Default Anvil dev accounts. Only funded if `cfg.fundDevAccounts == true`.
     /// Also known as "test test test test test test test test test test test junk" mnemonic accounts,
@@ -801,8 +801,8 @@ contract L2Genesis is Deployer {
     function setFeeCurrencyDirectory() internal {
         FeeCurrencyDirectory feeCurrencyDirectory = new FeeCurrencyDirectory({ test: false });
 
-        address precompile = FEE_CURRENCY_DIRECTORY;
-        string memory cname = CeloPredeploys.getName(CeloPredeploys.FEE_CURRENCY_DIRECTORY);
+        address precompile = CeloPredeploys.FEE_CURRENCY_DIRECTORY;
+        string memory cname = CeloPredeploys.getName(precompile);
         console.log("Deploying %s implementation at: %s", cname, address(feeCurrencyDirectory));
 
         vm.resetNonce(address(feeCurrencyDirectory));
@@ -869,7 +869,7 @@ contract L2Genesis is Deployer {
         */
         uint256 mockIntrinsicGas = 21000;
 
-        FeeCurrencyDirectory feeCurrencyDirectory = FeeCurrencyDirectory(FEE_CURRENCY_DIRECTORY);
+        FeeCurrencyDirectory feeCurrencyDirectory = FeeCurrencyDirectory(CeloPredeploys.FEE_CURRENCY_DIRECTORY);
         vm.startPrank(feeCurrencyDirectory.owner());
         feeCurrencyDirectory.setCurrencyConfig(cusdProxyAddress, address(sortedOracles), mockIntrinsicGas);
         vm.stopPrank();
