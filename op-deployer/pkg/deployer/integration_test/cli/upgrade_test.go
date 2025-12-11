@@ -54,11 +54,11 @@ func TestCLIUpgrade(t *testing.T) {
 			version:     "v4.1.0",
 			forkBlock:   9165154, // one block past the opcm deployment block
 		},
-		//{
-		//contractTag: standard.ContractsV500Tag,
-		//version:     "v5.0.0-rc.2",
-		//forkBlock:   9554797, // one block past the opcm deployment block
-		//},
+		{
+			contractTag: standard.ContractsV500Tag,
+			version:     "v5.0.0",
+			forkBlock:   9629972, // one block past the opcm deployment block
+		},
 	}
 
 	for _, tc := range testCases {
