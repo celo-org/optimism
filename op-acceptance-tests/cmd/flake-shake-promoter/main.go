@@ -503,6 +503,7 @@ func buildFlakeTests(cfg *acceptanceYAML, gateID, yamlPath string) (map[string]t
 	if flakeGate == nil {
 		fmt.Fprintf(os.Stderr, "gate %s not found in %s\n", gateID, yamlPath)
 		os.Exit(1)
+		return nil, nil, nil // unreachable, but satisfies static analysis
 	}
 	gateIndex := map[string]*gateYAML{}
 	for i := range cfg.Gates {
