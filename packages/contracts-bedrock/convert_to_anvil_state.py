@@ -21,7 +21,22 @@ def convert_to_anvil_state(input_file, output_file):
 
     # Create Anvil state format
     anvil_state = {
-        "accounts": anvil_accounts
+        "accounts": anvil_accounts,
+         "block": {
+            "number": "0x0",
+            "beneficiary": "0x0000000000000000000000000000000000000000",
+            "timestamp": "0x1",
+            "gas_limit": 30000000,
+            "basefee": 1000000000,
+            "difficulty": "0x0",
+            "prevrandao": "0x0000000000000000000000000000000000000000000000000000000000000000",
+            "blob_excess_gas_and_price": {
+            "excess_blob_gas": 0,
+            "blob_gasprice": 1
+            }
+        },
+        "best_block_number": 0,
+
     }
 
     # Write the Anvil state file
