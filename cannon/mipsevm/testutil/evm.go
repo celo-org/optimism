@@ -111,7 +111,7 @@ func NewEVMEnv(contracts *ContractMetadata) (*vm.EVM, *state.StateDB) {
 	}
 
 	feeCurrencyContext := core.GetFeeCurrencyContext(header, chainCfg, state)
-	blockContext := core.NewEVMBlockContext(header, bc, nil, chainCfg, state, feeCurrencyContext)
+	blockContext := core.NewEVMBlockContextWithFeeCurrencyContext(header, bc, nil, chainCfg, state, feeCurrencyContext)
 	vmCfg := vm.Config{}
 
 	env := vm.NewEVM(blockContext, state, chainCfg, vmCfg)

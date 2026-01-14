@@ -321,7 +321,7 @@ func Process(logger log.Logger, config *params.ChainConfig,
 		blockContext vm.BlockContext
 		signer       = types.MakeSigner(config, header.Number, header.Time)
 	)
-	blockContext = core.NewEVMBlockContext(header, chainCtx, nil, config, statedb, &blockContext.FeeCurrencyContext)
+	blockContext = core.NewEVMBlockContextWithFeeCurrencyContext(header, chainCtx, nil, config, statedb, &blockContext.FeeCurrencyContext)
 	vmenv := vm.NewEVM(blockContext, statedb, config, cfg)
 	if beaconRoot := block.ParentBeaconRoot; beaconRoot != nil {
 		core.ProcessBeaconBlockRoot(*beaconRoot, vmenv)
