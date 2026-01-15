@@ -1071,10 +1071,5 @@
     "inputs": [],
     "name": "SystemConfig_InvalidFeatureState",
     "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "CustomGasTokenNotSupported",
-    "type": "error"
   }
 ]
