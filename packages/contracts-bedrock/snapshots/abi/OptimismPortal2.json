@@ -844,11 +844,6 @@
   },
   {
     "inputs": [],
-    "name": "CustomGasTokenNotSupported",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "EmptyItem",
     "type": "error"
   },
@@ -944,7 +939,7 @@
   },
   {
     "inputs": [],
-    "name": "OptimismPortal_OnlyCustomGasToken",
+    "name": "OnlyCustomGasToken",
     "type": "error"
   },
   {
