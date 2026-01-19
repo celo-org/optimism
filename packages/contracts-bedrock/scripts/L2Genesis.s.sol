@@ -655,8 +655,8 @@ contract L2Genesis is Deployer {
         uint256 count = 0;
         accounts[count] = Predeploys.CELO_UNRELEASED_TREASURY;
         amounts[count++] = 500_000_000 ether;
-        // accounts[count] = address(cfg.proxyAdminOwner());
-        accounts[count] = 0xa3A3a43E2de78070129C697A5CdCa0618B1f574d;
+        accounts[count] = address(cfg.proxyAdminOwner());
+        // accounts[count] = 0x198293745E19818BD04fc05FD3a0Dd82b266ECF5;
         if (cfg.fundDevAccounts()) {
             amounts[count++] = 500_000_000 ether - devAccounts.length * DEV_ACCOUNT_FUND_AMT;
         } else {
