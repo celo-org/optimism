@@ -419,7 +419,9 @@ contract Deploy is Deployer {
     }
 
     /// @notice Initialize the SystemConfig
-    function initializeSystemConfig() public broadcast {
+    function initializeSystemConfig() public {
+        vm.startBroadcast(msg.sender);
+
         console.log("Upgrading and initializing SystemConfig proxy");
         address systemConfigProxy = artifacts.mustGetAddress("SystemConfigProxy");
         address systemConfig = artifacts.mustGetAddress("SystemConfigImpl");
@@ -432,6 +434,9 @@ contract Deploy is Deployer {
         }
 
         IProxyAdmin proxyAdmin = IProxyAdmin(payable(artifacts.mustGetAddress("ProxyAdmin")));
+        vm.stopBroadcast();
+
+        vm.startBroadcast(proxyAdmin.owner());
         proxyAdmin.upgradeAndCall({
             _proxy: payable(systemConfigProxy),
             _implementation: systemConfig,
@@ -459,12 +464,28 @@ contract Deploy is Deployer {
                 )
             )
         });
+        vm.stopBroadcast();
 
+        vm.startBroadcast(msg.sender);
         ISystemConfig config = ISystemConfig(systemConfigProxy);
         string memory version = config.version();
         console.log("SystemConfig version: %s", version);
 
-        ChainAssertions.checkSystemConfig({ _doi: DeployOPChainInput(address(0)), _contracts: _proxies(), _isProxy: true });
+        DeployOPChainInput doi;
+        {
+            doi = new DeployOPChainInput();
+            doi.set(DeployOPChainInput.systemConfigOwner.selector, config.owner());
+            doi.set(DeployOPChainInput.basefeeScalar.selector, config.basefeeScalar());
+            doi.set(DeployOPChainInput.blobBaseFeeScalar.selector, config.blobbasefeeScalar());
+            doi.set(DeployOPChainInput.batcher.selector, address(uint160(uint256(config.batcherHash()))));
+            doi.set(DeployOPChainInput.gasLimit.selector, config.gasLimit());
+            doi.set(DeployOPChainInput.unsafeBlockSigner.selector, config.unsafeBlockSigner());
+            doi.set(DeployOPChainInput.l2ChainId.selector, config.l2ChainId());
+            doi.set(DeployOPChainInput.opcm.selector, artifacts.mustGetAddress("OPContractsManager"));
+        }
+
+        ChainAssertions.checkSystemConfig({ _doi: doi, _contracts: _proxies(), _isProxy: true });
+        vm.stopBroadcast();
     }
 
     /// @notice Get the DeployInput struct to use for testing
