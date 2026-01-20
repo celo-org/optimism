@@ -350,6 +350,7 @@ contract SystemConfig_Init_CustomGasToken is SystemConfig_TestInit {
         vm.store(address(systemConfig), GasPayingToken.GAS_PAYING_TOKEN_NAME_SLOT, bytes32(0));
         vm.store(address(systemConfig), GasPayingToken.GAS_PAYING_TOKEN_SYMBOL_SLOT, bytes32(0));
 
+        vm.prank(address(proxyAdminOwner));
         systemConfig.initialize({
             _owner: alice,
             _basefeeScalar: 2100,

@@ -421,7 +421,9 @@ contract Deploy is Deployer {
     }
 
     /// @notice Initialize the SystemConfig
-    function initializeSystemConfig() public broadcast {
+    function initializeSystemConfig() public {
+        vm.startBroadcast(msg.sender);
+
         console.log("Upgrading and initializing SystemConfig proxy");
         address systemConfigProxy = artifacts.mustGetAddress("SystemConfigProxy");
         address systemConfig = artifacts.mustGetAddress("SystemConfigImpl");
@@ -434,6 +436,9 @@ contract Deploy is Deployer {
         }
 
         IProxyAdmin proxyAdmin = IProxyAdmin(payable(artifacts.mustGetAddress("ProxyAdmin")));
+        vm.stopBroadcast();
+
+        vm.startBroadcast(proxyAdmin.owner());
         proxyAdmin.upgradeAndCall({
             _proxy: payable(systemConfigProxy),
             _implementation: systemConfig,
@@ -461,36 +466,39 @@ contract Deploy is Deployer {
                 )
             )
         });
+        vm.stopBroadcast();
 
+        vm.startBroadcast(msg.sender);
         ISystemConfig config = ISystemConfig(systemConfigProxy);
         string memory version = config.version();
         console.log("SystemConfig version: %s", version);
 
         IOPContractsManager.DeployInput memory di = getDeployInput();
         Types.DeployOPChainInput memory doi = Types.DeployOPChainInput({
-            opChainProxyAdminOwner: cfg.finalSystemOwner(),
-            systemConfigOwner: cfg.finalSystemOwner(),
-            batcher: cfg.batchSenderAddress(),
-            unsafeBlockSigner: cfg.p2pSequencerAddress(),
-            proposer: cfg.l2OutputOracleProposer(),
-            challenger: cfg.l2OutputOracleChallenger(),
-            basefeeScalar: cfg.basefeeScalar(),
-            blobBaseFeeScalar: cfg.blobbasefeeScalar(),
-            l2ChainId: cfg.l2ChainID(),
+            opChainProxyAdminOwner: di.roles.opChainProxyAdminOwner,
+            systemConfigOwner: di.roles.systemConfigOwner,
+            batcher: di.roles.batcher,
+            unsafeBlockSigner: di.roles.unsafeBlockSigner,
+            proposer: di.roles.proposer,
+            challenger: di.roles.challenger,
+            basefeeScalar: di.basefeeScalar,
+            blobBaseFeeScalar: di.blobBasefeeScalar,
+            l2ChainId: di.l2ChainId,
             opcm: artifacts.mustGetAddress("OPContractsManagerProxy"),
-            saltMixer: "salt mixer",
-            gasLimit: uint64(cfg.l2GenesisBlockGasLimit()),
-            disputeGameType: GameTypes.PERMISSIONED_CANNON,
-            disputeAbsolutePrestate: Claim.wrap(bytes32(cfg.faultGameAbsolutePrestate())),
-            disputeMaxGameDepth: cfg.faultGameMaxDepth(),
-            disputeSplitDepth: cfg.faultGameSplitDepth(),
-            disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
-            disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
+            saltMixer: di.saltMixer,
+            gasLimit: di.gasLimit,
+            disputeGameType: di.disputeGameType,
+            disputeAbsolutePrestate: di.disputeAbsolutePrestate,
+            disputeMaxGameDepth: di.disputeMaxGameDepth,
+            disputeSplitDepth: di.disputeSplitDepth,
+            disputeClockExtension: di.disputeClockExtension,
+            disputeMaxClockDuration: di.disputeMaxClockDuration,
             allowCustomDisputeParameters: false,
             operatorFeeScalar: 0,
             operatorFeeConstant: 0
         });
         ChainAssertions.checkSystemConfigProxies({ _contracts: _proxies(), _doi: doi });
+        vm.stopBroadcast();
     }
 
     /// @notice Get the DeployInput struct to use for testing
