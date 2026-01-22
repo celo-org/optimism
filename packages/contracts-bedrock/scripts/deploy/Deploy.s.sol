@@ -484,7 +484,7 @@ contract Deploy is Deployer {
             basefeeScalar: di.basefeeScalar,
             blobBaseFeeScalar: di.blobBasefeeScalar,
             l2ChainId: di.l2ChainId,
-            opcm: artifacts.mustGetAddress("OPContractsManagerProxy"),
+            opcm: artifacts.mustGetAddress("OPContractsManager"),
             saltMixer: di.saltMixer,
             gasLimit: di.gasLimit,
             disputeGameType: di.disputeGameType,
