@@ -185,6 +185,13 @@ commands:
           branch_pattern: develop
           mentions: "<< parameters.mentions >>"
 
+  install-zstd:
+    description: "Install zstd compression utility"
+    steps:
+      - run:
+          name: Install zstd
+          command: sudo apt-get update && sudo apt-get install -y zstd=1.4.8*
+
   discord-notification-failures-on-develop:
     description: "Notify Discord"
     parameters:
@@ -361,9 +368,7 @@ jobs:
         type: string
         default: ci
     steps:
-      - utils/checkout-with-mise:
-          checkout-method: blobless
-          enable-mise-cache: true
+      - utils/checkout-with-mise
       - install-zstd
       - install-contracts-dependencies
       - run:
