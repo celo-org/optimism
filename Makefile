@@ -192,9 +192,6 @@ make-pre-test: ## Makes pre-test setup
 	make -C ./op-e2e pre-test
 .PHONY: make-pre-test
 
-build-op-deployer: ## Build op-deployer stuff
-	just $(JUSTFLAGS) ./op-deployer/build
-
 # Common prerequisites and package list for Go tests
 TEST_DEPS := op-program-client op-program-host cannon build-contracts cannon-prestates make-pre-test
 
@@ -328,7 +325,7 @@ _go-tests-ci-internal:
 	fi
 .PHONY: _go-tests-ci-internal
 
-go-tests-short-ci: build-op-deployer ## Runs short Go tests with gotestsum for CI (assumes deps built by CI)
+go-tests-short-ci: ## Runs short Go tests with gotestsum for CI (assumes deps built by CI)
 	$(MAKE) _go-tests-ci-internal GO_TEST_FLAGS="-short"
 .PHONY: go-tests-short-ci
 
