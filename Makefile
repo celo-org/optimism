@@ -328,7 +328,7 @@ _go-tests-ci-internal:
 	fi
 .PHONY: _go-tests-ci-internal
 
-go-tests-short-ci: build build-op-deployer ## Runs short Go tests with gotestsum for CI (assumes deps built by CI)
+go-tests-short-ci: build-op-deployer ## Runs short Go tests with gotestsum for CI (assumes deps built by CI)
 	$(MAKE) _go-tests-ci-internal GO_TEST_FLAGS="-short"
 .PHONY: go-tests-short-ci
 
