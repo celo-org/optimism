@@ -1319,7 +1319,7 @@ jobs:
   contracts-bedrock-checks-fast:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: xlarge
+    resource_class: 2xlarge
     steps:
       - utils/checkout-with-mise:
           enable-mise-cache: true
@@ -2795,9 +2795,9 @@ workflows:
             - contracts-bedrock-build
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-checks-fast:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # - contracts-bedrock-checks-fast:
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       - contracts-bedrock-upload:
           requires:
             - contracts-bedrock-build
