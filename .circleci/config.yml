@@ -1696,7 +1696,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     circleci_ip_ranges: true
-    resource_class: xlarge+
+    resource_class: xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
