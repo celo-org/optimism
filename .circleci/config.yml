@@ -809,6 +809,7 @@ jobs:
       - run:
           name: Write pinned block number for cache key
           command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
             just print-pinned-block-number > ./pinnedBlockNumber.txt
             cat pinnedBlockNumber.txt
           working_directory: packages/contracts-bedrock
