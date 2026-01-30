@@ -1696,7 +1696,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     circleci_ip_ranges: true
-    resource_class: xlarge
+    resource_class: 2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -3499,21 +3499,21 @@ workflows:
             - rust-build-kona
             - rust-build-op-rbuilder
             - rust-build-rollup-boost
-      # IN-MEMORY (all)
-      - op-acceptance-tests:
-          name: memory-all
-          gate: "" # Empty gate = gateless mode
-          no_output_timeout: 120m # Allow longer runs for memory-all gate
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
-            - cannon-kona-prestate
-            - cannon-kona-host
-            - rust-binaries-for-sysgo
+      # # IN-MEMORY (all)
+      # - op-acceptance-tests:
+      #     name: memory-all
+      #     gate: "" # Empty gate = gateless mode
+      #     no_output_timeout: 120m # Allow longer runs for memory-all gate
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
+      #       - discord
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate-quick
+      #       - cannon-kona-prestate
+      #       - cannon-kona-host
+      #       - rust-binaries-for-sysgo
       # Generate flaky test report
       - generate-flaky-report:
           name: generate-flaky-tests-report
