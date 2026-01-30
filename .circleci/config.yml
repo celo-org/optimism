@@ -2653,58 +2653,58 @@ jobs:
 
 workflows:
   # Nightly Kurtosis acceptance tests
-  scheduled-kurtosis-acceptance-tests:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-        - and:
-            - equal:
-                [
-                  true,
-                  << pipeline.parameters.kurtosis_acceptance_tests_dispatch >>,
-                ]
-            - equal: ["api", << pipeline.trigger_source >>]
-    jobs:
-      - contracts-bedrock-build: # needed for in-process tests that some suites may use
-          build_args: --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate-quick: # needed for sysgo tests (if any package is in-memory)
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - op-acceptance-tests-kurtosis:
-          name: kurtosis-simple-nightly
-          devnet: simple
-          gate: base
-          no_output_timeout: 60m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
-      - op-acceptance-tests-kurtosis:
-          name: kurtosis-jovian-nightly
-          devnet: jovian
-          gate: jovian
-          no_output_timeout: 60m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
-      - op-acceptance-tests-kurtosis:
-          name: kurtosis-interop-nightly
-          devnet: interop
-          gate: interop
-          no_output_timeout: 60m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
+  # scheduled-kurtosis-acceptance-tests:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, <<pipeline.schedule.name>>]
+  #       - and:
+  #           - equal:
+  #               [
+  #                 true,
+  #                 << pipeline.parameters.kurtosis_acceptance_tests_dispatch >>,
+  #               ]
+  #           - equal: ["api", << pipeline.trigger_source >>]
+  #   jobs:
+  #     - contracts-bedrock-build: # needed for in-process tests that some suites may use
+  #         build_args: --skip test
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - cannon-prestate-quick: # needed for sysgo tests (if any package is in-memory)
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - op-acceptance-tests-kurtosis:
+  #         name: kurtosis-simple-nightly
+  #         devnet: simple
+  #         gate: base
+  #         no_output_timeout: 60m
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - discord
+  #         requires:
+  #           - contracts-bedrock-build
+  #           - cannon-prestate-quick
+  #     - op-acceptance-tests-kurtosis:
+  #         name: kurtosis-jovian-nightly
+  #         devnet: jovian
+  #         gate: jovian
+  #         no_output_timeout: 60m
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - discord
+  #         requires:
+  #           - contracts-bedrock-build
+  #           - cannon-prestate-quick
+  #     - op-acceptance-tests-kurtosis:
+  #         name: kurtosis-interop-nightly
+  #         devnet: interop
+  #         gate: interop
+  #         no_output_timeout: 60m
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - discord
+  #         requires:
+  #           - contracts-bedrock-build
+  #           - cannon-prestate-quick
   main:
     when:
       or:
@@ -2968,483 +2968,483 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
 
-  go-release-op-deployer:
-    jobs:
-      - contracts-bedrock-build:
-          name: build-contracts-go-release-op-deployer
-          filters:
-            tags:
-              only: /^op-deployer.*/
-            branches:
-              ignore: /.*/
-          build_args: --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - go-release:
-          filters:
-            tags:
-              only: /^op-deployer.*/
-            branches:
-              ignore: /.*/
-          module: op-deployer
-          context:
-            - oplabs-gcr-release
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - build-contracts-go-release-op-deployer
+  # go-release-op-deployer:
+  #   jobs:
+  #     - contracts-bedrock-build:
+  #         name: build-contracts-go-release-op-deployer
+  #         filters:
+  #           tags:
+  #             only: /^op-deployer.*/
+  #           branches:
+  #             ignore: /.*/
+  #         build_args: --skip test
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - go-release:
+  #         filters:
+  #           tags:
+  #             only: /^op-deployer.*/
+  #           branches:
+  #             ignore: /.*/
+  #         module: op-deployer
+  #         context:
+  #           - oplabs-gcr-release
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - build-contracts-go-release-op-deployer
 
-  go-release-op-up:
-    jobs:
-      - contracts-bedrock-build:
-          name: build-contracts-go-release-op-up
-          filters:
-            tags:
-              only: /^op-up.*/
-            branches:
-              ignore: /.*/
-          build_args: --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - go-release:
-          filters:
-            tags:
-              only: /^op-up.*/
-            branches:
-              ignore: /.*/
-          module: op-up
-          context:
-            - oplabs-gcr-release
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - build-contracts-go-release-op-up
+  # go-release-op-up:
+  #   jobs:
+  #     - contracts-bedrock-build:
+  #         name: build-contracts-go-release-op-up
+  #         filters:
+  #           tags:
+  #             only: /^op-up.*/
+  #           branches:
+  #             ignore: /.*/
+  #         build_args: --skip test
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - go-release:
+  #         filters:
+  #           tags:
+  #             only: /^op-up.*/
+  #           branches:
+  #             ignore: /.*/
+  #         module: op-up
+  #         context:
+  #           - oplabs-gcr-release
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - build-contracts-go-release-op-up
 
-  release:
-    when:
-      not:
-        equal: [scheduled_pipeline, << pipeline.trigger_source >>]
-    jobs:
-      - initialize:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          filters:
-            tags:
-              only: /^(da-server|cannon|ufm-[a-z0-9\-]*|op-[a-z0-9\-]*)\/v.*/
-            branches:
-              ignore: /.*/
-      - contracts-bedrock-build:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - initialize
-          filters:
-            tags:
-              only: /^op-deployer.*/ # ensure contract artifacts are embedded in op-deployer binary
-            branches:
-              ignore: /.*/
-      # Standard (medium) cross-platform docker images go here
-      - docker-build:
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-deployer
-                - op-faucet
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-ufm
-                - op-supervisor
-                - op-supernode
-                - op-test-sequencer
-                - cannon
-                - op-dripper
-                - op-interop-mon
-          name: <<matrix.docker_name>>-docker-release
-          docker_tags: <<pipeline.git.revision>>
-          platforms: "linux/amd64,linux/arm64"
-          publish: true
-          release: true
-          filters:
-            tags:
-              only: /^<<matrix.docker_name>>\/v.*/
-            branches:
-              ignore: /.*/
-          context:
-            - oplabs-gcr-release
-          requires:
-            - initialize
-            - contracts-bedrock-build
-      # Checks for cross-platform images go here
-      - check-cross-platform:
-          matrix:
-            parameters:
-              op_component:
-                - op-node
-                - op-batcher
-                - op-deployer
-                - op-faucet
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - da-server
-                - op-ufm
-                - op-supervisor
-                - op-supernode
-                - op-test-sequencer
-                - op-deployer
-                - cannon
-                - op-dripper
-                - op-interop-mon
-          name: <<matrix.op_component>>-cross-platform
-          requires:
-            - op-node-docker-release
-            - op-batcher-docker-release
-            - op-deployer-docker-release
-            - op-faucet-docker-release
-            - op-proposer-docker-release
-            - op-challenger-docker-release
-            - op-dispute-mon-docker-release
-            - op-conductor-docker-release
-            - da-server-docker-release
-            - op-ufm-docker-release
-            - op-supervisor-docker-release
-            - op-supernode-docker-release
-            - op-test-sequencer-docker-release
-            - cannon-docker-release
-            - op-dripper-docker-release
-            - op-interop-mon-docker-release
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate:
-          filters:
-            tags:
-              only: /^op-program\/v.*/
-            branches:
-              ignore: /.*/
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - initialize
-      - publish-cannon-prestates:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-            - oplabs-network-optimism-io-bucket
-          requires:
-            - cannon-prestate
-          filters:
-            tags:
-              only: /^op-program\/v.*/
-            branches:
-              ignore: /.*/
+  # release:
+  #   when:
+  #     not:
+  #       equal: [scheduled_pipeline, << pipeline.trigger_source >>]
+  #   jobs:
+  #     - initialize:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         filters:
+  #           tags:
+  #             only: /^(da-server|cannon|ufm-[a-z0-9\-]*|op-[a-z0-9\-]*)\/v.*/
+  #           branches:
+  #             ignore: /.*/
+  #     - contracts-bedrock-build:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - initialize
+  #         filters:
+  #           tags:
+  #             only: /^op-deployer.*/ # ensure contract artifacts are embedded in op-deployer binary
+  #           branches:
+  #             ignore: /.*/
+  #     # Standard (medium) cross-platform docker images go here
+  #     - docker-build:
+  #         matrix:
+  #           parameters:
+  #             docker_name:
+  #               - op-node
+  #               - op-batcher
+  #               - op-deployer
+  #               - op-faucet
+  #               - op-proposer
+  #               - op-challenger
+  #               - op-dispute-mon
+  #               - op-conductor
+  #               - da-server
+  #               - op-ufm
+  #               - op-supervisor
+  #               - op-supernode
+  #               - op-test-sequencer
+  #               - cannon
+  #               - op-dripper
+  #               - op-interop-mon
+  #         name: <<matrix.docker_name>>-docker-release
+  #         docker_tags: <<pipeline.git.revision>>
+  #         platforms: "linux/amd64,linux/arm64"
+  #         publish: true
+  #         release: true
+  #         filters:
+  #           tags:
+  #             only: /^<<matrix.docker_name>>\/v.*/
+  #           branches:
+  #             ignore: /.*/
+  #         context:
+  #           - oplabs-gcr-release
+  #         requires:
+  #           - initialize
+  #           - contracts-bedrock-build
+  #     # Checks for cross-platform images go here
+  #     - check-cross-platform:
+  #         matrix:
+  #           parameters:
+  #             op_component:
+  #               - op-node
+  #               - op-batcher
+  #               - op-deployer
+  #               - op-faucet
+  #               - op-proposer
+  #               - op-challenger
+  #               - op-dispute-mon
+  #               - op-conductor
+  #               - da-server
+  #               - op-ufm
+  #               - op-supervisor
+  #               - op-supernode
+  #               - op-test-sequencer
+  #               - op-deployer
+  #               - cannon
+  #               - op-dripper
+  #               - op-interop-mon
+  #         name: <<matrix.op_component>>-cross-platform
+  #         requires:
+  #           - op-node-docker-release
+  #           - op-batcher-docker-release
+  #           - op-deployer-docker-release
+  #           - op-faucet-docker-release
+  #           - op-proposer-docker-release
+  #           - op-challenger-docker-release
+  #           - op-dispute-mon-docker-release
+  #           - op-conductor-docker-release
+  #           - da-server-docker-release
+  #           - op-ufm-docker-release
+  #           - op-supervisor-docker-release
+  #           - op-supernode-docker-release
+  #           - op-test-sequencer-docker-release
+  #           - cannon-docker-release
+  #           - op-dripper-docker-release
+  #           - op-interop-mon-docker-release
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - cannon-prestate:
+  #         filters:
+  #           tags:
+  #             only: /^op-program\/v.*/
+  #           branches:
+  #             ignore: /.*/
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - initialize
+  #     - publish-cannon-prestates:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - slack
+  #           - oplabs-network-optimism-io-bucket
+  #         requires:
+  #           - cannon-prestate
+  #         filters:
+  #           tags:
+  #             only: /^op-program\/v.*/
+  #           branches:
+  #             ignore: /.*/
 
-  scheduled-todo-issues:
-    when:
-      equal: [build_four_hours, <<pipeline.schedule.name>>]
-    jobs:
-      - todo-issues:
-          name: todo-issue-checks
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
+  # scheduled-todo-issues:
+  #   when:
+  #     equal: [build_four_hours, <<pipeline.schedule.name>>]
+  #   jobs:
+  #     - todo-issues:
+  #         name: todo-issue-checks
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
 
-  develop-publish-contract-artifacts:
-    when:
-      or:
-        - and:
-            - equal: ["develop", <<pipeline.git.branch>>]
-            - equal: ["webhook", << pipeline.trigger_source >>]
-        - and:
-            - equal:
-                [
-                  true,
-                  <<pipeline.parameters.publish_contract_artifacts_dispatch>>,
-                ]
-            - equal: ["api", << pipeline.trigger_source >>]
-    jobs:
-      - publish-contract-artifacts:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+  # develop-publish-contract-artifacts:
+  #   when:
+  #     or:
+  #       - and:
+  #           - equal: ["develop", <<pipeline.git.branch>>]
+  #           - equal: ["webhook", << pipeline.trigger_source >>]
+  #       - and:
+  #           - equal:
+  #               [
+  #                 true,
+  #                 <<pipeline.parameters.publish_contract_artifacts_dispatch>>,
+  #               ]
+  #           - equal: ["api", << pipeline.trigger_source >>]
+  #   jobs:
+  #     - publish-contract-artifacts:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
 
-  develop-fault-proofs:
-    when:
-      or:
-        - and:
-            - equal: ["develop", <<pipeline.git.branch>>]
-            - equal: ["webhook", << pipeline.trigger_source >>]
-        - and:
-            - equal: [true, <<pipeline.parameters.fault_proofs_dispatch>>]
-            - equal: ["api", << pipeline.trigger_source >>]
-    jobs:
-      - cannon-prestate:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-stf-verify:
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-build:
-          build_args: --deny-warnings --skip test
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
-      - go-tests-with-fault-proof-deps:
-          name: op-e2e-cannon-tests
-          notify: true
-          mentions: "@proofs-team"
-          no_output_timeout: 90m
-          test_timeout: 480m
-          resource_class: xlarge
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-      - publish-cannon-prestates:
-          context:
-            - slack
-            - oplabs-network-optimism-io-bucket
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - cannon-prestate
-            - op-e2e-cannon-tests
+  # develop-fault-proofs:
+  #   when:
+  #     or:
+  #       - and:
+  #           - equal: ["develop", <<pipeline.git.branch>>]
+  #           - equal: ["webhook", << pipeline.trigger_source >>]
+  #       - and:
+  #           - equal: [true, <<pipeline.parameters.fault_proofs_dispatch>>]
+  #           - equal: ["api", << pipeline.trigger_source >>]
+  #   jobs:
+  #     - cannon-prestate:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - cannon-stf-verify:
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - contracts-bedrock-build:
+  #         build_args: --deny-warnings --skip test
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - go-tests-with-fault-proof-deps:
+  #         name: op-e2e-cannon-tests
+  #         notify: true
+  #         mentions: "@proofs-team"
+  #         no_output_timeout: 90m
+  #         test_timeout: 480m
+  #         resource_class: xlarge
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - contracts-bedrock-build
+  #           - cannon-prestate
+  #     - publish-cannon-prestates:
+  #         context:
+  #           - slack
+  #           - oplabs-network-optimism-io-bucket
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - cannon-prestate
+  #           - op-e2e-cannon-tests
 
-  develop-kontrol-tests:
-    when:
-      or:
-        - and:
-            - equal: ["develop", <<pipeline.git.branch>>]
-            - equal: ["webhook", << pipeline.trigger_source >>]
-        - and:
-            - equal: [true, <<pipeline.parameters.kontrol_dispatch>>]
-            - equal: ["api", << pipeline.trigger_source >>]
-    jobs:
-      - kontrol-tests:
-          context:
-            - slack
-            - runtimeverification
-            - circleci-repo-readonly-authenticated-github-token
+  # develop-kontrol-tests:
+  #   when:
+  #     or:
+  #       - and:
+  #           - equal: ["develop", <<pipeline.git.branch>>]
+  #           - equal: ["webhook", << pipeline.trigger_source >>]
+  #       - and:
+  #           - equal: [true, <<pipeline.parameters.kontrol_dispatch>>]
+  #           - equal: ["api", << pipeline.trigger_source >>]
+  #   jobs:
+  #     - kontrol-tests:
+  #         context:
+  #           - slack
+  #           - runtimeverification
+  #           - circleci-repo-readonly-authenticated-github-token
 
-  scheduled-cannon-full-tests:
-    when:
-      or:
-        - equal: [build_four_hours, <<pipeline.schedule.name>>]
-        - equal: [true, << pipeline.parameters.cannon_full_test_dispatch >>]
-    jobs:
-      - contracts-bedrock-build:
-          build_args: --deny-warnings --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-go-lint-and-test:
-          requires:
-            - contracts-bedrock-build
-          skip_slow_tests: false
-          no_output_timeout: 30m
-          notify: true
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
+  # scheduled-cannon-full-tests:
+  #   when:
+  #     or:
+  #       - equal: [build_four_hours, <<pipeline.schedule.name>>]
+  #       - equal: [true, << pipeline.parameters.cannon_full_test_dispatch >>]
+  #   jobs:
+  #     - contracts-bedrock-build:
+  #         build_args: --deny-warnings --skip test
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - cannon-go-lint-and-test:
+  #         requires:
+  #           - contracts-bedrock-build
+  #         skip_slow_tests: false
+  #         no_output_timeout: 30m
+  #         notify: true
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
 
-  scheduled-docker-publish:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-        # Trigger on manual triggers if explicitly requested
-        - equal: [true, << pipeline.parameters.docker_publish_dispatch >>]
-    jobs:
-      - contracts-bedrock-build:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - docker-build:
-          matrix:
-            parameters:
-              docker_name:
-                - op-node
-                - op-batcher
-                - op-deployer
-                - op-faucet
-                - op-program
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - op-supervisor
-                - op-supernode
-                - op-test-sequencer
-                - cannon
-                - op-dripper
-                - op-interop-mon
-          name: <<matrix.docker_name>>-docker-publish
-          docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
-          platforms: "linux/amd64,linux/arm64"
-          publish: true
-          context:
-            - oplabs-gcr
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - contracts-bedrock-build
-      - check-cross-platform:
-          matrix:
-            parameters:
-              op_component:
-                - op-node
-                - op-batcher
-                - op-deployer
-                - op-faucet
-                - op-program
-                - op-proposer
-                - op-challenger
-                - op-dispute-mon
-                - op-conductor
-                - op-supervisor
-                - op-supernode
-                - op-test-sequencer
-                - cannon
-                - op-dripper
-                - op-interop-mon
-          name: <<matrix.op_component>>-cross-platform
-          requires:
-            - <<matrix.op_component>>-docker-publish
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+  # scheduled-docker-publish:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, <<pipeline.schedule.name>>]
+  #       # Trigger on manual triggers if explicitly requested
+  #       - equal: [true, << pipeline.parameters.docker_publish_dispatch >>]
+  #   jobs:
+  #     - contracts-bedrock-build:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - docker-build:
+  #         matrix:
+  #           parameters:
+  #             docker_name:
+  #               - op-node
+  #               - op-batcher
+  #               - op-deployer
+  #               - op-faucet
+  #               - op-program
+  #               - op-proposer
+  #               - op-challenger
+  #               - op-dispute-mon
+  #               - op-conductor
+  #               - op-supervisor
+  #               - op-supernode
+  #               - op-test-sequencer
+  #               - cannon
+  #               - op-dripper
+  #               - op-interop-mon
+  #         name: <<matrix.docker_name>>-docker-publish
+  #         docker_tags: <<pipeline.git.revision>>,<<pipeline.git.branch>>
+  #         platforms: "linux/amd64,linux/arm64"
+  #         publish: true
+  #         context:
+  #           - oplabs-gcr
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - contracts-bedrock-build
+  #     - check-cross-platform:
+  #         matrix:
+  #           parameters:
+  #             op_component:
+  #               - op-node
+  #               - op-batcher
+  #               - op-deployer
+  #               - op-faucet
+  #               - op-program
+  #               - op-proposer
+  #               - op-challenger
+  #               - op-dispute-mon
+  #               - op-conductor
+  #               - op-supervisor
+  #               - op-supernode
+  #               - op-test-sequencer
+  #               - cannon
+  #               - op-dripper
+  #               - op-interop-mon
+  #         name: <<matrix.op_component>>-cross-platform
+  #         requires:
+  #           - <<matrix.op_component>>-docker-publish
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
 
-  scheduled-flake-shake:
-    when:
-      or:
-        - equal: [build_daily, << pipeline.schedule.name >>]
-        - and:
-            - equal: [true, << pipeline.parameters.flake-shake-dispatch >>]
-            - equal: ["api", << pipeline.trigger_source >>]
-    jobs:
-      - contracts-bedrock-build:
-          build_args: --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate-quick:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-binary-build:
-          name: rust-build-kona
-          directory: kona
-          binaries: "kona-node kona-supervisor"
-          build_command: cargo build --release --bin kona-node --bin kona-supervisor
-          needs_clang: true
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-binary-build:
-          name: rust-build-op-rbuilder
-          directory: op-rbuilder
-          binaries: "op-rbuilder"
-          build_command: cargo build --release -p op-rbuilder --bin op-rbuilder
-          needs_clang: true
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-binary-build:
-          name: rust-build-rollup-boost
-          directory: rollup-boost
-          binaries: "rollup-boost"
-          build_command: cargo build --release -p rollup-boost --bin rollup-boost
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-binaries-for-sysgo:
-          requires:
-            - rust-build-kona
-            - rust-build-op-rbuilder
-            - rust-build-rollup-boost
-      - op-acceptance-tests-flake-shake:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
-            - rust-binaries-for-sysgo
-      - op-acceptance-tests-flake-shake-report:
-          requires:
-            - op-acceptance-tests-flake-shake
-      - op-acceptance-tests-flake-shake-promote:
-          requires:
-            - op-acceptance-tests-flake-shake-report
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-optimism
-            - circleci-api-token
-            - slack
+  # scheduled-flake-shake:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, << pipeline.schedule.name >>]
+  #       - and:
+  #           - equal: [true, << pipeline.parameters.flake-shake-dispatch >>]
+  #           - equal: ["api", << pipeline.trigger_source >>]
+  #   jobs:
+  #     - contracts-bedrock-build:
+  #         build_args: --skip test
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - cannon-prestate-quick:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - rust-binary-build:
+  #         name: rust-build-kona
+  #         directory: kona
+  #         binaries: "kona-node kona-supervisor"
+  #         build_command: cargo build --release --bin kona-node --bin kona-supervisor
+  #         needs_clang: true
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - rust-binary-build:
+  #         name: rust-build-op-rbuilder
+  #         directory: op-rbuilder
+  #         binaries: "op-rbuilder"
+  #         build_command: cargo build --release -p op-rbuilder --bin op-rbuilder
+  #         needs_clang: true
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - rust-binary-build:
+  #         name: rust-build-rollup-boost
+  #         directory: rollup-boost
+  #         binaries: "rollup-boost"
+  #         build_command: cargo build --release -p rollup-boost --bin rollup-boost
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - rust-binaries-for-sysgo:
+  #         requires:
+  #           - rust-build-kona
+  #           - rust-build-op-rbuilder
+  #           - rust-build-rollup-boost
+  #     - op-acceptance-tests-flake-shake:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #         requires:
+  #           - contracts-bedrock-build
+  #           - cannon-prestate-quick
+  #           - rust-binaries-for-sysgo
+  #     - op-acceptance-tests-flake-shake-report:
+  #         requires:
+  #           - op-acceptance-tests-flake-shake
+  #     - op-acceptance-tests-flake-shake-promote:
+  #         requires:
+  #           - op-acceptance-tests-flake-shake-report
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - circleci-repo-optimism
+  #           - circleci-api-token
+  #           - slack
 
-  scheduled-preimage-reproducibility:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-        # Trigger on manual triggers if explicitly requested
-        - equal: [true, << pipeline.parameters.reproducibility_dispatch >>]
-    jobs:
-      - preimage-reproducibility:
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
+  # scheduled-preimage-reproducibility:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, <<pipeline.schedule.name>>]
+  #       # Trigger on manual triggers if explicitly requested
+  #       - equal: [true, << pipeline.parameters.reproducibility_dispatch >>]
+  #   jobs:
+  #     - preimage-reproducibility:
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
 
-  scheduled-stale-check:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-          # Trigger on manual triggers if explicitly requested
-        - equal: [true, << pipeline.parameters.stale_check_dispatch >>]
-    jobs:
-      - stale-check:
-          context:
-            - circleci-repo-optimism
+  # scheduled-stale-check:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, <<pipeline.schedule.name>>]
+  #         # Trigger on manual triggers if explicitly requested
+  #       - equal: [true, << pipeline.parameters.stale_check_dispatch >>]
+  #   jobs:
+  #     - stale-check:
+  #         context:
+  #           - circleci-repo-optimism
 
-  scheduled-sync-test-op-node:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-        # Trigger on manual triggers if explicitly requested
-        - equal: [true, << pipeline.parameters.sync_test_op_node_dispatch >>]
-    jobs:
-      - contracts-bedrock-build: # needed for sysgo tests
-          build_args: --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate-quick: # needed for sysgo tests
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - op-acceptance-sync-tests-docker:
-          name: "sync-test-<<matrix.network_preset>>-daily-<<matrix.l2_cl_syncmode>>"
-          gate: sync-test-op-node
-          no_output_timeout: 30m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate-quick
-          matrix:
-            parameters:
-              network_preset:
-                [
-                  "op-sepolia",
-                  "base-sepolia",
-                  "unichain-sepolia",
-                  "op-mainnet",
-                  "base-mainnet",
-                ]
-              l2_cl_syncmode: ["consensus-layer", "execution-layer"]
+  # scheduled-sync-test-op-node:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, <<pipeline.schedule.name>>]
+  #       # Trigger on manual triggers if explicitly requested
+  #       - equal: [true, << pipeline.parameters.sync_test_op_node_dispatch >>]
+  #   jobs:
+  #     - contracts-bedrock-build: # needed for sysgo tests
+  #         build_args: --skip test
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - cannon-prestate-quick: # needed for sysgo tests
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #     - op-acceptance-sync-tests-docker:
+  #         name: "sync-test-<<matrix.network_preset>>-daily-<<matrix.l2_cl_syncmode>>"
+  #         gate: sync-test-op-node
+  #         no_output_timeout: 30m
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - slack
+  #         requires:
+  #           - contracts-bedrock-build
+  #           - cannon-prestate-quick
+  #         matrix:
+  #           parameters:
+  #             network_preset:
+  #               [
+  #                 "op-sepolia",
+  #                 "base-sepolia",
+  #                 "unichain-sepolia",
+  #                 "op-mainnet",
+  #                 "base-mainnet",
+  #               ]
+  #             l2_cl_syncmode: ["consensus-layer", "execution-layer"]
 
-  scheduled-heavy-fuzz-tests:
-    when:
-      or:
-        - equal: [build_daily, <<pipeline.schedule.name>>]
-        - equal: [true, << pipeline.parameters.heavy_fuzz_dispatch >>]
-    jobs:
-      - contracts-bedrock-heavy-fuzz-nightly:
-          context:
-            - slack
-            - circleci-repo-readonly-authenticated-github-token
+  # scheduled-heavy-fuzz-tests:
+  #   when:
+  #     or:
+  #       - equal: [build_daily, <<pipeline.schedule.name>>]
+  #       - equal: [true, << pipeline.parameters.heavy_fuzz_dispatch >>]
+  #   jobs:
+  #     - contracts-bedrock-heavy-fuzz-nightly:
+  #         context:
+  #           - slack
+  #           - circleci-repo-readonly-authenticated-github-token
 
   # Acceptance tests
   acceptance-tests:
@@ -3519,34 +3519,34 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
             - circleci-api-token
 
-  close-issue-workflow:
-    when:
-      and:
-        - equal: [<< pipeline.trigger_source >>, "api"]
-        - equal: [<< pipeline.parameters.github-event-type >>, "pull_request"]
-        - equal: [<< pipeline.parameters.github-event-action >>, "labeled"]
-    jobs:
-      - close-issue:
-          label_name: "auto-close-trivial-contribution"
-          message: "Thank you for your interest in contributing!
-            At this time, we are not accepting contributions that primarily fix spelling, stylistic, or grammatical errors in documentation, code, or elsewhere.
-            Please check our [contribution guidelines](https://github.com/ethereum-optimism/optimism/blob/develop/CONTRIBUTING.md#contributions-related-to-spelling-and-grammar) for more information.
-            This issue will be closed now."
-          context:
-            - circleci-repo-optimism
+  # close-issue-workflow:
+  #   when:
+  #     and:
+  #       - equal: [<< pipeline.trigger_source >>, "api"]
+  #       - equal: [<< pipeline.parameters.github-event-type >>, "pull_request"]
+  #       - equal: [<< pipeline.parameters.github-event-action >>, "labeled"]
+  #   jobs:
+  #     - close-issue:
+  #         label_name: "auto-close-trivial-contribution"
+  #         message: "Thank you for your interest in contributing!
+  #           At this time, we are not accepting contributions that primarily fix spelling, stylistic, or grammatical errors in documentation, code, or elsewhere.
+  #           Please check our [contribution guidelines](https://github.com/ethereum-optimism/optimism/blob/develop/CONTRIBUTING.md#contributions-related-to-spelling-and-grammar) for more information.
+  #           This issue will be closed now."
+  #         context:
+  #           - circleci-repo-optimism
 
-  devnet-metrics-collect:
-    when:
-      or:
-        - equal: [<< pipeline.trigger_source >>, "webhook"]
-        - and:
-            - equal: [true, << pipeline.parameters.devnet-metrics-collect >>]
-            - equal: [<< pipeline.trigger_source >>, "api"]
-    jobs:
-      - devnet-metrics-collect-authorship:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - oplabs-tools-data-public-metrics-bucket
+  # devnet-metrics-collect:
+  #   when:
+  #     or:
+  #       - equal: [<< pipeline.trigger_source >>, "webhook"]
+  #       - and:
+  #           - equal: [true, << pipeline.parameters.devnet-metrics-collect >>]
+  #           - equal: [<< pipeline.trigger_source >>, "api"]
+  #   jobs:
+  #     - devnet-metrics-collect-authorship:
+  #         context:
+  #           - circleci-repo-readonly-authenticated-github-token
+  #           - oplabs-tools-data-public-metrics-bucket
 
   ai-contracts-test-workflow:
     when:
