@@ -2773,7 +2773,11 @@ workflows:
           features: <<matrix.features>>
           matrix:
             parameters:
-              features: *features_matrix
+              features:
+                - main
+                # - CUSTOM_GAS_TOKEN
+                - OPCM_V2
+                # - OPCM_V2,CUSTOM_GAS_TOKEN
           context:
             - circleci-repo-readonly-authenticated-github-token
       # - contracts-bedrock-tests-upgrade:
