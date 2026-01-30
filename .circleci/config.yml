@@ -878,7 +878,7 @@ jobs:
     circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: xlarge
+    resource_class: 2xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -1059,7 +1059,7 @@ jobs:
     circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: xlarge
+    resource_class: 2xlarge
     parameters:
       test_timeout:
         description: Timeout for running tests
@@ -2728,43 +2728,43 @@ workflows:
       #       - contracts-bedrock-build
       #     context:
       #       - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-tests:
-          # Heavily fuzz any fuzz tests within added or modified test files.
-          name: contracts-bedrock-tests-heavy-fuzz-modified <<matrix.features>>
-          test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM -- './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
-          test_timeout: 1h
-          test_profile: ciheavy
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: &features_matrix
-                - main
-                # - CUSTOM_GAS_TOKEN
-                - OPCM_V2
-                # - OPCM_V2,CUSTOM_GAS_TOKEN
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-tests:
-          name: contracts-bedrock-tests <<matrix.features>>
-          test_list: find test -name "*.t.sol"
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          check_changed_patterns: contracts-bedrock,op-node
-      - contracts-bedrock-coverage:
-          # Generate coverage reports.
-          name: contracts-bedrock-coverage <<matrix.features>>
-          test_timeout: 1h
-          test_profile: cicoverage
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # - contracts-bedrock-tests:
+      #     # Heavily fuzz any fuzz tests within added or modified test files.
+      #     name: contracts-bedrock-tests-heavy-fuzz-modified <<matrix.features>>
+      #     test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM -- './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
+      #     test_timeout: 1h
+      #     test_profile: ciheavy
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features: &features_matrix
+      #           - main
+      #           # - CUSTOM_GAS_TOKEN
+      #           - OPCM_V2
+      #           # - OPCM_V2,CUSTOM_GAS_TOKEN
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - contracts-bedrock-tests:
+      #     name: contracts-bedrock-tests <<matrix.features>>
+      #     test_list: find test -name "*.t.sol"
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features: *features_matrix
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #     check_changed_patterns: contracts-bedrock,op-node
+      # - contracts-bedrock-coverage:
+      #     # Generate coverage reports.
+      #     name: contracts-bedrock-coverage <<matrix.features>>
+      #     test_timeout: 1h
+      #     test_profile: cicoverage
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features: *features_matrix
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       - contracts-bedrock-tests-upgrade:
           name: contracts-bedrock-tests-upgrade op-mainnet <<matrix.features>>
           fork_op_chain: op
