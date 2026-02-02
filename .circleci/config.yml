@@ -878,7 +878,7 @@ jobs:
     circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -1059,7 +1059,7 @@ jobs:
     circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     parameters:
       test_timeout:
         description: Timeout for running tests
@@ -1319,7 +1319,7 @@ jobs:
   contracts-bedrock-checks-fast:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           enable-mise-cache: true
@@ -1696,7 +1696,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     circleci_ip_ranges: true
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
