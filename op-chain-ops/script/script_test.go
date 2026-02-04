@@ -479,22 +479,22 @@ func TestWithNoMaxCodeSize(t *testing.T) {
 	scriptContext := DefaultContext
 	deployer := scriptContext.Sender
 
-	// Create init code that deploys a contract with >24KB runtime code
+	// Create init code that deploys a contract with >64KB runtime code
 	// Init code structure:
-	// PUSH2 0x6400 (25600 bytes = 25KB)
-	// PUSH1 0x0c (offset where runtime code starts)
+	// PUSH3 0x010400 (66560 bytes = 65KB)
+	// PUSH1 0x10 (offset where runtime code starts = 16 bytes)
 	// PUSH1 0x00 (memory destination)
 	// CODECOPY
-	// PUSH2 0x6400 (size to return)
+	// PUSH3 0x010400 (size to return)
 	// PUSH1 0x00 (memory offset)
 	// RETURN
-	runtimeSize := 25 * 1024 // 25KB runtime code
+	runtimeSize := 65 * 1024 // 65KB runtime code
 	initCode := []byte{
-		0x61, 0x64, 0x00, // PUSH2 0x6400
-		0x60, 0x0c, // PUSH1 0x0c (12 bytes - length of this init code)
+		0x62, 0x01, 0x04, 0x00, // PUSH3 0x010400
+		0x60, 0x10, // PUSH1 0x10 (16 bytes - length of this init code)
 		0x60, 0x00, // PUSH1 0x00
-		0x39,             // CODECOPY
-		0x61, 0x64, 0x00, // PUSH2 0x6400
+		0x39,                   // CODECOPY
+		0x62, 0x01, 0x04, 0x00, // PUSH3 0x010400
 		0x60, 0x00, // PUSH1 0x00
 		0xf3, // RETURN
 	}
