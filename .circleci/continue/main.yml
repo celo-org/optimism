@@ -2484,6 +2484,11 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
             - slack
       - check-kontrol-build:
+          # celo disable unwanted jobs/workflows
+          filters:
+            branches:
+              only:
+                - celo-disabled-circleci-jobs-branch
           requires:
             - contracts-bedrock-build
           context:
@@ -2762,6 +2767,8 @@ workflows:
             - circleci-api-token
 
   go-release-op-deployer:
+    # celo disable unwanted jobs/workflows
+    when: false
     jobs:
       - contracts-bedrock-build:
           name: build-contracts-go-release-op-deployer
@@ -2787,6 +2794,8 @@ workflows:
             - build-contracts-go-release-op-deployer
 
   go-release-op-up:
+    # celo disable unwanted jobs/workflows
+    when: false
     jobs:
       - contracts-bedrock-build:
           name: build-contracts-go-release-op-up
@@ -2812,7 +2821,9 @@ workflows:
             - build-contracts-go-release-op-up
 
   release:
-    when: << pipeline.parameters.c-run_release >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_release >>
     jobs:
       - initialize:
           context:
@@ -2846,7 +2857,9 @@ workflows:
               ignore: /.*/
 
   scheduled-todo-issues:
-    when: << pipeline.parameters.c-run_scheduled_todo_issues >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_todo_issues >>
     jobs:
       - todo-issues:
           name: todo-issue-checks
@@ -2864,9 +2877,30 @@ workflows:
               ignore: /.*/
           context:
             - circleci-repo-readonly-authenticated-github-token
+  develop-publish-contract-artifacts:
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when:
+    # or:
+    # - and:
+    # - equal: ["develop", <<pipeline.git.branch>>]
+    # - equal: ["webhook", << pipeline.trigger_source >>]
+    # - and:
+    # - equal:
+    # [
+    # true,
+    # <<pipeline.parameters.c-publish_contract_artifacts_dispatch>>,
+    # ]
+    # - equal: ["api", << pipeline.trigger_source >>]
+    jobs:
+      - publish-contract-artifacts:
+          context:
+            - circleci-repo-readonly-authenticated-github-token
 
   develop-fault-proofs:
-    when: << pipeline.parameters.c-run_develop_fault_proofs >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_develop_fault_proofs >>
     jobs:
       - cannon-prestate:
           context:
@@ -2914,7 +2948,9 @@ workflows:
             - op-e2e-cannon-tests
 
   develop-kontrol-tests:
-    when: << pipeline.parameters.c-run_develop_kontrol_tests >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_develop_kontrol_tests >>
     jobs:
       - kontrol-tests:
           context:
@@ -2923,7 +2959,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   scheduled-cannon-full-tests:
-    when: << pipeline.parameters.c-run_scheduled_cannon_full_tests >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_cannon_full_tests >>
     jobs:
       - contracts-bedrock-build:
           build_args: --deny-warnings --skip test
@@ -2940,7 +2978,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   scheduled-preimage-reproducibility:
-    when: << pipeline.parameters.c-run_scheduled_preimage_reproducibility >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_preimage_reproducibility >>
     jobs:
       - preimage-reproducibility:
           context:
@@ -2948,21 +2988,27 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   scheduled-stale-check:
-    when: << pipeline.parameters.c-run_scheduled_stale_check >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_stale_check >>
     jobs:
       - stale-check:
           context:
             - circleci-repo-optimism
 
   scheduled-heavy-fuzz-tests:
-    when: << pipeline.parameters.c-run_scheduled_heavy_fuzz_tests >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_heavy_fuzz_tests >>
     jobs:
       - contracts-bedrock-heavy-fuzz-nightly:
           context:
             - slack
             - circleci-repo-readonly-authenticated-github-token
   close-issue-workflow:
-    when: << pipeline.parameters.c-run_close_issue >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_close_issue >>
     jobs:
       - close-issue:
           label_name: "auto-close-trivial-contribution"
