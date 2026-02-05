@@ -1221,6 +1221,7 @@ jobs:
       - run:
           name: Write pinned block number for cache key
           command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
             just print-pinned-block-number > ./pinnedBlockNumber.txt
             cat pinnedBlockNumber.txt
           working_directory: packages/contracts-bedrock
@@ -1239,14 +1240,18 @@ jobs:
           working_directory: packages/contracts-bedrock
       - run:
           name: Run coverage tests
-          command: just coverage-lcov-all
+          command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
+            just coverage-lcov-all
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
           working_directory: packages/contracts-bedrock
           no_output_timeout: <<parameters.test_timeout>>
       - run:
           name: Print failed test traces
-          command: just test-rerun | tee failed-test-traces.log
+          command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
+            just test-rerun | tee failed-test-traces.log
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
           working_directory: packages/contracts-bedrock
@@ -1314,6 +1319,7 @@ jobs:
       - run:
           name: Write pinned block number for cache key
           command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
             just print-pinned-block-number > ./pinnedBlockNumber.txt
             cat pinnedBlockNumber.txt
           environment:
