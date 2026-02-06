@@ -26,3 +26,7 @@ rust/op-reth/tests/
 
 # Public docs (example code, not production)
 docs/public-docs/
+
+# Celo contracts follow different conventions
+packages/contracts-bedrock/src/celo/
+op-e2e/celo/
