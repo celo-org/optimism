@@ -235,7 +235,7 @@ abstract contract OPContractsManagerStandardValidator_TestInit is CommonTest {
             vm.mockCall(
                 address(proxyAdmin),
                 abi.encodeCall(IProxyAdmin.getProxyImplementation, (address(l1OptimismMintableERC20Factory))),
-                abi.encode(opcm.opcmStandardValidator().optimismMintableERC20FactoryImpl())
+                abi.encode(standardValidator.optimismMintableERC20FactoryImpl())
             );
         }
 
