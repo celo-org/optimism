@@ -67,4 +67,4 @@ jobs:
           push: true
           source: .
           files: docker-bake.hcl
-          targets: op-node,op-batcher,op-proposer,op-conductor,op-challenger,op-dispute-mon
+          targets: op-node,op-batcher,op-proposer,op-conductor,op-dispute-mon
