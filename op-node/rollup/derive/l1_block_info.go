@@ -9,6 +9,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -499,6 +500,12 @@ func L1InfoDeposit(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, 
 	if isEcotoneActivated {
 		l1BlockInfo.BlobBaseFee = block.BlobBaseFee(l1ChainConfig)
 
+		// Fusaka blob schedule fix: for Celo chains, use Prague blob params
+		// until Jovian activates, to gate BPO activation on Jovian.
+		if needsFusakaBlobScheduleFix(rollupCfg.L2ChainID) && !rollupCfg.IsJovian(l2Timestamp) {
+			l1BlockInfo.BlobBaseFee = calcBlobFeePrague(*block.ExcessBlobGas())
+		}
+
 		// Apply Cancun blob base fee calculation if this chain needs the L1 Pectra
 		// blob schedule fix (mostly Holesky and Sepolia OP-Stack chains).
 		if t := rollupCfg.PectraBlobScheduleTime; t != nil && block.Time() < *t {
@@ -583,6 +590,31 @@ func L1InfoDeposit(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, 
 		out.Gas = RegolithSystemTxGas
 	}
 	return out, nil
+}
+
+// calcBlobFeePrague calculates the blob fee using the Prague blob schedule.
+// This is only used to gate BPO activation on Jovian for Celo chains.
+func calcBlobFeePrague(excessBlobGas uint64) *big.Int {
+	pragueHeader := &types.Header{ExcessBlobGas: &excessBlobGas}
+	dummyChainCfg := &params.ChainConfig{
+		LondonBlock:        common.Big0,
+		CancunTime:         func() *uint64 { v := uint64(0); return &v }(),
+		PragueTime:         func() *uint64 { v := uint64(0); return &v }(),
+		BlobScheduleConfig: params.DefaultBlobSchedule,
+	}
+	return eip4844.CalcBlobFee(dummyChainCfg, pragueHeader)
+}
+
+// needsFusakaBlobScheduleFix returns true if the given L2 chain ID is a Celo chain
+// that delays Fusaka BPO blob parameter change.
+func needsFusakaBlobScheduleFix(chainID *big.Int) bool {
+	if chainID == nil {
+		return false
+	}
+	id := chainID.Uint64()
+	return id == params.CeloMainnetChainID ||
+		id == params.CeloSepoliaChainID ||
+		id == 11162320 // Celo Chaos testnet
 }
 
 // L1InfoDepositBytes returns a serialized L1-info attributes transaction.
