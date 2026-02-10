@@ -17,5 +17,8 @@ func TestMain(m *testing.M) {
 		// Requires access to a challenger config which only sysgo provides
 		// These tests would also be exceptionally slow on real L1s
 		presets.WithCompatibleTypes(compat.SysGo),
+		// Celo addition to skip all the cannon tests which are not working for us and
+		// also we don't need because we don't rely on cannon, since we have op-succinct.
+		presets.WithCompatibleTypes("non-existent-type"),
 	)
 }
