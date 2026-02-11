@@ -216,6 +216,7 @@ func setupOrchestrator(gt *testing.T, t devtest.T, blk, targetBlock uint64, l2CL
 }
 
 func hfsExt(gt *testing.T, upgradeName forks.Name, l2CLSyncMode sync.Mode) {
+	gt.Skip("Not applicable to Celo: all pre-Holocene forks are active at genesis so there are no fork boundaries to sync across, and the test targets op-sepolia infrastructure")
 	t := devtest.ParallelT(gt)
 	l := t.Logger()
 
