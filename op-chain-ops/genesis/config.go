@@ -1179,7 +1179,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *eth.BlockRef, l2GenesisBlockHa
 		KeepKarstUpgradeGas:    d.KeepKarstUpgradeGas,
 		AltDAConfig:            altDA,
 		ChainOpConfig:          chainOpConfig,
-		Cel2Time:               d.RegolithTime(l2GenesisTime),
+		Cel2Time:               func() *uint64 { v := uint64(0); return &v }(),
 	}, nil
 }
 
