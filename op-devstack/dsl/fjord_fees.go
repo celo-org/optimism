@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/txintent/contractio"
 	"github.com/ethereum-optimism/optimism/op-service/txplan"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -110,9 +111,19 @@ func (ff *FjordFees) ValidateTransaction(from *EOA, to *EOA, amount *big.Int) Fj
 	}
 }
 
+// baseFeeRecipientAddr returns the address that receives base fees.
+// On Celo (IsCel2), base fees are routed to the FeeHandler instead of BaseFeeVault.
+func (ff *FjordFees) baseFeeRecipientAddr() common.Address {
+	rc := ff.l2Network.inner.RollupConfig()
+	if rc.IsCel2(rc.Genesis.L2Time) {
+		return addresses.GetAddressesOrDefault(rc.L2ChainID, addresses.MainnetAddresses).FeeHandler
+	}
+	return predeploys.BaseFeeVaultAddr
+}
+
 // getVaultBalances gets the balances of the vaults
 func (ff *FjordFees) getVaultBalances(client apis.EthClient) VaultBalances {
-	baseFee := ff.getBalance(client, predeploys.BaseFeeVaultAddr)
+	baseFee := ff.getBalance(client, ff.baseFeeRecipientAddr())
 	l1Fee := ff.getBalance(client, predeploys.L1FeeVaultAddr)
 	sequencer := ff.getBalance(client, predeploys.SequencerFeeVaultAddr)
 	operator := ff.getBalance(client, predeploys.OperatorFeeVaultAddr)
