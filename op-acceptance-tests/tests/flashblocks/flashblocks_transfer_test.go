@@ -60,6 +60,7 @@ const flashblockObserveTimeout = 30 * time.Second
 // same misleading "never found the transaction in flashblock receipts" message
 // after a 30-minute hang.
 func TestFlashblocksTransfer(gt *testing.T) {
+	gt.Skip("Not applicable to Celo: flashblocks block building is disrupted by missing fee currency registry contract")
 	t := devtest.ParallelT(gt)
 	// Example error with kona-node:
 	//

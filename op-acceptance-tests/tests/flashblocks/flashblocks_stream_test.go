@@ -15,6 +15,7 @@ import (
 // TestFlashblocksStream checks that block numbers and indices always increase across both the
 // rollup-boost and op-rbuilder streams.
 func TestFlashblocksStream(gt *testing.T) {
+	gt.Skip("Not applicable to Celo: flashblocks block building is disrupted by missing fee currency registry contract")
 	t := devtest.ParallelT(gt)
 	// TODO(ethereum-optimism/optimism#19883): investigate and unmark.
 	t.MarkFlaky("ethereum-optimism/optimism#19883")
