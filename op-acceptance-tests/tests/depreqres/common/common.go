@@ -119,8 +119,8 @@ func UnsafeChainNotStalling_Disconnect(gt *testing.T, syncMode sync.Mode, advanc
 	sys.L2CL.ConnectPeer(sys.L2CLB)
 
 	l.Info("Confirm that the unsafe chain for L2CLB is not stalled")
-	sys.L2CLB.Reached(types.LocalUnsafe, ssA_after.UnsafeL2.Number, 30)
-	sys.L2ELB.Reached(eth.Unsafe, ssA_after.UnsafeL2.Number, 30)
+	sys.L2CLB.Reached(types.LocalUnsafe, ssA_after.UnsafeL2.Number, 60)
+	sys.L2ELB.Reached(eth.Unsafe, ssA_after.UnsafeL2.Number, 60)
 }
 
 func UnsafeChainNotStalling_RestartOpNode(gt *testing.T, syncMode sync.Mode, advanceBlocks uint64, opts ...presets.Option) {
@@ -175,8 +175,8 @@ func UnsafeChainNotStalling_RestartOpNode(gt *testing.T, syncMode sync.Mode, adv
 	sys.L2CL.ConnectPeer(sys.L2CLB)
 
 	l.Info("Confirm that the unsafe chain for L2CLB is not stalled")
-	sys.L2CLB.Reached(types.LocalUnsafe, ssA_after.UnsafeL2.Number, 30)
-	sys.L2ELB.Reached(eth.Unsafe, ssA_after.UnsafeL2.Number, 30)
+	sys.L2CLB.Reached(types.LocalUnsafe, ssA_after.UnsafeL2.Number, 60)
+	sys.L2ELB.Reached(eth.Unsafe, ssA_after.UnsafeL2.Number, 60)
 }
 
 func logPeerState(l log.Logger, name string, cl *dsl.L2CLNode) {

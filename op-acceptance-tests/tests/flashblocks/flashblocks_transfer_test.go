@@ -31,6 +31,7 @@ import (
 //   - Bob's balance in new_account_balances for that flashblock must match the
 //     on-chain balance at the inclusion block.
 func TestFlashblocksTransfer(gt *testing.T) {
+	gt.Skip("Not applicable to Celo: flashblocks block building is disrupted by missing fee currency registry contract")
 	t := devtest.ParallelT(gt)
 	// Example error with kona-node:
 	//
