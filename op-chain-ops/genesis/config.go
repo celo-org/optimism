@@ -1175,7 +1175,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *eth.BlockRef, l2GenesisBlockHa
 		ProtocolVersionsAddress: d.ProtocolVersionsProxy,
 		AltDAConfig:             altDA,
 		ChainOpConfig:           chainOpConfig,
-		Cel2Time:                d.RegolithTime(l1StartTime),
+		Cel2Time:                func() *uint64 { v := uint64(0); return &v }(),
 	}, nil
 }
 
