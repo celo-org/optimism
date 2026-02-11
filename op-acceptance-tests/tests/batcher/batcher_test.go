@@ -20,6 +20,9 @@ import (
 )
 
 func TestBatcherFullChannelsAfterDowntime(gt *testing.T) {
+	// Skipped upstream: https://github.com/ethereum-optimism/optimism/commit/01a4115836dc37ffb267cc65cf0b5076a893ac7f
+	gt.Skip("Skipping test until upstream fixes nonce too high error: tx: 177 state: 176")
+
 	t := devtest.SerialT(gt)
 	sys := presets.NewSingleChainMultiNodeWithTestSeq(t)
 	l := t.Logger()
