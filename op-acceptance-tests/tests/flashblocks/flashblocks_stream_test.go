@@ -26,6 +26,7 @@ var (
 
 // TestFlashblocksStream checks we can connect to the flashblocks stream across multiple CL backends.
 func TestFlashblocksStream(gt *testing.T) {
+	gt.Skip("Not applicable to Celo: flashblocks block building is disrupted by missing fee currency registry contract")
 	t := devtest.SerialT(gt)
 	logger := t.Logger()
 	sys := presets.NewSingleChainWithFlashblocks(t)
