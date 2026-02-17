@@ -463,6 +463,42 @@ func isJovianButNotFirstBlock(rollupCfg *rollup.Config, l2Timestamp uint64) bool
 	return rollupCfg.IsJovian(l2Timestamp) && !rollupCfg.IsJovianActivationBlock(l2Timestamp)
 }
 
+// bpoActivationBlock returns the L2 block number at which BPO hardfork support
+// is enabled for the given L2 chain. Returns nil if BPO is not yet supported.
+func bpoActivationBlock(l2ChainID uint64) *uint64 {
+	switch l2ChainID {
+	case params.CeloMainnetChainID, params.CeloSepoliaChainID, params.CeloChaosChainID:
+		return nil // BPO disabled until Jovian hardfork
+	default:
+		return uint64ptr(0) // Enable BPO by default (upstream behavior)
+	}
+}
+
+// stripBPOActivations returns a copy of the L1 chain config with BPO and Osaka
+// activation times removed, so blob fee calculations use pre-BPO parameters.
+func stripBPOActivations(l1ChainConfig *params.ChainConfig) *params.ChainConfig {
+	cfg := *l1ChainConfig
+	cfg.OsakaTime = nil
+	cfg.BPO1Time = nil
+	cfg.BPO2Time = nil
+	cfg.BPO3Time = nil
+	cfg.BPO4Time = nil
+	cfg.BPO5Time = nil
+	if cfg.BlobScheduleConfig != nil {
+		bsc := *cfg.BlobScheduleConfig
+		bsc.Osaka = nil
+		bsc.BPO1 = nil
+		bsc.BPO2 = nil
+		bsc.BPO3 = nil
+		bsc.BPO4 = nil
+		bsc.BPO5 = nil
+		cfg.BlobScheduleConfig = &bsc
+	}
+	return &cfg
+}
+
+func uint64ptr(n uint64) *uint64 { return &n }
+
 // L1BlockInfoFromBytes is the inverse of L1InfoDeposit, to see where the L2 chain is derived from
 func L1BlockInfoFromBytes(rollupCfg *rollup.Config, l2BlockTime uint64, data []byte) (*L1BlockInfo, error) {
 	var info L1BlockInfo
@@ -497,7 +533,13 @@ func L1InfoDeposit(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, 
 
 	// 1. Set all fields according to active forks
 	if isEcotoneActivated {
-		l1BlockInfo.BlobBaseFee = block.BlobBaseFee(l1ChainConfig)
+		l1Cfg := l1ChainConfig
+		if rollupCfg.L2ChainID != nil && rollupCfg.L2ChainID.IsUint64() {
+			if bpoActivationBlock(rollupCfg.L2ChainID.Uint64()) == nil {
+				l1Cfg = stripBPOActivations(l1ChainConfig)
+			}
+		}
+		l1BlockInfo.BlobBaseFee = block.BlobBaseFee(l1Cfg)
 
 		// Apply Cancun blob base fee calculation if this chain needs the L1 Pectra
 		// blob schedule fix (mostly Holesky and Sepolia OP-Stack chains).
