@@ -581,6 +581,11 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
         // Features can only be set by the ProxyAdmin or its owner.
         _assertOnlyProxyAdminOrProxyAdminOwner();
 
+        // Prevent Lockbox on CGT chains
+        if (_enabled && _feature == Features.ETH_LOCKBOX && isCustomGasToken()) {
+            revert SystemConfig_InvalidFeatureState();
+        }
+
         // As a sanity check, prevent users from enabling the feature if already enabled or
         // disabling the feature if already disabled. This helps to prevent accidental misuse.
         if (_enabled == isFeatureEnabled[_feature]) {
