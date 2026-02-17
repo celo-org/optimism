@@ -1,7 +1,6 @@
 package derive
 
 import (
-	"context"
 	crand "crypto/rand"
 	"math/big"
 	"math/rand"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/ethereum-optimism/optimism/op-core/forks"
@@ -280,25 +278,29 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 	})
 }
 
-// TestBlobBaseFeeFromSepolia fetches a real Sepolia L1 block header via RPC and verifies
-// that the derived BlobBaseFee matches a known BlobBaseFee.
-func TestBlobBaseFeeFromSepolia(t *testing.T) {
-	rpcURL := "https://ethereum-sepolia-rpc.publicnode.com"
+// TestStripBPOBlobBaseFee verifies that stripBPOActivations produces the BlobBaseFee
+// matching the actual Celo Sepolia L2 block (derived before BPO was known).
+// Uses data from Sepolia L1 block 10253939 / Celo Sepolia L2 block 17727223.
+func TestStripBPOBlobBaseFee(t *testing.T) {
+	// Sepolia L1 block 10253939 header data (post-BPO2 activation).
+	excessBlobGas := uint64(226664020)
+	blockTime := uint64(1771010016)
 
-	client, err := ethclient.Dial(rpcURL)
-	require.NoError(t, err)
-	defer client.Close()
+	blockInfo := eth.HeaderBlockInfo(&types.Header{
+		Time:          blockTime,
+		ExcessBlobGas: &excessBlobGas,
+	})
 
-	ctx := context.Background()
-	header, err := client.HeaderByNumber(ctx, big.NewInt(10253939)) // This block proved problematic when running jovian snap sync tests.
-	require.NoError(t, err)
-
-	blockInfo := eth.HeaderBlockInfo(header)
-	derivedBlobBaseFee := blockInfo.BlobBaseFee(params.SepoliaChainConfig)
-	expected, ok := new(big.Int).SetString("45441352348192177559", 10) // The blob base fee in the corresponding l2 block (17727223)
+	// With BPO-stripped config, the blob base fee should match the value in the
+	// corresponding Celo Sepolia L2 block (17727223), which was derived using
+	// Prague blob parameters (before BPO was activated on the L2).
+	strippedCfg := stripBPOActivations(params.SepoliaChainConfig)
+	derivedBlobBaseFee := blockInfo.BlobBaseFee(strippedCfg)
+	expected, ok := new(big.Int).SetString("45441352348192177559", 10)
 	require.True(t, ok)
 	require.Equal(t, expected, derivedBlobBaseFee)
 }
+
 func TestBpoActivationBlock(t *testing.T) {
 	t.Run("celo mainnet returns nil", func(t *testing.T) {
 		assert.Nil(t, bpoActivationBlock(params.CeloMainnetChainID))
