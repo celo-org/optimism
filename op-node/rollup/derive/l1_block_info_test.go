@@ -277,3 +277,121 @@ func TestParseL1InfoDepositTxData(t *testing.T) {
 		require.Equal(t, L1InfoJovianLen, len(depTx.Data))
 	})
 }
+
+// TestStripBPOBlobBaseFee verifies that stripBPOActivations produces the BlobBaseFee
+// matching the actual Celo Sepolia L2 block (derived before BPO was known).
+// Uses data from Sepolia L1 block 10253939 / Celo Sepolia L2 block 17727223.
+func TestStripBPOBlobBaseFee(t *testing.T) {
+	// Sepolia L1 block 10253939 header data (post-BPO2 activation).
+	excessBlobGas := uint64(226664020)
+	blockTime := uint64(1771010016)
+
+	blockInfo := eth.HeaderBlockInfo(&types.Header{
+		Time:          blockTime,
+		ExcessBlobGas: &excessBlobGas,
+	})
+
+	// With BPO-stripped config, the blob base fee should match the value in the
+	// corresponding Celo Sepolia L2 block (17727223), which was derived using
+	// Prague blob parameters (before BPO was activated on the L2).
+	strippedCfg := stripPreJovianBPOActivations(params.SepoliaChainConfig)
+	derivedBlobBaseFee := blockInfo.BlobBaseFee(strippedCfg)
+	expected, ok := new(big.Int).SetString("45441352348192177559", 10)
+	require.True(t, ok)
+	require.Equal(t, expected, derivedBlobBaseFee)
+}
+
+func TestIsPreJovianCeloChain(t *testing.T) {
+	t.Run("celo mainnet returns true at block 0", func(t *testing.T) {
+		assert.True(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloMainnetChainID)}, 0))
+	})
+	t.Run("celo sepolia returns true at block 0", func(t *testing.T) {
+		assert.True(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloSepoliaChainID)}, 0))
+	})
+	t.Run("celo chaos returns true at block 0", func(t *testing.T) {
+		assert.True(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloChaosChainID)}, 0))
+	})
+	t.Run("default chain returns false at block 0", func(t *testing.T) {
+		assert.False(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(999)}, 0))
+	})
+	t.Run("op mainnet returns false at block 0", func(t *testing.T) {
+		assert.False(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(10)}, 0))
+	})
+}
+
+func TestStripPreJovianBPOActivations(t *testing.T) {
+	osakaTime := uint64(1000)
+	bpo1Time := uint64(2000)
+	bpo2Time := uint64(3000)
+	bpo3Time := uint64(4000)
+	bpo4Time := uint64(5000)
+	bpo5Time := uint64(6000)
+	pragueTime := uint64(500)
+
+	t.Run("strips osaka and bpo times", func(t *testing.T) {
+		cfg := &params.ChainConfig{
+			OsakaTime:  &osakaTime,
+			BPO1Time:   &bpo1Time,
+			BPO2Time:   &bpo2Time,
+			BPO3Time:   &bpo3Time,
+			BPO4Time:   &bpo4Time,
+			BPO5Time:   &bpo5Time,
+			PragueTime: &pragueTime,
+			BlobScheduleConfig: &params.BlobScheduleConfig{
+				Osaka:  &params.BlobConfig{Target: 6, Max: 9},
+				BPO1:   &params.BlobConfig{Target: 8, Max: 12},
+				BPO2:   &params.BlobConfig{Target: 10, Max: 15},
+				BPO3:   &params.BlobConfig{Target: 12, Max: 18},
+				BPO4:   &params.BlobConfig{Target: 14, Max: 21},
+				BPO5:   &params.BlobConfig{Target: 16, Max: 24},
+				Prague: &params.BlobConfig{Target: 3, Max: 6},
+			},
+		}
+		stripped := stripPreJovianBPOActivations(cfg)
+
+		// BPO/Osaka times should be nil
+		assert.Nil(t, stripped.OsakaTime)
+		assert.Nil(t, stripped.BPO1Time)
+		assert.Nil(t, stripped.BPO2Time)
+
+		// Other times should be preserved
+		assert.NotNil(t, stripped.BPO3Time)
+		assert.NotNil(t, stripped.BPO4Time)
+		assert.NotNil(t, stripped.BPO5Time)
+		assert.NotNil(t, stripped.PragueTime)
+
+		// BlobScheduleConfig BPO/Osaka entries should be nil
+		require.NotNil(t, stripped.BlobScheduleConfig)
+		assert.Nil(t, stripped.BlobScheduleConfig.Osaka)
+		assert.Nil(t, stripped.BlobScheduleConfig.BPO1)
+		assert.Nil(t, stripped.BlobScheduleConfig.BPO2)
+
+		// Other BlobScheduleConfig entries should be preserved
+		assert.NotNil(t, stripped.BlobScheduleConfig.BPO3)
+		assert.NotNil(t, stripped.BlobScheduleConfig.BPO4)
+		assert.NotNil(t, stripped.BlobScheduleConfig.BPO5)
+		require.NotNil(t, stripped.BlobScheduleConfig.Prague)
+
+		// Original should be unmodified
+		require.NotNil(t, cfg.OsakaTime)
+		require.NotNil(t, cfg.BlobScheduleConfig)
+		require.NotNil(t, cfg.BlobScheduleConfig.Osaka)
+		require.NotNil(t, cfg.BPO1Time)
+		require.NotNil(t, cfg.BlobScheduleConfig.BPO1)
+		require.NotNil(t, cfg.BPO2Time)
+		require.NotNil(t, cfg.BlobScheduleConfig.BPO2)
+	})
+
+	t.Run("nil blob schedule config is safe", func(t *testing.T) {
+		cfg := &params.ChainConfig{
+			OsakaTime:          &osakaTime,
+			BPO1Time:           &bpo1Time,
+			BlobScheduleConfig: nil,
+		}
+
+		stripped := stripPreJovianBPOActivations(cfg)
+		assert.Nil(t, stripped.OsakaTime)
+		assert.Nil(t, stripped.BPO1Time)
+		assert.Nil(t, stripped.BlobScheduleConfig)
+	})
+}

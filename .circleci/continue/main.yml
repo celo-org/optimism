@@ -1242,7 +1242,7 @@ jobs:
           name: Run coverage tests
           command: |
             export ETH_RPC_URL="$MAINNET_RPC_URL"
-            just coverage-lcov-all
+            just coverage-lcov
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
           working_directory: packages/contracts-bedrock

@@ -15,6 +15,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-core/predeploys"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/solabi"
 )
@@ -463,6 +464,36 @@ func isJovianButNotFirstBlock(rollupCfg *rollup.Config, l2Timestamp uint64) bool
 	return rollupCfg.IsJovian(l2Timestamp) && !rollupCfg.IsJovianActivationBlock(l2Timestamp)
 }
 
+// bpoActivationBlock returns the L2 block number at which BPO hardfork support
+// is enabled for the given L2 chain. Returns nil if BPO is not yet supported.
+func isPreJovianCeloChain(rollupCfg *rollup.Config, l2BlockTimestamp uint64) bool {
+	if rollupCfg.L2ChainID == nil || !rollupCfg.L2ChainID.IsUint64() {
+		return false
+	}
+	switch bigs.Uint64Strict(rollupCfg.L2ChainID) {
+	case params.CeloMainnetChainID, params.CeloSepoliaChainID, params.CeloChaosChainID:
+		return !rollupCfg.IsJovian(l2BlockTimestamp)
+	default:
+		return false
+	}
+}
+
+// stripPreJovianBPOActivations strips the BPO activations from the given chain config.
+func stripPreJovianBPOActivations(l1Cfg *params.ChainConfig) *params.ChainConfig {
+	cfg := *l1Cfg
+	cfg.OsakaTime = nil
+	cfg.BPO1Time = nil
+	cfg.BPO2Time = nil
+	if cfg.BlobScheduleConfig != nil {
+		bsc := *cfg.BlobScheduleConfig
+		bsc.Osaka = nil
+		bsc.BPO1 = nil
+		bsc.BPO2 = nil
+		cfg.BlobScheduleConfig = &bsc
+	}
+	return &cfg
+}
+
 // L1BlockInfoFromBytes is the inverse of L1InfoDeposit, to see where the L2 chain is derived from
 func L1BlockInfoFromBytes(rollupCfg *rollup.Config, l2BlockTime uint64, data []byte) (*L1BlockInfo, error) {
 	var info L1BlockInfo
@@ -497,7 +528,19 @@ func L1InfoDeposit(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, 
 
 	// 1. Set all fields according to active forks
 	if isEcotoneActivated {
-		l1BlockInfo.BlobBaseFee = block.BlobBaseFee(l1ChainConfig)
+		l1Cfg := l1ChainConfig
+
+		// BPO (Blob Parameter Only) hardforks introduce changes to blob gas pricing that require
+		// corresponding support in op-node. For Celo chains, BPO must be disabled until the Jovian
+		// hardfork is activated, because Celo's op-node did not support these L1 hardfork changes
+		// early enough. Enabling BPO prematurely would cause the derivation pipeline to use
+		// blob schedules and timestamps that op-node ignored at the time.
+		// bpo3+ are intentionally omitted since Jovian is expected to activate on all Celo chains
+		// before bpo3 is scheduled on any L1 network.
+		if isPreJovianCeloChain(rollupCfg, l2Timestamp) {
+			l1Cfg = stripPreJovianBPOActivations(l1Cfg)
+		}
+		l1BlockInfo.BlobBaseFee = block.BlobBaseFee(l1Cfg)
 
 		// Apply Cancun blob base fee calculation if this chain needs the L1 Pectra
 		// blob schedule fix (mostly Holesky and Sepolia OP-Stack chains).
