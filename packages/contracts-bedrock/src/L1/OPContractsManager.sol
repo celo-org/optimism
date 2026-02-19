@@ -747,9 +747,9 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             // Grab the SuperchainConfig.
             ISuperchainConfig superchainConfig = _opChainConfigs[i].systemConfigProxy.superchainConfig();
 
-            // If the SuperchainConfig is not already upgraded, revert.
-            if (SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
-                revert OPContractsManagerUpgrader_SuperchainConfigNeedsUpgrade(i);
+            // SuperchainConfig should be in older version than impl on Celo L1.
+            if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
+                revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
             }
 
             // Do the chain upgrade.
