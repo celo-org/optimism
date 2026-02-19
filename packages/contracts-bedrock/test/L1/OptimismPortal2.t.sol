@@ -3373,3 +3373,26 @@ contract OptimismPortal2WithMockERC20_Test is OptimismPortal2_FinalizeWithdrawal
         optimismPortal2.depositERC20Transaction(address(0), 0, 0, 0, false, "");
     }
 }
+
+/// @title OptimismPortal2_CGTLockboxGuard_Test
+/// @notice Lockbox must stay inactive on CGT chains.
+contract OptimismPortal2_CGTLockboxGuard_Test is OptimismPortal2_TestInit {
+    /// @notice Deposit on a CGT chain never calls lockETH, even with lockbox force-enabled.
+    function test_deposit_customGasToken_skipsLockbox_succeeds() external {
+        forceEnableLockbox(address(ethLockbox));
+
+        // Mock CGT
+        vm.mockCall(
+            address(systemConfig),
+            abi.encodeCall(systemConfig.gasPayingToken, ()),
+            abi.encode(address(42), uint8(18))
+        );
+
+        // lockETH must NOT be called
+        vm.expectCall(address(ethLockbox), abi.encodeCall(ethLockbox.lockETH, ()), 0);
+
+        // Deposit with msg.value = 0
+        vm.prank(alice, alice);
+        optimismPortal2.depositTransaction(address(0xbeef), 0, 100_000, false, "");
+    }
+}
