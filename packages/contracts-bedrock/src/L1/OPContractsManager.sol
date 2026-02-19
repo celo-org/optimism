@@ -676,9 +676,9 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             // Get this OPChain's superchainConfig.
             ISuperchainConfig superchainConfig = optimismPortal.superchainConfig();
 
-            // If the SuperchainConfig is not already upgraded, revert.
-            if (SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
-                revert OPContractsManagerUpgrader_SuperchainConfigNeedsUpgrade(i);
+            // SuperchainConfig should be in older version than impl on Celo L1.
+            if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
+                revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
             }
 
             // Use the SystemConfig to grab the DisputeGameFactory address.
