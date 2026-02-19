@@ -316,6 +316,12 @@ contract OPContractsManagerStandardValidator is ISemver {
         _errors = internalRequire(_sysCfg.operatorFeeConstant() == 0, "SYSCON-120", _errors);
         _errors = internalRequire(getProxyAdmin(address(_sysCfg)) == _admin, "SYSCON-130", _errors);
         _errors = internalRequire(_sysCfg.superchainConfig() == superchainConfig, "SYSCON-140", _errors);
+
+        // CGT prevents Lockbox
+        if (_sysCfg.isCustomGasToken()) {
+            _errors = internalRequire(!_sysCfg.isFeatureEnabled(Features.ETH_LOCKBOX), "SYSCON-150", _errors);
+        }
+
         return _errors;
     }
 
@@ -493,6 +499,8 @@ contract OPContractsManagerStandardValidator is ISemver {
         _errors = internalRequire(getProxyAdmin(address(_lockbox)) == _admin, "LOCKBOX-30", _errors);
         _errors = internalRequire(_lockbox.systemConfig() == _sysCfg, "LOCKBOX-40", _errors);
         _errors = internalRequire(_lockbox.authorizedPortals(_portal), "LOCKBOX-50", _errors);
+        // Lockbox is not compatible with CGT
+        _errors = internalRequire(!_sysCfg.isCustomGasToken(), "LOCKBOX-60", _errors);
         return _errors;
     }
 

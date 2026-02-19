@@ -15,7 +15,6 @@ import { GasPayingToken, IGasToken } from "src/libraries/GasPayingToken.sol";
 
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
-import { IOptimismPortal2 } from "interfaces/L1/IOptimismPortal2.sol";
 import { IResourceMetering } from "interfaces/L1/IResourceMetering.sol";
 import { IOptimismPortal2 } from "interfaces/L1/IOptimismPortal2.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
@@ -560,6 +559,11 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
     function setFeature(bytes32 _feature, bool _enabled) external {
         // Features can only be set by the ProxyAdmin or its owner.
         _assertOnlyProxyAdminOrProxyAdminOwner();
+
+        // Prevent Lockbox on CGT chains
+        if (_enabled && _feature == Features.ETH_LOCKBOX && isCustomGasToken()) {
+            revert SystemConfig_InvalidFeatureState();
+        }
 
         // As a sanity check, prevent users from enabling the feature if already enabled or
         // disabling the feature if already disabled. This helps to prevent accidental misuse.

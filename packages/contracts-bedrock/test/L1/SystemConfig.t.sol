@@ -1066,6 +1066,25 @@ contract SystemConfig_SetFeature_Test is SystemConfig_TestInit {
     }
 }
 
+/// @title SystemConfig_SetFeature_CustomGasToken_Test
+/// @notice Validates that ETH_LOCKBOX cannot be enabled on a Custom Gas Token chain.
+contract SystemConfig_SetFeature_CustomGasToken_Test is SystemConfig_Init_CustomGasToken {
+    /// @notice Enabling ETH_LOCKBOX on a CGT chain must revert.
+    function test_setFeature_ethLockboxOnCGTChain_reverts() external {
+        vm.prank(address(systemConfig.proxyAdmin()));
+        vm.expectRevert(ISystemConfig.SystemConfig_InvalidFeatureState.selector);
+        systemConfig.setFeature(Features.ETH_LOCKBOX, true);
+    }
+
+    /// @notice Non-lockbox features remain unaffected on CGT chains.
+    function test_setFeature_nonLockboxFeatureOnCGTChain_succeeds() external {
+        bytes32 otherFeature = "OTHER_FEATURE";
+        vm.prank(address(systemConfig.proxyAdmin()));
+        systemConfig.setFeature(otherFeature, true);
+        assertTrue(systemConfig.isFeatureEnabled(otherFeature));
+    }
+}
+
 /// @title SystemConfig_IsFeatureEnabled_Test
 /// @notice Test contract for SystemConfig `isFeatureEnabled` function.
 contract SystemConfig_IsFeatureEnabled_Test is SystemConfig_TestInit {
