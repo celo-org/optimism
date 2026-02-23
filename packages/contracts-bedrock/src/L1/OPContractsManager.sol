@@ -674,11 +674,13 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             IOptimismPortal optimismPortal =
                 IOptimismPortal(payable(_opChainConfigs[i].systemConfigProxy.optimismPortal()));
 
-            // Get this OPChain's superchainConfig.
-            ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(optimismPortal.superchainConfig())).superchainConfig();
+            // Get celoSuperchainConfig.
+            ISuperchainConfig celoSuperchainConfig = optimismPortal.superchainConfig();
 
-            // SuperchainConfig should be in older version than impl on Celo L1.
             {
+                // Get superchainConfig from celoSuperchainConfig.
+                ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
+                // SuperchainConfig should be in older version than impl on Celo L1.
                 if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
                     revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
                 } else if (_upgradeSuperchainConfig) {
@@ -701,13 +703,13 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             uint256 l2ChainId = getL2ChainId(IFaultDisputeGame(address(permissionedDisputeGame)));
 
             // Start by upgrading the SystemConfig contract to have the l2ChainId and
-            // SuperchainConfig. We can get the SuperchainConfig from the existing OptimismPortal,
+            // CeloSuperchainConfig. We can get the CeloSuperchainConfig from the existing OptimismPortal,
             // we need to inline the call to avoid a stack too deep error.
             upgradeToAndCall(
                 _opChainConfigs[i].proxyAdmin,
                 address(_opChainConfigs[i].systemConfigProxy),
                 impls.systemConfigImpl,
-                abi.encodeCall(ISystemConfig.upgrade, (l2ChainId, superchainConfig))
+                abi.encodeCall(ISystemConfig.upgrade, (l2ChainId, celoSuperchainConfig))
             );
 
             // Try to grab the AnchorStateRegistry from the OptimismPortal contract. This will work

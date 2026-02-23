@@ -92,7 +92,7 @@ interface IOPContractsManagerUpgrader {
 
     function __constructor__(IOPContractsManagerContractsContainer _contractsContainer) external;
 
-    function upgrade(IOPContractsManager.OpChainConfig[] memory _opChainConfigs) external;
+    function upgrade(IOPContractsManager.OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external;
 
     function upgradeSuperchainConfig(ISuperchainConfig _superchainConfig, IProxyAdmin _superchainProxyAdmin) external;
 
