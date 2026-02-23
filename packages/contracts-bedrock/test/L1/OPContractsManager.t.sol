@@ -254,7 +254,7 @@ contract OPContractsManager_Upgrade_Harness is CommonTest {
         // Execute the upgrade.
         // We use the new format here, not the legacy one.
         DelegateCaller(_delegateCaller).dcForward(
-            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs))
+            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, false))
         );
 
         // Less than 90% of the gas target of 20M to account for the gas used by using Safe.
@@ -1087,7 +1087,7 @@ contract OPContractsManager_Upgrade_Test is OPContractsManager_Upgrade_Harness {
     function test_upgrade_notDelegateCalled_reverts() public {
         vm.prank(upgrader);
         vm.expectRevert(IOPContractsManager.OnlyDelegatecall.selector);
-        opcm.upgrade(opChainConfigs);
+        opcm.upgrade(opChainConfigs, false);
     }
 
     function test_upgrade_notProxyAdminOwner_reverts() public {
@@ -1104,7 +1104,7 @@ contract OPContractsManager_Upgrade_Test is OPContractsManager_Upgrade_Harness {
 
         vm.expectRevert("Ownable: caller is not the owner");
         DelegateCaller(delegateCaller).dcForward(
-            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs))
+            address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, false))
         );
     }
 
@@ -1132,7 +1132,7 @@ contract OPContractsManager_Upgrade_Test is OPContractsManager_Upgrade_Harness {
 
         // Expect the upgrade to revert with PrestateNotSet.
         vm.expectRevert(IOPContractsManager.PrestateNotSet.selector);
-        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs)));
+        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, false)));
     }
 
     /// @notice Tests that the upgrade function reverts when the superchainConfig is not at the expected target version.
@@ -1145,7 +1145,7 @@ contract OPContractsManager_Upgrade_Test is OPContractsManager_Upgrade_Harness {
                 IOPContractsManagerUpgrader.OPContractsManagerUpgrader_SuperchainConfigNeedsUpgrade.selector, 0
             )
         );
-        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs)));
+        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, false)));
     }
 }
 

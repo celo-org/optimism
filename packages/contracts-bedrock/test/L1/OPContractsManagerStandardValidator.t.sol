@@ -36,6 +36,9 @@ import { IStandardBridge } from "interfaces/universal/IStandardBridge.sol";
 import { IOPContractsManagerStandardValidator } from "interfaces/L1/IOPContractsManagerStandardValidator.sol";
 import { IMIPS64 } from "interfaces/cannon/IMIPS64.sol";
 
+import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { IHasSuperchainConfig } from "interfaces/L1/IHasSuperchainConfig.sol";
+
 /// @title BadDisputeGameFactoryReturner
 /// @notice Used to return a bad DisputeGameFactory address to the OPContractsManagerStandardValidator. Far easier
 ///         than the alternative ways of mocking this value since the normal vm.mockCall will cause
@@ -189,6 +192,78 @@ contract OPContractsManagerStandardValidator_TestInit is CommonTest {
         // Add the FaultDisputeGame to the DisputeGameFactory.
         vm.prank(disputeGameFactory.owner());
         disputeGameFactory.setImplementation(GameTypes.CANNON, IDisputeGame(address(fdg)));
+
+        // ========================================
+        // Celo-specific topology mocks
+        // ========================================
+        // Celo uses: Portal → CeloSuperchainConfig → SuperchainConfig
+        // The validator calls IHasSuperchainConfig(addr).superchainConfig() to resolve
+        // the real SuperchainConfig through the Celo wrapper layer.
+
+        // Mock IHasSuperchainConfig indirection on SuperchainConfig itself.
+        // In tests, sysCfg.superchainConfig() returns superchainConfig directly,
+        // so celoSuperchainConfig() needs superchainConfig.superchainConfig() to return itself.
+        vm.mockCall(
+            address(superchainConfig),
+            abi.encodeCall(IHasSuperchainConfig.superchainConfig, ()),
+            abi.encode(superchainConfig)
+        );
+
+        // Create a mock CeloSuperchainConfig for the portal topology
+        address celoSC = makeAddr("CeloSuperchainConfig");
+
+        // portal.superchainConfig() returns celoSC (Celo wrapper)
+        vm.mockCall(
+            address(optimismPortal2),
+            abi.encodeCall(IOptimismPortal2.superchainConfig, ()),
+            abi.encode(celoSC)
+        );
+
+        // celoSC.superchainConfig() returns the real superchainConfig
+        vm.mockCall(
+            celoSC,
+            abi.encodeCall(IHasSuperchainConfig.superchainConfig, ()),
+            abi.encode(superchainConfig)
+        );
+
+        // PORTAL-CEL-10 & PORTAL-CEL-20: distinct guardians
+        // Celo Mainnet: portal.guardian() (from CeloSuperchainConfig) differs from
+        // superchainConfig.guardian() (Optimism-owned). Mock accordingly.
+        address celoGuardian = makeAddr("CeloGuardian");
+        vm.mockCall(
+            celoSC,
+            abi.encodeCall(ISuperchainConfig.guardian, ()),
+            abi.encode(celoGuardian)
+        );
+        vm.mockCall(
+            address(optimismPortal2),
+            abi.encodeCall(IOptimismPortal2.guardian, ()),
+            abi.encode(celoGuardian)
+        );
+
+        // SYSCON-CEL-*: gas paying token mocks
+        // Test SystemConfig address doesn't match Celo hardcoded addresses, so
+        // expected_ = address(0) and name_ = "". Mock gasPayingToken to satisfy checks.
+        vm.mockCall(
+            address(systemConfig),
+            abi.encodeCall(ISystemConfig.gasPayingToken, ()),
+            abi.encode(address(0), uint8(18))
+        );
+        vm.mockCall(
+            address(systemConfig),
+            abi.encodeCall(ISystemConfig.isCustomGasToken, ()),
+            abi.encode(false)
+        );
+        vm.mockCall(
+            address(systemConfig),
+            abi.encodeCall(ISystemConfig.gasPayingTokenName, ()),
+            abi.encode("")
+        );
+        vm.mockCall(
+            address(systemConfig),
+            abi.encodeCall(ISystemConfig.gasPayingTokenSymbol, ()),
+            abi.encode("CELO")
+        );
     }
 
     /// @notice Runs the OPContractsManagerStandardValidator.validate function.
@@ -481,6 +556,13 @@ contract OPContractsManagerStandardValidator_SystemConfig_Test is OPContractsMan
     function test_validate_systemConfigInvalidSuperchainConfig_succeeds() public {
         vm.mockCall(
             address(systemConfig), abi.encodeCall(ISystemConfig.superchainConfig, ()), abi.encode(address(0xbad))
+        );
+        // Mock the IHasSuperchainConfig indirection on the bad address so it doesn't revert
+        // when the validator calls celoSuperchainConfig().
+        vm.mockCall(
+            address(0xbad),
+            abi.encodeCall(IHasSuperchainConfig.superchainConfig, ()),
+            abi.encode(address(0xbad))
         );
         assertEq("SYSCON-140", _validate(true));
     }

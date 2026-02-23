@@ -214,7 +214,7 @@ contract ForkLive is Deployer {
         // need to upgrade it.
 
         // Upgrade the chain.
-        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChains)));
+        DelegateCaller(upgrader).dcForward(address(opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChains, false)));
 
         // Reset the upgrader to the original code.
         vm.etch(upgrader, upgraderCode);

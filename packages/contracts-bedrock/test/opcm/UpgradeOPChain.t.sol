@@ -122,7 +122,7 @@ contract UpgradeOPChainInput_Test is Test {
 contract MockOPCM {
     event UpgradeCalled(address indexed sysCfgProxy, address indexed proxyAdmin, bytes32 indexed absolutePrestate);
 
-    function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs) public {
+    function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs, bool) public {
         emit UpgradeCalled(
             address(_opChainConfigs[0].systemConfigProxy),
             address(_opChainConfigs[0].proxyAdmin),

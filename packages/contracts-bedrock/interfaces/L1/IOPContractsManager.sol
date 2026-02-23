@@ -333,7 +333,8 @@ interface IOPContractsManager {
 
     /// @notice Upgrades the implementation of all proxies in the specified chains
     /// @param _opChainConfigs The chains to upgrade
-    function upgrade(OpChainConfig[] memory _opChainConfigs) external;
+    /// @param _upgradeSuperchainConfig Flag to optionally upgrade superchain config
+    function upgrade(OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external;
 
     /// @notice Upgrades the SuperchainConfig contract.
     /// @param _superchainConfig The SuperchainConfig contract to upgrade.

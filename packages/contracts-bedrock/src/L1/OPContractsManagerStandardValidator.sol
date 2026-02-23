@@ -17,6 +17,7 @@ import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.so
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
 import { IL1CrossDomainMessenger } from "interfaces/L1/IL1CrossDomainMessenger.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { IHasSuperchainConfig } from "interfaces/L1/IHasSuperchainConfig.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
@@ -287,6 +288,10 @@ contract OPContractsManagerStandardValidator is ISemver {
         return _errors;
     }
 
+    function celoSuperchainConfig(address _celoSuperchainConfig) internal view returns (ISuperchainConfig) {
+        return IHasSuperchainConfig(_celoSuperchainConfig).superchainConfig();
+    }
+
     /// @notice Asserts that the SystemConfig contract is valid.
     function assertValidSystemConfig(
         string memory _errors,
@@ -315,12 +320,30 @@ contract OPContractsManagerStandardValidator is ISemver {
         _errors = internalRequire(_sysCfg.operatorFeeScalar() == 0, "SYSCON-110", _errors);
         _errors = internalRequire(_sysCfg.operatorFeeConstant() == 0, "SYSCON-120", _errors);
         _errors = internalRequire(getProxyAdmin(address(_sysCfg)) == _admin, "SYSCON-130", _errors);
-        _errors = internalRequire(_sysCfg.superchainConfig() == superchainConfig, "SYSCON-140", _errors);
+        _errors = internalRequire(celoSuperchainConfig(address(_sysCfg.superchainConfig())) == superchainConfig, "SYSCON-140", _errors);
 
         // CGT prevents Lockbox
         if (_sysCfg.isCustomGasToken()) {
             _errors = internalRequire(!_sysCfg.isFeatureEnabled(Features.ETH_LOCKBOX), "SYSCON-150", _errors);
         }
+
+        // Celo extra validation: custom gas token
+        (address address_, uint8 decimals_) = _sysCfg.gasPayingToken();
+        address expected_;
+        string memory name_;
+        if (address(_sysCfg) == address(0x760a5F022C9940f4A074e0030be682F560d29818)) {
+            // sepolia
+            expected_ = address(0x3C7011fD5e6Aed460cAa4985cF8d8Caba435b092);
+            name_ = "Celo";
+        } else if (address(_sysCfg) == address(0x89E31965D844a309231B1f17759Ccaf1b7c09861)) {
+            // mainnet
+            expected_ = address(0x057898f3C43F129a17517B9056D23851F124b19f);
+            name_ = "Celo native asset";
+        }
+        _errors = internalRequire(address_ == expected_, "SYSCON-CEL-10", _errors);
+        _errors = internalRequire(decimals_ == 18, "SYSCON-CEL-20", _errors);
+        _errors = internalRequire(LibString.eq(_sysCfg.gasPayingTokenName(), name_) , "SYSCON-CEL-30", _errors);
+        _errors = internalRequire(LibString.eq(_sysCfg.gasPayingTokenSymbol(), "CELO") , "SYSCON-CEL-40", _errors);
 
         return _errors;
     }
@@ -471,6 +494,16 @@ contract OPContractsManagerStandardValidator is ISemver {
         _errors = internalRequire(address(_portal.systemConfig()) == address(_sysCfg), "PORTAL-40", _errors);
         _errors = internalRequire(_portal.l2Sender() == Constants.DEFAULT_L2_SENDER, "PORTAL-80", _errors);
         _errors = internalRequire(getProxyAdmin(address(_portal)) == _admin, "PORTAL-90", _errors);
+
+        // Celo extra validation: celo superchain config vs external superchain config
+        address celoSuperchainConfig_ = address(_portal.superchainConfig());
+        _errors = internalRequire(
+            _portal.guardian() != superchainConfig.guardian(), "PORTAL-CEL-10", _errors
+        ); // True only for Celo Mainnet
+        _errors = internalRequire(
+            _portal.guardian() == ISuperchainConfig(celoSuperchainConfig_).guardian(), "PORTAL-CEL-20", _errors
+        ); // True for Celo Mainnet & Celo Testnets
+
         return _errors;
     }
 
@@ -500,7 +533,7 @@ contract OPContractsManagerStandardValidator is ISemver {
         _errors = internalRequire(_lockbox.systemConfig() == _sysCfg, "LOCKBOX-40", _errors);
         _errors = internalRequire(_lockbox.authorizedPortals(_portal), "LOCKBOX-50", _errors);
         // Lockbox is not compatible with CGT
-        _errors = internalRequire(!_sysCfg.isCustomGasToken(), "LOCKBOX-60", _errors);
+        _errors = internalRequire(!_sysCfg.isCustomGasToken(), "LOCKBOX-CEL-10", _errors);
         return _errors;
     }
 
