@@ -294,32 +294,32 @@ func TestStripBPOBlobBaseFee(t *testing.T) {
 	// With BPO-stripped config, the blob base fee should match the value in the
 	// corresponding Celo Sepolia L2 block (17727223), which was derived using
 	// Prague blob parameters (before BPO was activated on the L2).
-	strippedCfg := stripPreJovialBPOActivations(params.SepoliaChainConfig)
+	strippedCfg := stripPreJovianBPOActivations(params.SepoliaChainConfig)
 	derivedBlobBaseFee := blockInfo.BlobBaseFee(strippedCfg)
 	expected, ok := new(big.Int).SetString("45441352348192177559", 10)
 	require.True(t, ok)
 	require.Equal(t, expected, derivedBlobBaseFee)
 }
 
-func TestIsPreJovialCeloChain(t *testing.T) {
+func TestIsPreJovianCeloChain(t *testing.T) {
 	t.Run("celo mainnet returns true at block 0", func(t *testing.T) {
-		assert.True(t, isPreJovialCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloMainnetChainID)}, 0))
+		assert.True(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloMainnetChainID)}, 0))
 	})
 	t.Run("celo sepolia returns true at block 0", func(t *testing.T) {
-		assert.True(t, isPreJovialCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloSepoliaChainID)}, 0))
+		assert.True(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloSepoliaChainID)}, 0))
 	})
 	t.Run("celo chaos returns true at block 0", func(t *testing.T) {
-		assert.True(t, isPreJovialCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloChaosChainID)}, 0))
+		assert.True(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(params.CeloChaosChainID)}, 0))
 	})
 	t.Run("default chain returns false at block 0", func(t *testing.T) {
-		assert.False(t, isPreJovialCeloChain(&rollup.Config{L2ChainID: big.NewInt(999)}, 0))
+		assert.False(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(999)}, 0))
 	})
 	t.Run("op mainnet returns false at block 0", func(t *testing.T) {
-		assert.False(t, isPreJovialCeloChain(&rollup.Config{L2ChainID: big.NewInt(10)}, 0))
+		assert.False(t, isPreJovianCeloChain(&rollup.Config{L2ChainID: big.NewInt(10)}, 0))
 	})
 }
 
-func TestStripPreJovialBPOActivations(t *testing.T) {
+func TestStripPreJovianBPOActivations(t *testing.T) {
 	osakaTime := uint64(1000)
 	bpo1Time := uint64(2000)
 	bpo2Time := uint64(3000)
@@ -347,7 +347,7 @@ func TestStripPreJovialBPOActivations(t *testing.T) {
 				Prague: &params.BlobConfig{Target: 3, Max: 6},
 			},
 		}
-		stripped := stripPreJovialBPOActivations(cfg)
+		stripped := stripPreJovianBPOActivations(cfg)
 
 		// BPO/Osaka times should be nil
 		assert.Nil(t, stripped.OsakaTime)
@@ -389,7 +389,7 @@ func TestStripPreJovialBPOActivations(t *testing.T) {
 			BlobScheduleConfig: nil,
 		}
 
-		stripped := stripPreJovialBPOActivations(cfg)
+		stripped := stripPreJovianBPOActivations(cfg)
 		assert.Nil(t, stripped.OsakaTime)
 		assert.Nil(t, stripped.BPO1Time)
 		assert.Nil(t, stripped.BlobScheduleConfig)

@@ -465,7 +465,7 @@ func isJovianButNotFirstBlock(rollupCfg *rollup.Config, l2Timestamp uint64) bool
 
 // bpoActivationBlock returns the L2 block number at which BPO hardfork support
 // is enabled for the given L2 chain. Returns nil if BPO is not yet supported.
-func isPreJovialCeloChain(rollupCfg *rollup.Config, l2BlockTimestamp uint64) bool {
+func isPreJovianCeloChain(rollupCfg *rollup.Config, l2BlockTimestamp uint64) bool {
 	if rollupCfg.L2ChainID == nil || !rollupCfg.L2ChainID.IsUint64() {
 		return false
 	}
@@ -477,8 +477,8 @@ func isPreJovialCeloChain(rollupCfg *rollup.Config, l2BlockTimestamp uint64) boo
 	}
 }
 
-// stripPreJovialBPOActivations strips the BPO activations from the given chain config.
-func stripPreJovialBPOActivations(l1Cfg *params.ChainConfig) *params.ChainConfig {
+// stripPreJovianBPOActivations strips the BPO activations from the given chain config.
+func stripPreJovianBPOActivations(l1Cfg *params.ChainConfig) *params.ChainConfig {
 	cfg := *l1Cfg
 	cfg.OsakaTime = nil
 	cfg.BPO1Time = nil
@@ -538,8 +538,8 @@ func L1InfoDeposit(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, 
 		// blob schedules and timestamps that op-node ignored at the time.
 		// bpo3+ are intentionally omitted since Jovian is expected to activate on all Celo chains
 		// before bpo3 is scheduled on any L1 network.
-		if isPreJovialCeloChain(rollupCfg, l2Timestamp) {
-			l1Cfg = stripPreJovialBPOActivations(l1Cfg)
+		if isPreJovianCeloChain(rollupCfg, l2Timestamp) {
+			l1Cfg = stripPreJovianBPOActivations(l1Cfg)
 		}
 		l1BlockInfo.BlobBaseFee = block.BlobBaseFee(l1Cfg)
 
