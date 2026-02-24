@@ -9,6 +9,7 @@ contract UpgradeOPChainInput is BaseDeployIO {
     address internal _prank;
     OPContractsManager internal _opcm;
     bytes _opChainConfigs;
+    bool _upgradeSuperchainConfig;
 
     // Setter for OPContractsManager type
     function set(bytes4 _sel, address _value) public {
@@ -26,6 +27,11 @@ contract UpgradeOPChainInput is BaseDeployIO {
         else revert("UpgradeOPCMInput: unknown selector");
     }
 
+    function set(bytes4 _sel, bool _value) public {
+        if (_sel == this.upgradeSuperchainConfig.selector) _upgradeSuperchainConfig = _value;
+        else revert("UpgradeOPCMInput: unknown selector");
+    }
+
     function prank() public view returns (address) {
         require(address(_prank) != address(0), "UpgradeOPCMInput: prank not set");
         return _prank;
@@ -40,6 +46,10 @@ contract UpgradeOPChainInput is BaseDeployIO {
         require(_opChainConfigs.length > 0, "UpgradeOPCMInput: not set");
         return _opChainConfigs;
     }
+
+    function upgradeSuperchainConfig() public view returns (bool) {
+        return _upgradeSuperchainConfig;
+    }
 }
 
 contract UpgradeOPChain is Script {
@@ -47,6 +57,7 @@ contract UpgradeOPChain is Script {
         OPContractsManager opcm = _uoci.opcm();
         OPContractsManager.OpChainConfig[] memory opChainConfigs =
             abi.decode(_uoci.opChainConfigs(), (OPContractsManager.OpChainConfig[]));
+        bool upgradeSuperchainConfig_ = _uoci.upgradeSuperchainConfig();
 
         // Etch DummyCaller contract. This contract is used to mimic the contract that is used
         // as the source of the delegatecall to the OPCM. In practice this will be the governance
@@ -60,7 +71,7 @@ contract UpgradeOPChain is Script {
         // Call into the DummyCaller. This will perform the delegatecall under the hood and
         // return the result.
         vm.broadcast(msg.sender);
-        (bool success,) = DummyCaller(prank).upgrade(opChainConfigs);
+        (bool success,) = DummyCaller(prank).upgrade(opChainConfigs, upgradeSuperchainConfig_);
         require(success, "UpgradeChain: upgrade failed");
     }
 }
@@ -68,8 +79,8 @@ contract UpgradeOPChain is Script {
 contract DummyCaller {
     address internal _opcmAddr;
 
-    function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs) external returns (bool, bytes memory) {
-        bytes memory data = abi.encodeCall(DummyCaller.upgrade, _opChainConfigs);
+    function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external returns (bool, bytes memory) {
+        bytes memory data = abi.encodeCall(DummyCaller.upgrade, (_opChainConfigs, _upgradeSuperchainConfig));
         (bool success, bytes memory result) = _opcmAddr.delegatecall(data);
         return (success, result);
     }

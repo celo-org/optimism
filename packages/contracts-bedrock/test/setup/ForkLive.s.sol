@@ -241,7 +241,7 @@ contract ForkLive is Deployer, StdAssertions {
 
         // Upgrade the chain.
         DelegateCaller(_delegateCaller).dcForward(
-            address(_opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChains))
+            address(_opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChains, false))
         );
 
         // Reset the upgrader to the original code.

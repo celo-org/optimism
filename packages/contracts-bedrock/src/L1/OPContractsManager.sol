@@ -29,6 +29,7 @@ import { IPermissionedDisputeGame } from "interfaces/dispute/IPermissionedDisput
 import { ISuperFaultDisputeGame } from "interfaces/dispute/ISuperFaultDisputeGame.sol";
 import { ISuperPermissionedDisputeGame } from "interfaces/dispute/ISuperPermissionedDisputeGame.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { IHasSuperchainConfig } from "interfaces/L1/IHasSuperchainConfig.sol";
 import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
 import { IOptimismPortal2 as IOptimismPortal } from "interfaces/L1/IOptimismPortal2.sol";
 import { IOptimismPortalInterop } from "interfaces/L1/IOptimismPortalInterop.sol";
@@ -732,10 +733,11 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
 
     /// @notice Upgrades a set of chains to the latest implementation contracts
     /// @param _opChainConfigs Array of OpChain structs, one per chain to upgrade
+    /// @param _upgradeSuperchainConfig Flag to indicate if superchainConfig should be upgraded
     /// @dev This function is intended to be DELEGATECALLed by an address that is the common owner of every chain in
     ///      `_opChainConfigs`'s ProxyAdmin.
     /// @dev This function requires that each chain's superchainConfig is already upgraded.
-    function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs) external virtual {
+    function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external virtual {
         // Grab the implementations.
         OPContractsManager.Implementations memory impls = getImplementations();
 
@@ -745,11 +747,17 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             uint256 l2ChainId = _opChainConfigs[i].systemConfigProxy.l2ChainId();
 
             // Grab the SuperchainConfig.
-            ISuperchainConfig superchainConfig = _opChainConfigs[i].systemConfigProxy.superchainConfig();
+            ISuperchainConfig celoSuperchainConfig = _opChainConfigs[i].systemConfigProxy.superchainConfig();
+            ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
 
             // SuperchainConfig should be in older version than impl on Celo L1.
-            if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
-                revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
+            {
+                if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
+                    revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
+                } else if (_upgradeSuperchainConfig) {
+                    // Celo: some chains (like Celo Mainnet) follow external superchain config that is not desired to be upgraded
+                    __upgradeSuperchainConfig(superchainConfig, _opChainConfigs[i].proxyAdmin);
+                }
             }
 
             // Do the chain upgrade.
@@ -898,12 +906,16 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
         }
     }
 
+    function upgradeSuperchainConfig(ISuperchainConfig _superchainConfig, IProxyAdmin _superchainProxyAdmin) external {
+        __upgradeSuperchainConfig(_superchainConfig, _superchainProxyAdmin);
+    }
+
     /// @notice Upgrades the SuperchainConfig contract.
     /// @param _superchainConfig The SuperchainConfig contract to upgrade.
     /// @param _superchainProxyAdmin The ProxyAdmin contract to use for the upgrade.
     /// @dev This function is intended to be DELEGATECALLed by the superchainConfig's ProxyAdminOwner.
     /// @dev This function will revert if the SuperchainConfig is already at or above the target version.
-    function upgradeSuperchainConfig(ISuperchainConfig _superchainConfig, IProxyAdmin _superchainProxyAdmin) external {
+    function __upgradeSuperchainConfig(ISuperchainConfig _superchainConfig, IProxyAdmin _superchainProxyAdmin) internal {
         // Only upgrade the superchainConfig if the current version is less than the target version.
         if (
             SemverComp.gte(
@@ -2031,13 +2043,14 @@ contract OPContractsManager is ISemver {
 
     /// @notice Upgrades a set of chains to the latest implementation contracts
     /// @param _opChainConfigs Array of OpChain structs, one per chain to upgrade
+    /// @param _upgradeSuperchainConfig Flag to indicate if superchainConfig should be upgraded
     /// @dev This function is intended to be DELEGATECALLed by an address that is the common owner of every chain in
     ///      `_opChainConfigs`'s ProxyAdmin.
     /// @dev This function requires that each chain's superchainConfig is already upgraded.
-    function upgrade(OpChainConfig[] memory _opChainConfigs) external virtual {
+    function upgrade(OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external virtual {
         if (address(this) == address(thisOPCM)) revert OnlyDelegatecall();
 
-        bytes memory data = abi.encodeCall(OPContractsManagerUpgrader.upgrade, (_opChainConfigs));
+        bytes memory data = abi.encodeCall(OPContractsManagerUpgrader.upgrade, (_opChainConfigs, _upgradeSuperchainConfig));
         _performDelegateCall(address(opcmUpgrader), data);
     }
 

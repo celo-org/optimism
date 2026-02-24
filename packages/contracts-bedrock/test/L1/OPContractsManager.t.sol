@@ -216,7 +216,7 @@ contract OPContractsManager_Upgrade_Harness is CommonTest {
 
         // Execute the chain upgrade.
         DelegateCaller(_delegateCaller).dcForward(
-            address(_opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs))
+            address(_opcm), abi.encodeCall(IOPContractsManager.upgrade, (opChainConfigs, false))
         );
 
         // Return early if a revert was expected. Otherwise we'll get errors below.
@@ -1343,7 +1343,7 @@ contract OPContractsManager_Upgrade_Test is OPContractsManager_Upgrade_Harness {
     function test_upgrade_notDelegateCalled_reverts() public {
         vm.prank(upgrader);
         vm.expectRevert(IOPContractsManager.OnlyDelegatecall.selector);
-        opcm.upgrade(opChainConfigs);
+        opcm.upgrade(opChainConfigs, false);
     }
 
     function test_upgrade_notProxyAdminOwner_reverts() public {
