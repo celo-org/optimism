@@ -493,8 +493,6 @@ func stripPreJovianBPOActivations(l1Cfg *params.ChainConfig) *params.ChainConfig
 	return &cfg
 }
 
-func uint64ptr(n uint64) *uint64 { return &n }
-
 // L1BlockInfoFromBytes is the inverse of L1InfoDeposit, to see where the L2 chain is derived from
 func L1BlockInfoFromBytes(rollupCfg *rollup.Config, l2BlockTime uint64, data []byte) (*L1BlockInfo, error) {
 	var info L1BlockInfo
