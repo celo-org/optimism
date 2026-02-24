@@ -660,6 +660,7 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
 
     /// @notice Upgrades a set of chains to the latest implementation contracts
     /// @param _opChainConfigs Array of OpChain structs, one per chain to upgrade
+    /// @param _upgradeSuperchainConfig Flag to indicate if superchainConfig should be upgraded
     /// @dev This function is intended to be called via DELEGATECALL from the Upgrade Controller Safe.
     /// @dev This function requires that each chain's superchainConfig is already upgraded.
     function upgrade(OPContractsManager.OpChainConfig[] memory _opChainConfigs, bool _upgradeSuperchainConfig) external virtual {
