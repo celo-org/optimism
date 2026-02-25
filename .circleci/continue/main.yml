@@ -870,7 +870,7 @@ jobs:
   cannon-go-lint-and-test:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: xlarge
+    resource_class: celo-org/xlarge
     parameters:
       skip_slow_tests:
         type: boolean
@@ -935,7 +935,7 @@ jobs:
   contracts-bedrock-build:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: large
+    resource_class: celo-org/xlarge
     parameters:
       build_args:
         description: Forge build arguments
@@ -1002,7 +1002,7 @@ jobs:
   contracts-bedrock-tests:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -1090,7 +1090,7 @@ jobs:
   contracts-bedrock-heavy-fuzz-nightly:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: full
@@ -1178,7 +1178,7 @@ jobs:
   contracts-bedrock-coverage:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     parameters:
       test_timeout:
         description: Timeout for running tests
@@ -1291,7 +1291,7 @@ jobs:
         default: ""
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           enable-mise-cache: true
@@ -1538,7 +1538,7 @@ jobs:
   contracts-bedrock-checks-fast:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           enable-mise-cache: true
@@ -1598,7 +1598,7 @@ jobs:
         default: false
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: xlarge
+    resource_class: celo-org/xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -1776,7 +1776,7 @@ jobs:
         default: 1
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     parallelism: <<parameters.parallelism>>
     steps:
       - utils/checkout-with-mise:
@@ -1834,7 +1834,7 @@ jobs:
       resource_class:
         description: Machine resource class
         type: string
-        default: 2xlarge
+        default: celo-org/2xlarge
       no_output_timeout:
         description: Timeout for when CircleCI kills the job if there's no output
         type: string
@@ -1908,7 +1908,7 @@ jobs:
         default: 30m
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge+
+    resource_class: celo-org/2xlarge
     steps:
       - run:
           name: Install eatmydata and disable fsync for all subprocesses
@@ -2175,7 +2175,7 @@ jobs:
       SEMGREP_COMMIT: << pipeline.git.revision >>
     docker:
       - image: returntocorp/semgrep
-    resource_class: xlarge
+    resource_class: celo-org/xlarge
     steps:
       - checkout # no need to use mise here since the docker image contains the only dependency
       - unless:
@@ -2321,7 +2321,7 @@ jobs:
   publish-contract-artifacts:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - gcp-cli/install
       - gcp-oidc-authenticate:
