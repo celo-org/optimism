@@ -464,7 +464,8 @@ workflows:
           profile: release
           persist_to_workspace: true
           # Release-build linking OOMs xlarge.gen2.
-          resource_class: 2xlarge.gen2
+          # celo: self-hosted runner, celo-org's plan has no 2xlarge.gen2
+          resource_class: celo-org/2xlarge
           context:
             - circleci-repo-readonly-authenticated-github-token
             - sccache-gcs-optimism

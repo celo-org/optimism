@@ -228,7 +228,7 @@ jobs:
         default: "just test-docs"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -261,7 +261,7 @@ jobs:
         default: "release"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
