@@ -104,4 +104,5 @@ func applyHardforks(cfg *Config, hardforks superchain.HardforkConfig) {
 	cfg.IsthmusTime = hardforks.IsthmusTime
 	cfg.InteropTime = hardforks.InteropTime
 	cfg.JovianTime = hardforks.JovianTime
+	cfg.Cel2Time = hardforks.Cel2Time
 }
