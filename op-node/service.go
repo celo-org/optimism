@@ -248,7 +248,6 @@ func NewRollupConfigFromCLI(log log.Logger, ctx cliiface.Context) (*rollup.Confi
 	if err != nil {
 		return nil, err
 	}
-	applyCeloHardforks(rollupConfig)
 	applyOverrides(ctx, rollupConfig)
 	return rollupConfig, nil
 }
@@ -290,41 +289,6 @@ func applyOverrides(ctx cliiface.Context, rollupConfig *rollup.Config) {
 			timestamp := ctx.Uint64(flagName)
 			rollupConfig.SetActivationTime(fork, &timestamp)
 		}
-	}
-}
-
-// applyCeloHardforks modifies the rollupConfig to apply Celo-specific hardforks.
-// This code is a shortcut and the proper config should be added to the superchain registry.
-// See https://github.com/celo-org/op-geth/issues/389
-func applyCeloHardforks(rollupConfig *rollup.Config) {
-	switch rollupConfig.L2ChainID.Uint64() {
-	case params.CeloMainnetChainID:
-		activationTime := params.CeloMainnetIsthmusTimestamp
-		rollupConfig.HoloceneTime = &activationTime
-		rollupConfig.IsthmusTime = &activationTime
-
-		// It seems we didn't need this to be set, since at the time of mainnet launch we were already
-		// using a version of optimism that used a version of op-geth that correctly handled the Pectra
-		// blob fee calculations. The addition of this flag means that we have been calculating the
-		// blobBaseFee (stored in the l1 info contract) with the Cancun parameters up until this the flag time.
-		// So from Prage mainnet activation on May 7th 2025 up until The isthmus time on Jul 9th 2025
-		// we've been using the Cancun parametrs and incorrectly calculating the blobBaseFee.
-		//
-		// We can check with the following commands, looking at a celo block ocurring on May 23rd 2025:
-		// ❯ cast call 0x4200000000000000000000000000000000000015 "blobBaseFee()" -r https://forno.celo.org 36066500 | cast to-dec
-		// 6449008216286192
-		//
-		// ❯ cast call 0x4200000000000000000000000000000000000015 "number()" -r https://forno.celo.org 36066500 | cast to-dec
-		// 24290057
-		//
-		// ❯ cast base-fee -r https://ethereum-rpc.publicnode.com 24290025
-		// 68041857
-		//
-		// See the below link for a description of the original bug the required the addition of the PectraBlobScheduleTime config option:
-		// https://docs.optimism.io/notices/archive/blob-fee-bug
-		rollupConfig.PectraBlobScheduleTime = &activationTime
-	default:
-		// No Celo hardforks for other chains, do nothing.
 	}
 }
 

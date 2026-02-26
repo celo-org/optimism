@@ -110,8 +110,8 @@ github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7
 github.com/bwesterb/go-ristretto v1.2.0/go.mod h1:fUIoIZaG73pV5biE2Blr2xEzDoMj7NFEuV9ekS419A0=
 github.com/campoy/embedmd v1.0.0 h1:V4kI2qTJJLf4J29RzI/MAt2c3Bl4dQSYPuflzwFH2hY=
 github.com/campoy/embedmd v1.0.0/go.mod h1:oxyr9RCiSXg0M3VJ3ks0UGfp98BpSSGr0kpiX3MzVl8=
-github.com/celo-org/op-geth v1.101411.1-0.20260224115301-4a481bb6aff9 h1:8PqPjI+Hv7qJA3EL9zESgeU3Rj5uD7kB6+kEBPEm088=
-github.com/celo-org/op-geth v1.101411.1-0.20260224115301-4a481bb6aff9/go.mod h1:9J7De8kDwXE/lrMgVEHc0F33TZqcN1Lb5nYaW6UZt38=
+github.com/celo-org/op-geth v1.101411.1-0.20260226170727-ceddbe76099e h1:0eaGY5/2zKhRMlm/jADSRS/yZsjamYrgfEejWpuYXig=
+github.com/celo-org/op-geth v1.101411.1-0.20260226170727-ceddbe76099e/go.mod h1:9J7De8kDwXE/lrMgVEHc0F33TZqcN1Lb5nYaW6UZt38=
 github.com/cenkalti/backoff/v4 v4.3.0 h1:MyRJ/UdXutAwSAT+s3wNd7MfTIcy71VQueUuFK343L8=
 github.com/cenkalti/backoff/v4 v4.3.0/go.mod h1:Y3VNntkOUPxTVeUxJ/G5vcM//AlwfmyYozVcomhLiZE=
 github.com/cespare/cp v0.1.0 h1:SE+dxFebS7Iik5LK0tsi1k9ZCxEaFX4AjQmoyA+1dJk=
