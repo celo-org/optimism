@@ -37,11 +37,6 @@ func requireAllHardforksSetCorrectly(t *testing.T, cfg Config, hardforkCfg super
 	cfgVal := reflect.ValueOf(&cfg).Elem()
 	for i := 0; i < hardforkVal.NumField(); i++ {
 		hardforkField := hardforkType.Field(i)
-		if hardforkField.Name == "GingerbreadBlock" {
-			// GingerbreadBlock is a chain config concept (block number, not timestamp),
-			// not a rollup config field.
-			continue
-		}
 		cfgField := cfgVal.FieldByName(hardforkField.Name)
 		require.Equalf(t, hardforkVal.Field(i).Elem(), cfgField.Elem(), "missing hard fork field %v", hardforkField.Name)
 	}
