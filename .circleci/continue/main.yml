@@ -2489,6 +2489,11 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
       - check-op-geth-version:
+          # celo disable unwanted jobs/workflows
+          filters:
+            branches:
+              only:
+                - celo-disabled-circleci-jobs-branch
           context:
             - circleci-repo-readonly-authenticated-github-token
       - check-nut-locks:
