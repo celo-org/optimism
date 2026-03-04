@@ -479,8 +479,8 @@ jobs:
       - run:
           name: Generate compact vectors from base
           command: |
-            # Use develop as the base branch
-            BASE_BRANCH="develop"
+            # Use the main branch as the base
+            BASE_BRANCH="celo-rebase-17"
             SUPERCHAIN_TAR="rust/op-reth/crates/chainspec/res/superchain-configs.tar"
 
             # `git checkout` switches between base and PR without touching the superchain-registry
