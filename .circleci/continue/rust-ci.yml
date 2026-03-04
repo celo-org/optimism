@@ -640,8 +640,8 @@ jobs:
       - run:
           name: Generate compact vectors from base
           command: |
-            # Use develop as the base branch
-            BASE_BRANCH="develop"
+            # Use the main branch as the base
+            BASE_BRANCH="celo-rebase-17"
 
             # Save current state
             git stash || true
