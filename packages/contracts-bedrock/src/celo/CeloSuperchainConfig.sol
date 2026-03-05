@@ -47,8 +47,8 @@ contract CeloSuperchainConfig is Initializable, ISemver {
     event ConfigUpdate(UpdateType indexed updateType, bytes data);
 
     /// @notice Semantic version.
-    /// @custom:semver 1.0.0-beta.1
-    string public constant version = "1.0.0-beta.1";
+    /// @custom:semver 1.0.0-celo
+    string public constant version = "1.0.0-celo";
 
     /// @notice Constructs the CeloSuperchainConfig contract.
     constructor() {
@@ -102,6 +102,20 @@ contract CeloSuperchainConfig is Initializable, ISemver {
 
         if (superchainConfig() != address(0)) {
             paused_ = ISuperchainConfig(superchainConfig()).paused();
+        }
+
+        return paused_;
+    }
+
+    /// @notice Forward-compatibility getter
+    function paused(address _identifier) public view returns (bool paused_) {
+        paused_ = celoPaused();
+        if (paused_) {
+            return paused_;
+        }
+
+        if (superchainConfig() != address(0)) {
+            paused_ = ISuperchainConfig(superchainConfig()).paused(_identifier);
         }
 
         return paused_;
