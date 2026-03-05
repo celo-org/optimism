@@ -19,6 +19,7 @@ interface ICeloSuperchainConfig {
     function superchainConfig() external view returns (address superchainConfig_);
     function pause(string memory _identifier) external;
     function paused() external view returns (bool paused_);
+    function paused(address _identifier) external view returns (bool paused_);
     function unpause() external;
     function checkAndPauseIfSuperchainPaused() external returns (bool paused_);
 
