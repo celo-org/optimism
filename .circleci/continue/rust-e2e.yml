@@ -229,9 +229,11 @@ workflows:
           build_args: --skip test
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate: &rust-e2e-job-base
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable cannon-prestate — orphaned fault-proof artifact; its only consumers
+      # (the rust-e2e / op-reth-e2e jobs) are disabled above.
+      # - cannon-prestate: &rust-e2e-job-base
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       # rust-workspace-release builds the whole rust workspace (no binary filter),
       # so it produces kona-host, kona-node, op-reth, and the rest. Downstream
       # e2e jobs attach the workspace and consume the binaries directly.
@@ -242,51 +244,55 @@ workflows:
           persist_to_workspace: true
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - rust-e2e-sysgo-tests:
-          name: rust-e2e-<<matrix.devnet_config>>
-          matrix:
-            parameters:
-              devnet_config:
-                ["simple-kona", "simple-kona-geth", "simple-kona-sequencer"]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - rust-workspace-release
-      - op-reth-e2e-sysgo-tests:
-          <<: *rust-e2e-job-base
-          requires:
-            - contracts-bedrock-build
-            - rust-workspace-release
-      - rust-restart-sysgo-tests:
-          name: rust-e2e-restart
-          <<: *rust-e2e-job-base
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - rust-workspace-release
-      # Proof tests - single kind only, interop excluded per original config
-      - kona-proof-action-tests:
-          name: kona-proof-action-single
-          kind: single
-          requires:
-            - rust-workspace-release
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: Skip e2e tests until we support Celo in op-reth and kona-node
+      # - rust-e2e-sysgo-tests:
+      #     name: rust-e2e-<<matrix.devnet_config>>
+      #     matrix:
+      #       parameters:
+      #         devnet_config:
+      #           ["simple-kona", "simple-kona-geth", "simple-kona-sequencer"]
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - rust-workspace-release
+      # celo: Skip e2e tests until we support Celo in op-reth and kona-node
+      # - op-reth-e2e-sysgo-tests:
+      #     <<: *rust-e2e-job-base
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - rust-workspace-release
+      # celo: skip until Rust RollupConfig supports cel2_time
+      # - rust-restart-sysgo-tests:
+      #     name: rust-e2e-restart
+      #     <<: *rust-e2e-job-base
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - rust-workspace-release
+      # celo: disable kona-proof-action — kona/fault-proof has no Celo support.
+      # - kona-proof-action-tests:
+      #     name: kona-proof-action-single
+      #     kind: single
+      #     requires:
+      #       - rust-workspace-release
+      #       - contracts-bedrock-build
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       # -----------------------------------------------------------------------
       # Required gate — fans in on all E2E test jobs
       # -----------------------------------------------------------------------
       - required-rust-e2e:
+          # celo: e2e tests disabled; still gate on the surviving build jobs.
           requires:
-            - rust-e2e-simple-kona: terminal
-            - rust-e2e-simple-kona-geth: terminal
-            - rust-e2e-simple-kona-sequencer: terminal
-            - rust-e2e-restart: terminal
-            - kona-proof-action-single: terminal
+            - contracts-bedrock-build: terminal
+            - rust-workspace-release: terminal
           context:
             - circleci-api-token
+
+  # Required Rust E2E gate (skip) — runs when no rust changes and no dispatch
+  # Just runs action tests
   rust-e2e-gate-skip:
     when: << pipeline.parameters.c-run_rust_e2e_gate_skip >>
     jobs:
@@ -301,18 +307,20 @@ workflows:
           persist_to_workspace: true
           context:
             - circleci-repo-readonly-authenticated-github-token
-      # Proof tests - single kind only, interop excluded per original config
-      - kona-proof-action-tests:
-          name: kona-proof-action-single
-          kind: single
-          requires:
-            - rust-workspace-release
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable kona-proof-action — kona/fault-proof has no Celo support.
+      # - kona-proof-action-tests:
+      #     name: kona-proof-action-single
+      #     kind: single
+      #     requires:
+      #       - rust-workspace-release
+      #       - contracts-bedrock-build
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
 
       - required-rust-e2e:
+          # celo: e2e tests disabled; still gate on the surviving build jobs.
           requires:
-            - kona-proof-action-single: terminal
+            - contracts-bedrock-build: terminal
+            - rust-workspace-release: terminal
           context:
             - circleci-api-token
