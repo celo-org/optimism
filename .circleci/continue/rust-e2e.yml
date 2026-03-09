@@ -336,32 +336,35 @@ workflows:
           binary: "op-reth"
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - rust-e2e-sysgo-tests:
-          name: rust-e2e-<<matrix.devnet_config>>
-          matrix:
-            parameters:
-              devnet_config: ["simple-kona", "simple-kona-geth", "simple-kona-sequencer"]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - cannon-kona-host
-            - kona-build-release
-            - op-reth-build
-      - op-reth-e2e-sysgo-tests:
-          <<: *rust-e2e-job-base
-          requires:
-            - contracts-bedrock-build
-            - op-reth-build
-      - rust-restart-sysgo-tests:
-          name: rust-e2e-restart
-          <<: *rust-e2e-job-base
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - cannon-kona-host
-            - kona-build-release
+      # celo: Skip e2e tests until we support Celo in op-reth and kona-node
+      # - rust-e2e-sysgo-tests:
+      #     name: rust-e2e-<<matrix.devnet_config>>
+      #     matrix:
+      #       parameters:
+      #         devnet_config: ["simple-kona", "simple-kona-geth", "simple-kona-sequencer"]
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - cannon-kona-host
+      #       - kona-build-release
+      #       - op-reth-build
+      # celo: Skip e2e tests until we support Celo in op-reth and kona-node
+      # - op-reth-e2e-sysgo-tests:
+      #     <<: *rust-e2e-job-base
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - op-reth-build
+      # celo: skip until Rust RollupConfig supports cel2_time
+      # - rust-restart-sysgo-tests:
+      #     name: rust-e2e-restart
+      #     <<: *rust-e2e-job-base
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - cannon-kona-host
+      #       - kona-build-release
       # Proof tests - single kind only, interop excluded per original config
       - kona-proof-action-tests:
           name: kona-proof-action-single
@@ -376,10 +379,11 @@ workflows:
       # -----------------------------------------------------------------------
       - required-rust-e2e:
           requires:
-            - rust-e2e-simple-kona
-            - rust-e2e-simple-kona-geth
-            - rust-e2e-simple-kona-sequencer
-            - rust-e2e-restart
+            # celo: skipped (kona/rust/op-reth e2e not supported on Celo until cel2_time support)
+            # - rust-e2e-simple-kona
+            # - rust-e2e-simple-kona-geth
+            # - rust-e2e-simple-kona-sequencer
+            # - rust-e2e-restart
             - kona-proof-action-single
 
   # Required Rust E2E gate (skip) — runs when no rust changes and no dispatch

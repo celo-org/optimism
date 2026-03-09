@@ -9,6 +9,7 @@ import (
 )
 
 func TestInteropSingleChainFaultProofs(gt *testing.T) {
+	gt.Skip("Skipped: fault proof program has no Celo support (cannot parse cel2_time in RollupConfig)")
 	t := devtest.SerialT(gt)
 	sys := presets.NewSingleChainInteropSupernodeProofs(t)
 	sfp.RunSingleChainSuperFaultProofSmokeTest(t, sys)
