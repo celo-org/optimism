@@ -87,6 +87,7 @@ func TestChallengerRespondsToMultipleInvalidClaimsEOA(gt *testing.T) {
 }
 
 func TestChallengerCountersPreGenesisGame(gt *testing.T) {
+	gt.Skip("Skipped: fault proof program has no Celo support (cannot parse cel2_time in RollupConfig)")
 	t := devtest.SerialT(gt)
 	sys := presets.NewSimpleInterop(
 		t,
