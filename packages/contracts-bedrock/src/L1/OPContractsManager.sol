@@ -28,6 +28,7 @@ import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
 import { IPermissionedDisputeGame } from "interfaces/dispute/IPermissionedDisputeGame.sol";
 import { ISuperFaultDisputeGame } from "interfaces/dispute/ISuperFaultDisputeGame.sol";
 import { ISuperPermissionedDisputeGame } from "interfaces/dispute/ISuperPermissionedDisputeGame.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IHasSuperchainConfig } from "interfaces/L1/IHasSuperchainConfig.sol";
 import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
@@ -677,7 +678,7 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
 
             // Get celoSuperchainConfig.
             ISuperchainConfig celoSuperchainConfig = optimismPortal.superchainConfig();
-
+            __upgradeCeloSuperchainConfig(address(celoSuperchainConfig), _opChainConfigs[i].proxyAdmin);
             {
                 // Get superchainConfig from celoSuperchainConfig.
                 ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
@@ -905,6 +906,20 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
         );
     }
 
+    /// @notice Upgrades the CeloSuperchainConfig contract.
+    /// @param _celoSuperchainConfig The CeloSuperchainConfig contract to upgrade.
+    /// @param _superchainProxyAdmin The ProxyAdmin contract to use for the upgrade.
+    function __upgradeCeloSuperchainConfig(address _celoSuperchainConfig, IProxyAdmin _superchainProxyAdmin) internal {
+        // Grab the implementations.
+        OPContractsManager.Implementations memory impls = getImplementations();
+
+        // Attempt to upgrade. If the ProxyAdmin is not the CeloSuperchainConfig's admin, this will revert.
+        upgradeTo(
+            _superchainProxyAdmin,
+            _celoSuperchainConfig,
+            impls.celoSuperchainConfigImpl
+        );
+    }
 
     /// @notice Deploys and initializes a new AnchorStateRegistry when the chain is not yet on U16.
     /// @param _opChainConfig The OP chain configuration for the chain being upgraded.
@@ -1913,6 +1928,7 @@ contract OPContractsManager is ISemver {
 
     /// @notice The latest implementation contracts for the OP Stack.
     struct Implementations {
+        address celoSuperchainConfigImpl;
         address superchainConfigImpl;
         address protocolVersionsImpl;
         address l1ERC721BridgeImpl;

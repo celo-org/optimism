@@ -202,6 +202,7 @@ interface IOPContractsManager {
 
     /// @notice The latest implementation contracts for the OP Stack.
     struct Implementations {
+        address celoSuperchainConfigImpl;
         address superchainConfigImpl;
         address protocolVersionsImpl;
         address l1ERC721BridgeImpl;

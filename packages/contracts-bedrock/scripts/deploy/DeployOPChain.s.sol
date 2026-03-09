@@ -473,6 +473,7 @@ contract DeployOPChain is Script {
             SystemConfig: address(_doo.systemConfigProxy()),
             L1ERC721Bridge: address(_doo.l1ERC721BridgeProxy()),
             ProtocolVersions: address(0),
+            CeloSuperchainConfig: address(0),
             SuperchainConfig: address(0)
         });
 

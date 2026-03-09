@@ -488,6 +488,7 @@ library ChainAssertions {
             SystemConfig: address(_output.systemConfigImpl),
             L1ERC721Bridge: address(_output.l1ERC721BridgeImpl),
             ProtocolVersions: address(_output.protocolVersionsImpl),
+            CeloSuperchainConfig: address(_output.celoSuperchainConfigImpl),
             SuperchainConfig: address(_output.superchainConfigImpl)
         });
     }
