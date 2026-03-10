@@ -296,6 +296,7 @@ contract OPContractsManagerStandardValidator is ISemver {
     function assertValidSystemConfig(
         string memory _errors,
         ISystemConfig _sysCfg,
+        uint256 _l2ChainId,
         IProxyAdmin _admin
     )
         internal
@@ -344,6 +345,17 @@ contract OPContractsManagerStandardValidator is ISemver {
         _errors = internalRequire(decimals_ == 18, "SYSCON-CEL-20", _errors);
         _errors = internalRequire(LibString.eq(_sysCfg.gasPayingTokenName(), name_) , "SYSCON-CEL-30", _errors);
         _errors = internalRequire(LibString.eq(_sysCfg.gasPayingTokenSymbol(), "CELO") , "SYSCON-CEL-40", _errors);
+
+        // Celo extra validation: celo superchain config
+        if (_l2ChainId == 42220) {
+            _errors = internalRequire(
+                _sysCfg.superchainConfig().guardian() == address(0x9Eb44Da23433b5cAA1c87e35594D15FcEb08D34d), "SYSCON-CEL-50", _errors
+            ); // True only for Celo Mainnet
+        } else if (_l2ChainId == 11142220) {
+            _errors = internalRequire(
+                _sysCfg.superchainConfig().guardian() == address(0x769b480A8036873a2a5EB01FE39278e5Ab78Bb27), "SYSCON-CEL-60", _errors
+            ); // True only for Celo Sepolia
+        }
 
         return _errors;
     }
@@ -849,7 +861,7 @@ contract OPContractsManagerStandardValidator is ISemver {
 
         _errors = assertValidSuperchainConfig(_errors);
         _errors = assertValidProxyAdmin(_errors, _input.proxyAdmin, _overrides);
-        _errors = assertValidSystemConfig(_errors, _input.sysCfg, _input.proxyAdmin);
+        _errors = assertValidSystemConfig(_errors, _input.sysCfg,  _input.l2ChainID, _input.proxyAdmin);
         _errors = assertValidL1CrossDomainMessenger(_errors, _input.sysCfg, _input.proxyAdmin);
         _errors = assertValidL1StandardBridge(_errors, _input.sysCfg, _input.proxyAdmin);
         _errors = assertValidOptimismMintableERC20Factory(_errors, _input.sysCfg, _input.proxyAdmin);

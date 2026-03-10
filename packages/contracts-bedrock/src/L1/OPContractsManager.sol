@@ -642,6 +642,9 @@ contract OPContractsManagerGameTypeAdder is OPContractsManagerBase {
 }
 
 contract OPContractsManagerUpgrader is OPContractsManagerBase {
+    address constant internal V4_CELO_GUARDIAN_MAINNET = 0x9Eb44Da23433b5cAA1c87e35594D15FcEb08D34d;
+    address constant internal V4_CELO_GUARDIAN_SEPOLIA = 0x769b480A8036873a2a5EB01FE39278e5Ab78Bb27;
+
     /// @notice Emitted when a chain is upgraded
     /// @param systemConfig Address of the chain's SystemConfig contract
     /// @param upgrader Address that initiated the upgrade
@@ -676,9 +679,12 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             IOptimismPortal optimismPortal =
                 IOptimismPortal(payable(_opChainConfigs[i].systemConfigProxy.optimismPortal()));
 
-            // Get celoSuperchainConfig.
-            ISuperchainConfig celoSuperchainConfig = optimismPortal.superchainConfig();
-            __upgradeCeloSuperchainConfig(address(celoSuperchainConfig), _opChainConfigs[i].proxyAdmin);
+            // Deploy new CeloSuperchainConfig.
+            ICeloSuperchainConfig celoSuperchainConfig = __deployNewCeloSuperchainConfig(
+                _opChainConfigs[i],
+                impls,
+                ICeloSuperchainConfig(address(optimismPortal.superchainConfig()))
+            );
             {
                 // Get superchainConfig from celoSuperchainConfig.
                 ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
@@ -711,7 +717,7 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
                 _opChainConfigs[i].proxyAdmin,
                 address(_opChainConfigs[i].systemConfigProxy),
                 impls.systemConfigImpl,
-                abi.encodeCall(ISystemConfig.upgrade, (l2ChainId, celoSuperchainConfig))
+                abi.encodeCall(ISystemConfig.upgrade, (l2ChainId, ISuperchainConfig(address(celoSuperchainConfig))))
             );
 
             // Try to grab the AnchorStateRegistry from the OptimismPortal contract. This will work
@@ -907,17 +913,53 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
     }
 
     /// @notice Upgrades the CeloSuperchainConfig contract.
-    /// @param _celoSuperchainConfig The CeloSuperchainConfig contract to upgrade.
-    /// @param _superchainProxyAdmin The ProxyAdmin contract to use for the upgrade.
-    function __upgradeCeloSuperchainConfig(address _celoSuperchainConfig, IProxyAdmin _superchainProxyAdmin) internal {
-        // Grab the implementations.
-        OPContractsManager.Implementations memory impls = getImplementations();
+    /// @param _opChainConfig The OP chain configuration for the chain being upgraded.
+    /// @param _impls The latest implementation contract addresses.
+    /// @param _old Existing CeloSuperchainConfig.
+    function __deployNewCeloSuperchainConfig(
+        OPContractsManager.OpChainConfig memory _opChainConfig,
+        OPContractsManager.Implementations memory _impls,
+        ICeloSuperchainConfig _old
+    ) internal returns (ICeloSuperchainConfig celoSuperchainConfig_) {
+
+        // Grab the L2 chain ID
+        uint256 l2ChainId = getL2ChainId(IFaultDisputeGame(address(
+            getGameImplementation(IDisputeGameFactory(_opChainConfig.systemConfigProxy.disputeGameFactory()), GameTypes.PERMISSIONED_CANNON)
+        )));
+
+        // Deploy a new CeloSuperchainConfig proxy.
+        celoSuperchainConfig_ = ICeloSuperchainConfig(
+            deployProxy({
+                _l2ChainId: l2ChainId,
+                _proxyAdmin: _opChainConfig.proxyAdmin,
+                _saltMixer: reusableSaltMixer(_opChainConfig),
+                _contractName: "CeloSuperchainConfig-U16"
+            })
+        );
+
+        // Overwrite guardian for Celo Mainnet or Celo Sepolia
+        address guardian;
+        if (l2ChainId == 42220) {
+            guardian = V4_CELO_GUARDIAN_MAINNET;
+        } else if (l2ChainId == 11142220) {
+            guardian = V4_CELO_GUARDIAN_SEPOLIA;
+        } else {
+            guardian = _old.guardian();
+        }
 
         // Attempt to upgrade. If the ProxyAdmin is not the CeloSuperchainConfig's admin, this will revert.
-        upgradeTo(
-            _superchainProxyAdmin,
-            _celoSuperchainConfig,
-            impls.celoSuperchainConfigImpl
+        upgradeToAndCall(
+            _opChainConfig.proxyAdmin,
+            address(celoSuperchainConfig_),
+            _impls.celoSuperchainConfigImpl,
+            abi.encodeCall(
+                ICeloSuperchainConfig.initialize,
+                (
+                    guardian,
+                    _old.paused(),
+                    _old.superchainConfig()
+                )
+            )
         );
     }
 
