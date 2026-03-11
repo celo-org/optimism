@@ -94,6 +94,7 @@ contract CeloSuperchainConfig is Initializable, ISemver {
 
     /// @notice Getter for the current paused status, which depends both on the
     ///         local paused value, and the paused status of Superchain.
+    /// @return paused_ True if the system is paused for this identifier and not expired.
     function paused() public view returns (bool paused_) {
         paused_ = celoPaused();
         if (paused_) {
@@ -108,14 +109,19 @@ contract CeloSuperchainConfig is Initializable, ISemver {
     }
 
     /// @notice Forward-compatibility getter
+    /// @dev Getter for the current paused status, which depends both on the
+    ///         local paused value, and the paused status of Superchain.
+    /// @param _identifier The address identifier to check.
+    /// @return paused_ True if the system is paused for this identifier and not expired.
     function paused(address _identifier) public view returns (bool paused_) {
         paused_ = celoPaused();
         if (paused_) {
             return paused_;
         }
 
-        if (superchainConfig() != address(0)) {
-            paused_ = ISuperchainConfig(superchainConfig()).paused(_identifier);
+        address superchainConfig_ = superchainConfig();
+        if (superchainConfig_ != address(0)) {
+            paused_ = ISuperchainConfig(superchainConfig_).paused(_identifier);
         }
 
         return paused_;
