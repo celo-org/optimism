@@ -2,6 +2,7 @@
 
 use alloy_consensus::Header;
 use clap::Parser;
+use reth_chainspec::EthChainSpec;
 use reth_cli::chainspec::ChainSpecParser;
 use reth_cli_commands::common::{AccessRights, CliNodeTypes, Environment};
 use reth_db_common::init::init_from_state_dump;
@@ -9,6 +10,7 @@ use reth_optimism_chainspec::OpChainSpec;
 use reth_optimism_primitives::{
     OpPrimitives,
     bedrock::{BEDROCK_HEADER, BEDROCK_HEADER_HASH},
+    celo::{CEL2_HEADER, CEL2_HEADER_HASH},
 };
 use reth_primitives_traits::{SealedHeader, header::HeaderMut};
 use reth_provider::{
@@ -18,6 +20,9 @@ use reth_provider::{
 use std::{io::BufReader, sync::Arc};
 use tracing::info;
 
+/// Celo mainnet chain ID.
+const CELO_MAINNET_CHAIN_ID: u64 = 42220;
+
 /// Initializes the database with the genesis block.
 #[derive(Debug, Parser)]
 pub struct InitStateCommandOp<C: ChainSpecParser> {
@@ -26,9 +31,10 @@ pub struct InitStateCommandOp<C: ChainSpecParser> {
 
     /// Specifies whether to initialize the state without relying on OVM or EVM historical data.
     ///
-    /// When enabled, and before inserting the state, it creates a dummy chain up to the last OVM
-    /// block (#105235062) (14GB / 90 seconds). It then, appends the Bedrock block. This is
-    /// hardcoded for OP mainnet, for other OP chains you will need to pass in a header.
+    /// When enabled, and before inserting the state, it creates a dummy chain up to the
+    /// migration block, then appends the migration header. Hardcoded migration headers are
+    /// available for OP mainnet (Bedrock, block #105235063) and Celo mainnet (Cel2, block
+    /// #31056500). For other OP chains, a header must be passed in.
     ///
     /// - **Note**: **Do not** import receipts and blocks beforehand, or this will fail or be
     ///   ignored.
@@ -41,14 +47,22 @@ impl<C: ChainSpecParser<ChainSpec = OpChainSpec>> InitStateCommandOp<C> {
     pub async fn execute<N: CliNodeTypes<ChainSpec = C::ChainSpec, Primitives = OpPrimitives>>(
         mut self,
     ) -> eyre::Result<()> {
-        // If using --without-ovm for OP mainnet, handle the special case with hardcoded Bedrock
-        // header. Otherwise delegate to the base InitStateCommand implementation.
         if self.without_ovm {
             if self.init_state.env.chain.is_optimism_mainnet() {
-                return self.execute_with_bedrock_header::<N>();
+                return self.execute_with_migration_header::<N>(
+                    "OP mainnet",
+                    SealedHeader::new(BEDROCK_HEADER, BEDROCK_HEADER_HASH),
+                );
             }
 
-            // For non-mainnet OP chains with --without-ovm, use the base implementation
+            if self.init_state.env.chain.chain_id() == CELO_MAINNET_CHAIN_ID {
+                return self.execute_with_migration_header::<N>(
+                    "Celo mainnet",
+                    SealedHeader::new(CEL2_HEADER, CEL2_HEADER_HASH),
+                );
+            }
+
+            // For other OP chains with --without-ovm, use the base implementation
             // by setting the without_evm flag
             self.init_state.without_evm = true;
         }
@@ -56,13 +70,18 @@ impl<C: ChainSpecParser<ChainSpec = OpChainSpec>> InitStateCommandOp<C> {
         self.init_state.execute::<N>().await
     }
 
-    /// Execute init-state with hardcoded Bedrock header for OP mainnet.
-    fn execute_with_bedrock_header<
+    /// Execute init-state with a hardcoded migration header.
+    ///
+    /// Creates a dummy chain up to the block before `migration_header`, appends the migration
+    /// header, then imports the state dump.
+    fn execute_with_migration_header<
         N: CliNodeTypes<ChainSpec = C::ChainSpec, Primitives = OpPrimitives>,
     >(
         self,
+        chain_name: &str,
+        migration_header: SealedHeader<Header>,
     ) -> eyre::Result<()> {
-        info!(target: "reth::cli", "Reth init-state starting for OP mainnet");
+        info!(target: "reth::cli", chain_name, "Reth init-state starting");
         let env = self.init_state.env.init::<N>(AccessRights::RW)?;
 
         let Environment { config, provider_factory, .. } = env;
@@ -70,11 +89,12 @@ impl<C: ChainSpecParser<ChainSpec = OpChainSpec>> InitStateCommandOp<C> {
         let provider_rw = provider_factory.database_provider_rw()?;
 
         let last_block_number = provider_rw.last_block_number()?;
+        let migration_block_number = migration_header.header().number;
 
         if last_block_number == 0 {
             reth_cli_commands::init_state::without_evm::setup_without_evm(
                 &provider_rw,
-                SealedHeader::new(BEDROCK_HEADER, BEDROCK_HEADER_HASH),
+                migration_header,
                 |number| {
                     let mut header = Header::default();
                     header.set_number(number);
@@ -85,10 +105,10 @@ impl<C: ChainSpecParser<ChainSpec = OpChainSpec>> InitStateCommandOp<C> {
             // SAFETY: it's safe to commit static files, since in the event of a crash, they
             // will be unwound according to database checkpoints.
             //
-            // Necessary to commit, so the BEDROCK_HEADER is accessible to provider_rw and
-            // init_state_dump
+            // Necessary to commit, so the migration header is accessible to provider_rw and
+            // init_from_state_dump.
             static_file_provider.commit()?;
-        } else if last_block_number > 0 && last_block_number < BEDROCK_HEADER.number {
+        } else if last_block_number > 0 && last_block_number < migration_block_number {
             return Err(eyre::eyre!(
                 "Data directory should be empty when calling init-state with --without-ovm."
             ));
