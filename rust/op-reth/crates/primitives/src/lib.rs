@@ -12,6 +12,7 @@
 extern crate alloc;
 
 pub mod bedrock;
+pub mod celo;
 
 // Re-export predeploys from op-alloy-consensus
 pub use op_alloy_consensus::L2_TO_L1_MESSAGE_PASSER_ADDRESS;
