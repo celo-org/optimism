@@ -296,6 +296,30 @@ func RandomSetCodeTx(rng *rand.Rand, signer types.Signer) *types.Transaction {
 	return tx
 }
 
+func RandomCeloDynamicFeeTxV2(rng *rand.Rand, signer types.Signer) *types.Transaction {
+	baseFee := new(big.Int).SetUint64(rng.Uint64())
+	key := InsecureRandomKey(rng)
+	tip := big.NewInt(rng.Int63n(10 * params.GWei))
+	feeCurrency := RandomAddress(rng)
+	txData := &types.CeloDynamicFeeTxV2{
+		ChainID:     signer.ChainID(),
+		Nonce:       rng.Uint64(),
+		GasTipCap:   tip,
+		GasFeeCap:   new(big.Int).Add(baseFee, tip),
+		Gas:         params.TxGas + uint64(rng.Int63n(2_000_000)),
+		To:          RandomTo(rng),
+		Value:       RandomETH(rng, 10),
+		Data:        RandomData(rng, rng.Intn(RandomDataSize)),
+		AccessList:  nil,
+		FeeCurrency: &feeCurrency,
+	}
+	tx, err := types.SignNewTx(key, signer, txData)
+	if err != nil {
+		panic(err)
+	}
+	return tx
+}
+
 func RandomReceipt(rng *rand.Rand, signer types.Signer, tx *types.Transaction, txIndex uint64, cumulativeGasUsed uint64) *types.Receipt {
 	gasUsed := params.TxGas + uint64(rng.Int63n(int64(tx.Gas()-params.TxGas+1)))
 	logs := make([]*types.Log, rng.Intn(10))

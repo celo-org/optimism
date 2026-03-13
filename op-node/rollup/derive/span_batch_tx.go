@@ -57,6 +57,19 @@ type spanBatchSetCodeTxData struct {
 
 func (txData *spanBatchSetCodeTxData) txType() byte { return types.SetCodeTxType }
 
+type spanBatchCeloDynamicFeeTxV2Data struct {
+	Value       *big.Int
+	GasTipCap   *big.Int // a.k.a. maxPriorityFeePerGas
+	GasFeeCap   *big.Int // a.k.a. maxFeePerGas
+	Data        []byte
+	AccessList  types.AccessList
+	FeeCurrency *common.Address `rlp:"nil"`
+}
+
+func (txData *spanBatchCeloDynamicFeeTxV2Data) txType() byte {
+	return types.CeloDynamicFeeTxV2Type
+}
+
 // Type returns the transaction type.
 func (tx *spanBatchTx) Type() uint8 {
 	return tx.inner.txType()
@@ -110,6 +123,13 @@ func (tx *spanBatchTx) decodeTyped(b []byte) (spanBatchTxData, error) {
 		err := rlp.DecodeBytes(b[1:], &inner)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decode spanBatchSetCodeTxData: %w", err)
+		}
+		return &inner, nil
+	case types.CeloDynamicFeeTxV2Type:
+		var inner spanBatchCeloDynamicFeeTxV2Data
+		err := rlp.DecodeBytes(b[1:], &inner)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode spanBatchCeloDynamicFeeTxV2Data: %w", err)
 		}
 		return &inner, nil
 	default:
@@ -208,6 +228,23 @@ func (tx *spanBatchTx) convertToFullTx(nonce, gas uint64, to *common.Address, ch
 			R:          uint256.MustFromBig(R),
 			S:          uint256.MustFromBig(S),
 		}
+	case types.CeloDynamicFeeTxV2Type:
+		batchTxInner := tx.inner.(*spanBatchCeloDynamicFeeTxV2Data)
+		inner = &types.CeloDynamicFeeTxV2{
+			ChainID:     chainID,
+			Nonce:       nonce,
+			GasTipCap:   batchTxInner.GasTipCap,
+			GasFeeCap:   batchTxInner.GasFeeCap,
+			Gas:         gas,
+			To:          to,
+			Value:       batchTxInner.Value,
+			Data:        batchTxInner.Data,
+			AccessList:  batchTxInner.AccessList,
+			FeeCurrency: batchTxInner.FeeCurrency,
+			V:           V,
+			R:           R,
+			S:           S,
+		}
 	default:
 		return nil, fmt.Errorf("invalid tx type: %d", tx.Type())
 	}
@@ -247,6 +284,15 @@ func newSpanBatchTx(tx *types.Transaction) (*spanBatchTx, error) {
 			Data:              tx.Data(),
 			AccessList:        tx.AccessList(),
 			AuthorizationList: tx.SetCodeAuthorizations(),
+		}
+	case types.CeloDynamicFeeTxV2Type:
+		inner = &spanBatchCeloDynamicFeeTxV2Data{
+			GasTipCap:   tx.GasTipCap(),
+			GasFeeCap:   tx.GasFeeCap(),
+			Value:       tx.Value(),
+			Data:        tx.Data(),
+			AccessList:  tx.AccessList(),
+			FeeCurrency: tx.FeeCurrency(),
 		}
 	default:
 		return nil, fmt.Errorf("invalid tx type: %d", tx.Type())
