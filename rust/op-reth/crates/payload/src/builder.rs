@@ -764,9 +764,11 @@ where
             info.cumulative_da_bytes_used += tx_da_size;
 
             // update and add to total fees
-            let miner_fee = tx
-                .effective_tip_per_gas(base_fee)
-                .expect("fee is always valid; execution succeeded");
+            // For CIP-64 (fee currency) transactions, max_fee_per_gas is denominated in the
+            // fee currency (not native), so effective_tip_per_gas may return None when
+            // comparing against the native base_fee. Use 0 in that case — the actual fee
+            // handling for fee-currency txs happens via EVM debit/credit.
+            let miner_fee = tx.effective_tip_per_gas(base_fee).unwrap_or(0);
             info.total_fees += U256::from(miner_fee) * U256::from(gas_used);
         }
 
