@@ -19,7 +19,7 @@ jobs:
     outputs:
       tags: ${{ steps.set_tags.outputs.tags }}
 
-  # Build op-node using docker-bake and push to devopsre/celo-blockchain-public registry
+  # Build op-node and op-batcher using docker-bake and push to devopsre/celo-blockchain-public registry
   build-op-stack:
     runs-on: ubuntu-latest
     timeout-minutes: 240
@@ -52,7 +52,7 @@ jobs:
           push: true
           source: .
           files: docker-bake.hcl
-          targets: op-node
+          targets: op-node,op-batcher
 
   # Attest images
   attest-op-stack:
