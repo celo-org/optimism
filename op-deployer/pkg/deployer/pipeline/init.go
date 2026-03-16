@@ -155,10 +155,10 @@ func PopulateSuperchainState(host *script.Host, opcmAddr common.Address, superch
 	}
 
 	// The OPCM has the ProtocolVersions proxy baked in as an immutable from Optimism's
-	// deployment. Override it with the address from our superchain registry, which points
-	// to Celo's own ProtocolVersions contract.
+	// deployment. Wehen the ProtocolVersionsProxy retrieved from the OPCM is non zero (meaning OPCMv1),
+	// override it with the address from our superchain registry, which points to Celo's own ProtocolVersions contract.
 	protocolVersionsProxy := out.ProtocolVersionsProxy
-	if out.SuperchainConfigProxy != (common.Address{}) {
+	if out.ProtocolVersionsProxy != (common.Address{}) {
 		for _, network := range []string{"mainnet", "sepolia"} {
 			sc, err := superchain.GetSuperchain(network)
 			if err != nil {
