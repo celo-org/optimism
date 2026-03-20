@@ -686,12 +686,15 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
                 ICeloSuperchainConfig(address(optimismPortal.superchainConfig()))
             );
             {
-                // Get superchainConfig from celoSuperchainConfig.
-                ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
-                // SuperchainConfig should be in older version than impl on Celo L1.
-                if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
-                    revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
-                } else if (_upgradeSuperchainConfig) {
+                if (_upgradeSuperchainConfig) {
+                    // Get superchainConfig from celoSuperchainConfig.
+                    ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
+
+                    // SuperchainConfig should be in older version than impl on Celo L1.
+                    if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
+                        revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
+                    }
+
                     // Celo: some chains (like Celo Mainnet) follow external superchain config that is not desired to be upgraded
                     __upgradeSuperchainConfig(superchainConfig, _opChainConfigs[i].proxyAdmin);
                 }
