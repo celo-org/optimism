@@ -746,15 +746,17 @@ contract OPContractsManagerUpgrader is OPContractsManagerBase {
             assertValidOpChainConfig(_opChainConfigs[i]);
             uint256 l2ChainId = _opChainConfigs[i].systemConfigProxy.l2ChainId();
 
-            // Grab the SuperchainConfig.
-            ISuperchainConfig celoSuperchainConfig = _opChainConfigs[i].systemConfigProxy.superchainConfig();
-            ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
-
-            // SuperchainConfig should be in older version than impl on Celo L1.
             {
-                if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
-                    revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
-                } else if (_upgradeSuperchainConfig) {
+                if (_upgradeSuperchainConfig) {
+                    // Grab the SuperchainConfig.
+                    ISuperchainConfig celoSuperchainConfig = _opChainConfigs[i].systemConfigProxy.superchainConfig();
+                    ISuperchainConfig superchainConfig = IHasSuperchainConfig(address(celoSuperchainConfig)).superchainConfig();
+
+                    // SuperchainConfig should be in older version than impl on Celo L1.
+                    if (!SemverComp.lt(superchainConfig.version(), ISuperchainConfig(impls.superchainConfigImpl).version())) {
+                        revert OPContractsManagerUpgrader_SuperchainConfigMismatch();
+                    }
+
                     // Celo: some chains (like Celo Mainnet) follow external superchain config that is not desired to be upgraded
                     __upgradeSuperchainConfig(superchainConfig, _opChainConfigs[i].proxyAdmin);
                 }
