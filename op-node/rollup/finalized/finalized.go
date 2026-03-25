@@ -25,7 +25,7 @@ func (f *finalized) L1BlockRefByNumber(ctx context.Context, num uint64) (eth.L1B
 	if num == 0 || num <= l1Finalized.Number {
 		return f.L1Fetcher.L1BlockRefByNumber(ctx, num)
 	}
-	f.log.Warn("requested L1 block is beyond local finalized height", "requested_block", num, "finalized_block", l1Finalized.Number)
+	f.log.Debug("requested L1 block is beyond local finalized height", "requested_block", num, "finalized_block", l1Finalized.Number)
 	return eth.L1BlockRef{}, ethereum.NotFound
 }
 
