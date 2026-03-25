@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-chain-ops/script"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/superchain"
 )
 
 func IsSupportedStateVersion(version int) bool {
@@ -153,11 +154,28 @@ func PopulateSuperchainState(host *script.Host, opcmAddr common.Address, superch
 		return nil, nil, fmt.Errorf("error reading superchain deployment: %w", err)
 	}
 
+	// The OPCM has the ProtocolVersions proxy baked in as an immutable from Optimism's
+	// deployment. Wehen the ProtocolVersionsProxy retrieved from the OPCM is non zero (meaning OPCMv1),
+	// override it with the address from our superchain registry, which points to Celo's own ProtocolVersions contract.
+	protocolVersionsProxy := out.ProtocolVersionsProxy
+	if out.ProtocolVersionsProxy != (common.Address{}) {
+		for _, network := range []string{"mainnet", "sepolia"} {
+			sc, err := superchain.GetSuperchain(network)
+			if err != nil {
+				return nil, nil, fmt.Errorf("error getting superchain config for %s: %w", network, err)
+			}
+			if sc.SuperchainConfigAddr == out.SuperchainConfigProxy {
+				protocolVersionsProxy = sc.ProtocolVersionsAddr
+				break
+			}
+		}
+	}
+
 	deployment := &addresses.SuperchainContracts{
 		SuperchainProxyAdminImpl: out.SuperchainProxyAdmin,
 		SuperchainConfigProxy:    out.SuperchainConfigProxy,
 		SuperchainConfigImpl:     out.SuperchainConfigImpl,
-		ProtocolVersionsProxy:    out.ProtocolVersionsProxy,
+		ProtocolVersionsProxy:    protocolVersionsProxy,
 		ProtocolVersionsImpl:     out.ProtocolVersionsImpl,
 	}
 	roles := &addresses.SuperchainRoles{
