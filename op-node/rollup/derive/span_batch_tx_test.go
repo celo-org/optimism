@@ -19,6 +19,15 @@ type spanBatchTxTest struct {
 	protected bool
 }
 
+// spanBatchTestSigner returns a signer that supports all tx types including
+// Celo CIP-64. LatestSignerForChainID wraps with the Celo signer overlay.
+func spanBatchTestSigner(chainID *big.Int, protected bool) types.Signer {
+	if !protected {
+		return types.HomesteadSigner{}
+	}
+	return types.LatestSignerForChainID(chainID)
+}
+
 func TestSpanBatchTxConvert(t *testing.T) {
 	cases := []spanBatchTxTest{
 		{"unprotected legacy tx", 32, testutils.RandomLegacyTx, false},
@@ -26,16 +35,14 @@ func TestSpanBatchTxConvert(t *testing.T) {
 		{"access list tx", 32, testutils.RandomAccessListTx, true},
 		{"dynamic fee tx", 32, testutils.RandomDynamicFeeTx, true},
 		{"setcode tx", 32, testutils.RandomSetCodeTx, true},
+		{"celo dynamic fee tx v2", 32, testutils.RandomCeloDynamicFeeTxV2, true},
 	}
 
 	for i, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			rng := rand.New(rand.NewSource(int64(0x1331 + i)))
 			chainID := big.NewInt(rng.Int63n(1000))
-			signer := types.NewPragueSigner(chainID)
-			if !testCase.protected {
-				signer = types.HomesteadSigner{}
-			}
+			signer := spanBatchTestSigner(chainID, testCase.protected)
 
 			for txIdx := 0; txIdx < testCase.trials; txIdx++ {
 				tx := testCase.mkTx(rng, signer)
@@ -64,16 +71,14 @@ func TestSpanBatchTxRoundTrip(t *testing.T) {
 		{"access list tx", 32, testutils.RandomAccessListTx, true},
 		{"dynamic fee tx", 32, testutils.RandomDynamicFeeTx, true},
 		{"setcode tx", 32, testutils.RandomSetCodeTx, true},
+		{"celo dynamic fee tx v2", 32, testutils.RandomCeloDynamicFeeTxV2, true},
 	}
 
 	for i, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			rng := rand.New(rand.NewSource(int64(0x1332 + i)))
 			chainID := big.NewInt(rng.Int63n(1000))
-			signer := types.NewPragueSigner(chainID)
-			if !testCase.protected {
-				signer = types.HomesteadSigner{}
-			}
+			signer := spanBatchTestSigner(chainID, testCase.protected)
 
 			for txIdx := 0; txIdx < testCase.trials; txIdx++ {
 				tx := testCase.mkTx(rng, signer)

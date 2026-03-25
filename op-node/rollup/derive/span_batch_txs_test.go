@@ -338,6 +338,7 @@ func TestSpanBatchTxsRecoverV(t *testing.T) {
 
 	chainID := big.NewInt(rng.Int63n(1000))
 	pragueSigner := types.NewPragueSigner(chainID)
+	celoSigner := types.LatestSignerForChainID(chainID)
 	totalblockTxCount := 20 + rng.Intn(100)
 
 	cases := []txTypeTest{
@@ -346,6 +347,7 @@ func TestSpanBatchTxsRecoverV(t *testing.T) {
 		{"access list tx", testutils.RandomAccessListTx, pragueSigner},
 		{"dynamic fee tx", testutils.RandomDynamicFeeTx, pragueSigner},
 		{"setcode tx", testutils.RandomSetCodeTx, pragueSigner},
+		{"celo dynamic fee tx v2", testutils.RandomCeloDynamicFeeTxV2, celoSigner},
 	}
 
 	for _, testCase := range cases {
@@ -430,6 +432,7 @@ func TestSpanBatchTxsRoundTripFullTxs(t *testing.T) {
 	rng := rand.New(rand.NewSource(0x13377331))
 	chainID := big.NewInt(rng.Int63n(1000))
 	pragueSigner := types.NewPragueSigner(chainID)
+	celoSigner := types.LatestSignerForChainID(chainID)
 
 	cases := []txTypeTest{
 		{"unprotected legacy tx", testutils.RandomLegacyTx, types.HomesteadSigner{}},
@@ -437,6 +440,7 @@ func TestSpanBatchTxsRoundTripFullTxs(t *testing.T) {
 		{"access list tx", testutils.RandomAccessListTx, pragueSigner},
 		{"dynamic fee tx", testutils.RandomDynamicFeeTx, pragueSigner},
 		{"setcode tx", testutils.RandomSetCodeTx, pragueSigner},
+		{"celo dynamic fee tx v2", testutils.RandomCeloDynamicFeeTxV2, celoSigner},
 	}
 
 	for _, testCase := range cases {
@@ -588,6 +592,7 @@ func TestSpanBatchTxsFullTxNotEnoughTxTos(t *testing.T) {
 	rng := rand.New(rand.NewSource(0x13572468))
 	chainID := big.NewInt(rng.Int63n(1000))
 	pragueSigner := types.NewPragueSigner(chainID)
+	celoSigner := types.LatestSignerForChainID(chainID)
 
 	cases := []txTypeTest{
 		{"unprotected legacy tx", testutils.RandomLegacyTx, types.HomesteadSigner{}},
@@ -595,6 +600,7 @@ func TestSpanBatchTxsFullTxNotEnoughTxTos(t *testing.T) {
 		{"access list tx", testutils.RandomAccessListTx, pragueSigner},
 		{"dynamic fee tx", testutils.RandomDynamicFeeTx, pragueSigner},
 		{"setcode tx", testutils.RandomSetCodeTx, pragueSigner},
+		{"celo dynamic fee tx v2", testutils.RandomCeloDynamicFeeTxV2, celoSigner},
 	}
 
 	for _, testCase := range cases {
