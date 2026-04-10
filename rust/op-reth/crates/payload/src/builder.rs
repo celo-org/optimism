@@ -730,6 +730,16 @@ where
         while let Some(tx) = best_txs.next(()) {
             let interop = tx.interop_deadline();
             let tx_da_size = tx.estimated_da_size();
+            // Compute miner fee from the pool-layer view of the transaction, before
+            // `into_consensus()` erases any fee-abstraction context the pool tx type
+            // may carry. For standard pool tx types this is equivalent to computing
+            // it on the consensus tx, but OP-derived chains with richer pool tx types
+            // (e.g. Celo's CIP-64, where `max_fee_per_gas` is denominated in an ERC20
+            // fee currency on-chain but the pool stores a native-equivalent value)
+            // require the pool-layer view to produce a correct native-denominated tip.
+            let miner_fee = tx
+                .effective_tip_per_gas(base_fee)
+                .expect("fee is always valid; enforced by the pool validator");
             let tx = tx.into_consensus();
 
             let da_footprint_gas_scalar = self
@@ -803,10 +813,8 @@ where
             info.cumulative_gas_used += gas_used;
             info.cumulative_da_bytes_used += tx_da_size;
 
-            // update and add to total fees
-            let miner_fee = tx
-                .effective_tip_per_gas(base_fee)
-                .expect("fee is always valid; execution succeeded");
+            // update and add to total fees (miner_fee was computed above, before
+            // `into_consensus()`, to preserve any pool-layer fee-abstraction context)
             info.total_fees += U256::from(miner_fee) * U256::from(gas_used);
         }
 
