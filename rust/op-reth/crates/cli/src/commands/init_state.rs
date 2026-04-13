@@ -15,8 +15,9 @@ use reth_optimism_primitives::{
 use reth_primitives_traits::{SealedHeader, header::HeaderMut};
 use reth_provider::{
     BlockNumReader, DBProvider, DatabaseProviderFactory, StaticFileProviderFactory,
-    StaticFileWriter,
+    StaticFileWriter, StorageSettingsCache,
 };
+use reth_static_file_types::StaticFileSegment;
 use std::{io::BufReader, sync::Arc};
 use tracing::info;
 
@@ -101,6 +102,23 @@ impl<C: ChainSpecParser<ChainSpec = OpChainSpec>> InitStateCommandOp<C> {
                     header
                 },
             )?;
+
+            // With storage v2, genesis init created changeset segments at block 0.
+            // Advance them through the dummy blocks so the next expected block is
+            // the migration block. Each increment_block call is cheap (header
+            // counter + small offset), and new segment files are created as needed.
+            if provider_rw.cached_storage_settings().storage_v2 {
+                info!(target: "reth::cli", "Advancing changeset segments to migration block");
+                for segment in [
+                    StaticFileSegment::AccountChangeSets,
+                    StaticFileSegment::StorageChangeSets,
+                ] {
+                    let mut writer = static_file_provider.latest_writer(segment)?;
+                    for block in 1..migration_block_number {
+                        writer.increment_block(block)?;
+                    }
+                }
+            }
 
             // SAFETY: it's safe to commit static files, since in the event of a crash, they
             // will be unwound according to database checkpoints.
