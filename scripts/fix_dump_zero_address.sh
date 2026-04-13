@@ -20,7 +20,17 @@ if [ ! -f "$input" ]; then
     exit 1
 fi
 
-sed -i '' 's/"key":"0x5380c7b7ae81a58eb98d9c78de4a1fd7fd9535fc953ed2be602daaa41767312a"/"address":"0x0000000000000000000000000000000000000000"/' \
-    "$input"
+old='"key":"0x5380c7b7ae81a58eb98d9c78de4a1fd7fd9535fc953ed2be602daaa41767312a"'
+new='"address":"0x0000000000000000000000000000000000000000"'
 
-echo "Fixed zero address in: $input"
+before=$(grep -m 1 "$old" "$input")
+if [ -z "$before" ]; then
+    echo "Error: zero address entry not found in dump" >&2
+    exit 1
+fi
+
+echo "Before: $before"
+
+sed -i '' "s/${old}/${new}/" "$input"
+
+echo "After:  ${before/$old/$new}"

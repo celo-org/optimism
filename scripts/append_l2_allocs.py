@@ -11,10 +11,11 @@ The state dump format expected by reth's `init_from_state_dump` is:
 The Cel2 migration header's state_root already accounts for these alloc entries being present.
 
 Usage:
-  python3 append_l2_allocs.py <state_dump.jsonl> [output.jsonl] [--update-state-root]
+  python3 append_l2_allocs.py <state_dump.jsonl> [output.jsonl]
 
 If output path is omitted, creates <state_dump.jsonl>.with-allocs.jsonl.
-Use --update-state-root to replace the state root on line 1 with the Cel2 migration header root.
+The state root on line 1 is replaced with the Cel2 migration header root, since reth
+verifies it against CEL2_HEADER.state_root before importing.
 """
 
 import argparse
@@ -67,11 +68,6 @@ def main():
         nargs="?",
         help="Output path (default: <state_dump>.with-allocs.jsonl)",
     )
-    parser.add_argument(
-        "--update-state-root",
-        action="store_true",
-        help="Replace the state root on line 1 with the Cel2 migration header state root",
-    )
     args = parser.parse_args()
 
     state_dump_path = args.state_dump
@@ -119,8 +115,7 @@ def main():
                 entry["storage"] = account["storage"]
             out.write(json.dumps(entry) + "\n")
 
-    if args.update_state_root:
-        replace_state_root(output_path, CEL2_STATE_ROOT)
+    replace_state_root(output_path, CEL2_STATE_ROOT)
 
     print("Done.")
 
