@@ -23,10 +23,10 @@ fi
 old='"key":"0x5380c7b7ae81a58eb98d9c78de4a1fd7fd9535fc953ed2be602daaa41767312a"'
 new='"address":"0x0000000000000000000000000000000000000000"'
 
-before=$(grep -m 1 "$old" "$input")
+before=$(grep -m 1 "$old" "$input" || true)
 if [ -z "$before" ]; then
-    echo "Error: zero address entry not found in dump" >&2
-    exit 1
+    echo "Already fixed or pattern not found, skipping."
+    exit 0
 fi
 
 echo "Before: $before"
