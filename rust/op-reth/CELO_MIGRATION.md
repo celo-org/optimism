@@ -31,16 +31,16 @@ The state dump contains Celo L1 accounts but is missing the L2 allocs (OP Stack 
 The L2 allocs are published at:
 https://storage.googleapis.com/cel2-rollup-files/celo/l2-allocs.json
 
-Run the script to download the allocs and append them to a copy of the state dump. The `--update-state-root` flag is **required**: reth verifies that the state root on line 1 of the dump matches `CEL2_HEADER.state_root`, and the original L1 dump root (`0x3817f877...`) does not include the L2 allocs.
+Run the script to download the allocs and append them to a copy of the state dump. The script also updates the state root on line 1 to match `CEL2_HEADER.state_root`, which reth verifies before importing.
 
 ```bash
-python3 scripts/append_l2_allocs.py --update-state-root /path/to/celo-l1-dump-final-state.json
+python3 scripts/append_l2_allocs.py /path/to/celo-l1-dump-final-state.json
 ```
 
 This creates `/path/to/celo-l1-dump-final-state.json.with-allocs.jsonl` without modifying the original. You can also specify a custom output path:
 
 ```bash
-python3 scripts/append_l2_allocs.py --update-state-root /path/to/celo-l1-dump-final-state.json /path/to/output.jsonl
+python3 scripts/append_l2_allocs.py /path/to/celo-l1-dump-final-state.json /path/to/output.jsonl
 ```
 
 ### State dump format
@@ -55,11 +55,18 @@ After importing all accounts, reth computes the state root from the trie and ver
 
 ## Step 3: Initialize reth
 
-Run `op-reth init-state` with the `--without-ovm` flag and the prepared state dump:
+The dummy chain creation opens many static file segments. Increase the file descriptor limit before running:
+
+```bash
+ulimit -n 10240
+```
+
+Then run `op-reth init-state` with the `--without-ovm` flag and the prepared state dump:
 
 ```bash
 op-reth init-state \
   --chain /path/to/celo-chainspec.json \
+  --datadir=/path/to/datadir \
   --without-ovm \
   /path/to/celo-l1-dump-final-state.json.with-allocs.jsonl
 ```
