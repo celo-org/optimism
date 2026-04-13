@@ -8,9 +8,20 @@ The Celo L2 migration imports the full Celo L1 state (pre-migration) into reth a
 
 ## Prerequisites
 
-- The Celo L1 state dump file (`celo-l1-dump-final-state.json`, ~50GB JSONL)
 - A built `op-reth` binary with the Celo migration header support (branch `palango/reth-import`)
 - A Celo chain spec file
+
+## Step 0: Download and Decompress the L1 State Dump
+
+The compressed state dump (~5GB zstd) is available at:
+https://storage.googleapis.com/cel2-rollup-files/celo/l1-final-state.json.zst
+
+Download and decompress (~50GB JSONL):
+
+```bash
+curl -O https://storage.googleapis.com/cel2-rollup-files/celo/l1-final-state.json.zst
+zstd -d l1-final-state.json.zst
+```
 
 ## Step 1: Fix the Zero Address Entry
 
@@ -84,6 +95,7 @@ All Celo mainnet migration artifacts are available at:
 
 | Asset | URL |
 |-------|-----|
+| L1 state dump | https://storage.googleapis.com/cel2-rollup-files/celo/l1-final-state.json.zst |
 | Deploy config | https://storage.googleapis.com/cel2-rollup-files/celo/config.json |
 | L1 contract addresses | https://storage.googleapis.com/cel2-rollup-files/celo/deployment-l1.json |
 | L2 allocs | https://storage.googleapis.com/cel2-rollup-files/celo/l2-allocs.json |
