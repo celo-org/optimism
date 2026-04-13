@@ -7,19 +7,13 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DUMP_URL="https://storage.googleapis.com/cel2-rollup-files/celo/l1-final-state.json.zst"
 
-if [ $# -ne 3 ]; then
-    echo "Usage: $0 <workdir> <chain-spec.json> <datadir>" >&2
+if [ $# -ne 2 ]; then
+    echo "Usage: $0 <workdir> <datadir>" >&2
     exit 1
 fi
 
 workdir="$1"
-chain_spec="$2"
-datadir="$3"
-
-if [ ! -f "$chain_spec" ]; then
-    echo "Error: chain spec not found: $chain_spec" >&2
-    exit 1
-fi
+datadir="$2"
 
 mkdir -p "$workdir"
 dump_zst="$workdir/l1-final-state.json.zst"
@@ -54,7 +48,7 @@ fi
 echo "==> Initializing reth (ulimit -n 10240)..."
 ulimit -n 10240
 op-reth init-state \
-    --chain "$chain_spec" \
+    --chain celo \
     --datadir="$datadir" \
     --without-ovm \
     "$dump_allocs"
