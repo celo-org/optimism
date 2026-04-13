@@ -76,8 +76,9 @@ Then run `op-reth init-state` with the `--without-ovm` flag and the prepared sta
 
 ```bash
 op-reth init-state \
-  --chain /path/to/celo-chainspec.json \
+  --chain celo \
   --datadir=/path/to/datadir \
+  --storage.v2 \
   --without-ovm \
   /path/to/celo-l1-dump-final-state.json.with-allocs.jsonl
 ```
@@ -106,3 +107,23 @@ All Celo mainnet migration artifacts are available at:
 ## Open Questions
 
 - The state dump may have storage values without `0x` prefix — needs verification that reth's `Bytes` deserializer handles non-prefixed hex strings correctly.
+
+## Logs
+
+From run Mon, 13 April
+
+```
+~/P/optimism (palango/reth-import) $ ./scripts/fix_dump_zero_address.sh  ~/Downloads/l1-final-state.json
+Before: {"balance":"324222713619168179923","nonce":0,"root":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","codeHash":"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470","key":"0x5380c7b7ae81a58eb98d9c78de4a1fd7fd9535fc953ed2be602daaa41767312a"}
+After:  {"balance":"324222713619168179923","nonce":0,"root":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","codeHash":"0xc5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470","address":"0x0000000000000000000000000000000000000000"}
+mise WARN  missing: golangci-lint@2.8.0 rust@1.92.0 op-acceptor@op-acceptor/v3.8.3
+~/P/optimism (palango/reth-import) $ python3 ./scripts/append_l2_allocs.py --update-state-root ~/Downloads/l1-final-state.json
+Copying /Users/paul/Downloads/l1-final-state.json to /Users/paul/Downloads/l1-final-state.json.with-allocs.jsonl (45.8 GB)...
+  45.8 / 45.8 GB
+Downloading l2-allocs.json from https://storage.googleapis.com/cel2-rollup-files/celo/l2-allocs.json...
+Appending 2080 accounts to /Users/paul/Downloads/l1-final-state.json.with-allocs.jsonl...
+Replacing state root: 0x3817f87742aaeb96219d6c1fed8b32a562b59065116c49a53693abfd118838bc -> 0xed980641a4bd4d2e84c6c8db980b7f05e95733c92be2e0045db3735efeb1d807
+Old first line: b'{"root":"0x3817f87742aaeb96219d6c1fed8b32a562b59065116c49a53693abfd118838bc"}\n'
+New first line: b'{"root":"0xed980641a4bd4d2e84c6c8db980b7f05e95733c92be2e0045db3735efeb1d807"}\n'
+Done.
+```
