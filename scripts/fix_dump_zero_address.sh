@@ -31,6 +31,6 @@ fi
 
 echo "Before: $before"
 
-sed -i '' "s/${old}/${new}/" "$input"
+perl -i -pe "s/\Q${old}\E/${new}/" "$input"
 
 echo "After:  ${before/$old/$new}"
