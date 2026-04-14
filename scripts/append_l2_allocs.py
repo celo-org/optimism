@@ -114,8 +114,10 @@ def merge_alloc(l1_account, alloc, address):
     if address in ALLOWLIST:
         if not ALLOWLIST[address]:
             # Case 2: keep L1 account unchanged
+            print(f"  Merge {address}: case 2 (allowlist skip, keep L1)")
             return dict(l1_account)
         # Case 3: overwrite code only
+        print(f"  Merge {address}: case 3 (allowlist, overwrite code only)")
         merged = dict(l1_account)
         if "code" in alloc:
             merged["code"] = alloc["code"]
@@ -133,8 +135,10 @@ def merge_alloc(l1_account, alloc, address):
         )
 
     # Case 5: balance-only L1 account — take alloc data, keep L1 balance
+    l1_balance = l1_account.get("balance", "0x0")
+    print(f"  Merge {address}: case 5 (balance-only L1, balance={l1_balance})")
     entry = build_entry(address, alloc)
-    entry["balance"] = l1_account.get("balance", "0x0")
+    entry["balance"] = l1_balance
     return entry
 
 
@@ -248,20 +252,21 @@ def main():
         # Phase 4: Write treasury with hardcoded balance
         treasury_alloc = allocs.get(TREASURY)
         if treasury_alloc and treasury_l1_account:
-            # Both L1 and alloc exist: apply merge rules, then override balance
+            print(f"Treasury {TREASURY}: L1 + alloc, merge then set balance")
             treasury_entry = merge_alloc(
                 treasury_l1_account, treasury_alloc, TREASURY
             )
             treasury_entry["balance"] = hex(TREASURY_BALANCE)
         elif treasury_alloc:
-            # Only alloc: use alloc data with hardcoded balance
+            print(f"Treasury {TREASURY}: alloc only, set balance")
             treasury_entry = build_entry(TREASURY, treasury_alloc)
             treasury_entry["balance"] = hex(TREASURY_BALANCE)
         elif treasury_l1_account:
-            # Only L1: keep L1 data with hardcoded balance
+            print(f"Treasury {TREASURY}: L1 only, set balance")
             treasury_entry = dict(treasury_l1_account)
             treasury_entry["balance"] = hex(TREASURY_BALANCE)
         else:
+            print(f"Treasury {TREASURY}: not in L1 or allocs, creating")
             treasury_entry = {"address": TREASURY, "balance": hex(TREASURY_BALANCE)}
         out.write(account_line(treasury_entry))
 
