@@ -56,6 +56,9 @@ type HardforkConfig struct {
 	LagoonTime          *uint64 `toml:"lagoon_time"`
 	// Optional Forks
 	PectraBlobScheduleTime *uint64 `toml:"pectra_blob_schedule_time,omitempty"`
+
+	// Celo
+	Cel2Time *uint64 `toml:"cel2_time,omitempty"`
 }
 
 type OptimismConfig struct {
