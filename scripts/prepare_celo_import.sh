@@ -32,11 +32,7 @@ else
     echo "==> L1 state dump already exists: $dump"
 fi
 
-# Step 1: Fix zero address
-echo "==> Fixing zero address entry..."
-"$SCRIPT_DIR/fix_dump_zero_address.sh" "$dump"
-
-# Step 2: Append L2 allocs and update state root
+# Step 1: Append L2 allocs and update state root
 if [ ! -f "$dump_allocs" ]; then
     echo "==> Appending L2 allocs..."
     python3 "$SCRIPT_DIR/append_l2_allocs.py" "$dump"
@@ -44,7 +40,7 @@ else
     echo "==> Allocs file already exists: $dump_allocs"
 fi
 
-# Step 3: Initialize reth
+# Step 2: Initialize reth
 echo "==> Initializing reth (ulimit -n 10240)..."
 ulimit -n 10240
 op-reth init-state \
