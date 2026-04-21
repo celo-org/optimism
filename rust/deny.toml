@@ -94,6 +94,7 @@ registries = []
 [sources]
 allow-git = [
   "https://github.com/paradigmxyz/reth",
+  "https://github.com/celo-org/reth",
   "https://github.com/alloy-rs/alloy",
   "https://github.com/alloy-rs/hardforks",
   "https://github.com/alloy-rs/evm",
