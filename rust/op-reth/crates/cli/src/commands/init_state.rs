@@ -109,10 +109,9 @@ impl<C: ChainSpecParser<ChainSpec = OpChainSpec>> InitStateCommandOp<C> {
             // counter + small offset), and new segment files are created as needed.
             if provider_rw.cached_storage_settings().storage_v2 {
                 info!(target: "reth::cli", "Advancing changeset segments to migration block");
-                for segment in [
-                    StaticFileSegment::AccountChangeSets,
-                    StaticFileSegment::StorageChangeSets,
-                ] {
+                for segment in
+                    [StaticFileSegment::AccountChangeSets, StaticFileSegment::StorageChangeSets]
+                {
                     let mut writer = static_file_provider.latest_writer(segment)?;
                     for block in 1..migration_block_number {
                         writer.increment_block(block)?;

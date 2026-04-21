@@ -30,7 +30,9 @@ pub const CEL2_HEADER: Header = Header {
     base_fee_per_gas: Some(0x5d240390e),
     blob_gas_used: Some(0),
     excess_blob_gas: Some(0),
-    parent_beacon_block_root: Some(b256!("0x6cb2e365f9d78b9071b90e8a1f4675d378cd0867b858571dc1b172ef1d3e085c")),
+    parent_beacon_block_root: Some(b256!(
+        "0x6cb2e365f9d78b9071b90e8a1f4675d378cd0867b858571dc1b172ef1d3e085c"
+    )),
     requests_hash: None,
 };
 
