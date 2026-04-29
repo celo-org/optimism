@@ -56,6 +56,7 @@ type L2Configurator interface {
 	WithFinalizationPeriodSeconds(value uint64)
 	WithRevenueShare(enabled bool, chainFeesRecipient common.Address)
 	WithCustomGasToken(name string, symbol string, initialLiquidity *big.Int, liquidityControllerOwner common.Address)
+	WithDeployCeloContracts(enabled bool)
 	ContractsConfigurator
 	L2VaultsConfigurator
 	L2RolesConfigurator
@@ -478,6 +479,10 @@ func (c *l2Configurator) WithCustomGasToken(name, symbol string, initialLiquidit
 		InitialLiquidity:         (*hexutil.Big)(initialLiquidity),
 		LiquidityControllerOwner: liquidityControllerOwner,
 	}
+}
+
+func (c *l2Configurator) WithDeployCeloContracts(enabled bool) {
+	c.builder.intent.Chains[c.chainIndex].DeployCeloContracts = enabled
 }
 
 func (c *l2Configurator) WithEIP1559Elasticity(value uint64) {

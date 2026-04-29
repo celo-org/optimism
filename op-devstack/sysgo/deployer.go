@@ -406,6 +406,17 @@ func WithCustomGasToken(name, symbol string, initialLiquidity *big.Int, liquidit
 	}
 }
 
+// WithCelo enables Celo predeploys (CeloRegistry, FeeCurrencyDirectory, cUSD, ...) in the
+// L2 genesis allocs. cUSD is registered as a fee currency so CIP-64 (CeloDynamicFeeTxV2)
+// transactions can be paid in cUSD. devAccounts[0] is funded with 100k cUSD.
+func WithCelo() DeployerOption {
+	return func(p devtest.P, keys devkeys.Keys, builder intentbuilder.Builder) {
+		for _, l2Cfg := range builder.L2s() {
+			l2Cfg.WithDeployCeloContracts(true)
+		}
+	}
+}
+
 func (wb *worldBuilder) buildL1Genesis() {
 	wb.require.NotNil(wb.output.L1DevGenesis, "must have L1 genesis outer config")
 	wb.require.NotNil(wb.output.L1StateDump, "must have L1 genesis alloc")
