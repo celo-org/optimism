@@ -412,7 +412,7 @@ func WithCustomGasToken(name, symbol string, initialLiquidity *big.Int, liquidit
 func WithCelo() DeployerOption {
 	return func(p devtest.P, keys devkeys.Keys, builder intentbuilder.Builder) {
 		for _, l2Cfg := range builder.L2s() {
-			l2Cfg.WithDeployCeloContracts(true)
+			l2Cfg.WithDeployCeloContracts()
 		}
 	}
 }
