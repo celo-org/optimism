@@ -5,9 +5,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/miner"
 	gn "github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -20,6 +22,14 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-service/client"
 	"github.com/ethereum-optimism/optimism/op-service/testutils/tcpproxy"
+)
+
+// Celo predeploy addresses that the WithCelo() deployer option installs into the
+// L2 genesis. Detected here so we can set the matching miner config without
+// polluting the generic geth.InitL2 code path with Celo-specific defaults.
+var (
+	celoFeeCurrencyDirectoryAddr = common.HexToAddress("0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276")
+	celoTestFeeCurrencyAddr      = common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a")
 )
 
 type OpGeth struct {
@@ -117,6 +127,21 @@ func (n *OpGeth) Start() {
 		func(ethCfg *ethconfig.Config, nodeCfg *gn.Config) error {
 			ethCfg.InteropMessageRPC = n.supervisorRPC
 			ethCfg.InteropMempoolFiltering = true
+
+			// If WithCelo() was used, the L2 genesis has the FeeCurrencyDirectory at
+			// the celo-mainnet address. Configure op-geth's MultiGasPool so CIP-64 txs
+			// don't get silently popped at block-building time:
+			//   - FeeCurrencyDefault: default per-currency fraction of the block gas limit
+			//     (mirrors miner.DefaultConfig).
+			//   - FeeCurrencyLimits: explicit 0.9 for the registered test fee currency,
+			//     mirroring celo-mainnet's cUSD/USDT/USDC config.
+			if alloc, ok := n.l2Net.genesis.Alloc[celoFeeCurrencyDirectoryAddr]; ok && len(alloc.Code) > 0 {
+				ethCfg.Miner.FeeCurrencyDefault = miner.DefaultFeeCurrencyLimit
+				if ethCfg.Miner.FeeCurrencyLimits == nil {
+					ethCfg.Miner.FeeCurrencyLimits = map[common.Address]float64{}
+				}
+				ethCfg.Miner.FeeCurrencyLimits[celoTestFeeCurrencyAddr] = 0.9
+			}
 
 			listenAddr := n.cfg.P2PAddr
 			port := n.cfg.P2PPort
