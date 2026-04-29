@@ -16,9 +16,14 @@ dep-status:
 ########################################################
 
 # Core forge build command.
-
+#
+# AddressSortedLinkedListWithMedian is a library used by Celo predeploys; without
+# the explicit address forge writes link placeholders into the bytecode and
+# downstream artifact loaders fail. Configuring this in foundry.toml's libraries
+# array works for forge but writes a metadata format that breaks Go-side artifact
+# parsers, so we set it on the CLI instead — applied to every forge build.
 forge-build *ARGS:
-  forge build {{ARGS}}
+  forge build --libraries "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol:AddressSortedLinkedListWithMedian:0xED477A99035d0c1e11369F1D7A4e587893cc002B" {{ARGS}}
 
   @# Forge build compiles only the src/ graph; the scripts/ graph is compiled by `forge script`.
   @# On the first invocation, `forge script` may compile a small set of dependencies.
