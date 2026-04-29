@@ -40,6 +40,7 @@ type L2GenesisInput struct {
 	NativeAssetLiquidityAmount               *big.Int
 	LiquidityControllerOwner                 common.Address
 	UseL2CM                                  bool
+	DeployCeloContracts                      bool
 }
 
 type L2GenesisScript script.DeployScriptWithoutOutput[L2GenesisInput]

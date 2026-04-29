@@ -34,6 +34,19 @@ import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
 import { IL1Withdrawer } from "interfaces/L2/IL1Withdrawer.sol";
 import { ISuperchainRevSharesCalculator } from "interfaces/L2/ISuperchainRevSharesCalculator.sol";
 
+// Celo predeploys
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+import { CeloRegistry } from "src/celo/CeloRegistry.sol";
+import { GoldToken } from "src/celo/GoldToken.sol";
+import { FeeHandler } from "src/celo/FeeHandler.sol";
+import { MentoFeeHandlerSeller } from "src/celo/MentoFeeHandlerSeller.sol";
+import { UniswapFeeHandlerSeller } from "src/celo/UniswapFeeHandlerSeller.sol";
+import { SortedOracles } from "src/celo/stability/SortedOracles.sol";
+import { FeeCurrencyDirectory } from "src/celo/FeeCurrencyDirectory.sol";
+import { FeeCurrency } from "src/celo/testing/FeeCurrency.sol";
+import { StableTokenV2 } from "src/celo/StableTokenV2.sol";
+import { AddressSortedLinkedListWithMedian } from "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol";
+
 /// @title L2Genesis
 /// @notice Generates the genesis state for the L2 network.
 ///         The following safety invariants are used when setting state:
@@ -82,6 +95,7 @@ contract L2Genesis is Script {
         uint256 nativeAssetLiquidityAmount;
         address liquidityControllerOwner;
         bool useL2CM;
+        bool deployCeloContracts;
     }
 
     using ForkUtils for Fork;
@@ -141,6 +155,9 @@ contract L2Genesis is Script {
         setPreinstalls();
         if (_input.fundDevAccounts) {
             fundDevAccounts();
+        }
+        if (_input.deployCeloContracts) {
+            setCeloPredeploys(deployer);
         }
 
         vm.stopPrank();
@@ -762,5 +779,141 @@ contract L2Genesis is Script {
         for (uint256 i; i < devAccounts.length; i++) {
             vm.deal(devAccounts[i], DEV_ACCOUNT_FUND_AMT);
         }
+    }
+
+    /// @notice Etches all Celo predeploy contracts and registers a test fee currency.
+    ///         devAccounts[0] receives 100k TEST tokens and owns the FeeCurrencyDirectory.
+    function setCeloPredeploys(address _deployer) internal {
+        setCeloRegistry();
+        setCeloGoldToken();
+        setCeloFeeHandler();
+        setCeloMentoFeeHandlerSeller();
+        setCeloUniswapFeeHandlerSeller();
+        setCeloAddressSortedLinkedListWithMedian();
+        setCeloSortedOracles();
+        setCeloFeeCurrency();
+        setFeeCurrencyDirectory();
+
+        address[] memory initialBalanceAddresses = new address[](2);
+        initialBalanceAddresses[0] = devAccounts[0];
+        // Seed the FeeHandler with 1 wei to avoid the cold-SSTORE penalty on its first transfer.
+        initialBalanceAddresses[1] = CeloPredeploys.FEE_HANDLER;
+
+        uint256[] memory initialBalances = new uint256[](2);
+        initialBalances[0] = 100_000 ether;
+        initialBalances[1] = 1;
+
+        deployTestFeeCurrency(_deployer, initialBalanceAddresses, initialBalances, 2);
+    }
+
+    function _setupCeloProxy(address _addr, address _impl) internal {
+        bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
+        vm.etch(_addr, code);
+        EIP1967Helper.setAdmin(_addr, Predeploys.PROXY_ADMIN);
+        EIP1967Helper.setImplementation(_addr, _impl);
+    }
+
+    function setCeloRegistry() internal {
+        CeloRegistry impl = new CeloRegistry({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.CELO_REGISTRY, address(impl));
+    }
+
+    function setCeloGoldToken() internal {
+        GoldToken impl = new GoldToken({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.GOLD_TOKEN, address(impl));
+    }
+
+    function setCeloFeeHandler() internal {
+        FeeHandler impl = new FeeHandler({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.FEE_HANDLER, address(impl));
+    }
+
+    function setCeloMentoFeeHandlerSeller() internal {
+        MentoFeeHandlerSeller impl = new MentoFeeHandlerSeller({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.MENTO_FEE_HANDLER_SELLER, address(impl));
+    }
+
+    function setCeloUniswapFeeHandlerSeller() internal {
+        UniswapFeeHandlerSeller impl = new UniswapFeeHandlerSeller({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.UNISWAP_FEE_HANDLER_SELLER, address(impl));
+    }
+
+    function setCeloAddressSortedLinkedListWithMedian() internal {
+        bytes memory runtimeCode = type(AddressSortedLinkedListWithMedian).runtimeCode;
+        vm.etch(CeloPredeploys.ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN, runtimeCode);
+    }
+
+    function setCeloSortedOracles() internal {
+        SortedOracles impl = new SortedOracles({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.SORTED_ORACLES, address(impl));
+    }
+
+    function setCeloFeeCurrency() internal {
+        FeeCurrency impl = new FeeCurrency({ name_: "Test", symbol_: "TST" });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.FEE_CURRENCY, address(impl));
+    }
+
+    function setFeeCurrencyDirectory() internal {
+        FeeCurrencyDirectory impl = new FeeCurrencyDirectory({ test: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.FEE_CURRENCY_DIRECTORY, address(impl));
+
+        // Initialize the proxy and transfer ownership to devAccounts[0] so devnets can
+        // edit the directory at runtime.
+        vm.startPrank(devAccounts[0]);
+        FeeCurrencyDirectory(CeloPredeploys.FEE_CURRENCY_DIRECTORY).initialize();
+        vm.stopPrank();
+    }
+
+    /// @notice Deploys a test fee currency (StableTokenV2) at its predeploy address, mints
+    ///         initial balances, registers _deployer as a price oracle, reports a price,
+    ///         and registers the token with the FeeCurrencyDirectory so the EL accepts
+    ///         CIP-64 transactions paying gas in it.
+    function deployTestFeeCurrency(
+        address _deployer,
+        address[] memory _initialBalanceAddresses,
+        uint256[] memory _initialBalances,
+        uint256 _price
+    )
+        internal
+    {
+        StableTokenV2 impl = new StableTokenV2({ disable: false });
+        vm.resetNonce(address(impl));
+        _setupCeloProxy(CeloPredeploys.TEST_FEE_CURRENCY, address(impl));
+
+        StableTokenV2(CeloPredeploys.TEST_FEE_CURRENCY).initialize(
+            "Test Fee Currency", "TEST", _initialBalanceAddresses, _initialBalances
+        );
+
+        // Register _deployer as an oracle for the test currency. addOracle is onlyOwner.
+        SortedOracles sortedOracles = SortedOracles(CeloPredeploys.SORTED_ORACLES);
+        vm.startPrank(sortedOracles.owner());
+        sortedOracles.addOracle(CeloPredeploys.TEST_FEE_CURRENCY, _deployer);
+        vm.stopPrank();
+
+        // Report a price as the registered oracle.
+        if (_price != 0) {
+            vm.startPrank(_deployer);
+            sortedOracles.report(CeloPredeploys.TEST_FEE_CURRENCY, _price * 1e24, address(0), address(0));
+            vm.stopPrank();
+        }
+
+        // Register the test currency with the FeeCurrencyDirectory so the EL recognizes it
+        // as a fee currency. Intrinsic gas is the per-tx surcharge added to cover the
+        // debitGasFees / creditGasFees calls into the fee-currency contract.
+        uint256 intrinsicGas = 80_000;
+        FeeCurrencyDirectory feeCurrencyDirectory = FeeCurrencyDirectory(CeloPredeploys.FEE_CURRENCY_DIRECTORY);
+        vm.startPrank(feeCurrencyDirectory.owner());
+        feeCurrencyDirectory.setCurrencyConfig(
+            CeloPredeploys.TEST_FEE_CURRENCY, address(sortedOracles), intrinsicGas
+        );
+        vm.stopPrank();
     }
 }

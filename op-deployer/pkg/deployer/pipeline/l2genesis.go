@@ -127,6 +127,7 @@ func GenerateL2Genesis(pEnv *Env, intent *state.Intent, bundle ArtifactsBundle, 
 		NativeAssetLiquidityAmount: cgt.NativeAssetLiquidityAmount,
 		LiquidityControllerOwner:   cgt.LiquidityControllerOwner,
 		UseL2CM:                    useL2CM,
+		DeployCeloContracts:        thisIntent.DeployCeloContracts,
 	}); err != nil {
 		return fmt.Errorf("failed to call L2Genesis script: %w", err)
 	}

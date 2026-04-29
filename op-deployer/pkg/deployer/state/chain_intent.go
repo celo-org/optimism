@@ -83,6 +83,7 @@ type ChainIntent struct {
 	MinBaseFee                 uint64                    `json:"minBaseFee,omitempty" toml:"minBaseFee,omitempty"`
 	DAFootprintGasScalar       uint16                    `json:"daFootprintGasScalar,omitempty" toml:"daFootprintGasScalar,omitempty"`
 	CustomGasToken             CustomGasToken            `json:"customGasToken" toml:"customGasToken"`
+	DeployCeloContracts        bool                      `json:"deployCeloContracts,omitempty" toml:"deployCeloContracts,omitempty"`
 
 	// Optional. For development purposes only. Only enabled if the operation mode targets a genesis-file output.
 	L2DevGenesisParams *L2DevGenesisParams `json:"l2DevGenesisParams,omitempty" toml:"l2DevGenesisParams,omitempty"`
