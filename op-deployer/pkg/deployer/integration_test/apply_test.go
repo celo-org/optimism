@@ -550,12 +550,12 @@ func TestApplyDeployCeloContracts(t *testing.T) {
 
 	// Predeploys (proxies — code is the EIP-1967 Proxy bytecode at these addresses).
 	proxied := []common.Address{
-		common.HexToAddress("0x000000000000000000000000000000000000ce10"), // CeloRegistry
-		common.HexToAddress("0x471EcE3750Da237f93B8E339c536989b8978a438"), // GoldToken
-		common.HexToAddress("0xcD437749E43A154C07F3553504c68fBfD56B8778"), // FeeHandler
-		common.HexToAddress("0xefB84935239dAcdecF7c5bA76d8dE40b077B7b33"), // SortedOracles
-		common.HexToAddress("0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276"), // FeeCurrencyDirectory
-		common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a"), // TestFeeCurrency (StableTokenV2)
+		predeploys.CeloRegistryAddr,
+		predeploys.GoldTokenAddr,
+		predeploys.FeeHandlerAddr,
+		predeploys.SortedOraclesAddr,
+		predeploys.FeeCurrencyDirectoryAddr,
+		predeploys.TestFeeCurrencyAddr, // StableTokenV2 instance registered as a fee currency
 	}
 	for _, addr := range proxied {
 		acc, ok := allocs[addr]
@@ -564,8 +564,7 @@ func TestApplyDeployCeloContracts(t *testing.T) {
 	}
 
 	// Library — etched directly, not proxied.
-	libAddr := common.HexToAddress("0xED477A99035d0c1e11369F1D7A4e587893cc002B")
-	acc, ok := allocs[libAddr]
+	acc, ok := allocs[predeploys.AddressSortedLinkedListWithMedianAddr]
 	require.True(t, ok, "no account at AddressSortedLinkedListWithMedian")
 	require.NotEmpty(t, acc.Code)
 }
