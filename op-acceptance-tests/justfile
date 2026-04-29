@@ -17,6 +17,9 @@ interop:
 cgt:
     @just acceptance-test "" cgt
 
+celo:
+    @just acceptance-test "" celo
+
 
 # Run acceptance tests with mise-managed binary
 # Usage: just acceptance-test [devnet] [gate]
