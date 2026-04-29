@@ -47,11 +47,8 @@ build-source:
   forge build --skip "/**/test/**" --skip "/**/scripts/**"
 
 # Builds source contracts and scripts, skipping tests.
-# Links AddressSortedLinkedListWithMedian to its predeploy address so the L2Genesis
-# script can be loaded by op-deployer when deployCeloContracts is enabled.
 build-no-tests:
-  forge build --skip "/**/test/**" --libraries \
-  "src/celo/common/linkedlists/AddressSortedLinkedListWithMedian.sol:AddressSortedLinkedListWithMedian:0xED477A99035d0c1e11369F1D7A4e587893cc002B"
+  forge build --skip "/**/test/**"
 
 # Builds the contracts.
 build *ARGS: lint-fix-no-fail
