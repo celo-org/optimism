@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	"github.com/ethereum-optimism/optimism/op-core/predeploys"
 	"github.com/ethereum-optimism/optimism/op-devstack/devtest"
 	"github.com/ethereum-optimism/optimism/op-devstack/shim"
 	"github.com/ethereum-optimism/optimism/op-devstack/stack"
@@ -22,14 +23,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-service/client"
 	"github.com/ethereum-optimism/optimism/op-service/testutils/tcpproxy"
-)
-
-// Celo predeploy addresses that the WithCelo() deployer option installs into the
-// L2 genesis. Detected here so we can set the matching miner config without
-// polluting the generic geth.InitL2 code path with Celo-specific defaults.
-var (
-	celoFeeCurrencyDirectoryAddr = common.HexToAddress("0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276")
-	celoTestFeeCurrencyAddr      = common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a")
 )
 
 type OpGeth struct {
@@ -135,12 +128,12 @@ func (n *OpGeth) Start() {
 			//     (mirrors miner.DefaultConfig).
 			//   - FeeCurrencyLimits: explicit 0.9 for the registered test fee currency,
 			//     mirroring celo-mainnet's cUSD/USDT/USDC config.
-			if alloc, ok := n.l2Net.genesis.Alloc[celoFeeCurrencyDirectoryAddr]; ok && len(alloc.Code) > 0 {
+			if alloc, ok := n.l2Net.genesis.Alloc[predeploys.FeeCurrencyDirectoryAddr]; ok && len(alloc.Code) > 0 {
 				ethCfg.Miner.FeeCurrencyDefault = miner.DefaultFeeCurrencyLimit
 				if ethCfg.Miner.FeeCurrencyLimits == nil {
 					ethCfg.Miner.FeeCurrencyLimits = map[common.Address]float64{}
 				}
-				ethCfg.Miner.FeeCurrencyLimits[celoTestFeeCurrencyAddr] = 0.9
+				ethCfg.Miner.FeeCurrencyLimits[predeploys.TestFeeCurrencyAddr] = 0.9
 			}
 
 			listenAddr := n.cfg.P2PAddr

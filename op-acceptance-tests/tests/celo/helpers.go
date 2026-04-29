@@ -10,15 +10,9 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/lmittmann/w3"
 
+	"github.com/ethereum-optimism/optimism/op-core/predeploys"
 	"github.com/ethereum-optimism/optimism/op-devstack/devtest"
 	"github.com/ethereum-optimism/optimism/op-devstack/presets"
-)
-
-// Addresses of Celo predeploys deployed by sysgo.WithCelo() (see
-// packages/contracts-bedrock/scripts/L2Genesis.s.sol::setCeloPredeploys).
-var (
-	feeCurrencyDirectoryAddr = common.HexToAddress("0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276")
-	testFeeCurrencyAddr      = common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a")
 )
 
 // Foundry "test test test test test test test test test test test junk" mnemonic,
@@ -42,10 +36,10 @@ func ensureCeloFeeCurrencyOrSkip(t devtest.T, sys *presets.Minimal) {
 		"getCurrencyConfig(address)",
 		"(address oracle, uint256 intrinsicGas)",
 	)
-	data, err := getCurrencyConfig.EncodeArgs(testFeeCurrencyAddr)
+	data, err := getCurrencyConfig.EncodeArgs(predeploys.TestFeeCurrencyAddr)
 	t.Require().NoError(err, "encode getCurrencyConfig")
 
-	if _, err := l2.Call(ctx, ethereum.CallMsg{To: &feeCurrencyDirectoryAddr, Data: data}, rpc.LatestBlockNumber); err != nil {
+	if _, err := l2.Call(ctx, ethereum.CallMsg{To: &predeploys.FeeCurrencyDirectoryAddr, Data: data}, rpc.LatestBlockNumber); err != nil {
 		t.Skip("test fee currency not registered with FeeCurrencyDirectory: " + err.Error())
 	}
 }

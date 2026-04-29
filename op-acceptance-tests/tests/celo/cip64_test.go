@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 
+	"github.com/ethereum-optimism/optimism/op-core/predeploys"
 	"github.com/ethereum-optimism/optimism/op-devstack/devtest"
 	"github.com/ethereum-optimism/optimism/op-devstack/presets"
 )
@@ -36,7 +37,7 @@ func TestCIP64_PayGasInTestFeeCurrency(gt *testing.T) {
 
 	nativeBefore, err := l2.BalanceAt(ctx, sender, nil)
 	t.Require().NoError(err, "get native balance")
-	testBefore := erc20BalanceOf(t, sys, testFeeCurrencyAddr, sender)
+	testBefore := erc20BalanceOf(t, sys, predeploys.TestFeeCurrencyAddr, sender)
 	t.Require().Truef(testBefore.Sign() > 0, "sender must have a positive TEST balance, got %s", testBefore)
 
 	nonce, err := l2.PendingNonceAt(ctx, sender)
@@ -50,7 +51,7 @@ func TestCIP64_PayGasInTestFeeCurrency(gt *testing.T) {
 		Gas:         200_000,
 		To:          &recipient,
 		Value:       big.NewInt(0),
-		FeeCurrency: &testFeeCurrencyAddr,
+		FeeCurrency: &predeploys.TestFeeCurrencyAddr,
 	})
 	signed, err := types.SignTx(tx, types.LatestSignerForChainID(chainID), priv)
 	t.Require().NoError(err, "sign CIP-64 tx")
@@ -70,7 +71,7 @@ func TestCIP64_PayGasInTestFeeCurrency(gt *testing.T) {
 
 	nativeAfter, err := l2.BalanceAt(ctx, sender, nil)
 	t.Require().NoError(err, "get native balance after")
-	testAfter := erc20BalanceOf(t, sys, testFeeCurrencyAddr, sender)
+	testAfter := erc20BalanceOf(t, sys, predeploys.TestFeeCurrencyAddr, sender)
 
 	// Native balance must not change: gas was paid in TEST, no value transferred.
 	t.Require().Equal(0, nativeBefore.Cmp(nativeAfter),
