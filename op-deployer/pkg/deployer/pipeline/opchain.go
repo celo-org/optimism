@@ -151,8 +151,8 @@ func makeDCI(intent *state.Intent, thisIntent *state.ChainIntent, chainID common
 		UnsafeBlockSigner:            thisIntent.Roles.UnsafeBlockSigner,
 		Proposer:                     thisIntent.Roles.Proposer,
 		Challenger:                   thisIntent.Roles.Challenger,
-		BasefeeScalar:                celoOrDefault(thisIntent.DeployCeloContracts, standard.BasefeeScalar),
-		BlobBaseFeeScalar:            celoOrDefault(thisIntent.DeployCeloContracts, standard.BlobBaseFeeScalar),
+		BasefeeScalar:                celoOrDefaultScalar(thisIntent.DeployCeloContracts, standard.BasefeeScalar),
+		BlobBaseFeeScalar:            celoOrDefaultScalar(thisIntent.DeployCeloContracts, standard.BlobBaseFeeScalar),
 		L2ChainId:                    chainID.Big(),
 		Opcm:                         opcmAddr,
 		SaltMixer:                    st.Create2Salt.String(), // passing through salt generated at state initialization
@@ -172,9 +172,9 @@ func makeDCI(intent *state.Intent, thisIntent *state.ChainIntent, chainID common
 	}, nil
 }
 
-// celoOrDefault returns 0 when Celo contracts are deployed (so the chain operator pays
-// all L1 DA cost) and the standard default otherwise.
-func celoOrDefault(celo bool, def uint32) uint32 {
+// celoOrDefaultScalar returns 0 when Celo contracts are deployed (so the chain operator
+// pays all L1 DA cost on behalf of users) and the standard default otherwise.
+func celoOrDefaultScalar(celo bool, def uint32) uint32 {
 	if celo {
 		return 0
 	}
