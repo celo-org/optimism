@@ -151,8 +151,8 @@ func makeDCI(intent *state.Intent, thisIntent *state.ChainIntent, chainID common
 		UnsafeBlockSigner:            thisIntent.Roles.UnsafeBlockSigner,
 		Proposer:                     thisIntent.Roles.Proposer,
 		Challenger:                   thisIntent.Roles.Challenger,
-		BasefeeScalar:                standard.BasefeeScalar,
-		BlobBaseFeeScalar:            standard.BlobBaseFeeScalar,
+		BasefeeScalar:                celoOrDefault(thisIntent.DeployCeloContracts, standard.BasefeeScalar),
+		BlobBaseFeeScalar:            celoOrDefault(thisIntent.DeployCeloContracts, standard.BlobBaseFeeScalar),
 		L2ChainId:                    chainID.Big(),
 		Opcm:                         opcmAddr,
 		SaltMixer:                    st.Create2Salt.String(), // passing through salt generated at state initialization
@@ -169,6 +169,15 @@ func makeDCI(intent *state.Intent, thisIntent *state.ChainIntent, chainID common
 		SuperchainConfig:             st.SuperchainDeployment.SuperchainConfigProxy,
 		UseCustomGasToken:            thisIntent.IsCustomGasTokenEnabled(),
 	}, nil
+}
+
+// celoOrDefault returns 0 when Celo contracts are deployed (so the chain operator pays
+// all L1 DA cost) and the standard default otherwise.
+func celoOrDefault(celo bool, def uint32) uint32 {
+	if celo {
+		return 0
+	}
+	return def
 }
 
 func makeChainState(chainID common.Hash, impls opcm.ReadImplementationAddressesOutput, dco opcm.DeployOPChainOutput) *state.ChainState {

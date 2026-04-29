@@ -141,6 +141,17 @@ func InitL2(name string, genesis *core.Genesis, jwtPath string, opts ...GethOpti
 			GasPrice:            nil,
 			// enough to build blocks within 1 second, but high enough to avoid unnecessary test CPU cycles.
 			Recommit: time.Millisecond * 400,
+			// Celo: per-currency fraction of the block gas limit available to fee-currency txs.
+			// Without these, op-geth's MultiGasPool gives each registered fee currency 0 gas
+			// and silently drops every CIP-64 tx during block building. The default mirrors
+			// miner.DefaultConfig; the explicit entry for the test fee currency mirrors
+			// celo-mainnet's 0.9 limit for cUSD/USDT/USDC.
+			FeeCurrencyDefault: miner.DefaultFeeCurrencyLimit,
+			FeeCurrencyLimits: map[common.Address]float64{
+				// TEST_FEE_CURRENCY (kept at the celo-mainnet cUSD address for a deterministic
+				// predeploy slot; only present when sysgo.WithCelo() is set).
+				common.HexToAddress("0x765DE816845861e75A25fCA122bb6898B8B1282a"): 0.9,
+			},
 		},
 		TxPool: legacypool.Config{
 			NoLocals: true,

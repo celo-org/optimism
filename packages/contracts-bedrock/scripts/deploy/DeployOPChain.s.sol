@@ -290,8 +290,9 @@ contract DeployOPChain is Script {
         require(_i.proposer != address(0), "DeployOPChainInput: proposer not set");
         require(_i.challenger != address(0), "DeployOPChainInput: challenger not set");
 
-        require(_i.blobBaseFeeScalar != 0, "DeployOPChainInput: blobBaseFeeScalar not set");
-        require(_i.basefeeScalar != 0, "DeployOPChainInput: basefeeScalar not set");
+        // Zero scalars are valid for Celo-style chains where the operator pays all L1 DA cost.
+        // require(_i.blobBaseFeeScalar != 0, "DeployOPChainInput: blobBaseFeeScalar not set");
+        // require(_i.basefeeScalar != 0, "DeployOPChainInput: basefeeScalar not set");
         require(_i.gasLimit != 0, "DeployOPChainInput: gasLimit not set");
 
         require(_i.l2ChainId != 0, "DeployOPChainInput: l2ChainId not set");
