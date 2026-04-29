@@ -852,6 +852,9 @@ contract L2Genesis is Script {
         SortedOracles impl = new SortedOracles({ test: false });
         vm.resetNonce(address(impl));
         _setupCeloProxy(CeloPredeploys.SORTED_ORACLES, address(impl));
+        // Initialize so owner() is non-zero and reportExpirySeconds is set. 1 hour is
+        // generous enough for tests; production deployments configure their own value.
+        SortedOracles(CeloPredeploys.SORTED_ORACLES).initialize(1 hours);
     }
 
     function setCeloFeeCurrency() internal {
