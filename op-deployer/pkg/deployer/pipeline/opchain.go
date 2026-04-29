@@ -168,6 +168,7 @@ func makeDCI(intent *state.Intent, thisIntent *state.ChainIntent, chainID common
 		OperatorFeeConstant:          thisIntent.OperatorFeeConstant,
 		SuperchainConfig:             st.SuperchainDeployment.SuperchainConfigProxy,
 		UseCustomGasToken:            thisIntent.IsCustomGasTokenEnabled(),
+		DeployCeloContracts:          thisIntent.DeployCeloContracts,
 	}, nil
 }
 
