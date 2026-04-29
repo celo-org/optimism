@@ -870,9 +870,8 @@ contract L2Genesis is Script {
 
         // Initialize the proxy and transfer ownership to devAccounts[0] so devnets can
         // edit the directory at runtime.
-        vm.startPrank(devAccounts[0]);
+        vm.prank(devAccounts[0]);
         FeeCurrencyDirectory(CeloPredeploys.FEE_CURRENCY_DIRECTORY).initialize();
-        vm.stopPrank();
     }
 
     /// @notice Deploys a test fee currency (StableTokenV2) at its predeploy address, mints
@@ -897,15 +896,13 @@ contract L2Genesis is Script {
 
         // Register _deployer as an oracle for the test currency. addOracle is onlyOwner.
         SortedOracles sortedOracles = SortedOracles(CeloPredeploys.SORTED_ORACLES);
-        vm.startPrank(sortedOracles.owner());
+        vm.prank(sortedOracles.owner());
         sortedOracles.addOracle(CeloPredeploys.TEST_FEE_CURRENCY, _deployer);
-        vm.stopPrank();
 
         // Report a price as the registered oracle.
         if (_price != 0) {
-            vm.startPrank(_deployer);
+            vm.prank(_deployer);
             sortedOracles.report(CeloPredeploys.TEST_FEE_CURRENCY, _price * 1e24, address(0), address(0));
-            vm.stopPrank();
         }
 
         // Register the test currency with the FeeCurrencyDirectory so the EL recognizes it
@@ -913,10 +910,9 @@ contract L2Genesis is Script {
         // debitGasFees / creditGasFees calls into the fee-currency contract.
         uint256 intrinsicGas = 80_000;
         FeeCurrencyDirectory feeCurrencyDirectory = FeeCurrencyDirectory(CeloPredeploys.FEE_CURRENCY_DIRECTORY);
-        vm.startPrank(feeCurrencyDirectory.owner());
+        vm.prank(feeCurrencyDirectory.owner());
         feeCurrencyDirectory.setCurrencyConfig(
             CeloPredeploys.TEST_FEE_CURRENCY, address(sortedOracles), intrinsicGas
         );
-        vm.stopPrank();
     }
 }
