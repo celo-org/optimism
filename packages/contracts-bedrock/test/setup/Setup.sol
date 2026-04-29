@@ -408,7 +408,8 @@ abstract contract Setup is FeatureFlags {
                 gasPayingTokenSymbol: deploy.cfg().gasPayingTokenSymbol(),
                 nativeAssetLiquidityAmount: deploy.cfg().nativeAssetLiquidityAmount(),
                 liquidityControllerOwner: deploy.cfg().liquidityControllerOwner(),
-                useL2CM: deploy.cfg().useL2CM()
+                useL2CM: deploy.cfg().useL2CM(),
+                deployCeloContracts: deploy.cfg().deployCeloContracts()
             })
         );
 
