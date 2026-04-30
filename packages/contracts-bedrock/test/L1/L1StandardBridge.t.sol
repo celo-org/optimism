@@ -506,7 +506,9 @@ contract L1StandardBridge_DepositETHTo_Test is L1StandardBridge_TestInit {
         address _to,
         uint32 _minGasLimit,
         bytes calldata _extraData
-    ) external {
+    )
+        external
+    {
         // TODO(opcm upgrades): remove skip once upgrade path is implemented
         skipIfForkTest("L1StandardBridge_DepositETHTo_TestFail: gas paying token functionality DNE on op mainnet");
 
@@ -519,7 +521,6 @@ contract L1StandardBridge_DepositETHTo_Test is L1StandardBridge_TestInit {
         l1StandardBridge.depositETHTo{ value: _value }(_to, _minGasLimit, _extraData);
     }
 }
-
 
 /// @title L1StandardBridge_DepositERC20_Test
 /// @notice Tests the `depositERC20` function of the `L1StandardBridge` contract.
@@ -744,7 +745,9 @@ contract L1StandardBridge_FinalizeETHWithdrawal_Test is CommonTest {
     function testFuzz_finalizeETHWithdrawal_customGasToken_reverts(
         uint256 _value,
         bytes calldata _extraData
-    ) external {
+    )
+        external
+    {
         // TODO(opcm upgrades): remove skip once upgrade path is implemented
         skipIfForkTest(
             "L1StandardBridge_FinalizeETHWithdrawal_TestFail: gas paying token functionality DNE on op mainnet"
@@ -906,7 +909,9 @@ contract L1StandardBridge_Uncategorized_Test is L1StandardBridge_TestInit {
         uint256 _value,
         uint32 _minGasLimit,
         bytes calldata _extraData
-    ) external {
+    )
+        external
+    {
         // TODO(opcm upgrades): remove skip once upgrade path is implemented
         skipIfForkTest("L1StandardBridge_BridgeETHTo_TestFail: gas paying token functionality DNE on op mainnet");
 

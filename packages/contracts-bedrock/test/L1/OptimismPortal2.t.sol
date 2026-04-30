@@ -1609,9 +1609,7 @@ contract OptimismPortal2_FinalizeWithdrawalTransaction_Test is OptimismPortal2_T
         IFaultDisputeGame game_noData = IFaultDisputeGame(
             payable(
                 address(
-                    disputeGameFactory.create{
-                        value: disputeGameFactory.initBonds(respectedGameType)
-                    }(
+                    disputeGameFactory.create{ value: disputeGameFactory.initBonds(respectedGameType) }(
                         optimismPortal2.respectedGameType(),
                         Claim.wrap(_outputRoot_noData),
                         abi.encode(_proposedBlockNumber_noData)
@@ -3383,9 +3381,7 @@ contract OptimismPortal2_CGTLockboxGuard_Test is OptimismPortal2_TestInit {
 
         // Mock CGT
         vm.mockCall(
-            address(systemConfig),
-            abi.encodeCall(systemConfig.gasPayingToken, ()),
-            abi.encode(address(42), uint8(18))
+            address(systemConfig), abi.encodeCall(systemConfig.gasPayingToken, ()), abi.encode(address(42), uint8(18))
         );
 
         // lockETH must NOT be called

@@ -514,6 +514,7 @@ contract SystemConfig_Init_CustomGasToken is SystemConfig_TestInit {
 }
 /// @title SystemConfig_SetBatcherHash_Test
 /// @notice Test contract for SystemConfig `setBatcherHash` function.
+
 contract SystemConfig_SetBatcherHash_Test is SystemConfig_TestInit {
     /// @notice Tests that `setBatcherHash` reverts if the caller is not the owner.
     function test_setBatcherHash_notOwner_reverts() external {

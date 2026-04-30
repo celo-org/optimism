@@ -794,7 +794,8 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
     function _isUsingLockbox() internal view returns (bool) {
         // CGT prevents Lockbox
         (address token,) = gasPayingToken();
-        return token == Constants.ETHER && systemConfig.isFeatureEnabled(Features.ETH_LOCKBOX) && address(ethLockbox) != address(0);
+        return token == Constants.ETHER && systemConfig.isFeatureEnabled(Features.ETH_LOCKBOX)
+            && address(ethLockbox) != address(0);
     }
 
     /// @notice Asserts that the contract is not paused.

@@ -219,7 +219,7 @@ contract L1Block is ISemver, IGasToken {
             sstore(operatorFeeConstant.slot, slotVal)
         }
     }
-    
+
     /// @notice Sets the gas paying token for the L2 system. Can only be called by the special
     ///         depositor account. This function is not called on every L2 block but instead
     ///         only called by specially crafted L1 deposit transactions.
