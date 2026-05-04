@@ -20,6 +20,7 @@ library Types {
         address SystemConfig;
         address L1ERC721Bridge;
         address ProtocolVersions;
+        address CeloSuperchainConfig;
         address SuperchainConfig;
     }
 

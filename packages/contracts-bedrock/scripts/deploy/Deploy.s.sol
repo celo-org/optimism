@@ -118,6 +118,7 @@ contract Deploy is Deployer {
             SystemConfig: artifacts.getAddress("SystemConfigProxy"),
             L1ERC721Bridge: artifacts.getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: artifacts.getAddress("ProtocolVersionsProxy"),
+            CeloSuperchainConfig: artifacts.getAddress("CeloSuperchainConfigProxy"),
             SuperchainConfig: artifacts.getAddress("SuperchainConfigProxy")
         });
     }
