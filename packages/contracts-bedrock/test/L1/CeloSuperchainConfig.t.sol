@@ -37,7 +37,7 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
         assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
     }
 
-    /// @dev Tests that it can be intialized as paused.
+    /// @dev Tests that it can be initialized as paused.
     function test_initialize_paused_succeeds() external {
         IProxy newProxy = IProxy(
             DeployUtils.create1({
@@ -60,10 +60,11 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
 
         assertTrue(ICeloSuperchainConfig(address(newProxy)).paused());
         assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), celoGuardian);
-        assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
+        assertEq(ICeloSuperchainConfig(address(newProxy)).superchainConfig(), address(superchainConfig));
+        vm.stopPrank();
     }
 
-    /// @dev Tests that it will be intialized as paused if Superchain was paused
+    /// @dev Tests that it will be initialized as paused if Superchain was paused
     ///      at initialization time.
     function test_initialize_whenSuperchainPaused_succeeds() external {
         vm.prank(superchainConfig.guardian());
@@ -96,7 +97,7 @@ contract CeloSuperchainConfig_Init_Test is CeloSuperchainConfig_Test_Setup {
 
         assertTrue(ICeloSuperchainConfig(address(newProxy)).paused());
         assertEq(ICeloSuperchainConfig(address(newProxy)).guardian(), celoGuardian);
-        assertEq(celoSuperchainConfig.superchainConfig(), address(superchainConfig));
+        assertEq(ICeloSuperchainConfig(address(newProxy)).superchainConfig(), address(superchainConfig));
     }
 }
 
@@ -256,7 +257,7 @@ contract CeloSuperchainConfig_CheckAndPauseIfSuperchainPaused_Test is CeloSuperc
         assertFalse(paused);
     }
 
-    /// @dev Tests that `checkAndPauseIfSuperchainPaused` propagatates
+    /// @dev Tests that `checkAndPauseIfSuperchainPaused` propagates
     ///      Superchain's paused status to Celo when the Superchain is paused.
     function test_checkAndPauseIfSuperchainPaused_whenSuperchainPaused_succeeds() external {
         vm.prank(superchainConfig.guardian());
