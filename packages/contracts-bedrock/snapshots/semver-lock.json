@@ -147,6 +147,10 @@
     "initCodeHash": "0x6af5b0e83b455aab8d0946c160a4dc049a4e03be69f8a2a9e87b574f27b25a66",
     "sourceCodeHash": "0x03c160168986ffc8d26a90c37366e7ad6da03f49d83449e1f8b3de0f4b590f6f"
   },
+  "src/celo/CeloSuperchainConfig.sol:CeloSuperchainConfig": {
+    "initCodeHash": "0xc5b31123fb885ff02e9d059de554e757af5d9b63acf3d7b12aa4213f63a007f6",
+    "sourceCodeHash": "0x563250ef42cbb9a342dae7549ad21db46361c030793b7992eb0454d28c063a84"
+  },
   "src/dispute/AnchorStateRegistry.sol:AnchorStateRegistry": {
     "initCodeHash": "0x9bb9cd78ac1d15844fbff2e7c759f2c949f3aa1a8d950d54ddb4b1ed88863239",
     "sourceCodeHash": "0xf2715ff5393244742428454e1661aae7a56433867ee7bc563f44ad572c492d82"
