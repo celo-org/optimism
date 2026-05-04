@@ -132,6 +132,17 @@ contract ForkLive is Deployer, StdAssertions {
         artifacts.save("ProxyAdmin", vm.parseTomlAddress(opToml, ".addresses.ProxyAdmin"));
         saveProxyAndImpl("SystemConfig", opToml, ".addresses.SystemConfigProxy");
 
+        // CeloSuperchainConfig: query the live SystemConfig.superchainConfig() to find the CSC
+        // proxy address. On Celo this points at the CSC; on non-Celo forks it points at the
+        // upstream SuperchainConfig and Setup will skip the artifact lookup.
+        address sysCfg = artifacts.mustGetAddress("SystemConfigProxy");
+        try ISystemConfig(sysCfg).superchainConfig() returns (ISuperchainConfig csc) {
+            artifacts.save("CeloSuperchainConfigProxy", address(csc));
+        } catch {
+            // Older deployments may not expose superchainConfig() yet; tests that need CSC will
+            // fail with a clear DeploymentDoesNotExist error.
+        }
+
         // Bridge contracts
         address optimismPortal = vm.parseTomlAddress(opToml, ".addresses.OptimismPortalProxy");
         artifacts.save("OptimismPortalProxy", optimismPortal);

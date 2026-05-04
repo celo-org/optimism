@@ -30,6 +30,7 @@ import { GameType, Claim, GameTypes, Proposal, Hash } from "src/dispute/lib/Type
 import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
@@ -172,6 +173,11 @@ contract Deploy is Deployer {
 
         deployImplementations({ _isInterop: cfg.useInterop() });
 
+        // Deploy + initialize the CeloSuperchainConfig proxy before the OP chain so that
+        // `artifacts.mustGetAddress("CeloSuperchainConfigProxy")` resolves during chain wiring
+        // (ContractSet in _proxies() and Setup.sol).
+        setupCeloSuperchainConfig();
+
         // Deploy Current OPChain Contracts
         deployOpChain();
 
@@ -303,6 +309,7 @@ contract Deploy is Deployer {
         artifacts.save("DelayedWETHImpl", address(dio.delayedWETHImpl));
         artifacts.save("PreimageOracle", address(dio.preimageOracleSingleton));
         artifacts.save("SystemConfigImpl", address(dio.systemConfigImpl));
+        artifacts.save("CeloSuperchainConfigImpl", address(dio.celoSuperchainConfigImpl));
 
         // Get a contract set from the implementation addresses which were just deployed.
         Types.ContractSet memory impls = ChainAssertions.dioToContractSet(dio);
@@ -390,6 +397,40 @@ contract Deploy is Deployer {
             _implementation: delayedWETHImpl,
             _data: abi.encodeCall(IDelayedWETH.initialize, (deployOutput.systemConfigProxy))
         });
+    }
+
+    /// @notice Deploys and initializes the CeloSuperchainConfig proxy.
+    ///         The implementation is deployed earlier by DeployImplementations and saved as
+    ///         `CeloSuperchainConfigImpl`. This function creates the proxy under the
+    ///         SuperchainProxyAdmin and upgrades+initializes it to the implementation, binding
+    ///         the Celo guardian and the external SuperchainConfig pointer.
+    ///         Ports v1.8.0 `setupCeloSuperchainConfig` + `initializeCeloSuperchainConfig`.
+    function setupCeloSuperchainConfig() public {
+        console.log("Setting up CeloSuperchainConfig");
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
+        deployERC1967ProxyWithOwner("CeloSuperchainConfigProxy", address(superchainProxyAdmin));
+        initializeCeloSuperchainConfig();
+    }
+
+    /// @notice Upgrades the CeloSuperchainConfig proxy to its implementation and initializes it.
+    function initializeCeloSuperchainConfig() public {
+        address payable superchainConfigProxy = artifacts.mustGetAddress("SuperchainConfigProxy");
+        address payable celoSuperchainConfigProxy = artifacts.mustGetAddress("CeloSuperchainConfigProxy");
+        address celoSuperchainConfigImpl = artifacts.mustGetAddress("CeloSuperchainConfigImpl");
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
+
+        vm.startBroadcast(superchainProxyAdmin.owner());
+        superchainProxyAdmin.upgradeAndCall({
+            _proxy: celoSuperchainConfigProxy,
+            _implementation: celoSuperchainConfigImpl,
+            _data: abi.encodeCall(
+                ICeloSuperchainConfig.initialize,
+                (cfg.superchainConfigGuardian(), false, superchainConfigProxy)
+            )
+        });
+        vm.stopBroadcast();
+
+        ChainAssertions.checkCeloSuperchainConfig({ _contracts: _proxies(), _cfg: cfg, _isPaused: false });
     }
 
     ////////////////////////////////////////////////////////////////

@@ -21,6 +21,7 @@ import { Hash } from "src/dispute/lib/Types.sol";
 import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
 import { IResourceMetering } from "interfaces/L1/IResourceMetering.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IL1CrossDomainMessenger } from "interfaces/L1/IL1CrossDomainMessenger.sol";
 import { IOptimismPortal2 as IOptimismPortal } from "interfaces/L1/IOptimismPortal2.sol";
@@ -372,6 +373,31 @@ library ChainAssertions {
         } else {
             require(superchainConfig.guardian() == address(0), "CHECK-SC-40");
         }
+    }
+
+    /// @notice Asserts that the CeloSuperchainConfig proxy is set up correctly.
+    function checkCeloSuperchainConfig(
+        Types.ContractSet memory _contracts,
+        DeployConfig _cfg,
+        bool _isPaused
+    )
+        internal
+        view
+    {
+        ICeloSuperchainConfig celoSuperchainConfig = ICeloSuperchainConfig(_contracts.CeloSuperchainConfig);
+        console.log("Checking CeloSuperchainConfig proxy at %s", address(celoSuperchainConfig));
+        require(address(celoSuperchainConfig) != address(0), "CHECK-CSC-10");
+
+        DeployUtils.assertInitialized({
+            _contractAddress: address(celoSuperchainConfig),
+            _isProxy: true,
+            _slot: 0,
+            _offset: 0
+        });
+
+        require(celoSuperchainConfig.guardian() == _cfg.superchainConfigGuardian(), "CHECK-CSC-20");
+        require(celoSuperchainConfig.paused() == _isPaused, "CHECK-CSC-30");
+        require(celoSuperchainConfig.superchainConfig() == _contracts.SuperchainConfig, "CHECK-CSC-40");
     }
 
     /// @notice Asserts that the OPContractsManager is setup correctly

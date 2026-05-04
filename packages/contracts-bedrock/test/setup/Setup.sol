@@ -29,6 +29,7 @@ import { IOptimismPortal2 as IOptimismPortal } from "interfaces/L1/IOptimismPort
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 import { IL1CrossDomainMessenger } from "interfaces/L1/IL1CrossDomainMessenger.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IDataAvailabilityChallenge } from "interfaces/L1/IDataAvailabilityChallenge.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
@@ -116,6 +117,7 @@ contract Setup is FeatureFlags {
     IL1ERC721Bridge l1ERC721Bridge;
     IOptimismMintableERC20Factory l1OptimismMintableERC20Factory;
     IProtocolVersions protocolVersions;
+    ICeloSuperchainConfig celoSuperchainConfig;
     ISuperchainConfig superchainConfig;
     IDataAvailabilityChallenge dataAvailabilityChallenge;
     IOPContractsManager opcm;
@@ -274,6 +276,11 @@ contract Setup is FeatureFlags {
         l1OptimismMintableERC20Factory =
             IOptimismMintableERC20Factory(artifacts.mustGetAddress("OptimismMintableERC20FactoryProxy"));
         protocolVersions = IProtocolVersions(artifacts.mustGetAddress("ProtocolVersionsProxy"));
+        // getAddress (not mustGetAddress) so non-Celo fork tests don't revert during setUp.
+        celoSuperchainConfig = ICeloSuperchainConfig(artifacts.getAddress("CeloSuperchainConfigProxy"));
+        if (address(celoSuperchainConfig) != address(0)) {
+            vm.label(address(celoSuperchainConfig), "CeloSuperchainConfig");
+        }
         superchainConfig = ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy"));
         anchorStateRegistry = IAnchorStateRegistry(artifacts.mustGetAddress("AnchorStateRegistryProxy"));
         disputeGameFactory = IDisputeGameFactory(artifacts.mustGetAddress("DisputeGameFactoryProxy"));
