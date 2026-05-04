@@ -85,6 +85,10 @@ contract DeployConfig is Script {
     bool public useCustomGasToken;
     address public customGasTokenAddress;
 
+    /// @notice External SuperchainConfig that CeloSuperchainConfig wraps.
+    ///         If zero, Deploy.s.sol deploys a fresh local SuperchainConfig.
+    address public externalSuperchainConfig;
+
     bool public useInterop;
     bool public useUpgradedFork;
     bytes32 public devFeatureBitmap;
@@ -162,6 +166,7 @@ contract DeployConfig is Script {
 
         useCustomGasToken = _readOr(_json, "$.useCustomGasToken", false);
         customGasTokenAddress = _readOr(_json, "$.customGasTokenAddress", address(0));
+        externalSuperchainConfig = _readOr(_json, "$.externalSuperchainConfig", address(0));
 
         useInterop = _readOr(_json, "$.useInterop", false);
         devFeatureBitmap = bytes32(_readOr(_json, "$.devFeatureBitmap", 0));
@@ -235,6 +240,11 @@ contract DeployConfig is Script {
     function setUseCustomGasToken(address _token) public {
         useCustomGasToken = true;
         customGasTokenAddress = _token;
+    }
+
+    /// @notice Override the externalSuperchainConfig in tests.
+    function setExternalSuperchainConfig(address _externalSuperchainConfig) public {
+        externalSuperchainConfig = _externalSuperchainConfig;
     }
 
     /// @notice Allow the `useUpgradedFork` config to be overridden in testing environments

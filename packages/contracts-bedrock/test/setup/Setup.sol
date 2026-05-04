@@ -103,6 +103,10 @@ contract Setup is FeatureFlags {
     IPermissionedDisputeGame permissionedDisputeGame;
     IDelayedWETH delayedWETHPermissionedGameProxy;
 
+    /// @notice If false, skip deploying a fresh local SuperchainConfig and use an external one.
+    ///         Toggled via `withoutSuperchain()` from `CommonTest.enableExternalSuperchainConfig`.
+    bool needsSuperchain = true;
+
     // L1 contracts - core
     address proxyAdminOwner;
     IProxyAdmin proxyAdmin;
@@ -189,6 +193,9 @@ contract Setup is FeatureFlags {
         resolveFeaturesFromEnv();
         deploy.cfg().setDevFeatureBitmap(devFeatureBitmap);
 
+        // Apply cfg overrides after deploy is etched but before L1() runs deploy.run.
+        applyCfgOverrides();
+
         console.log("Setup: L1 setup done!");
 
         if (isForkTest()) {
@@ -249,7 +256,7 @@ contract Setup is FeatureFlags {
         if (isForkTest()) {
             forkLive.run();
         } else {
-            deploy.run();
+            deploy.run(needsSuperchain);
         }
 
         console.log("Setup: completed L1 deployment, registering addresses now");
@@ -394,4 +401,13 @@ contract Setup is FeatureFlags {
     function labelPreinstall(address _addr) internal {
         vm.label(_addr, Preinstalls.getName(_addr));
     }
+
+    /// @notice Skip the fresh SuperchainConfig deploy; the next setUp() will use an external one.
+    function withoutSuperchain() internal {
+        needsSuperchain = false;
+    }
+
+    /// @notice Override in subclasses to push cfg fields after deploy is etched but before
+    ///         deploy.run() reads them.
+    function applyCfgOverrides() internal virtual { }
 }

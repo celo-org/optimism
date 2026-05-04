@@ -134,6 +134,55 @@ contract Deploy is Deployer {
         _run({ _needsSuperchain: true });
     }
 
+    /// @notice Test-only entrypoint: skip the fresh SuperchainConfig deploy when false.
+    function run(bool _needsSuperchain) public {
+        _run({ _needsSuperchain: _needsSuperchain });
+    }
+
+    /// @notice Deploy a fresh OP Stack for Celo wrapping the externalSuperchainConfig from the
+    ///         deploy config. Existing Celo networks (Mainnet, Sepolia, Chaos) are already
+    ///         deployed; this is for new network deployments. ProtocolVersions is passed in;
+    ///         SuperchainProxyAdmin is deployed fresh so Celo controls it.
+    /// @param _protocolVersionsProxy Address of the existing ProtocolVersions proxy.
+    function runCelo(address payable _protocolVersionsProxy) public {
+        address externalSC = cfg.externalSuperchainConfig();
+        require(externalSC != address(0), "Deploy: must provide externalSuperchainConfig in deploy config");
+        require(_protocolVersionsProxy != address(0), "Deploy: must specify address for protocol versions proxy");
+
+        vm.chainId(cfg.l1ChainID());
+
+        console.log("Deploying OP Stack for Celo, wrapping external SuperchainConfig at %s", externalSC);
+
+        IProxy scProxy = IProxy(payable(externalSC));
+        artifacts.save("SuperchainConfigImpl", scProxy.implementation());
+        artifacts.save("SuperchainConfigProxy", externalSC);
+
+        IProxy pvProxy = IProxy(_protocolVersionsProxy);
+        artifacts.save("ProtocolVersionsImpl", pvProxy.implementation());
+        artifacts.save("ProtocolVersionsProxy", _protocolVersionsProxy);
+
+        _deploySuperchainProxyAdmin();
+
+        _run({ _needsSuperchain: false });
+    }
+
+    /// @notice Deploy a fresh ProxyAdmin owned by `cfg.finalSystemOwner()` and save it as the
+    ///         `SuperchainProxyAdmin` artifact. Mirrors `DeploySuperchain.deploySuperchainProxyAdmin`.
+    function _deploySuperchainProxyAdmin() internal {
+        vm.broadcast(msg.sender);
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(
+            DeployUtils.create1({
+                _name: "ProxyAdmin",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (msg.sender)))
+            })
+        );
+        vm.broadcast(msg.sender);
+        superchainProxyAdmin.transferOwnership(cfg.finalSystemOwner());
+
+        vm.label(address(superchainProxyAdmin), "SuperchainProxyAdmin");
+        artifacts.save("SuperchainProxyAdmin", address(superchainProxyAdmin));
+    }
+
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
     /// @param _superchainConfigProxy Address of the existing SuperchainConfig proxy
     /// @param _protocolVersionsProxy Address of the existing ProtocolVersions proxy
@@ -169,13 +218,32 @@ contract Deploy is Deployer {
         // Set up the Superchain if needed.
         if (_needsSuperchain) {
             deploySuperchain();
+        } else {
+            // No fresh superchain. If SuperchainConfigProxy isn't already pre-saved (e.g. by
+            // runCelo / runWithSuperchain), fall back to cfg.externalSuperchainConfig().
+            if (artifacts.getAddress("SuperchainConfigProxy") == address(0)) {
+                address externalSC = cfg.externalSuperchainConfig();
+                require(externalSC != address(0), "Deploy: externalSuperchainConfig is zero");
+                console.log("Using external SuperchainConfig at %s", externalSC);
+                artifacts.save("SuperchainConfigProxy", externalSC);
+            }
+            // ProtocolVersionsProxy and SuperchainProxyAdmin are still required downstream by
+            // deployImplementations / setupCeloSuperchainConfig. Fail fast here so the error
+            // message points at the caller (use runCelo / runWithSuperchain) instead of
+            // surfacing as DeploymentDoesNotExist deep in the deploy.
+            require(
+                artifacts.getAddress("ProtocolVersionsProxy") != address(0),
+                "Deploy: ProtocolVersionsProxy not seeded (use runCelo / runWithSuperchain)"
+            );
+            require(
+                artifacts.getAddress("SuperchainProxyAdmin") != address(0),
+                "Deploy: SuperchainProxyAdmin not seeded (use runCelo / runWithSuperchain)"
+            );
         }
 
         deployImplementations({ _isInterop: cfg.useInterop() });
 
-        // Deploy + initialize the CeloSuperchainConfig proxy before the OP chain so that
-        // `artifacts.mustGetAddress("CeloSuperchainConfigProxy")` resolves during chain wiring
-        // (ContractSet in _proxies() and Setup.sol).
+        // Must run before deployOpChain so CeloSuperchainConfigProxy resolves in _proxies().
         setupCeloSuperchainConfig();
 
         // Deploy Current OPChain Contracts
@@ -399,12 +467,8 @@ contract Deploy is Deployer {
         });
     }
 
-    /// @notice Deploys and initializes the CeloSuperchainConfig proxy.
-    ///         The implementation is deployed earlier by DeployImplementations and saved as
-    ///         `CeloSuperchainConfigImpl`. This function creates the proxy under the
-    ///         SuperchainProxyAdmin and upgrades+initializes it to the implementation, binding
-    ///         the Celo guardian and the external SuperchainConfig pointer.
-    ///         Ports v1.8.0 `setupCeloSuperchainConfig` + `initializeCeloSuperchainConfig`.
+    /// @notice Deploy the CeloSuperchainConfig proxy under SuperchainProxyAdmin and initialize
+    ///         it. The implementation is deployed earlier by DeployImplementations.
     function setupCeloSuperchainConfig() public {
         console.log("Setting up CeloSuperchainConfig");
         IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
@@ -412,7 +476,8 @@ contract Deploy is Deployer {
         initializeCeloSuperchainConfig();
     }
 
-    /// @notice Upgrades the CeloSuperchainConfig proxy to its implementation and initializes it.
+    /// @notice Upgrade the CeloSuperchainConfig proxy to its impl and initialize it with the
+    ///         Celo guardian and the SuperchainConfig pointer.
     function initializeCeloSuperchainConfig() public {
         address payable superchainConfigProxy = artifacts.mustGetAddress("SuperchainConfigProxy");
         address payable celoSuperchainConfigProxy = artifacts.mustGetAddress("CeloSuperchainConfigProxy");
@@ -430,6 +495,7 @@ contract Deploy is Deployer {
         });
         vm.stopBroadcast();
 
+        // Assumes the wrapped (external) SuperchainConfig isn't paused at deploy time.
         ChainAssertions.checkCeloSuperchainConfig({ _contracts: _proxies(), _cfg: cfg, _isPaused: false });
     }
 
