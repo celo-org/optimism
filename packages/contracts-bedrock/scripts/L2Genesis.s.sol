@@ -293,7 +293,7 @@ contract L2Genesis is Script {
     function setSequencerFeeVault(Input memory _input) internal {
         ISequencerFeeVault vault = ISequencerFeeVault(
             DeployUtils.create1({
-                _name: "SequencerFeeVault",
+                _name: "CeloSequencerFeeVault",
                 _args: DeployUtils.encodeConstructor(
                     abi.encodeCall(
                         ISequencerFeeVault.__constructor__,
