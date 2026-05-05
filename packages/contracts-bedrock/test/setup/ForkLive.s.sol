@@ -20,6 +20,7 @@ import { LibString } from "@solady/utils/LibString.sol";
 
 // Interfaces
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
 import { IPermissionedDisputeGame } from "interfaces/dispute/IPermissionedDisputeGame.sol";
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
@@ -132,16 +133,16 @@ contract ForkLive is Deployer, StdAssertions {
         artifacts.save("ProxyAdmin", vm.parseTomlAddress(opToml, ".addresses.ProxyAdmin"));
         saveProxyAndImpl("SystemConfig", opToml, ".addresses.SystemConfigProxy");
 
-        // CeloSuperchainConfig: query the live SystemConfig.superchainConfig() to find the CSC
-        // proxy address. On Celo this points at the CSC; on non-Celo forks it points at the
-        // upstream SuperchainConfig and Setup will skip the artifact lookup.
+        // CeloSuperchainConfig: on Celo, SystemConfig.superchainConfig() returns the CSC proxy.
+        // On non-Celo forks it returns the upstream SuperchainConfig, which has a different ABI.
+        // Probe with SUPERCHAIN_CONFIG_SLOT() — only CSC exposes it. If the probe reverts, leave
+        // the artifact unset; non-Celo tests don't need CSC.
         address sysCfg = artifacts.mustGetAddress("SystemConfigProxy");
-        try ISystemConfig(sysCfg).superchainConfig() returns (ISuperchainConfig csc) {
-            artifacts.save("CeloSuperchainConfigProxy", address(csc));
-        } catch {
-            // Older deployments may not expose superchainConfig() yet; tests that need CSC will
-            // fail with a clear DeploymentDoesNotExist error.
-        }
+        try ISystemConfig(sysCfg).superchainConfig() returns (ISuperchainConfig sc) {
+            try ICeloSuperchainConfig(address(sc)).SUPERCHAIN_CONFIG_SLOT() returns (bytes32) {
+                artifacts.save("CeloSuperchainConfigProxy", address(sc));
+            } catch { }
+        } catch { }
 
         // Bridge contracts
         address optimismPortal = vm.parseTomlAddress(opToml, ".addresses.OptimismPortalProxy");

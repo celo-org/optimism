@@ -24,6 +24,9 @@ contract CeloSuperchainConfig_Test_Setup is CommonTest, CeloSuperchainConfigEven
 
     function setUp() public override {
         super.setUp();
+        // CSC unit tests require a Celo deploy environment. Non-Celo forks (e.g. upstream OP
+        // Mainnet) don't have a CSC, so skip these tests there.
+        skipIfForkTest("CeloSuperchainConfig: only runs on non-fork or Celo-fork environments");
 
         celoGuardian = deploy.cfg().superchainConfigGuardian();
     }
