@@ -1,0 +1,51 @@
+name: Backfill image attestation
+on:
+  workflow_dispatch:
+    inputs:
+      image_name:
+        description: Image name without tag
+        required: true
+        default: us-west1-docker.pkg.dev/devopsre/celo-blockchain-public/op-batcher
+      image_tag:
+        description: Image tag
+        required: true
+        default: celo-v2.1.0
+jobs:
+  attest-image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    steps:
+      - uses: 'google-github-actions/auth@v2'
+        id: auth1
+        with:
+          workload_identity_provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
+          service_account: celo-optimism-gh@devopsre.iam.gserviceaccount.com
+          token_format: access_token
+      - name: Auth w/ registry
+        uses: docker/login-action@v3
+        with:
+          registry: us-west1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth1.outputs.access_token }}
+      - name: Set up crane
+        uses: imjasonh/setup-crane@v0.4
+      - name: Resolve image digest
+        id: digest
+        run: |
+          digest="$(crane digest "${{ inputs.image_name }}:${{ inputs.image_tag }}")"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          echo "$digest"
+      - name: Echo
+        run: |
+          echo "${{ inputs.image_name }}"
+          echo "${{ steps.digest.outputs.digest }}"
+      - name: Attest image
+        uses: actions/attest@v4.1.0
+        with:
+          subject-name: ${{ inputs.image_name }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
