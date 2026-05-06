@@ -163,10 +163,12 @@ contract Deploy is Deployer {
         _deploySuperchainProxyAdmin();
 
         _run({ _needsSuperchain: false });
+
+        // Transfer last so the CSC upgrade inside _run broadcasts as deployer, not multisig.
+        _transferSuperchainProxyAdminOwnership();
     }
 
-    /// @notice Deploy a fresh ProxyAdmin owned by `cfg.finalSystemOwner()` and save it as the
-    ///         `SuperchainProxyAdmin` artifact. Mirrors `DeploySuperchain.deploySuperchainProxyAdmin`.
+    /// @notice Deploy a fresh SuperchainProxyAdmin owned by the deployer.
     function _deploySuperchainProxyAdmin() internal {
         vm.broadcast(msg.sender);
         IProxyAdmin superchainProxyAdmin = IProxyAdmin(
@@ -175,11 +177,16 @@ contract Deploy is Deployer {
                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (msg.sender)))
             })
         );
-        vm.broadcast(msg.sender);
-        superchainProxyAdmin.transferOwnership(cfg.finalSystemOwner());
 
         vm.label(address(superchainProxyAdmin), "SuperchainProxyAdmin");
         artifacts.save("SuperchainProxyAdmin", address(superchainProxyAdmin));
+    }
+
+    /// @notice Hand SuperchainProxyAdmin ownership to `cfg.finalSystemOwner()`.
+    function _transferSuperchainProxyAdminOwnership() internal {
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
+        vm.broadcast(msg.sender);
+        superchainProxyAdmin.transferOwnership(cfg.finalSystemOwner());
     }
 
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
