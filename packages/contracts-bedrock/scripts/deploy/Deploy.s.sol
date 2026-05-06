@@ -208,6 +208,10 @@ contract Deploy is Deployer {
         artifacts.save("ProtocolVersionsImpl", pvProxy.implementation());
         artifacts.save("ProtocolVersionsProxy", _protocolVersionsProxy);
 
+        // setupCeloSuperchainConfig() (called inside _run) needs SuperchainProxyAdmin.
+        // Use the existing proxy admin of the supplied SuperchainConfig.
+        artifacts.save("SuperchainProxyAdmin", EIP1967Helper.getAdmin(_superchainConfigProxy));
+
         _run({ _needsSuperchain: false });
     }
 
