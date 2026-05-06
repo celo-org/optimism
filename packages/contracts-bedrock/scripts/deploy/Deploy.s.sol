@@ -139,10 +139,9 @@ contract Deploy is Deployer {
         _run({ _needsSuperchain: _needsSuperchain });
     }
 
-    /// @notice Deploy a fresh OP Stack for Celo wrapping the externalSuperchainConfig from the
-    ///         deploy config. Existing Celo networks (Mainnet, Sepolia, Chaos) are already
-    ///         deployed; this is for new network deployments. ProtocolVersions is passed in;
-    ///         SuperchainProxyAdmin is deployed fresh so Celo controls it.
+    /// @notice Deploy a fresh OP Stack for Celo, wrapping cfg.externalSuperchainConfig() as the
+    ///         SuperchainConfig. ProtocolVersions is passed in; SuperchainProxyAdmin is deployed
+    ///         fresh so Celo owns it.
     /// @param _protocolVersionsProxy Address of the existing ProtocolVersions proxy.
     function runCelo(address payable _protocolVersionsProxy) public {
         address externalSC = cfg.externalSuperchainConfig();
@@ -227,10 +226,8 @@ contract Deploy is Deployer {
                 console.log("Using external SuperchainConfig at %s", externalSC);
                 artifacts.save("SuperchainConfigProxy", externalSC);
             }
-            // ProtocolVersionsProxy and SuperchainProxyAdmin are still required downstream by
-            // deployImplementations / setupCeloSuperchainConfig. Fail fast here so the error
-            // message points at the caller (use runCelo / runWithSuperchain) instead of
-            // surfacing as DeploymentDoesNotExist deep in the deploy.
+            // PV + SuperchainProxyAdmin are still required downstream; fail fast with a useful
+            // message instead of letting DeploymentDoesNotExist surface deep in the deploy.
             require(
                 artifacts.getAddress("ProtocolVersionsProxy") != address(0),
                 "Deploy: ProtocolVersionsProxy not seeded (use runCelo / runWithSuperchain)"

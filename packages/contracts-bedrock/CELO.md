@@ -4,7 +4,7 @@ L1-side deltas between Celo's fork and upstream OP at v5.0.0.
 
 ## Dual guardian via CeloSuperchainConfig
 
-`src/celo/CeloSuperchainConfig.sol` (CSC) wraps a `SuperchainConfig` and adds a Celo-side guardian on top. Either guardian can pause: Celo's, or the upstream Optimism one.
+`src/celo/CeloSuperchainConfig.sol` (CSC) wraps a `SuperchainConfig` and adds a Celo-side guardian. Either guardian can pause.
 
 ABI:
 
@@ -13,7 +13,7 @@ ABI:
 - `pause(string identifier)` / `unpause()` — Celo guardian only
 - `checkAndPauseIfSuperchainPaused()` — copies the wrapped SC's paused state into local
 
-State lives in unstructured (`keccak256`-derived) slots, so it doesn't show in `forge inspect storage-layout` and won't collide with upstream additions.
+State lives in unstructured (`keccak256`-derived) slots, so it doesn't show in `forge inspect storage-layout`.
 
 ## How L1 contracts reach CSC
 
