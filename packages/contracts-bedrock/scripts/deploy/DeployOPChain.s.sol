@@ -78,7 +78,9 @@ contract DeployOPChain is Script {
             disputeMaxGameDepth: _input.disputeMaxGameDepth,
             disputeSplitDepth: _input.disputeSplitDepth,
             disputeClockExtension: _input.disputeClockExtension,
-            disputeMaxClockDuration: _input.disputeMaxClockDuration
+            disputeMaxClockDuration: _input.disputeMaxClockDuration,
+            // op-deployer entrypoint deploys upstream OP chains only; Celo deploys through Deploy.s.sol::runCelo
+            superchainConfigOverride: address(0)
         });
 
         vm.broadcast(msg.sender);

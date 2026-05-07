@@ -56,11 +56,11 @@ contract ETHLockbox_Version_Test is ETHLockbox_TestInit {
 /// @title ETHLockbox_Initialize_Test
 /// @notice Test contract for the initialize function.
 contract ETHLockbox_Initialize_Test is ETHLockbox_TestInit {
-    /// @notice Tests the superchain config was correctly set during initialization.
+    /// @notice Tests the superchain config was correctly set during initialization (CeloSuperchainConfig on Celo).
     function test_initialize_succeeds() public view {
-        assertEq(address(ethLockbox.systemConfig().superchainConfig()), address(superchainConfig));
+        assertEq(address(ethLockbox.systemConfig().superchainConfig()), address(celoSuperchainConfig));
         assertEq(ethLockbox.authorizedPortals(optimismPortal2), true);
-        assertEq(address(ethLockbox.superchainConfig()), address(superchainConfig));
+        assertEq(address(ethLockbox.superchainConfig()), address(celoSuperchainConfig));
     }
 
     /// @notice Tests that the initializer value is correct. Trivial test for normal initialization

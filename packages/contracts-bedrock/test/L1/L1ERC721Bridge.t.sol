@@ -317,8 +317,8 @@ contract L1ERC721Bridge_FinalizeBridgeERC721_Test is L1ERC721Bridge_TestInit {
     function test_finalizeBridgeERC721_paused_reverts() external {
         /// Sets up the test by pausing the bridge, giving ether to the bridge and mocking the
         /// calls to the xDomainMessageSender so that it returns the correct value.
-        vm.startPrank(systemConfig.superchainConfig().guardian());
-        systemConfig.superchainConfig().pause(address(0));
+        vm.startPrank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("test");
         vm.stopPrank();
 
         assertTrue(l1ERC721Bridge.paused());

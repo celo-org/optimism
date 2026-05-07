@@ -63,7 +63,8 @@ contract AnchorStateRegistry_Initialize_Test is AnchorStateRegistry_TestInit {
         // Verify contract addresses.
         assert(anchorStateRegistry.systemConfig() == systemConfig);
         assert(anchorStateRegistry.disputeGameFactory() == disputeGameFactory);
-        assert(anchorStateRegistry.superchainConfig() == superchainConfig);
+        // Celo: AnchorStateRegistry resolves SuperchainConfig through SystemConfig (CeloSuperchainConfig on Celo).
+        assert(address(anchorStateRegistry.superchainConfig()) == address(celoSuperchainConfig));
     }
 
     /// @notice Tests that the initializer value is correct. Trivial test for normal

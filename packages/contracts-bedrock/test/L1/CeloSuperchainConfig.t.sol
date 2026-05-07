@@ -11,9 +11,7 @@ import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
-/// @dev Re-declares CSC's Paused(string) / Unpaused() events so vm.expectEmit can match them.
-///      Upstream SuperchainConfig (pulled in via Events.sol) declares same-named events with
-///      different signatures, which would otherwise shadow the CSC ones.
+/// @dev Re-declares CeloSuperchainConfig events. Importing them requires Solidity 0.8.21
 contract CeloSuperchainConfigEvents {
     event Paused(string identifier);
     event Unpaused();
@@ -24,8 +22,8 @@ contract CeloSuperchainConfig_Test_Setup is CommonTest, CeloSuperchainConfigEven
 
     function setUp() public override {
         super.setUp();
-        // CSC unit tests require a Celo deploy environment. Non-Celo forks (e.g. upstream OP
-        // Mainnet) don't have a CSC, so skip these tests there.
+        // These tests need a CeloSuperchainConfig deployment. Non-Celo forks (e.g. upstream
+        // OP Mainnet) don't deploy one, so skip there.
         skipIfForkTest("CeloSuperchainConfig: only runs on non-fork or Celo-fork environments");
 
         celoGuardian = deploy.cfg().superchainConfigGuardian();

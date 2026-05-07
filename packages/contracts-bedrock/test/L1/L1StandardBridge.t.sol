@@ -224,8 +224,8 @@ contract L1StandardBridge_Paused_Test is CommonTest {
     /// @notice Sets up the test by pausing the bridge, giving ether to the bridge and mocking the
     ///         calls to the xDomainMessageSender so that it returns the correct value.
     function _setupPausedBridge() internal {
-        vm.startPrank(systemConfig.guardian());
-        systemConfig.superchainConfig().pause(address(0));
+        vm.startPrank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("test");
         vm.stopPrank();
         assertTrue(l1StandardBridge.paused());
 

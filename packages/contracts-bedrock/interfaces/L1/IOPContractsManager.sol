@@ -157,6 +157,8 @@ interface IOPContractsManager {
         uint256 disputeSplitDepth;
         Duration disputeClockExtension;
         Duration disputeMaxClockDuration;
+        // Celo: allows to override superchain config
+        address superchainConfigOverride;
     }
 
     /// @notice The full set of outputs from deploying a new OP Stack chain.

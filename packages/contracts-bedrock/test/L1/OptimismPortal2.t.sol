@@ -220,7 +220,7 @@ contract OptimismPortal2_Initialize_Test is OptimismPortal2_TestInit {
     function test_initialize_succeeds() external virtual {
         assertEq(address(optimismPortal2.anchorStateRegistry()), address(anchorStateRegistry));
         assertEq(address(optimismPortal2.disputeGameFactory()), address(disputeGameFactory));
-        assertEq(address(optimismPortal2.superchainConfig()), address(superchainConfig));
+        assertEq(address(optimismPortal2.superchainConfig()), address(celoSuperchainConfig));
         assertEq(optimismPortal2.l2Sender(), Constants.DEFAULT_L2_SENDER);
         assertEq(optimismPortal2.paused(), false);
         assertEq(address(optimismPortal2.systemConfig()), address(systemConfig));
@@ -606,9 +606,9 @@ contract OptimismPortal2_DisputeGameFactory_Test is OptimismPortal2_TestInit {
 /// @title OptimismPortal2_SuperchainConfig_Test
 /// @notice Test contract for OptimismPortal2 `superchainConfig` function.
 contract OptimismPortal2_SuperchainConfig_Test is OptimismPortal2_TestInit {
-    /// @notice Tests that `superchainConfig` returns the correct address.
+    /// @notice Tests that `superchainConfig` returns the correct address (CeloSuperchainConfig on Celo).
     function test_superchainConfig_succeeds() external view {
-        assertEq(address(optimismPortal2.superchainConfig()), address(superchainConfig));
+        assertEq(address(optimismPortal2.superchainConfig()), address(celoSuperchainConfig));
     }
 }
 
@@ -974,8 +974,8 @@ contract OptimismPortal2_MigrateToSuperRoots_Test is OptimismPortal2_TestInit {
 contract OptimismPortal2_ProveWithdrawalTransaction_Test is OptimismPortal2_TestInit {
     /// @notice Tests that `proveWithdrawalTransaction` reverts when paused.
     function test_proveWithdrawalTransaction_paused_reverts() external {
-        vm.startPrank(optimismPortal2.guardian());
-        systemConfig.superchainConfig().pause(address(0));
+        vm.startPrank(celoSuperchainConfig.guardian());
+        celoSuperchainConfig.pause("test");
         vm.stopPrank();
 
         vm.expectRevert(IOptimismPortal.OptimismPortal_CallPaused.selector);

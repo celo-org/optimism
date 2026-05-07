@@ -152,19 +152,18 @@ contract Deploy is Deployer {
 
         console.log("Deploying OP Stack for Celo, wrapping external SuperchainConfig at %s", externalSC);
 
-        IProxy scProxy = IProxy(payable(externalSC));
-        artifacts.save("SuperchainConfigImpl", scProxy.implementation());
+        artifacts.save("SuperchainConfigImpl", EIP1967Helper.getImplementation(externalSC));
         artifacts.save("SuperchainConfigProxy", externalSC);
 
-        IProxy pvProxy = IProxy(_protocolVersionsProxy);
-        artifacts.save("ProtocolVersionsImpl", pvProxy.implementation());
+        artifacts.save("ProtocolVersionsImpl", EIP1967Helper.getImplementation(_protocolVersionsProxy));
         artifacts.save("ProtocolVersionsProxy", _protocolVersionsProxy);
 
         _deploySuperchainProxyAdmin();
 
         _run({ _needsSuperchain: false });
 
-        // Transfer last so the CSC upgrade inside _run broadcasts as deployer, not multisig.
+        // Celo: transfer last so the CeloSuperchainConfig upgrade inside _run broadcasts as the
+        //       deployer, not the final multisig owner.
         _transferSuperchainProxyAdminOwnership();
     }
 
@@ -185,8 +184,9 @@ contract Deploy is Deployer {
     /// @notice Hand SuperchainProxyAdmin ownership to `cfg.finalSystemOwner()`.
     function _transferSuperchainProxyAdminOwnership() internal {
         IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
-        vm.broadcast(msg.sender);
+        vm.startBroadcast(msg.sender);
         superchainProxyAdmin.transferOwnership(cfg.finalSystemOwner());
+        vm.stopBroadcast();
     }
 
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
@@ -258,7 +258,11 @@ contract Deploy is Deployer {
         deployOpChain();
 
         // Set the respected game type according to the deploy config
-        vm.startPrank(ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy")).guardian());
+        address guardianSuperchainConfig = artifacts.getAddress("CeloSuperchainConfigProxy");
+        if (guardianSuperchainConfig == address(0)) {
+            guardianSuperchainConfig = artifacts.mustGetAddress("SuperchainConfigProxy");
+        }
+        vm.startPrank(ISuperchainConfig(guardianSuperchainConfig).guardian());
         IAnchorStateRegistry(artifacts.mustGetAddress("AnchorStateRegistryProxy")).setRespectedGameType(
             GameType.wrap(uint32(cfg.respectedGameType()))
         );
@@ -642,7 +646,8 @@ contract Deploy is Deployer {
             disputeMaxGameDepth: cfg.faultGameMaxDepth(),
             disputeSplitDepth: cfg.faultGameSplitDepth(),
             disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
-            disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration()))
+            disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
+            superchainConfigOverride: artifacts.getAddress("CeloSuperchainConfigProxy")
         });
     }
 
