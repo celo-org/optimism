@@ -582,7 +582,7 @@ contract Deploy is Deployer {
                         gasPayingToken: customGasTokenAddress
                     }),
                     cfg.l2ChainID(),
-                    ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy"))
+                    ISuperchainConfig(artifacts.mustGetAddress("CeloSuperchainConfigProxy"))
                 )
             )
         });
