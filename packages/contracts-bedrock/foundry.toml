@@ -7,7 +7,12 @@
 src = 'src'
 out = 'forge-artifacts'
 script = 'scripts'
+# espresso: explicitly set libs to prevent Forge from searching espresso-tee-contracts/lib
+# nested subdirectories, which causes ambiguous import errors for openzeppelin-contracts.
+libs = ['lib']
 build_info_path = 'artifacts/build-info'
+snapshots = 'notarealpath'               # workaround for foundry#9477
+allow_internal_expect_revert = true      # workaround described in https://github.com/PaulRBerg/prb-math/issues/248
 
 optimizer = true
 optimizer_runs = 999999
@@ -20,6 +25,7 @@ optimizer_runs = 999999
 additional_compiler_profiles = [
   { name = "dispute", optimizer_runs = 5000 },
   { name = "validator", optimizer_runs = 200 },
+  { name = "via-ir", via_ir = true },
 ]
 compilation_restrictions = [
   { paths = "src/dispute/FaultDisputeGame.sol", optimizer_runs = 5000 },
@@ -42,18 +48,35 @@ ast = true
 evm_version = 'cancun'
 
 remappings = [
+  # Espresso-tee-contracts context-specific remappings (must come before general @openzeppelin remappings)
+  'lib/espresso-tee-contracts/:@espresso-tee/=lib/espresso-tee-contracts/src/',
+  'lib/espresso-tee-contracts/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts',
+  # espresso: OZ upgradeable v5 is at a top-level lib (not nested under espresso-tee-contracts/lib/)
+  # to avoid ambiguous import errors when Forge adds lib/espresso-tee-contracts/ as an include path.
+  'lib/espresso-tee-contracts/:@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable-v5/contracts',
+  'lib/espresso-tee-contracts/:aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src/',
+  'lib/espresso-tee-contracts/:solady/=lib/solady/src',
+  # Context remappings for OZ upgradeable v5: its @openzeppelin/contracts/ imports → OZ v5 non-upgradeable
+  'lib/openzeppelin-contracts-upgradeable-v5/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts',
+  # General remappings
   '@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts',
+  # espresso: OZ upgradeable v5 alias for src/ contracts (e.g. BatchAuthenticator.sol)
+  '@openzeppelin/contracts-upgradeable-v5/=lib/openzeppelin-contracts-upgradeable-v5/contracts',
+  '@espresso-tee-contracts/=lib/espresso-tee-contracts/src',
+  '@nitro-validator/=lib/espresso-tee-contracts/lib/nitro-validator/src',
+  'aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src',
   '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts',
   '@openzeppelin/contracts-v5/=lib/openzeppelin-contracts-v5/contracts',
   '@rari-capital/solmate/=lib/solmate',
   '@lib-keccak/=lib/lib-keccak/contracts/lib',
+  'solady/=lib/solady/',
   '@solady/=lib/solady/src',
   '@solady-v0.0.245/=lib/solady-v0.0.245/src',
   'forge-std/=lib/forge-std/src',
   'ds-test/=lib/forge-std/lib/ds-test/src',
   'safe-contracts/=lib/safe-contracts/contracts',
   'kontrol-cheatcodes/=lib/kontrol-cheatcodes/src',
-  'interfaces/=interfaces'
+  'interfaces/=interfaces',
 ]
 
 fs_permissions = [
@@ -75,7 +98,8 @@ fs_permissions = [
 # 5159 = selfdestruct deprecation
 # 8429 = virtual modifiers deprecated (solc 0.8.31, triggered by solmate)
 # 2424 = natspec memory-safe-assembly comment deprecated (solc 0.8.31, triggered by forge-std)
-ignored_error_codes = ["transient-storage", "code-size", "init-code-size", "too-many-warnings", 5159, 8429, 2424]
+# 6321 = unnamed return variable; 5667 = unused param (lib/espresso-tee-contracts mocks); 1878 = missing SPDX (lib/espresso-tee-contracts scripts)
+ignored_error_codes = ["transient-storage", "code-size", "init-code-size", "too-many-warnings", 5159, 8429, 2424, 6321, 5667, 1878]
 deny = "warnings"
 ffi = true
 
@@ -86,8 +110,16 @@ ffi = true
 # you increase the gas limit above this value it must be a string.
 gas_limit = 9223372036854775807
 
+# Disable forge lint during build so 287+ linter warnings (e.g. unsafe-typecast) don't fail the build.
+# Run `forge lint` separately when fixing style.
+# Note: [lint] is a Foundry 1.5+ top-level section. Forge 1.2.x treats it as a deprecated profile
+# notation and emits a harmless warning; lint_on_build has no effect there (feature didn't exist yet).
+[lint]
+lint_on_build = false
+
 [fuzz]
 runs = 64
+failure_persist_file = "~/Desktop/failures.txt"
 
 [fmt]
 line_length=120
@@ -98,6 +130,16 @@ wrap_comments=true
 ################################################################
 #                         PROFILE: CI                          #
 ################################################################
+
+[profile.ci]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+# Default is CPU count (8). With espresso-tee-contracts submodule deps, the two 0.8.15
+# groups (530 + 211 files) run together and exceed 16GB even at jobs=2. Serialize to 1.
+jobs = 1
+# Limit test execution threads to avoid OOM during forge test on xlarge (16GB) runners.
+# espresso-tee-contracts increases per-test memory pressure; default (8 threads on xlarge)
+# can exhaust 16GB. 4 threads keeps memory within budget while retaining parallelism.
+threads = 4
 
 [profile.ci.fuzz]
 runs = 128
@@ -111,6 +153,9 @@ depth = 32
 ################################################################
 
 [profile.cicoverage]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+# espresso-tee-contracts adds additional compilation groups that exhaust memory without serialization.
+jobs = 1
 optimizer = false
 compilation_restrictions = []
 
@@ -127,12 +172,14 @@ depth = 1
 
 [profile.ciheavy]
 optimizer = false
-optimizer_runs = 0
+optimizer_runs = 200
+use_literal_content = false
 
 # IMPORTANT:
 # See the info in the "DEFAULT" profile to understand this section.
 additional_compiler_profiles = [
   { name = "dispute", optimizer_runs = 0 },
+  { name = "via-ir", via_ir = true },
 ]
 compilation_restrictions = [
   { paths = "src/dispute/FaultDisputeGame.sol", optimizer_runs = 0 },
@@ -148,6 +195,8 @@ compilation_restrictions = [
   { paths = "src/L1/OptimismPortal2.sol", optimizer_runs = 0 },
   { paths = "src/universal/StorageSetter.sol", optimizer_runs = 0 }
 ]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+jobs = 1
 
 [profile.ciheavy.fuzz]
 runs = 20000
@@ -201,6 +250,8 @@ depth = 32
 ################################################################
 
 [profile.lite]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+jobs = 1
 optimizer = false
 optimizer_runs = 0
 

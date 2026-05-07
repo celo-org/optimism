@@ -39,6 +39,13 @@ var excludedFiles = []string{
 	"src/periphery/Transactor.sol",
 	"src/periphery/monitoring/DisputeMonitorHelper.sol",
 	"src/universal/SafeSend.sol",
+	// Upstream OP stack contracts that intentionally use ^ for broad compatibility.
+	"src/universal/Proxy.sol",
+	"src/universal/ProxyAdmin.sol",
+	// BatchAuthenticator is imported by scripts at =0.8.25 AND by test groups at 0.8.28
+	// (via OZ v5 ^0.8.20 transitive deps). An exact pragma would break one or the other
+	// compilation group in Foundry's multi-version resolver.
+	"src/L1/BatchAuthenticator.sol",
 }
 
 func main() {

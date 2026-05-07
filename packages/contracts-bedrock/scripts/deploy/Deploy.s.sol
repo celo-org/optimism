@@ -373,7 +373,7 @@ contract Deploy is Deployer {
             DeployUtils.create2AndSave({
                 _save: artifacts,
                 _salt: keccak256(abi.encode(_implSalt(), _name)),
-                _name: "Proxy",
+                _name: "src/universal/Proxy.sol:Proxy", // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
                 _nick: _name,
                 _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxy.__constructor__, (_proxyOwner)))
             })
