@@ -99,4 +99,6 @@ contracts = [
     "Constants_Test",                           # Invalid naming pattern - doesn't specify function or Uncategorized
     "LivenessModule2_TestUtils",                # Test utils library in LivenessModule2 test file
     "L1Block_SetCustomGasToken_Test",           # Custom gas token tests hosted in the L1Block test file
+    "BatchAuthenticator_Fork_Test",             # Espresso fork tests - 'Fork' is a descriptor, not a function name
+    "MockSystemConfig",                         # Espresso mock helper contract inside BatchAuthenticator.t.sol
 ]

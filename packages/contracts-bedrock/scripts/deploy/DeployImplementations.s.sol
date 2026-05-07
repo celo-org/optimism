@@ -197,7 +197,7 @@ contract DeployImplementations is Script {
         address checkAddress;
         (blueprints.addressManager, checkAddress) = DeployUtils.createDeterministicBlueprint(DeployUtils.getCode("AddressManager"), _salt);
         require(checkAddress == address(0), "OPCM-10");
-        (blueprints.proxy, checkAddress) = DeployUtils.createDeterministicBlueprint(DeployUtils.getCode("Proxy"), _salt);
+        (blueprints.proxy, checkAddress) = DeployUtils.createDeterministicBlueprint(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), _salt); // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
         require(checkAddress == address(0), "OPCM-20");
         (blueprints.proxyAdmin, checkAddress) = DeployUtils.createDeterministicBlueprint(DeployUtils.getCode("ProxyAdmin"), _salt);
         require(checkAddress == address(0), "OPCM-30");

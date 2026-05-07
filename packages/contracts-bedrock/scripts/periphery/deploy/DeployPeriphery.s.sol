@@ -9,8 +9,8 @@ import { Config } from "scripts/libraries/Config.sol";
 import { Artifacts } from "scripts/Artifacts.s.sol";
 import { PeripheryDeployConfig } from "scripts/periphery/deploy/PeripheryDeployConfig.s.sol";
 
-import { ProxyAdmin } from "src/universal/ProxyAdmin.sol";
-import { Proxy } from "src/universal/Proxy.sol";
+import { IProxy } from "interfaces/universal/IProxy.sol";
+import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { Faucet } from "src/periphery/faucet/Faucet.sol";
 import { Drippie } from "src/periphery/drippie/Drippie.sol";
 import { CheckBalanceLow } from "src/periphery/drippie/dripchecks/CheckBalanceLow.sol";
@@ -85,11 +85,11 @@ contract DeployPeriphery is Script {
     function deployProxyAdmin() public broadcast returns (address addr_) {
         addr_ = _deployCreate2({
             _name: "ProxyAdmin",
-            _creationCode: type(ProxyAdmin).creationCode,
+            _creationCode: vm.getCode("ProxyAdmin"),
             _constructorParams: abi.encode(msg.sender)
         });
 
-        ProxyAdmin admin = ProxyAdmin(addr_);
+        IProxyAdmin admin = IProxyAdmin(addr_);
         require(admin.owner() == msg.sender, "DeployPeriphery: ProxyAdmin owner mismatch");
     }
 
@@ -97,11 +97,11 @@ contract DeployPeriphery is Script {
     function deployFaucetProxy() public broadcast returns (address addr_) {
         addr_ = _deployCreate2({
             _name: "FaucetProxy",
-            _creationCode: type(Proxy).creationCode,
+            _creationCode: vm.getCode("src/universal/Proxy.sol:Proxy"), // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
             _constructorParams: abi.encode(artifacts.mustGetAddress("ProxyAdmin"))
         });
 
-        Proxy proxy = Proxy(payable(addr_));
+        IProxy proxy = IProxy(payable(addr_));
         require(
             EIP1967Helper.getAdmin(address(proxy)) == artifacts.mustGetAddress("ProxyAdmin"),
             "DeployPeriphery: FaucetProxy admin mismatch"
@@ -201,7 +201,7 @@ contract DeployPeriphery is Script {
 
     /// @notice Initialize the Faucet.
     function initializeFaucet() public broadcast {
-        ProxyAdmin proxyAdmin = ProxyAdmin(artifacts.mustGetAddress("ProxyAdmin"));
+        IProxyAdmin proxyAdmin = IProxyAdmin(artifacts.mustGetAddress("ProxyAdmin"));
         address faucetProxy = artifacts.mustGetAddress("FaucetProxy");
         address faucet = artifacts.mustGetAddress("Faucet");
         address implementationAddress = proxyAdmin.getProxyImplementation(faucetProxy);
