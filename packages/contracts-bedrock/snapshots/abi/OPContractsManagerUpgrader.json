@@ -285,6 +285,11 @@
         "internalType": "struct OPContractsManager.OpChainConfig[]",
         "name": "_opChainConfigs",
         "type": "tuple[]"
+      },
+      {
+        "internalType": "bool",
+        "name": "_upgradeSuperchainConfig",
+        "type": "bool"
       }
     ],
     "name": "upgrade",

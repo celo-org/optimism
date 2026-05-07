@@ -1100,9 +1100,11 @@ contract SystemConfig_Guardian_Test is SystemConfig_TestInit {
 /// @notice General tests that are not testing any function directly of the `SystemConfig` contract
 ///         are testing multiple functions at once.
 contract SystemConfig_SuperchainConfig_Test is SystemConfig_TestInit {
-    /// @notice Tests that `superchainConfig()` returns the correct address (CeloSuperchainConfig on Celo).
+    /// @notice Tests that `superchainConfig()` returns the correct address.
     function test_superchainConfig_succeeds() external view {
-        assertEq(address(systemConfig.superchainConfig()), address(celoSuperchainConfig));
+        address expected =
+            address(celoSuperchainConfig) != address(0) ? address(celoSuperchainConfig) : address(superchainConfig);
+        assertEq(address(systemConfig.superchainConfig()), expected);
     }
 }
 

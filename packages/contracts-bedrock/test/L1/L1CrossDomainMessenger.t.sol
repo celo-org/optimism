@@ -194,9 +194,11 @@ contract L1CrossDomainMessenger_Paused_Test is L1CrossDomainMessenger_TestInit {
 /// @title L1CrossDomainMessenger_SuperchainConfig_Test
 /// @notice Tests for the `superchainConfig` function of the L1CrossDomainMessenger.
 contract L1CrossDomainMessenger_SuperchainConfig_Test is L1CrossDomainMessenger_TestInit {
-    /// @notice Tests that `superchainConfig` returns the correct address (CeloSuperchainConfig on Celo).
+    /// @notice Tests that `superchainConfig` returns the correct address.
     function test_superchainConfig_succeeds() external view {
-        assertEq(address(l1CrossDomainMessenger.superchainConfig()), address(celoSuperchainConfig));
+        address expected =
+            address(celoSuperchainConfig) != address(0) ? address(celoSuperchainConfig) : address(superchainConfig);
+        assertEq(address(l1CrossDomainMessenger.superchainConfig()), expected);
     }
 }
 
