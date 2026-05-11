@@ -6,9 +6,15 @@ import { FeeVault } from "src/L2/FeeVault.sol";
 
 // Libraries
 import { Types } from "src/libraries/Types.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 // Interfaces
 import { ISemver } from "interfaces/universal/ISemver.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { ICeloRegistry } from "src/celo/interfaces/ICeloRegistry.sol";
+import { IFeeCurrencyDirectory } from "src/celo/interfaces/IFeeCurrencyDirectory.sol";
+import { IFeeCurrencyAdapter } from "src/celo/interfaces/IFeeCurrencyAdapter.sol";
 
 /// @custom:proxied true
 /// @custom:predeploy 0x4200000000000000000000000000000000000011
@@ -25,8 +31,28 @@ import { ISemver } from "interfaces/universal/ISemver.sol";
 ///         3. The minimum withdrawal amount is not important, and is not enforced for ERC-20
 ///            tokens.
 contract CeloSequencerFeeVault is FeeVault, ISemver {
+    using SafeERC20 for IERC20;
+
     /// @custom:semver 1.0.0
     string public constant version = "1.0.0";
+
+    /// @notice Registry identifier hash used to look up the FeeCurrencyDirectory address.
+    bytes32 internal constant FEE_CURRENCY_DIRECTORY_REGISTRY_ID = keccak256(abi.encodePacked("FeeCurrencyDirectory"));
+
+    /// @notice Total amount of each ERC-20 token transferred out of the vault.
+    ///         Keyed by the actually-transferred token address (the underlying for adapter
+    ///         fee currencies, or the registered address itself for native fee currencies).
+    mapping(address => uint256) public totalProcessedToken;
+
+    /// @notice Emitted when an ERC-20 fee-currency balance is withdrawn.
+    /// @param registered The address registered in the FeeCurrencyDirectory.
+    /// @param actual     The ERC-20 token address that was actually transferred.
+    /// @param value      Amount transferred (in `actual` token's native units).
+    /// @param to         Recipient of the transfer.
+    /// @param from       Address that triggered the withdrawal.
+    event TokenWithdrawal(
+        address indexed registered, address indexed actual, uint256 value, address indexed to, address from
+    );
 
     /// @notice Constructs the CeloSequencerFeeVault contract.
     /// @param _recipient           Wallet that will receive the fees.
@@ -45,5 +71,42 @@ contract CeloSequencerFeeVault is FeeVault, ISemver {
     /// @return The recipient address.
     function l1FeeWallet() public view returns (address) {
         return RECIPIENT;
+    }
+
+    /// @notice Withdraws the vault's full balance of a native fee-currency ERC-20 to RECIPIENT.
+    ///         Convenience overload for native fee currencies, where the directory-registered
+    ///         address is itself the transferable ERC-20.
+    /// @param _token The fee-currency token registered in the FeeCurrencyDirectory.
+    function withdrawToken(address _token) external {
+        withdrawToken(_token, _token);
+    }
+
+    /// @notice Withdraws the vault's full balance of an ERC-20 to RECIPIENT, validated against
+    ///         the FeeCurrencyDirectory. For adapter-wrapped fee currencies (e.g. USDC), pass the
+    ///         registered adapter as `_registered` and the underlying ERC-20 as `_actual`.
+    /// @param _registered Address registered in the FeeCurrencyDirectory (native token or adapter).
+    /// @param _actual     ERC-20 token to actually transfer. Must equal `_registered` (native case)
+    ///                    or `IFeeCurrencyAdapter(_registered).getAdaptedToken()` (adapter case).
+    function withdrawToken(address _registered, address _actual) public {
+        address directory =
+            ICeloRegistry(CeloPredeploys.CELO_REGISTRY).getAddressForOrDie(FEE_CURRENCY_DIRECTORY_REGISTRY_ID);
+        IFeeCurrencyDirectory.CurrencyConfig memory cfg =
+            IFeeCurrencyDirectory(directory).getCurrencyConfig(_registered);
+        require(cfg.oracle != address(0), "CeloSequencerFeeVault: token not a registered fee currency");
+
+        if (_actual != _registered) {
+            require(
+                IFeeCurrencyAdapter(_registered).getAdaptedToken() == _actual, "CeloSequencerFeeVault: adapter mismatch"
+            );
+        }
+
+        uint256 value = IERC20(_actual).balanceOf(address(this));
+        require(value > 0, "CeloSequencerFeeVault: no token balance to withdraw");
+
+        totalProcessedToken[_actual] += value;
+
+        emit TokenWithdrawal(_registered, _actual, value, RECIPIENT, msg.sender);
+
+        IERC20(_actual).safeTransfer(RECIPIENT, value);
     }
 }

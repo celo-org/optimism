@@ -5,6 +5,7 @@ pragma solidity 0.8.15;
 import { CommonTest } from "test/setup/CommonTest.sol";
 import { Reverter } from "test/mocks/Callers.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
+import { TestERC20 } from "test/mocks/TestERC20.sol";
 
 // Contracts
 import { ISequencerFeeVault } from "interfaces/L2/ISequencerFeeVault.sol";
@@ -15,6 +16,13 @@ import { Hashing } from "src/libraries/Hashing.sol";
 import { Types } from "src/libraries/Types.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+
+// Celo interfaces
+import { ICeloRegistry } from "src/celo/interfaces/ICeloRegistry.sol";
+import { IFeeCurrencyDirectory } from "src/celo/interfaces/IFeeCurrencyDirectory.sol";
+import { IFeeCurrencyAdapter } from "src/celo/interfaces/IFeeCurrencyAdapter.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /// @title CeloSequencerFeeVault_TestInit
 /// @notice Reusable test initialization for `CeloSequencerFeeVault` tests.
@@ -187,5 +195,179 @@ contract CeloSequencerFeeVault_Withdraw_Test is CeloSequencerFeeVault_TestInit {
         vm.expectRevert("FeeVault: failed to send ETH to L2 fee recipient");
         sequencerFeeVault.withdraw();
         assertEq(sequencerFeeVault.totalProcessed(), 0);
+    }
+}
+
+/// @title CeloSequencerFeeVault_WithdrawToken_Test
+/// @notice Tests the `withdrawToken` overloads of the `CeloSequencerFeeVault` contract.
+contract CeloSequencerFeeVault_WithdrawToken_Test is CeloSequencerFeeVault_TestInit {
+    /// @dev Stand-in address used to mock the FeeCurrencyDirectory.
+    address internal constant DIRECTORY = address(0xD12EC707);
+
+    /// @dev Stand-in address used to mock an oracle (only its non-zeroness matters).
+    address internal constant ORACLE = address(0x07AC1E);
+
+    /// @dev keccak256("FeeCurrencyDirectory") — must match the constant in the contract.
+    bytes32 internal constant FCD_ID = keccak256(abi.encodePacked("FeeCurrencyDirectory"));
+
+    /// @dev Cached event signature, mirrored here so `vm.expectEmit` can match.
+    event TokenWithdrawal(
+        address indexed registered, address indexed actual, uint256 value, address indexed to, address from
+    );
+
+    function setUp() public override {
+        super.setUp();
+
+        // Always mock the registry → directory lookup.
+        vm.mockCall(
+            CeloPredeploys.CELO_REGISTRY,
+            abi.encodeCall(ICeloRegistry.getAddressForOrDie, (FCD_ID)),
+            abi.encode(DIRECTORY)
+        );
+    }
+
+    function _mockCurrencyConfig(address token, address oracle) internal {
+        vm.mockCall(
+            DIRECTORY,
+            abi.encodeCall(IFeeCurrencyDirectory.getCurrencyConfig, (token)),
+            abi.encode(IFeeCurrencyDirectory.CurrencyConfig({ oracle: oracle, intrinsicGas: 0 }))
+        );
+    }
+
+    function _mockAdaptedToken(address adapter, address underlying) internal {
+        vm.mockCall(adapter, abi.encodeCall(IFeeCurrencyAdapter.getAdaptedToken, ()), abi.encode(underlying));
+    }
+
+    /// @notice `withdrawToken(token, token)` succeeds for a directly-registered native fee currency.
+    function test_withdrawToken_native_succeeds() external {
+        TestERC20 token = new TestERC20();
+        _mockCurrencyConfig(address(token), ORACLE);
+
+        uint256 amount = 1_000 ether;
+        token.mint(address(sequencerFeeVault), amount);
+
+        vm.expectEmit(address(sequencerFeeVault));
+        emit TokenWithdrawal(address(token), address(token), amount, recipient, address(this));
+
+        sequencerFeeVault.withdrawToken(address(token), address(token));
+
+        assertEq(token.balanceOf(address(sequencerFeeVault)), 0);
+        assertEq(token.balanceOf(recipient), amount);
+        assertEq(sequencerFeeVault.totalProcessedToken(address(token)), amount);
+    }
+
+    /// @notice One-arg overload delegates to the two-arg version with the address repeated.
+    function test_withdrawToken_singleArgOverload_succeeds() external {
+        TestERC20 token = new TestERC20();
+        _mockCurrencyConfig(address(token), ORACLE);
+
+        uint256 amount = 42;
+        token.mint(address(sequencerFeeVault), amount);
+
+        vm.expectEmit(address(sequencerFeeVault));
+        emit TokenWithdrawal(address(token), address(token), amount, recipient, address(this));
+
+        sequencerFeeVault.withdrawToken(address(token));
+
+        assertEq(token.balanceOf(address(sequencerFeeVault)), 0);
+        assertEq(token.balanceOf(recipient), amount);
+        assertEq(sequencerFeeVault.totalProcessedToken(address(token)), amount);
+    }
+
+    /// @notice For an adapter-registered fee currency, the underlying ERC-20 is transferred.
+    function test_withdrawToken_adapter_succeeds() external {
+        // The adapter address can be any address that we mock; it doesn't need to be a deployed contract.
+        address adapter = address(0xADAB7E5);
+        TestERC20 underlying = new TestERC20();
+        _mockCurrencyConfig(adapter, ORACLE);
+        _mockAdaptedToken(adapter, address(underlying));
+
+        uint256 amount = 26_660_316; // shaped like a USDC balance (6 decimals)
+        underlying.mint(address(sequencerFeeVault), amount);
+
+        vm.expectEmit(address(sequencerFeeVault));
+        emit TokenWithdrawal(adapter, address(underlying), amount, recipient, address(this));
+
+        sequencerFeeVault.withdrawToken(adapter, address(underlying));
+
+        assertEq(underlying.balanceOf(address(sequencerFeeVault)), 0);
+        assertEq(underlying.balanceOf(recipient), amount);
+        assertEq(sequencerFeeVault.totalProcessedToken(address(underlying)), amount);
+        // Adapter mapping key is NOT used.
+        assertEq(sequencerFeeVault.totalProcessedToken(adapter), 0);
+    }
+
+    /// @notice Reverts when the registered token has no oracle in the directory (i.e. unregistered).
+    function test_withdrawToken_invalidRegistered_reverts() external {
+        TestERC20 token = new TestERC20();
+        _mockCurrencyConfig(address(token), address(0));
+
+        vm.expectRevert("CeloSequencerFeeVault: token not a registered fee currency");
+        sequencerFeeVault.withdrawToken(address(token), address(token));
+    }
+
+    /// @notice Reverts when adapter routing is requested but `getAdaptedToken` returns the wrong address.
+    function test_withdrawToken_adapterMismatch_reverts() external {
+        address adapter = address(0xADAB7E5);
+        TestERC20 wrongUnderlying = new TestERC20();
+        TestERC20 actualPassed = new TestERC20();
+        _mockCurrencyConfig(adapter, ORACLE);
+        _mockAdaptedToken(adapter, address(wrongUnderlying));
+
+        vm.expectRevert("CeloSequencerFeeVault: adapter mismatch");
+        sequencerFeeVault.withdrawToken(adapter, address(actualPassed));
+    }
+
+    /// @notice Reverts when the vault has no balance of a valid registered token.
+    function test_withdrawToken_zeroBalance_reverts() external {
+        TestERC20 token = new TestERC20();
+        _mockCurrencyConfig(address(token), ORACLE);
+
+        vm.expectRevert("CeloSequencerFeeVault: no token balance to withdraw");
+        sequencerFeeVault.withdrawToken(address(token), address(token));
+    }
+
+    /// @notice Sequential withdrawals accumulate `totalProcessedToken`.
+    function test_withdrawToken_cumulative_succeeds() external {
+        TestERC20 token = new TestERC20();
+        _mockCurrencyConfig(address(token), ORACLE);
+
+        token.mint(address(sequencerFeeVault), 100);
+        sequencerFeeVault.withdrawToken(address(token));
+        assertEq(sequencerFeeVault.totalProcessedToken(address(token)), 100);
+
+        token.mint(address(sequencerFeeVault), 50);
+        sequencerFeeVault.withdrawToken(address(token));
+        assertEq(sequencerFeeVault.totalProcessedToken(address(token)), 150);
+        assertEq(token.balanceOf(recipient), 150);
+    }
+
+    /// @notice Token withdrawal does not affect the ETH `totalProcessed` counter.
+    function test_withdrawToken_doesNotAffectETHTotalProcessed() external {
+        TestERC20 token = new TestERC20();
+        _mockCurrencyConfig(address(token), ORACLE);
+        token.mint(address(sequencerFeeVault), 1);
+
+        uint256 ethProcessedBefore = sequencerFeeVault.totalProcessed();
+        sequencerFeeVault.withdrawToken(address(token));
+        assertEq(sequencerFeeVault.totalProcessed(), ethProcessedBefore);
+    }
+
+    /// @notice Calling the one-arg overload with an adapter token is not supported and reverts at
+    ///         the transfer step (adapters do not implement ERC-20 `transfer`). Use the two-arg
+    ///         overload with the underlying token instead.
+    function test_withdrawToken_singleArgOnAdapter_reverts() external {
+        address adapter = address(0xADAB7E5);
+        vm.etch(adapter, hex"00"); // give adapter non-empty code so vm.mockCall is reachable
+        _mockCurrencyConfig(adapter, ORACLE);
+        vm.mockCall(
+            adapter, abi.encodeCall(IERC20.balanceOf, (address(sequencerFeeVault))), abi.encode(uint256(1))
+        );
+        // Real adapters have no `transfer` function; their Solidity dispatcher reverts on the
+        // unknown selector. Simulate that here.
+        vm.mockCallRevert(adapter, abi.encodeWithSelector(IERC20.transfer.selector), "");
+
+        vm.expectRevert();
+        sequencerFeeVault.withdrawToken(adapter);
     }
 }

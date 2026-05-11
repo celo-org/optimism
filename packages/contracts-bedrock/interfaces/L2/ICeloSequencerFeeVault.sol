@@ -6,6 +6,9 @@ import { Types } from "src/libraries/Types.sol";
 interface ICeloSequencerFeeVault {
     event Withdrawal(uint256 value, address to, address from);
     event Withdrawal(uint256 value, address to, address from, Types.WithdrawalNetwork withdrawalNetwork);
+    event TokenWithdrawal(
+        address indexed registered, address indexed actual, uint256 value, address indexed to, address from
+    );
 
     receive() external payable;
 
@@ -15,7 +18,10 @@ interface ICeloSequencerFeeVault {
     function minWithdrawalAmount() external view returns (uint256 amount_);
     function recipient() external view returns (address recipient_);
     function totalProcessed() external view returns (uint256);
+    function totalProcessedToken(address token) external view returns (uint256);
     function withdraw() external;
+    function withdrawToken(address token) external;
+    function withdrawToken(address registered, address actual) external;
     function withdrawalNetwork() external view returns (Types.WithdrawalNetwork network_);
 
     function version() external view returns (string memory);

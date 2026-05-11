@@ -43,17 +43,6 @@
   {
     "inputs": [
       {
-        "internalType": "contract IAnchorStateRegistry",
-        "name": "",
-        "type": "address"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [
-      {
         "internalType": "bytes32",
         "name": "_withdrawalHash",
         "type": "bytes32"
@@ -846,6 +835,11 @@
   },
   {
     "inputs": [],
+    "name": "OnlyCustomGasToken",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OptimismPortal_AlreadyFinalized",
     "type": "error"
   },
@@ -916,17 +910,27 @@
   },
   {
     "inputs": [],
+    "name": "OptimismPortal_NoValue",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OptimismPortal_ProofNotOldEnough",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "OptimismPortal_Unproven",
+    "name": "OptimismPortal_TransferFailed",
     "type": "error"
   },
   {
     "inputs": [],
-    "name": "OnlyCustomGasToken",
+    "name": "OptimismPortal_Unauthorized",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "OptimismPortal_Unproven",
     "type": "error"
   },
   {
@@ -951,11 +955,6 @@
   },
   {
     "inputs": [],
-    "name": "OptimismPortal_TransferFailed",
-    "type": "error"
-  },
-  {
-    "inputs": [],
     "name": "ProxyAdminOwnedBase_NotResolvedDelegateProxy",
     "type": "error"
   },
@@ -972,16 +971,6 @@
   {
     "inputs": [],
     "name": "ReinitializableBase_ZeroInitVersion",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OptimismPortal_Unauthorized",
-    "type": "error"
-  },
-  {
-    "inputs": [],
-    "name": "OptimismPortal_NoValue",
     "type": "error"
   },
   {
