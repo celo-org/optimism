@@ -13,7 +13,7 @@ pub const MAX_RLP_BYTES_PER_CHANNEL_BEDROCK: u64 = 10_000_000;
 pub const MAX_RLP_BYTES_PER_CHANNEL_FJORD: u64 = 100_000_000;
 
 /// The max sequencer drift when the Fjord hardfork is active.
-pub const FJORD_MAX_SEQUENCER_DRIFT: u64 = 1800;
+pub const FJORD_MAX_SEQUENCER_DRIFT: u64 = 2892; // Replace the value for Celo
 
 /// The channel timeout once the Granite hardfork is active.
 pub const GRANITE_CHANNEL_TIMEOUT: u64 = 50;
