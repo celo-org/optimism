@@ -53,3 +53,56 @@ jobs:
           source: .
           files: docker-bake.hcl
           targets: op-node
+
+  # Attest images
+  attest-op-stack:
+    runs-on: ubuntu-latest
+    needs: [Set-Tags, build-op-stack]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+      artifact-metadata: write
+    env:
+      IMAGE_TAGS: ${{ needs.Set-Tags.outputs.tags }}
+      REGISTRY: us-west1-docker.pkg.dev
+      REPOSITORY: devopsre/celo-blockchain-public
+    steps:
+      - uses: 'google-github-actions/auth@v2'
+        id: auth1
+        with:
+          workload_identity_provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
+          service_account: celo-optimism-gh@devopsre.iam.gserviceaccount.com
+          token_format: access_token
+      - name: Auth w/ registry
+        uses: docker/login-action@v3
+        with:
+          registry: us-west1-docker.pkg.dev
+          username: oauth2accesstoken
+          password: ${{ steps.auth1.outputs.access_token }}
+      - name: Set up crane
+        uses: imjasonh/setup-crane@v0.4
+      - name: Resolve op-node image digest
+        id: op_node_digest
+        run: |
+          image_tag="${IMAGE_TAGS%%,*}"
+          digest="$(crane digest "${REGISTRY}/${REPOSITORY}/op-node:${image_tag}")"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Attest op-node image
+        uses: actions/attest@v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/op-node
+          subject-digest: ${{ steps.op_node_digest.outputs.digest }}
+          push-to-registry: true
+      - name: Resolve op-batcher image digest
+        id: op_batcher_digest
+        run: |
+          image_tag="${IMAGE_TAGS%%,*}"
+          digest="$(crane digest "${REGISTRY}/${REPOSITORY}/op-batcher:${image_tag}")"
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+      - name: Attest op-batcher image
+        uses: actions/attest@v4.1.0
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.REPOSITORY }}/op-batcher
+          subject-digest: ${{ steps.op_batcher_digest.outputs.digest }}
+          push-to-registry: true
