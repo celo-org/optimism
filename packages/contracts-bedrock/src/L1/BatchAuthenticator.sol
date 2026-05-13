@@ -114,6 +114,15 @@ contract BatchAuthenticator is
         emit BatchInfoAuthenticated(_commitment);
     }
 
+    /// @notice Permissionless registration of a TEE-generated signer.
+    ///         Anyone may call this; safety is enforced by the verifier:
+    ///           1. `verificationData` must contain a valid AWS Nitro attestation, verified via Succinct ZK proof.
+    ///           2. The attestation's PCR0 measurement must match an enclave hash pre-approved by the TEE
+    ///              verifier's owner/guardian.
+    ///           3. The registered signer address is derived from the public key inside the attestation
+    ///              — the caller cannot choose it.
+    ///         An attacker would need to compromise governance (to whitelist a malicious enclave hash), forge
+    ///         an AWS Nitro signature, or break the Succinct ZK proof — all outside the contract's threat model.
     function registerSigner(bytes calldata _verificationData, bytes calldata _data) external {
         if (paused()) revert BatchAuthenticator_Paused();
 
