@@ -4,8 +4,8 @@ pragma solidity ^0.8.0;
 import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
 import { IEspressoNitroTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoNitroTEEVerifier.sol";
 import { INitroEnclaveVerifier } from "aws-nitro-enclave-attestation/interfaces/INitroEnclaveVerifier.sol";
-import { ECDSA } from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/draft-EIP712.sol";
+import { ECDSA } from "@openzeppelin/contracts-v5/utils/cryptography/ECDSA.sol";
+import { EIP712 } from "@openzeppelin/contracts-v5/utils/cryptography/EIP712.sol";
 
 /// @notice Mock implementation of IEspressoNitroTEEVerifier for testing without real attestation verification.
 ///         Used by deployment scripts and tests.
