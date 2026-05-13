@@ -20,7 +20,7 @@ import {
     Pcr
 } from "aws-nitro-enclave-attestation/interfaces/INitroEnclaveVerifier.sol";
 
-import { Chains } from "scripts/libraries/Chains.sol";
+import { Config } from "scripts/libraries/Config.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IBatchAuthenticator } from "interfaces/L1/IBatchAuthenticator.sol";
 
@@ -464,7 +464,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         // An unauthorized sender must be rejected.
         vm.prank(unauthorized);
         vm.expectRevert(
-            abi.encodeWithSelector(IBatchAuthenticator.UnauthorizedFallbackBatcher.selector, unauthorized, fallbackBatcher)
+            abi.encodeWithSelector(
+                IBatchAuthenticator.UnauthorizedFallbackBatcher.selector, unauthorized, fallbackBatcher
+            )
         );
         authenticator.authenticateBatchInfo(commitment, "");
     }
@@ -594,7 +596,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
     }
 }
 
-/// @notice Fork tests for BatchAuthenticator on Sepolia.
+/// @notice Fork tests for BatchAuthenticator. Runs against the FORK_RPC_URL fork when FORK_TEST=true,
+///         using the repo's standard fork-test env vars (FORK_TEST, FORK_RPC_URL, FORK_BLOCK_NUMBER)
+///         exposed via the Config library.
 contract BatchAuthenticator_Fork_Test is Test {
     address public proxyAdminOwner = address(0xBEEF);
     address public espressoBatcher = address(0x1234);
@@ -628,21 +632,22 @@ contract BatchAuthenticator_Fork_Test is Test {
     }
 
     function setUp() public {
-        // Create a fork of Sepolia using the execution layer RPC endpoint.
-        string memory forkUrl = "https://theserversroom.com/sepolia/54cmzzhcj1o/";
-        vm.createSelectFork(forkUrl);
+        // Skip unless fork tests are explicitly enabled.
+        if (!Config.l1ForkTest()) {
+            vm.skip(true);
+            return;
+        }
 
-        // Verify we're on Sepolia.
-        require(block.chainid == Chains.Sepolia, "BatchAuthenticatorForkTest: fork test must run on Sepolia");
-        console.log("Forked Sepolia at block:", block.number);
+        vm.createSelectFork(Config.forkRpcUrl(), Config.forkBlockNumber());
 
-        // Deploy mock SystemConfig and TEE verifier (standalone mode) and authenticator implementation.
+        console.log("BatchAuthenticator_Fork_Test: forked at block", block.number);
+
         mockSystemConfig = new MockSystemConfig();
         nitroVerifier = new EspressoNitroTEEVerifierMock();
         teeVerifier = new EspressoTEEVerifierMock(IEspressoNitroTEEVerifier(address(nitroVerifier)));
         implementation = new BatchAuthenticator();
 
-        // Deploy proxy admin via vm.getCode to avoid duplicate ProxyAdmin artifacts.
+        // Deploy ProxyAdmin via vm.getCode to avoid duplicate ProxyAdmin artifacts.
         {
             bytes memory _code = vm.getCode("ProxyAdmin");
             bytes memory _args = abi.encode(proxyAdminOwner);
@@ -657,7 +662,6 @@ contract BatchAuthenticator_Fork_Test is Test {
         vm.prank(proxyAdminOwner);
         proxyAdmin.setProxyType(address(proxy), IProxyAdmin.ProxyType.ERC1967);
 
-        // Initialize the proxy.
         bytes memory initData = abi.encodeCall(
             BatchAuthenticator.initialize,
             (
@@ -670,7 +674,6 @@ contract BatchAuthenticator_Fork_Test is Test {
         vm.prank(proxyAdminOwner);
         proxyAdmin.upgradeAndCall(payable(address(proxy)), address(implementation), initData);
 
-        // Get the proxied contract instance.
         authenticator = BatchAuthenticator(address(proxy));
     }
 
@@ -703,7 +706,7 @@ contract BatchAuthenticator_Fork_Test is Test {
         nitroVerifier.registerService(_nitroRegistrationOutputForPrivateKey(privateKey), "");
     }
 
-    /// @notice Test deployment and initialization on Sepolia fork.
+    /// @notice Test deployment and initialization on the fork.
     function test_deployment_succeeds() external view {
         assertEq(address(authenticator.espressoTEEVerifier()), address(teeVerifier));
         assertEq(authenticator.espressoBatcher(), espressoBatcher);
@@ -715,7 +718,7 @@ contract BatchAuthenticator_Fork_Test is Test {
         assertEq(admin, address(proxyAdmin));
     }
 
-    /// @notice Test switchBatcher on Sepolia fork.
+    /// @notice Test switchBatcher on the fork.
     function test_switchBatcher_succeeds() external {
         assertTrue(authenticator.activeIsEspresso());
 
@@ -730,9 +733,9 @@ contract BatchAuthenticator_Fork_Test is Test {
         assertTrue(authenticator.activeIsEspresso());
     }
 
-    /// @notice Test authenticateBatchInfo on Sepolia fork.
+    /// @notice Test authenticateBatchInfo on the fork.
     function test_authenticateBatchInfo_succeeds() external {
-        bytes32 commitment = keccak256("test commitment on sepolia");
+        bytes32 commitment = keccak256("test commitment on fork");
 
         // Create a signature.
         uint256 privateKey = 1;
@@ -749,7 +752,7 @@ contract BatchAuthenticator_Fork_Test is Test {
         authenticator.authenticateBatchInfo(commitment, signature);
     }
 
-    /// @notice Test upgrade on Sepolia fork preserves state.
+    /// @notice Test upgrade on the fork preserves state.
     function test_upgrade_succeeds() external {
         // Initialize the authenticator.
         bytes32 commitment = keccak256("test commitment");
@@ -778,19 +781,14 @@ contract BatchAuthenticator_Fork_Test is Test {
         assertEq(authenticator.espressoBatcher(), espressoBatcher);
     }
 
-    /// @notice Test that contract works with real Sepolia state.
-    function test_integrationWithSepolia_succeeds() external view {
-        // Verify we're on Sepolia.
-        assertEq(block.chainid, Chains.Sepolia);
-
-        // Verify contract is functional.
+    /// @notice Test that the contract works against live forked L1 state.
+    function test_integrationWithFork_succeeds() external view {
         assertEq(authenticator.version(), "1.2.0");
         assertTrue(authenticator.activeIsEspresso());
 
-        // Verify the fork is working by testing that we can read the block number.
         uint256 blockNum = block.number;
         assertGt(blockNum, 0);
-        console.log("Sepolia block number:", blockNum);
+        console.log("Fork block number:", blockNum);
     }
 
     // Event declarations for expectEmit.
