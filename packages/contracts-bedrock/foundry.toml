@@ -119,7 +119,6 @@ lint_on_build = false
 
 [fuzz]
 runs = 64
-failure_persist_file = "~/Desktop/failures.txt"
 
 [fmt]
 line_length=120
