@@ -98,7 +98,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
         // Deploy the proxy admin via vm.getCode to avoid duplicate ProxyAdmin artifacts.
         {
-            bytes memory _code = vm.getCode("ProxyAdmin");
+            bytes memory _code = vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json");
             bytes memory _args = abi.encode(proxyAdminOwner);
             bytes memory _initCode = abi.encodePacked(_code, _args);
             address _addr;
@@ -860,7 +860,7 @@ contract BatchAuthenticator_Fork_Test is Test {
 
         // Deploy ProxyAdmin via vm.getCode to avoid duplicate ProxyAdmin artifacts.
         {
-            bytes memory _code = vm.getCode("ProxyAdmin");
+            bytes memory _code = vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json");
             bytes memory _args = abi.encode(proxyAdminOwner);
             bytes memory _initCode = abi.encodePacked(_code, _args);
             address _addr;

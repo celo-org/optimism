@@ -9,8 +9,8 @@ import { IBatchAuthenticator } from "interfaces/L1/IBatchAuthenticator.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IEspressoNitroTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoNitroTEEVerifier.sol";
 import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
-import { DeployTEEVerifier } from "lib/espresso-tee-contracts/scripts/DeployTEEVerifier.s.sol";
-import { DeployNitroTEEVerifier } from "lib/espresso-tee-contracts/scripts/DeployNitroTEEVerifier.s.sol";
+import { EspressoTEEVerifier } from "@espresso-tee-contracts/EspressoTEEVerifier.sol";
+import { EspressoNitroTEEVerifier } from "@espresso-tee-contracts/EspressoNitroTEEVerifier.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
@@ -105,11 +105,6 @@ contract DeployEspressoOutput is BaseDeployIO {
 }
 
 contract DeployEspresso is Script {
-    /// @dev ERC-1967 admin slot: keccak256("eip1967.proxy.admin") - 1
-    ///      Used to read the ProxyAdmin address auto-deployed by the OZ v5 TransparentUpgradeableProxy
-    ///      that DeployTEEVerifier deploys.
-    bytes32 internal constant ERC1967_ADMIN_SLOT = 0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103;
-
     function run(DeployEspressoInput _input, DeployEspressoOutput _output, address _deployerAddress) public {
         IEspressoTEEVerifier teeVerifier = deployTEEContracts(_input, _output, _deployerAddress);
         deployBatchAuthenticator(_input, _output, _deployerAddress, teeVerifier);
@@ -174,11 +169,15 @@ contract DeployEspresso is Script {
         return IBatchAuthenticator(address(proxy));
     }
 
-    /// @notice Deploys NitroTEEVerifier and TEEVerifier via the canonical espresso-tee-contracts scripts.
+    /// @notice Deploys NitroTEEVerifier and TEEVerifier (production path).
     ///         Deployment order:
-    ///         1. Deploy TEEVerifier (impl + OZ v5 TUP proxy) with placeholder nitro address
+    ///         1. Deploy TEEVerifier (impl + OP-style ERC-1967 Proxy + ProxyAdmin) with placeholder nitro address
     ///         2. Deploy NitroTEEVerifier pointing to the TEEVerifier proxy
     ///         3. Update TEEVerifier with the actual NitroTEEVerifier address
+    ///
+    ///         The TEEVerifier is deployed behind src/universal/Proxy.sol rather than the
+    ///         upstream's OZ v5 TransparentUpgradeableProxy. This avoids pulling OZ's TUP +
+    ///         ProxyAdmin into the OP artifact tree (which would shadow src/universal/ProxyAdmin.sol).
     ///
     ///         If nitroEnclaveVerifier is address(0), deploys our local mocks (dev/test only).
     function deployTEEContracts(
@@ -239,30 +238,62 @@ contract DeployEspresso is Script {
         address proxyAdminOwner = _input.proxyAdminOwner();
         if (proxyAdminOwner == address(0)) proxyAdminOwner = _deployerAddress;
 
-        // Deploy TEEVerifier (impl + OZ v5 TUP proxy) via the canonical submodule script.
-        // DeployImplementations uses vm.getCode("src/universal/ProxyAdmin.sol:ProxyAdmin") to avoid
-        // the artifact collision with the OZ v5 ProxyAdmin that this TUP auto-deploys.
-        vm.startBroadcast(msg.sender);
-        (address teeProxy,) = new DeployTEEVerifier().deploy(proxyAdminOwner, address(0));
-        vm.stopBroadcast();
-        vm.label(teeProxy, "TEEVerifierProxy");
+        // Deploy OP's ProxyAdmin (owned by msg.sender for now so we can upgradeAndCall).
+        vm.broadcast(msg.sender);
+        IProxyAdmin proxyAdmin = _deployProxyAdmin(msg.sender);
+        vm.label(address(proxyAdmin), "TEEVerifierProxyAdmin");
 
-        // NitroTEEVerifier is deployed without a proxy; it stores teeProxy for access control.
-        vm.startBroadcast(msg.sender);
-        address nitroVerifier = new DeployNitroTEEVerifier().deploy(teeProxy, _nitroEnclaveVerifier);
-        vm.stopBroadcast();
-        vm.label(nitroVerifier, "NitroTEEVerifier");
+        // Deploy OP's ERC-1967 Proxy pointing at the ProxyAdmin.
+        address payable teeProxyAddr;
+        {
+            bytes memory initCode =
+                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(address(proxyAdmin)));
+            vm.broadcast(msg.sender);
+            assembly {
+                teeProxyAddr := create(0, add(initCode, 0x20), mload(initCode))
+            }
+            require(teeProxyAddr != address(0), "DeployEspresso: tee proxy deployment failed");
+        }
+        vm.label(teeProxyAddr, "TEEVerifierProxy");
 
         vm.broadcast(msg.sender);
-        IEspressoTEEVerifier(teeProxy).setEspressoNitroTEEVerifier(IEspressoNitroTEEVerifier(nitroVerifier));
+        proxyAdmin.setProxyType(teeProxyAddr, IProxyAdmin.ProxyType.ERC1967);
 
-        address teeProxyAdmin = address(uint160(uint256(vm.load(teeProxy, ERC1967_ADMIN_SLOT))));
+        // Deploy the implementation and initialize with the configured owner. The contract uses
+        // OZ Ownable2Step under the hood, so setting the final owner via `initialize` avoids
+        // the two-step transfer dance.
+        vm.broadcast(msg.sender);
+        EspressoTEEVerifier teeImpl = new EspressoTEEVerifier();
+        vm.label(address(teeImpl), "TEEVerifierImpl");
 
-        _output.set(_output.teeVerifierProxy.selector, teeProxy);
-        _output.set(_output.teeVerifierProxyAdmin.selector, teeProxyAdmin);
-        _output.set(_output.nitroTEEVerifier.selector, nitroVerifier);
+        bytes memory initData =
+            abi.encodeCall(EspressoTEEVerifier.initialize, (proxyAdminOwner, IEspressoNitroTEEVerifier(address(0))));
+        vm.broadcast(msg.sender);
+        proxyAdmin.upgradeAndCall(teeProxyAddr, address(teeImpl), initData);
 
-        return IEspressoTEEVerifier(teeProxy);
+        if (proxyAdminOwner != msg.sender) {
+            vm.broadcast(msg.sender);
+            proxyAdmin.transferOwnership(proxyAdminOwner);
+        }
+
+        // Deploy NitroTEEVerifier (no proxy; it stores teeProxy for access control).
+        vm.broadcast(msg.sender);
+        EspressoNitroTEEVerifier nitroVerifier = new EspressoNitroTEEVerifier(teeProxyAddr, _nitroEnclaveVerifier);
+        vm.label(address(nitroVerifier), "NitroTEEVerifier");
+
+        // Wire the verifier into the TEE verifier. `setEspressoNitroTEEVerifier` is onlyOwner,
+        // so this implicitly requires msg.sender == proxyAdminOwner (same constraint the
+        // previous implementation had).
+        vm.broadcast(msg.sender);
+        IEspressoTEEVerifier(teeProxyAddr).setEspressoNitroTEEVerifier(
+            IEspressoNitroTEEVerifier(address(nitroVerifier))
+        );
+
+        _output.set(_output.teeVerifierProxy.selector, teeProxyAddr);
+        _output.set(_output.teeVerifierProxyAdmin.selector, address(proxyAdmin));
+        _output.set(_output.nitroTEEVerifier.selector, address(nitroVerifier));
+
+        return IEspressoTEEVerifier(teeProxyAddr);
     }
 
     function checkOutput(DeployEspressoOutput _output) public view {
@@ -283,8 +314,12 @@ contract DeployEspresso is Script {
     /// @notice Deploys a ProxyAdmin via vm.getCode to avoid importing src/universal/ProxyAdmin.sol or
     ///         scripts/libraries/DeployUtils.sol, which would merge into the 0.8.28 compilation group
     ///         alongside files that import src/universal/Proxy.sol, creating duplicate Proxy artifacts.
+    ///         The explicit artifact path is used to deterministically resolve to the default
+    ///         compilation profile's bytecode (a plain `vm.getCode("ProxyAdmin")` is ambiguous when
+    ///         ProxyAdmin is also compiled in the dispute profile via transitive imports).
     function _deployProxyAdmin(address _owner) internal returns (IProxyAdmin proxyAdmin_) {
-        bytes memory _initCode = abi.encodePacked(vm.getCode("ProxyAdmin"), abi.encode(_owner));
+        bytes memory _initCode =
+            abi.encodePacked(vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json"), abi.encode(_owner));
         address payable _addr;
         assembly {
             _addr := create(0, add(_initCode, 0x20), mload(_initCode))
