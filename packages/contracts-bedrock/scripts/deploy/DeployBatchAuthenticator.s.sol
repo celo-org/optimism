@@ -47,7 +47,8 @@ contract DeployBatchAuthenticator is Script {
         // alongside files that import src/universal/Proxy.sol, creating duplicate Proxy artifacts.
         IProxyAdmin proxyAdmin;
         {
-            bytes memory _initCode = abi.encodePacked(vm.getCode("ProxyAdmin"), abi.encode(msg.sender));
+            bytes memory _initCode =
+                abi.encodePacked(vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json"), abi.encode(msg.sender));
             address payable _addr;
             assembly {
                 _addr := create(0, add(_initCode, 0x20), mload(_initCode))
