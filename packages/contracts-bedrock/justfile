@@ -38,10 +38,6 @@ forge-build *ARGS:
     --skip-simulation \
     2>/dev/null || true
 
-  @# lib/espresso-tee-contracts uses OZ v5 TransparentUpgradeableProxy, which causes Foundry
-  @# to emit shadow ProxyAdmin/Proxy artifacts that break vm.getCode lookups. Clean them up.
-  just fix-proxy-artifact
-
 # Developer build command (faster). Skip forge lint-on-build so we don't fail on 287+ warnings (e.g. unsafe-typecast in deps).
 forge-build-dev *ARGS:
   @# Use default profile (not lite) so the source build cache is shared — re-using
@@ -57,7 +53,7 @@ build-source:
 
 # Builds source contracts and scripts, skipping tests.
 build-no-tests:
-  forge build --skip "/**/test/**" && just fix-proxy-artifact
+  forge build --skip "/**/test/**"
 
 # Builds the contracts.
 build *ARGS: lint-fix-no-fail
@@ -65,7 +61,7 @@ build *ARGS: lint-fix-no-fail
 
 # Builds the contracts (developer mode).
 build-dev *ARGS: lint-fix-no-fail
-  just forge-build-dev {{ARGS}} && just fix-proxy-artifact
+  just forge-build-dev {{ARGS}}
 
 # Builds the go-ffi tool for contract tests.
 build-go-ffi:
@@ -74,105 +70,6 @@ build-go-ffi:
 # Cleans build artifacts and deployments.
 clean:
   rm -rf ./artifacts ./forge-artifacts ./cache ./scripts/go-ffi/go-ffi ./deployments/hardhat/*
-
-# Fixes Proxy and ProxyAdmin artifact bytecode when Foundry's unversioned .json is missing,
-# empty, or overwritten by a third-party library (e.g. OZ v5 ProxyAdmin shadowing
-# src/universal/ProxyAdmin.sol). Restores from the pinned src/universal versioned artifact.
-# Also removes OZ v5 shadow directories (transparent/ProxyAdmin.sol, proxy/Proxy.sol, etc.)
-# and duplicate disambiguation directories (universal/ProxyAdmin.sol) that cause
-# vm.getCode("ProxyAdmin") / vm.getCode("Proxy") to fail with "multiple matching artifacts".
-fix-proxy-artifact:
-  #!/usr/bin/env python3
-  import json, os, shutil, glob
-  CONTRACTS = ["Proxy", "ProxyAdmin"]
-  for contract in CONTRACTS:
-      dir_path  = f"forge-artifacts/{contract}.sol"
-      main_path = f"{dir_path}/{contract}.json"
-      if not os.path.exists(dir_path):
-          continue
-      # Find the versioned artifact from src/universal (Foundry version-agnostic).
-      # Prefer the lowest solc version to avoid PUSH0 opcodes (introduced in EIP-3855/
-      # Shanghai), which are invalid in pre-Canyon L2 EVM environments.
-      ref_path = None
-      ref_ver  = None
-      for candidate in sorted(glob.glob(f"{dir_path}/{contract}.*.json")):
-          d = json.load(open(candidate))
-          if "src/universal" not in d.get("ast", {}).get("absolutePath", ""):
-              continue
-          ver = d.get("metadata", {}).get("compiler", {}).get("version", "")
-          # Parse semver string like "0.8.15+commit.xxx" -> (0, 8, 15)
-          try:
-              ver_tuple = tuple(int(x) for x in ver.split("+")[0].split("."))
-          except (ValueError, AttributeError):
-              ver_tuple = (999, 999, 999)
-          # Skip PUSH0-capable compiler versions (>= 0.8.20). We only want a versioned
-          # artifact as reference if it was compiled without PUSH0 support. Stale CI caches
-          # may contain 0.8.28 versioned artifacts from before the pragma was pinned.
-          if ver_tuple >= (0, 8, 20):
-              continue
-          if ref_path is None or ver_tuple < ref_ver:
-              ref_path = candidate
-              ref_ver  = ver_tuple
-      if ref_path is None:
-          # No PUSH0-safe versioned artifact available.
-          # First check if the unversioned artifact is ALREADY correct:
-          # src/universal compiled at a pre-PUSH0 version. This is the expected state
-          # when Proxy.sol / ProxyAdmin.sol have their pragma pinned to exact 0.8.15.
-          if os.path.exists(main_path):
-              main = json.load(open(main_path))
-              abs_path = main.get("ast", {}).get("absolutePath", "")
-              compiler_ver = main.get("metadata", {}).get("compiler", {}).get("version", "")
-              try:
-                  ver_tuple = tuple(int(x) for x in compiler_ver.split("+")[0].split("."))
-              except (ValueError, AttributeError):
-                  ver_tuple = (999, 999, 999)
-              if "src/universal" in abs_path and ver_tuple < (0, 8, 20):
-                  print(f"{contract}.json is already src/universal/{contract}.sol at {compiler_ver} (no PUSH0), skipping fix")
-                  continue
-              # The unversioned artifact is not yet safe. If it was compiled with a
-              # PUSH0-capable version, fail loudly — the allocs will break pre-Canyon L2.
-              if ver_tuple >= (0, 8, 20):
-                  deployed = main.get("deployedBytecode", {}).get("object", "").lstrip("0x")
-                  deployed_bytes = [deployed[i:i+2] for i in range(0, len(deployed), 2)]
-                  push0_count = deployed_bytes.count("5f")
-                  if push0_count > 0:
-                      raise SystemExit(
-                          f"ERROR: {contract}.json compiled with PUSH0-emitting Solc "
-                          f"(found {push0_count} PUSH0 opcodes, compiler {compiler_ver}) "
-                          f"and no PUSH0-safe src/universal versioned artifact exists to "
-                          f"fix it. Check that pragma solidity in src/universal/{contract}.sol "
-                          f"is pinned to an exact pre-0.8.20 version (e.g. 0.8.15), or run "
-                          f"'forge build --force' locally to regenerate artifacts."
-                      )
-          print(f"WARNING: no src/universal artifact found for {contract}, skipping fix")
-          continue
-      ref = json.load(open(ref_path))
-      if os.path.exists(main_path):
-          main = json.load(open(main_path))
-          # Skip if already patched with the exact same bytecode as ref.
-          if main.get("deployedBytecode") == ref.get("deployedBytecode"):
-              print(f"{contract}.json already matches lowest-version src/universal bytecode, skipping fix")
-              continue
-          main["bytecode"] = ref["bytecode"]
-          main["deployedBytecode"] = ref["deployedBytecode"]
-          main["ast"] = ref["ast"]
-          json.dump(main, open(main_path, "w"), indent=2)
-      else:
-          json.dump(ref, open(main_path, "w"), indent=2)
-      print(f"Fixed {contract}.json from {os.path.basename(ref_path)}")
-  # Remove artifact directories that shadow src/universal/{Proxy,ProxyAdmin}.sol to work with
-  # espresso-tee-contracts.
-  REMOVE_DIRS = [
-      "forge-artifacts/transparent/ProxyAdmin.sol",  # OZ v5 proxy/transparent/ProxyAdmin.sol
-      "forge-artifacts/universal/ProxyAdmin.sol",    # disambiguation duplicate of src/universal
-      "forge-artifacts/proxy/Proxy.sol",             # OZ v5 proxy/Proxy.sol
-      "forge-artifacts/universal/Proxy.sol",         # disambiguation duplicate of src/universal
-  ]
-  for d in REMOVE_DIRS:
-      if os.path.exists(d):
-          shutil.rmtree(d)
-          print(f"Removed conflicting artifact directory: {d}")
-
 
 ########################################################
 #                         TEST                         #
@@ -282,12 +179,7 @@ coverage: build-go-ffi
   forge coverage
 
 # Runs contract coverage with lcov.
-# Pre-builds then fixes proxy artifacts before forge coverage to avoid
-# "multiple matching artifacts" errors from OZ v5 proxy/Proxy.sol disambiguation.
 coverage-lcov *ARGS: build-go-ffi
-  #!/bin/bash
-  FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-default}" forge build 2>/dev/null || true
-  just fix-proxy-artifact
   FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-default}" forge coverage {{ARGS}} --report lcov --report-file lcov.info
 
 # Runs upgrade path variant of contract coverage tests.
