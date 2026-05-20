@@ -3198,6 +3198,20 @@ workflows:
             - cannon-prestate
             - rust-binaries-for-sysgo
             - go-binaries-for-sysgo
+      # IN-MEMORY (celo) — dedicated job for the Celo CIP-64 acceptance gate so
+      # failures are visible independently of the gateless memory-all job.
+      - op-acceptance-tests:
+          name: memory-celo
+          gate: celo
+          context:
+            - circleci-repo-readonly-authenticated-github-token
+            - slack
+            - discord
+          requires:
+            - contracts-bedrock-build
+            - cannon-prestate
+            - rust-binaries-for-sysgo
+            - go-binaries-for-sysgo
       # Generate flaky test report
       - generate-flaky-report:
           name: generate-flaky-tests-report

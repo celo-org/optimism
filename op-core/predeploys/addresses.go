@@ -57,6 +57,14 @@ const (
 	SortedOracles                     = "0xefb84935239dacdecf7c5ba76d8de40b077b7b33"
 	AddressSortedLinkedListWithMedian = "0xED477A99035d0c1e11369F1D7A4e587893cc002B"
 	FeeCurrency                       = "0x4200000000000000000000000000000000001022"
+	// FeeCurrencyDirectory matches the celo-mainnet address that op-geth's
+	// addresses.MainnetAddresses defaults to when no chain-specific entry exists.
+	FeeCurrencyDirectory = "0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276"
+	// TestFeeCurrency is a non-production fee currency installed by L2Genesis when
+	// deployCeloContracts is set, registered with the FeeCurrencyDirectory so CIP-64
+	// transactions can pay gas in it. The address is the celo-mainnet cUSD address
+	// (kept for a deterministic predeploy slot).
+	TestFeeCurrency = "0x765DE816845861e75A25fCA122bb6898B8B1282a"
 )
 
 var (
@@ -114,6 +122,8 @@ var (
 	SortedOraclesAddr                     = common.HexToAddress(SortedOracles)
 	AddressSortedLinkedListWithMedianAddr = common.HexToAddress(AddressSortedLinkedListWithMedian)
 	FeeCurrencyAddr                       = common.HexToAddress(FeeCurrency)
+	FeeCurrencyDirectoryAddr              = common.HexToAddress(FeeCurrencyDirectory)
+	TestFeeCurrencyAddr                   = common.HexToAddress(TestFeeCurrency)
 
 	CeloPredeploys = make(map[string]*Predeploy)
 )
@@ -213,6 +223,8 @@ func init() {
 	CeloPredeploys["SortedOracles"] = &Predeploy{Address: SortedOraclesAddr}
 	CeloPredeploys["AddressSortedLinkedListWithMedian"] = &Predeploy{Address: AddressSortedLinkedListWithMedianAddr}
 	CeloPredeploys["FeeCurrency"] = &Predeploy{Address: FeeCurrencyAddr}
+	CeloPredeploys["FeeCurrencyDirectory"] = &Predeploy{Address: FeeCurrencyDirectoryAddr}
+	CeloPredeploys["TestFeeCurrency"] = &Predeploy{Address: TestFeeCurrencyAddr}
 	for key, predeploy := range CeloPredeploys {
 		Predeploys[key] = predeploy
 	}

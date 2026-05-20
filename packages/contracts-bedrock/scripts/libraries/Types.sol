@@ -54,5 +54,8 @@ library Types {
         ISuperchainConfig superchainConfig;
         // Whether to use the custom gas token.
         bool useCustomGasToken;
+        // Whether the chain is configured as a Celo chain (operator pays all L1 DA cost,
+        // basefeeScalar/blobBaseFeeScalar may be zero).
+        bool deployCeloContracts;
     }
 }

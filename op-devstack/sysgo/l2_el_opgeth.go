@@ -5,14 +5,17 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/miner"
 	gn "github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	"github.com/ethereum-optimism/optimism/op-core/predeploys"
 	"github.com/ethereum-optimism/optimism/op-devstack/devtest"
 	"github.com/ethereum-optimism/optimism/op-devstack/shim"
 	"github.com/ethereum-optimism/optimism/op-devstack/stack"
@@ -117,6 +120,21 @@ func (n *OpGeth) Start() {
 		func(ethCfg *ethconfig.Config, nodeCfg *gn.Config) error {
 			ethCfg.InteropMessageRPC = n.supervisorRPC
 			ethCfg.InteropMempoolFiltering = true
+
+			// If WithCelo() was used, the L2 genesis has the FeeCurrencyDirectory at
+			// the celo-mainnet address. Configure op-geth's MultiGasPool so CIP-64 txs
+			// don't get silently popped at block-building time:
+			//   - FeeCurrencyDefault: default per-currency fraction of the block gas limit
+			//     (mirrors miner.DefaultConfig).
+			//   - FeeCurrencyLimits: explicit 0.9 for the registered test fee currency,
+			//     mirroring celo-mainnet's cUSD/USDT/USDC config.
+			if alloc, ok := n.l2Net.genesis.Alloc[predeploys.FeeCurrencyDirectoryAddr]; ok && len(alloc.Code) > 0 {
+				ethCfg.Miner.FeeCurrencyDefault = miner.DefaultFeeCurrencyLimit
+				if ethCfg.Miner.FeeCurrencyLimits == nil {
+					ethCfg.Miner.FeeCurrencyLimits = map[common.Address]float64{}
+				}
+				ethCfg.Miner.FeeCurrencyLimits[predeploys.TestFeeCurrencyAddr] = 0.9
+			}
 
 			listenAddr := n.cfg.P2PAddr
 			port := n.cfg.P2PPort

@@ -62,8 +62,8 @@ func CombineDeployConfig(intent *Intent, chainIntent *ChainIntent, state *State,
 				GovernanceTokenOwner:  standard.GovernanceTokenOwner,
 			},
 			GasPriceOracleDeployConfig: genesis.GasPriceOracleDeployConfig{
-				GasPriceOracleBaseFeeScalar:       standard.BasefeeScalar,
-				GasPriceOracleBlobBaseFeeScalar:   standard.BlobBaseFeeScalar,
+				GasPriceOracleBaseFeeScalar:       celoOrDefaultScalar(chainIntent.DeployCeloContracts, standard.BasefeeScalar),
+				GasPriceOracleBlobBaseFeeScalar:   celoOrDefaultScalar(chainIntent.DeployCeloContracts, standard.BlobBaseFeeScalar),
 				GasPriceOracleOperatorFeeScalar:   chainIntent.OperatorFeeScalar,
 				GasPriceOracleOperatorFeeConstant: chainIntent.OperatorFeeConstant,
 			},
@@ -183,4 +183,13 @@ func calculateBatchInboxAddr(chainID common.Hash) common.Address {
 	var out common.Address
 	copy(out[1:], crypto.Keccak256(chainID[:])[:19])
 	return out
+}
+
+// celoOrDefaultScalar returns 0 when Celo contracts are deployed (so the chain operator
+// pays all L1 DA cost on behalf of users) and the standard default otherwise.
+func celoOrDefaultScalar(celo bool, def uint32) uint32 {
+	if celo {
+		return 0
+	}
+	return def
 }

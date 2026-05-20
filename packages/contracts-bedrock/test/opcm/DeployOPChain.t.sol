@@ -141,7 +141,8 @@ contract DeployOPChain_TestBase is Test, FeatureFlags {
             operatorFeeScalar: 0,
             operatorFeeConstant: 0,
             superchainConfig: superchainConfig,
-            useCustomGasToken: useCustomGasToken
+            useCustomGasToken: useCustomGasToken,
+            deployCeloContracts: false
         });
     }
 }

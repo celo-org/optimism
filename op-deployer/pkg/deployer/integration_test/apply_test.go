@@ -535,6 +535,40 @@ func TestApplyGenesisStrategy(t *testing.T) {
 	})
 }
 
+func TestApplyDeployCeloContracts(t *testing.T) {
+	op_e2e.InitParallel(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	opts, intent, st := setupGenesisChain(t, devnet.DefaultChainID)
+	intent.Chains[0].DeployCeloContracts = true
+
+	require.NoError(t, deployer.ApplyPipeline(ctx, opts))
+
+	allocs := st.Chains[0].Allocs.Data.Accounts
+
+	// Predeploys (proxies — code is the EIP-1967 Proxy bytecode at these addresses).
+	proxied := []common.Address{
+		predeploys.CeloRegistryAddr,
+		predeploys.GoldTokenAddr,
+		predeploys.FeeHandlerAddr,
+		predeploys.SortedOraclesAddr,
+		predeploys.FeeCurrencyDirectoryAddr,
+		predeploys.TestFeeCurrencyAddr, // StableTokenV2 instance registered as a fee currency
+	}
+	for _, addr := range proxied {
+		acc, ok := allocs[addr]
+		require.Truef(t, ok, "no account at %s", addr)
+		require.NotEmpty(t, acc.Code, "no code at %s", addr)
+	}
+
+	// Library — etched directly, not proxied.
+	acc, ok := allocs[predeploys.AddressSortedLinkedListWithMedianAddr]
+	require.True(t, ok, "no account at AddressSortedLinkedListWithMedian")
+	require.NotEmpty(t, acc.Code)
+}
+
 func TestProofParamOverrides(t *testing.T) {
 	op_e2e.InitParallel(t)
 

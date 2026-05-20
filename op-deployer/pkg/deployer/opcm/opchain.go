@@ -47,6 +47,8 @@ type DeployOPChainInput struct {
 	SuperchainConfig    common.Address
 
 	UseCustomGasToken bool
+
+	DeployCeloContracts bool
 }
 
 type DeployOPChainOutput struct {

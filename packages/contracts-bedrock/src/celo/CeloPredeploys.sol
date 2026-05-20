@@ -12,8 +12,12 @@ library CeloPredeploys {
     address internal constant SORTED_ORACLES = 0xefB84935239dAcdecF7c5bA76d8dE40b077B7b33;
     address internal constant ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN = 0xED477A99035d0c1e11369F1D7A4e587893cc002B;
     address internal constant FEE_CURRENCY = 0x4200000000000000000000000000000000001022;
-    address internal constant FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
-    address internal constant cUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
+    address internal constant FEE_CURRENCY_DIRECTORY = 0x15F344b9E6c3Cb6F0376A36A64928b13F62C6276;
+    /// @notice A test fee currency deployed only when `deployCeloContracts` is set.
+    ///         Registered with the FeeCurrencyDirectory so that CIP-64 transactions can
+    ///         pay gas in this token. Address is the (now meaningless) Celo mainnet cUSD
+    ///         address kept for deterministic predeploy placement.
+    address internal constant TEST_FEE_CURRENCY = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
 
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {
@@ -28,7 +32,7 @@ library CeloPredeploys {
         if (_addr == ADDRESS_SORTED_LINKED_LIST_WITH_MEDIAN) return "AddressSortedLinkedListWithMedian";
         if (_addr == FEE_CURRENCY) return "FeeCurrency";
         if (_addr == FEE_CURRENCY_DIRECTORY) return "FeeCurrencyDirectory";
-        if (_addr == cUSD) return "cUSD";
+        if (_addr == TEST_FEE_CURRENCY) return "TestFeeCurrency";
 
         revert("Predeploys: unnamed predeploy");
     }
