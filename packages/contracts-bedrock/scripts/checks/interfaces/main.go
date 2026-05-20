@@ -21,12 +21,6 @@ var excludeContracts = []string{
 	"ERC777TokensRecipient", "Guard", "IProxy", "Vm", "VmSafe", "IMulticall3",
 	"IERC721TokenReceiver", "IProxyCreationCallback", "IBeacon", "IEIP712",
 
-	// Espresso dependencies
-	"IBatchAuthenticator", "IEspressoTEEVerifier", "IEspressoNitroTEEVerifier",
-	"ICertManager", "BatchAuthenticator", "INitroValidator",
-	// Espresso TEE submodule deep dependency interfaces (vendor-controlled pragma)
-	"IDaoAttestationResolver", "IPCCSRouter", "IQuoteVerifier",
-
 	// EAS
 	"IEAS", "ISchemaResolver", "ISchemaRegistry",
 
@@ -39,6 +33,18 @@ var excludeContracts = []string{
 	// TODO: Interfaces that need to be fixed
 	"IInitializable", "IOptimismMintableERC20", "ILegacyMintableERC20",
 	"KontrolCheatsBase", "IResolvedDelegateProxy",
+
+	// Espresso dependencies
+	"IBatchAuthenticator",
+	"IEspressoTEEVerifier",
+	"IEspressoNitroTEEVerifier",
+	"ICertManager",
+	"BatchAuthenticator",
+	"INitroValidator",
+	// Espresso TEE submodule deep dependency interfaces (vendor-controlled pragma)
+	"IDaoAttestationResolver",
+	"IPCCSRouter",
+	"IQuoteVerifier",
 }
 
 // excludeSourceContracts is a list of contracts that are allowed to not have interfaces
