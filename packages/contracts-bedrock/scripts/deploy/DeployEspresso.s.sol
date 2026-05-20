@@ -112,20 +112,21 @@ contract DeployEspresso is Script {
 
     function run(DeployEspressoInput _input, DeployEspressoOutput _output, address _deployerAddress) public {
         IEspressoTEEVerifier teeVerifier = deployTEEContracts(_input, _output, _deployerAddress);
-        deployBatchAuthenticator(_input, _output, teeVerifier);
+        deployBatchAuthenticator(_input, _output, _deployerAddress, teeVerifier);
         checkOutput(_output);
     }
 
     function deployBatchAuthenticator(
         DeployEspressoInput _input,
         DeployEspressoOutput _output,
+        address _deployerAddress,
         IEspressoTEEVerifier _teeVerifier
     )
         public
         returns (IBatchAuthenticator)
     {
         address proxyAdminOwner = _input.proxyAdminOwner();
-        if (proxyAdminOwner == address(0)) proxyAdminOwner = msg.sender;
+        if (proxyAdminOwner == address(0)) proxyAdminOwner = _deployerAddress;
 
         vm.broadcast(msg.sender);
         IProxyAdmin proxyAdmin = _deployProxyAdmin(msg.sender);
