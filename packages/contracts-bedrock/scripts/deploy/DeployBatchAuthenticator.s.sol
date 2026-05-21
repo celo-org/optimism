@@ -73,7 +73,9 @@ contract DeployBatchAuthenticator is Script {
                 IEspressoTEEVerifier(_teeVerifier),
                 _espressoBatcher,
                 ISystemConfig(_systemConfig),
-                _proxyAdminOwner
+                _proxyAdminOwner,
+                // First deployment: start with the Espresso batcher active.
+                true
             )
         );
         proxyAdmin.upgradeAndCall(
