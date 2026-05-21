@@ -45,11 +45,13 @@ contract BatchAuthenticator is
         _disableInitializers();
     }
 
+    /// @notice Initializes the contract.
     function initialize(
         IEspressoTEEVerifier _espressoTEEVerifier,
         address _espressoBatcher,
         ISystemConfig _systemConfig,
-        address _owner
+        address _owner,
+        bool _activeIsEspresso
     )
         external
         reinitializer(initVersion())
@@ -69,8 +71,7 @@ contract BatchAuthenticator is
         espressoTEEVerifier = _espressoTEEVerifier;
         espressoBatcher = _espressoBatcher;
         systemConfig = _systemConfig;
-        // By default, start with the Espresso batcher active.
-        activeIsEspresso = true;
+        activeIsEspresso = _activeIsEspresso;
     }
 
     /// @notice Returns the owner of the contract.

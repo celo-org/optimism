@@ -153,7 +153,14 @@ contract DeployEspresso is Script {
 
         bytes memory initData = abi.encodeCall(
             BatchAuthenticator.initialize,
-            (_teeVerifier, _input.espressoBatcher(), ISystemConfig(_input.systemConfig()), proxyAdminOwner)
+            (
+                _teeVerifier,
+                _input.espressoBatcher(),
+                ISystemConfig(_input.systemConfig()),
+                proxyAdminOwner,
+                // First deployment: start with the Espresso batcher active.
+                true
+            )
         );
         vm.broadcast(msg.sender);
         proxyAdmin.upgradeAndCall(payable(address(proxy)), address(impl), initData);

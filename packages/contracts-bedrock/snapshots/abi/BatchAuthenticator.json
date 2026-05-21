@@ -141,6 +141,11 @@
         "internalType": "address",
         "name": "_owner",
         "type": "address"
+      },
+      {
+        "internalType": "bool",
+        "name": "_activeIsEspresso",
+        "type": "bool"
       }
     ],
     "name": "initialize",
@@ -590,6 +595,22 @@
   {
     "inputs": [],
     "name": "ReinitializableBase_ZeroInitVersion",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "expected",
+        "type": "address"
+      }
+    ],
+    "name": "UnauthorizedFallbackBatcher",
     "type": "error"
   }
 ]
