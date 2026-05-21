@@ -144,7 +144,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
                 IEspressoTEEVerifier(address(teeVerifier)),
                 espressoBatcher,
                 ISystemConfig(address(mockSystemConfig)),
-                proxyAdminOwner
+                proxyAdminOwner,
+                // First deployment: start with the Espresso batcher active.
+                true
             )
         );
         vm.prank(proxyAdminOwner);
@@ -165,7 +167,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
                 IEspressoTEEVerifier(address(teeVerifier)),
                 espressoBatcher,
                 ISystemConfig(address(mockSystemConfig)),
-                proxyAdminOwner
+                proxyAdminOwner,
+                true
             )
         );
 
@@ -194,7 +197,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
                 IEspressoTEEVerifier(address(teeVerifier)),
                 address(0),
                 ISystemConfig(address(mockSystemConfig)),
-                proxyAdminOwner
+                proxyAdminOwner,
+                true
             )
         );
 
@@ -215,7 +219,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
                 IEspressoTEEVerifier(address(0)),
                 espressoBatcher,
                 ISystemConfig(address(mockSystemConfig)),
-                proxyAdminOwner
+                proxyAdminOwner,
+                true
             )
         );
 
@@ -231,6 +236,31 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         assertEq(address(authenticator.espressoTEEVerifier()), address(teeVerifier));
         assertEq(authenticator.espressoBatcher(), espressoBatcher);
         assertTrue(authenticator.activeIsEspresso());
+    }
+
+    /// @notice Test that initialize honors the explicit `_activeIsEspresso` parameter.
+    ///         Guards against the non-idempotent-init footgun: if a future `initVersion()` bump
+    ///         re-runs `initialize` with `_activeIsEspresso = false`, the contract must reflect
+    ///         that — not silently revert to a hardcoded default.
+    function test_constructor_respectsActiveIsEspressoFalse() external {
+        IProxy proxy = _newProxy(address(proxyAdmin));
+        vm.prank(proxyAdminOwner);
+        proxyAdmin.setProxyType(address(proxy), IProxyAdmin.ProxyType.ERC1967);
+
+        bytes memory initData = abi.encodeCall(
+            BatchAuthenticator.initialize,
+            (
+                IEspressoTEEVerifier(address(teeVerifier)),
+                espressoBatcher,
+                ISystemConfig(address(mockSystemConfig)),
+                proxyAdminOwner,
+                false
+            )
+        );
+        vm.prank(proxyAdminOwner);
+        proxyAdmin.upgradeAndCall(payable(address(proxy)), address(implementation), initData);
+
+        assertFalse(BatchAuthenticator(address(proxy)).activeIsEspresso());
     }
 
     /// @notice Test that switchBatcher can be called by owner or guardian.
@@ -668,7 +698,8 @@ contract BatchAuthenticator_Fork_Test is Test {
                 IEspressoTEEVerifier(address(teeVerifier)),
                 espressoBatcher,
                 ISystemConfig(address(mockSystemConfig)),
-                proxyAdminOwner
+                proxyAdminOwner,
+                true
             )
         );
         vm.prank(proxyAdminOwner);
