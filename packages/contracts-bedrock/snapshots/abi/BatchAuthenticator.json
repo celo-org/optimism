@@ -69,6 +69,62 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "index",
+        "type": "uint256"
+      }
+    ],
+    "name": "espressoBatcherAt",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "batcher",
+        "type": "address"
+      },
+      {
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint64",
+        "name": "l1Block",
+        "type": "uint64"
+      }
+    ],
+    "name": "espressoBatcherAtBlock",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "espressoBatcherHistoryLength",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "espressoTEEVerifier",
     "outputs": [
@@ -387,6 +443,12 @@
         "internalType": "address",
         "name": "newEspressoBatcher",
         "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "uint64",
+        "name": "fromBlock",
+        "type": "uint64"
       }
     ],
     "name": "EspressoBatcherUpdated",
@@ -506,6 +568,17 @@
   {
     "inputs": [],
     "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "batcher",
+        "type": "address"
+      }
+    ],
+    "name": "NoChange",
     "type": "error"
   },
   {
