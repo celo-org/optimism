@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"math/big"
 	"math/rand"
@@ -14,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 
+	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -47,6 +49,255 @@ func (tx *testTx) Create(t *testing.T, signer types.Signer, rng *rand.Rand) *typ
 type calldataTest struct {
 	name string
 	txs  []testTx
+}
+
+// mockAuthEvents sets up L1 mock expectations for CollectAuthenticatedBatches to find auth events
+// for the given batch hashes at the given ref's block number. Auth events for batch hashes in
+// `authenticated` are placed in the ref block's receipts; all other blocks in the lookback
+// window have empty receipts.
+//
+// CollectAuthenticatedBatches traverses backward from ref via parent hashes, so this helper
+// builds a chain of L1BlockRef values with proper parent-hash linkage, sets up FetchReceipts
+// for each block, and L1BlockRefByHash for each parent.
+//
+// Returns the updated ref with its ParentHash properly set to the chain. Callers must use
+// the returned ref when calling functions that invoke CollectAuthenticatedBatches.
+func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1BlockRef, authenticatorAddr common.Address, authenticated []common.Hash) eth.L1BlockRef {
+	startBlock := ref.Number
+	if startBlock > espresso.DefaultBatchAuthLookbackWindow {
+		startBlock = ref.Number - espresso.DefaultBatchAuthLookbackWindow
+	} else {
+		startBlock = 0
+	}
+	windowSize := ref.Number - startBlock + 1
+
+	// Build the auth receipts for the ref block
+	var authLogs []*types.Log
+	for _, bh := range authenticated {
+		authLogs = append(authLogs, &types.Log{
+			Address: authenticatorAddr,
+			Topics: []common.Hash{
+				BatchInfoAuthenticatedABIHash,
+				bh,
+			},
+		})
+	}
+	authReceipts := types.Receipts{}
+	if len(authLogs) > 0 {
+		authReceipts = types.Receipts{{Status: types.ReceiptStatusSuccessful, Logs: authLogs}}
+	}
+
+	// Build parent-hash-linked chain from startBlock to ref.Number.
+	// chain[i] corresponds to block number startBlock + i.
+	chain := make([]eth.L1BlockRef, windowSize)
+	for i := uint64(0); i < windowSize; i++ {
+		blockNum := startBlock + i
+		if blockNum == ref.Number {
+			chain[i] = ref
+		} else {
+			chain[i] = eth.L1BlockRef{Number: blockNum, Hash: testutils.RandomHash(rng)}
+		}
+		if i > 0 {
+			chain[i].ParentHash = chain[i-1].Hash
+		}
+	}
+
+	// Update the ref at the end of the chain with the correct ParentHash
+	updatedRef := chain[windowSize-1]
+
+	// Set up expectations for backward traversal: ref -> ref-1 -> ... -> startBlock
+	for i := int(windowSize) - 1; i >= 0; i-- {
+		blockRef := chain[i]
+		if blockRef.Number == ref.Number {
+			l1F.ExpectFetchReceipts(blockRef.Hash, nil, authReceipts, nil)
+		} else {
+			l1F.ExpectFetchReceipts(blockRef.Hash, nil, types.Receipts{}, nil)
+		}
+		// L1BlockRefByHash is called for every parent except when we've reached the end of the window
+		if i > 0 {
+			l1F.ExpectL1BlockRefByHash(chain[i-1].Hash, chain[i-1], nil)
+		}
+	}
+
+	return updatedRef
+}
+
+// TestDataFromEVMTransactionsEventAuth tests event-based batch authentication
+// where a BatchInfoAuthenticated event in the lookback window authorizes a batch.
+//
+// Event-based authentication is only active post-EspressoEnforcement; the fixture
+// activates the fork at L1 origin time 0 (genesis) so all test refs satisfy
+// ref.Time >= *EspressoEnforcementTime.
+func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+	batcherPriv := testutils.RandomKey()
+	altAuthor := testutils.RandomKey()
+	batchInboxAddr := testutils.RandomAddress(rng)
+	authenticatorAddr := testutils.RandomAddress(rng)
+	batcherAddr := crypto.PubkeyToAddress(batcherPriv.PublicKey)
+	signer := types.NewCancunSigner(big.NewInt(100))
+
+	enforcementTime := uint64(0)
+	dsCfg := DataSourceConfig{
+		l1Signer:                  signer,
+		batchInboxAddress:         batchInboxAddr,
+		batchAuthenticatorAddress: authenticatorAddr,
+		batchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
+		espressoEnforcementTime:   &enforcementTime,
+	}
+
+	ctx := context.Background()
+	logger := testlog.Logger(t, log.LevelDebug)
+
+	t.Run("authenticated tx accepted", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData,
+		})
+		require.NoError(t, err)
+
+		// Use block number 1 so lookback window is [0, 1] — only 2 blocks to mock
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		batchHash := ComputeCalldataBatchHash(txData)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 1)
+		require.Equal(t, eth.Data(txData), out[0])
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("unauthenticated tx from unknown sender rejected", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx, err := types.SignNewTx(altAuthor, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		// No auth events — empty authenticated list
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil)
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 0)
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("fallback batcher without auth event rejected", func(t *testing.T) {
+		// The fallback batcher now also authenticates via BatchAuthenticator events.
+		// Without an auth event, even the SystemConfig batcher address is rejected.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil)
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 0, "fallback batcher without auth event should be rejected")
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("wrong inbox address rejected without auth check", func(t *testing.T) {
+		// Tx to wrong address should be filtered by isValidBatchTx.
+		// CollectAuthenticatedBatches still runs (it's a block-level operation),
+		// but no tx passes the inbox address check.
+		l1F := &testutils.MockL1Source{}
+		wrongAddr := testutils.RandomAddress(rng)
+		txData := testutils.RandomData(rng, 100)
+		tx, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &wrongAddr, Data: txData,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		// Mock the lookback window scan (returns no authenticated hashes)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil)
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 0)
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("mixed: only event-authenticated txs accepted", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		// tx1: has auth event — should be accepted
+		txData1 := testutils.RandomData(rng, 100)
+		tx1, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData1,
+		})
+		require.NoError(t, err)
+
+		// tx2: no auth event — should be rejected even though sender is batcherAddr
+		txData2 := testutils.RandomData(rng, 100)
+		tx2, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 1, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData2,
+		})
+		require.NoError(t, err)
+
+		// tx3: unknown sender without auth event — should be rejected
+		txData3 := testutils.RandomData(rng, 100)
+		tx3, err := types.SignNewTx(altAuthor, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 2, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData3,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		batchHash1 := ComputeCalldataBatchHash(txData1)
+		// Only tx1 has an auth event. tx2 and tx3 do not — both should be rejected.
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash1})
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx1, tx2, tx3}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 1, "only event-authenticated tx should pass")
+		require.Equal(t, eth.Data(txData1), out[0])
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("sender doesn't matter with event auth", func(t *testing.T) {
+		// In event-based mode, any sender is accepted if the auth event exists
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx, err := types.SignNewTx(altAuthor, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		batchHash := ComputeCalldataBatchHash(txData)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 1)
+		require.Equal(t, eth.Data(txData), out[0])
+		l1F.AssertExpectations(t)
+	})
 }
 
 // TestDataFromEVMTransactions creates some transactions from a specified template and asserts
@@ -115,14 +366,23 @@ func TestDataFromEVMTransactions(t *testing.T) {
 		var expectedData []eth.Data
 		var txs []*types.Transaction
 		for i, tx := range tc.txs {
-			txs = append(txs, tx.Create(t, signer, rng))
+			transaction := tx.Create(t, signer, rng)
+			txs = append(txs, transaction)
+
 			if tx.good {
 				expectedData = append(expectedData, txs[i].Data())
 			}
 		}
 
-		out := DataFromEVMTransactions(DataSourceConfig{cfg.L1Signer(), cfg.BatchInboxAddress, false}, batcherAddr, txs, testlog.Logger(t, log.LevelCrit))
+		// Legacy mode (no batch authenticator, EspressoEnforcement inactive) — uses sender-based auth
+		dsCfg := DataSourceConfig{
+			l1Signer:          cfg.L1Signer(),
+			batchInboxAddress: cfg.BatchInboxAddress,
+		}
+		ref := eth.L1BlockRef{Number: 1}
+		// In legacy mode, no L1Fetcher calls are needed for auth (sender check is local)
+		out, err := DataFromEVMTransactions(context.Background(), dsCfg, batcherAddr, txs, nil, ref, testlog.Logger(t, log.LevelCrit))
+		require.NoError(t, err)
 		require.ElementsMatch(t, expectedData, out)
 	}
-
 }

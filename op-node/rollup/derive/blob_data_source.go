@@ -27,13 +27,13 @@ type BlobDataSource struct {
 	ref          eth.L1BlockRef
 	batcherAddr  common.Address
 	dsCfg        DataSourceConfig
-	fetcher      L1TransactionFetcher
+	fetcher      L1Fetcher
 	blobsFetcher L1BlobsFetcher
 	log          log.Logger
 }
 
 // NewBlobDataSource creates a new blob data source.
-func NewBlobDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, blobsFetcher L1BlobsFetcher, ref eth.L1BlockRef, batcherAddr common.Address) DataIter {
+func NewBlobDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1Fetcher, blobsFetcher L1BlobsFetcher, ref eth.L1BlockRef, batcherAddr common.Address) DataIter {
 	return &BlobDataSource{
 		ref:          ref,
 		dsCfg:        dsCfg,
@@ -86,7 +86,10 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 		return nil, NewTemporaryError(fmt.Errorf("failed to open blob data source: %w", err))
 	}
 
-	data, hashes := dataAndHashesFromTxs(txs, &ds.dsCfg, ds.batcherAddr, ds.log)
+	data, hashes, err := dataAndHashesFromTxs(ctx, txs, &ds.dsCfg, ds.batcherAddr, ds.fetcher, ds.ref, ds.log)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(hashes) == 0 {
 		// there are no blobs to fetch so we can return immediately
@@ -115,14 +118,52 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // dataAndHashesFromTxs extracts calldata and datahashes from the input transactions and returns them. It
 // creates a placeholder blobOrCalldata element for each returned blob hash that must be populated
 // by fillBlobPointers after blob bodies are retrieved.
-func dataAndHashesFromTxs(txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, logger log.Logger) ([]blobOrCalldata, []common.Hash) {
+//
+// Pre-EspressoEnforcement (the L1 origin time of `ref` is < *EspressoEnforcementTime,
+// or unset), this runs upstream Optimism semantics: filter by batch inbox + sender ==
+// batcher.
+//
+// Post-EspressoEnforcement, it collects all authenticated batch hashes from a
+// lookback window once and rejects any batch whose commitment hash is not in the
+// authenticated set. For blob transactions, the batch hash is computed from the
+// concatenated blob versioned hashes.
+func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
+	// Only collect authenticated batch hashes when the Espresso enforcement fork
+	// is active at the L1 origin time of the block we're scanning. Pre-fork, the
+	// upstream sender-based authorization path is used and authenticatedHashes is
+	// unused.
+	var authenticatedHashes map[common.Hash]bool
+	if config.isEspressoEnforcement(ref.Time) {
+		var err error
+		authenticatedHashes, err = CollectAuthenticatedBatches(
+			ctx, fetcher, ref, config.batchAuthenticatorAddress, config.batchAuthLookbackWindow, logger,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	data := []blobOrCalldata{}
 	var hashes []common.Hash
 	for _, tx := range txs {
-		// skip any non-batcher transactions
-		if !isValidBatchTx(tx, config.l1Signer, config.batchInboxAddress, batcherAddr, logger) {
+		// skip any non-batcher transactions (wrong type or wrong To address)
+		if !isValidBatchTx(tx, config.batchInboxAddress, logger) {
 			continue
 		}
+
+		// Compute batch hash depending on tx type
+		var batchHash common.Hash
+		if tx.Type() == types.BlobTxType {
+			batchHash = ComputeBlobBatchHash(tx.BlobHashes())
+		} else {
+			batchHash = ComputeCalldataBatchHash(tx.Data())
+		}
+
+		// Check authorization (sender-based pre-fork; event-based post-fork).
+		if !isBatchTxAuthorized(tx, *config, batcherAddr, batchHash, authenticatedHashes, ref.Time, logger) {
+			continue
+		}
+
 		// handle non-blob batcher transactions by extracting their calldata
 		if tx.Type() != types.BlobTxType {
 			calldata := eth.Data(tx.Data())
@@ -138,7 +179,7 @@ func dataAndHashesFromTxs(txs types.Transactions, config *DataSourceConfig, batc
 			data = append(data, blobOrCalldata{nil, nil}) // will fill in blob pointers after we download them below
 		}
 	}
-	return data, hashes
+	return data, hashes, nil
 }
 
 // fillBlobPointers goes back through the data array and fills in the pointers to the fetched blob

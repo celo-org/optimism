@@ -166,6 +166,25 @@ type Config struct {
 	// This feature (de)activates by L1 origin timestamp, to keep a consistent L1 block info per L2
 	// epoch.
 	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
+
+	// EspressoEnforcementTime sets the activation time of the Espresso enforcement upgrade.
+	// Pre-fork, the derivation pipeline behaves exactly as upstream Optimism: batches are
+	// accepted based on the L1 transaction sender matching the SystemConfig batcher address.
+	// Post-fork, batches must be authenticated via BatchInfoAuthenticated events emitted by
+	// the BatchAuthenticator contract; sender-based authorization is rejected.
+	// Active if EspressoEnforcementTime != nil && L2 block timestamp >= *EspressoEnforcementTime.
+	EspressoEnforcementTime *uint64 `json:"espresso_enforcement_time,omitempty"`
+
+	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
+	// BatchInfoAuthenticated(bytes32) events the derivation pipeline scans post-EspressoEnforcement.
+	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
+
+	// BatchAuthLookbackWindow is the number of L1 blocks to scan for BatchInfoAuthenticated events.
+	// Zero means use the default (espresso.DefaultBatchAuthLookbackWindow = 100).
+	// Resolve via BatchAuthLookbackWindowOrDefault (defined in espresso_config.go); that helper
+	// is the only mips64-reachable consumer of the espresso package, and it imports only the
+	// constants.go file which is mips64-clean.
+	BatchAuthLookbackWindow uint64 `json:"batch_auth_lookback_window,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -869,6 +888,10 @@ func (c *Config) forEachFork(callback func(name string, logName string, time *ui
 	callback("Jovian", "jovian_time", c.JovianTime)
 	callback("Karst", "karst_time", c.KarstTime)
 	callback("Interop", "interop_time", c.InteropTime)
+	if c.EspressoEnforcementTime != nil {
+		// only report if config is set
+		callback("Espresso Enforcement", "espresso_enforcement_time", c.EspressoEnforcementTime)
+	}
 }
 
 func (c *Config) ParseRollupConfig(in io.Reader) error {

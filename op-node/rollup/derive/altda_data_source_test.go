@@ -2,6 +2,7 @@ package derive
 
 import (
 	"context"
+	"errors"
 	"io"
 	"math/big"
 	"math/rand"
@@ -118,12 +119,11 @@ func TestAltDADataSource(t *testing.T) {
 		}
 		l1Refs = append(l1Refs, ref)
 		logger.Info("new l1 block", "ref", ref)
-		// called for each l1 block to sync challenges
-		l1F.ExpectFetchReceipts(ref.Hash, nil, types.Receipts{}, nil)
 
 		// pick a random number of commitments to include in the l1 block
 		c := rng.Intn(4)
 		var txs []*types.Transaction
+		var receipts types.Receipts
 
 		for j := 0; j < c; j++ {
 			// mock input commitments in l1 transactions
@@ -147,9 +147,17 @@ func TestAltDADataSource(t *testing.T) {
 			})
 			require.NoError(t, err)
 
+			receipt := types.Receipt{
+				TxHash: tx.Hash(),
+				Status: types.ReceiptStatusSuccessful,
+			}
+
 			txs = append(txs, tx)
+			receipts = append(receipts, &receipt)
 
 		}
+		l1F.SetFetchReceipts(ref.Hash, testutils.RandomBlockInfo(rng), receipts, nil)
+
 		logger.Info("included commitments", "count", c)
 		l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), txs, nil)
 		// called once per derivation
@@ -221,12 +229,11 @@ func TestAltDADataSource(t *testing.T) {
 			}
 			l1Refs = append(l1Refs, ref)
 			logger.Info("new l1 block", "ref", ref)
-			// called for each l1 block to sync challenges
-			l1F.ExpectFetchReceipts(ref.Hash, nil, types.Receipts{}, nil)
 
 			// pick a random number of commitments to include in the l1 block
 			c := rng.Intn(4)
 			var txs []*types.Transaction
+			var receipts []*types.Receipt
 
 			for j := 0; j < c; j++ {
 				// mock input commitments in l1 transactions
@@ -249,11 +256,18 @@ func TestAltDADataSource(t *testing.T) {
 				})
 				require.NoError(t, err)
 
+				receipt := &types.Receipt{
+					TxHash: tx.Hash(),
+					Status: types.ReceiptStatusSuccessful,
+				}
+
 				txs = append(txs, tx)
+				receipts = append(receipts, receipt)
 
 			}
 			logger.Info("included commitments", "count", c)
 			l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), txs, nil)
+			l1F.SetFetchReceipts(ref.Hash, testutils.RandomBlockInfo(rng), receipts, nil)
 		}
 
 		// create a new data source for each block
@@ -352,7 +366,6 @@ func TestAltDADataSourceStall(t *testing.T) {
 		ParentHash: parent.Hash,
 		Time:       parent.Time + l1Time,
 	}
-	l1F.ExpectFetchReceipts(ref.Hash, nil, types.Receipts{}, nil)
 	// mock input commitments in l1 transactions
 	input := testutils.RandomData(rng, 2000)
 	comm, _ := storage.SetInput(ctx, input)
@@ -370,7 +383,9 @@ func TestAltDADataSourceStall(t *testing.T) {
 	require.NoError(t, err)
 
 	txs := []*types.Transaction{tx}
+	receipts := types.Receipts{&types.Receipt{TxHash: tx.Hash(), Status: types.ReceiptStatusSuccessful}}
 
+	l1F.SetFetchReceipts(ref.Hash, nil, receipts, nil)
 	l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), txs, nil)
 
 	// delete the input from the DA provider so it returns not found
@@ -475,7 +490,6 @@ func TestAltDADataSourceInvalidData(t *testing.T) {
 		ParentHash: parent.Hash,
 		Time:       parent.Time + l1Time,
 	}
-	l1F.ExpectFetchReceipts(ref.Hash, nil, types.Receipts{}, nil)
 	// mock input commitments in l1 transactions with an oversized input
 	input := testutils.RandomData(rng, altda.MaxInputSize+1)
 	comm, _ := storage.SetInput(ctx, input)
@@ -522,7 +536,12 @@ func TestAltDADataSourceInvalidData(t *testing.T) {
 	require.NoError(t, err)
 
 	txs := []*types.Transaction{tx1, tx2, tx3}
+	receipts := types.Receipts{
+		&types.Receipt{TxHash: tx1.Hash(), Status: types.ReceiptStatusSuccessful},
+		&types.Receipt{TxHash: tx2.Hash(), Status: types.ReceiptStatusSuccessful},
+		&types.Receipt{TxHash: tx3.Hash(), Status: types.ReceiptStatusSuccessful}}
 
+	l1F.SetFetchReceipts(ref.Hash, nil, receipts, nil)
 	l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), txs, nil)
 
 	src, err := factory.OpenData(ctx, ref, batcherAddr)
@@ -537,6 +556,121 @@ func TestAltDADataSourceInvalidData(t *testing.T) {
 	data, err = src.Next(ctx)
 	require.NoError(t, err)
 	require.Equal(t, hexutil.Bytes(input3), data)
+
+	_, err = src.Next(ctx)
+	require.ErrorIs(t, err, io.EOF)
+
+	l1F.AssertExpectations(t)
+}
+
+// TestAltDADataSourceL1FetcherErrors tests that the pipeline handles intermittent errors in
+// L1Source correctly.
+func TestAltDADataSourceL1FetcherErrors(t *testing.T) {
+	logger := testlog.Logger(t, log.LevelDebug)
+	ctx := context.Background()
+
+	rng := rand.New(rand.NewSource(1234))
+
+	l1F := &testutils.MockL1Source{}
+
+	storage := altda.NewMockDAClient(logger)
+
+	pcfg := altda.Config{
+		ChallengeWindow: 90, ResolveWindow: 90,
+	}
+
+	da := altda.NewAltDAWithStorage(logger, pcfg, storage, &altda.NoopMetrics{})
+
+	// Create rollup genesis and config
+	l1Time := uint64(2)
+	refA := testutils.RandomBlockRef(rng)
+	refA.Number = 1
+	l1Refs := []eth.L1BlockRef{refA}
+	refA0 := eth.L2BlockRef{
+		Hash:           testutils.RandomHash(rng),
+		Number:         0,
+		ParentHash:     common.Hash{},
+		Time:           refA.Time,
+		L1Origin:       refA.ID(),
+		SequenceNumber: 0,
+	}
+	batcherPriv := testutils.RandomKey()
+	batcherAddr := crypto.PubkeyToAddress(batcherPriv.PublicKey)
+	batcherInbox := common.Address{42}
+	cfg := &rollup.Config{
+		Genesis: rollup.Genesis{
+			L1:     refA.ID(),
+			L2:     refA0.ID(),
+			L2Time: refA0.Time,
+		},
+		L1ChainID:         big.NewInt(1),
+		BlockTime:         1,
+		SeqWindowSize:     20,
+		BatchInboxAddress: batcherInbox,
+		AltDAConfig: &rollup.AltDAConfig{
+			DAChallengeWindow: pcfg.ChallengeWindow,
+			DAResolveWindow:   pcfg.ResolveWindow,
+			CommitmentType:    altda.KeccakCommitmentString,
+		},
+	}
+
+	signer := cfg.L1Signer()
+
+	factory := NewDataSourceFactory(logger, cfg, l1F, nil, da)
+
+	parent := l1Refs[0]
+	// create a new mock l1 ref
+	ref := eth.L1BlockRef{
+		Hash:       testutils.RandomHash(rng),
+		Number:     parent.Number + 1,
+		ParentHash: parent.Hash,
+		Time:       parent.Time + l1Time,
+	}
+	// mock input to include in l1 transaction
+	input := testutils.RandomData(rng, 200)
+	comm, _ := storage.SetInput(ctx, input)
+
+	tx, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+		ChainID:   signer.ChainID(),
+		Nonce:     0,
+		GasTipCap: big.NewInt(2 * params.GWei),
+		GasFeeCap: big.NewInt(30 * params.GWei),
+		Gas:       100_000,
+		To:        &batcherInbox,
+		Value:     big.NewInt(int64(0)),
+		Data:      comm.TxData(),
+	})
+	require.NoError(t, err)
+
+	txs := []*types.Transaction{tx}
+
+	// First attempt: InfoAndTxsByHash fails, so CalldataSource opens in closed state.
+	// Note: the mock panics on nil interface type-assert, so we pass a dummy BlockInfo even for error cases.
+	l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), nil, errors.New("Intermittent error"))
+
+	src, err := factory.OpenData(ctx, ref, batcherAddr)
+	// Data source should still be opened correctly (error is deferred)
+	require.NoError(t, err)
+
+	// On Next(), AltDA calls AdvanceL1Origin which fetches receipts for challenge events,
+	// then the inner CalldataSource retries InfoAndTxsByHash.
+
+	// Second attempt: AdvanceL1Origin needs receipts, then InfoAndTxsByHash fails again.
+	l1F.ExpectFetchReceipts(ref.Hash, nil, types.Receipts{}, nil)
+	l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), nil, errors.New("Intermittent error"))
+
+	// Should fail because InfoAndTxsByHash still returns error
+	_, err = src.Next(ctx)
+	require.Error(t, err)
+
+	// Third attempt: InfoAndTxsByHash succeeds, data is returned.
+	// AltDA AdvanceL1Origin is a no-op since the origin was already advanced.
+	l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), txs, nil)
+
+	// regular input is passed through
+	data, err := src.Next(ctx)
+	require.NoError(t, err)
+	require.Equal(t, hexutil.Bytes(input), data)
 
 	_, err = src.Next(ctx)
 	require.ErrorIs(t, err, io.EOF)
