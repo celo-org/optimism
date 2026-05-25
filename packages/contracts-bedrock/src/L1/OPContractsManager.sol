@@ -1392,6 +1392,11 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         (IResourceMetering.ResourceConfig memory referenceResourceConfig, ISystemConfig.Addresses memory opChainAddrs) =
             defaultSystemConfigParams(_input, _output);
 
+        // Celo: External superchain config override
+        ISuperchainConfig superchainConfig_ = _input.superchainConfigOverride == address(0)
+            ? _superchainConfig
+            : ISuperchainConfig(_input.superchainConfigOverride);
+
         return abi.encodeCall(
             ISystemConfig.initialize,
             (
@@ -1405,7 +1410,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
                 chainIdToBatchInboxAddress(_input.l2ChainId),
                 opChainAddrs,
                 _input.l2ChainId,
-                _superchainConfig
+                superchainConfig_
             )
         );
     }
@@ -1813,6 +1818,8 @@ contract OPContractsManager is ISemver {
         uint256 disputeSplitDepth;
         Duration disputeClockExtension;
         Duration disputeMaxClockDuration;
+        // Celo: allows to override superchain config
+        address superchainConfigOverride;
     }
 
     /// @notice The full set of outputs from deploying a new OP Stack chain.

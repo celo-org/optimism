@@ -36,6 +36,7 @@ contract CommonTest is Test, Setup, Events {
     bool useAltDAOverride;
     address customGasToken;
     bool useInteropOverride;
+    address externalSuperchainConfig;
 
     /// @dev This value is only used in forked tests. During forked tests, the default is to perform the upgrade before
     ///      running the tests.
@@ -219,5 +220,21 @@ contract CommonTest is Test, Setup, Events {
         _checkNotDeployed("non-upgraded fork");
 
         useUpgradedFork = false;
+    }
+
+    /// @dev Use an externally-injected SuperchainConfig instead of deploying a fresh one.
+    function enableExternalSuperchainConfig(address _externalSuperchainConfig) public {
+        _checkNotDeployed("external SuperchainConfig");
+        require(_externalSuperchainConfig != address(0), "CommonTest: external SuperchainConfig must be non-zero");
+
+        externalSuperchainConfig = _externalSuperchainConfig;
+        super.withoutSuperchain();
+    }
+
+    /// @dev Push the externalSuperchainConfig override into cfg before deploy.run reads it.
+    function applyCfgOverrides() internal virtual override {
+        if (externalSuperchainConfig != address(0)) {
+            deploy.cfg().setExternalSuperchainConfig(externalSuperchainConfig);
+        }
     }
 }

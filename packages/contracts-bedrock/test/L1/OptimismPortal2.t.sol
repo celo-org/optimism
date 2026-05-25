@@ -220,7 +220,9 @@ contract OptimismPortal2_Initialize_Test is OptimismPortal2_TestInit {
     function test_initialize_succeeds() external virtual {
         assertEq(address(optimismPortal2.anchorStateRegistry()), address(anchorStateRegistry));
         assertEq(address(optimismPortal2.disputeGameFactory()), address(disputeGameFactory));
-        assertEq(address(optimismPortal2.superchainConfig()), address(superchainConfig));
+        address expectedSuperchainConfig =
+            address(celoSuperchainConfig) != address(0) ? address(celoSuperchainConfig) : address(superchainConfig);
+        assertEq(address(optimismPortal2.superchainConfig()), expectedSuperchainConfig);
         assertEq(optimismPortal2.l2Sender(), Constants.DEFAULT_L2_SENDER);
         assertEq(optimismPortal2.paused(), false);
         assertEq(address(optimismPortal2.systemConfig()), address(systemConfig));
@@ -608,7 +610,9 @@ contract OptimismPortal2_DisputeGameFactory_Test is OptimismPortal2_TestInit {
 contract OptimismPortal2_SuperchainConfig_Test is OptimismPortal2_TestInit {
     /// @notice Tests that `superchainConfig` returns the correct address.
     function test_superchainConfig_succeeds() external view {
-        assertEq(address(optimismPortal2.superchainConfig()), address(superchainConfig));
+        address expected =
+            address(celoSuperchainConfig) != address(0) ? address(celoSuperchainConfig) : address(superchainConfig);
+        assertEq(address(optimismPortal2.superchainConfig()), expected);
     }
 }
 
@@ -974,9 +978,14 @@ contract OptimismPortal2_MigrateToSuperRoots_Test is OptimismPortal2_TestInit {
 contract OptimismPortal2_ProveWithdrawalTransaction_Test is OptimismPortal2_TestInit {
     /// @notice Tests that `proveWithdrawalTransaction` reverts when paused.
     function test_proveWithdrawalTransaction_paused_reverts() external {
-        vm.startPrank(optimismPortal2.guardian());
-        systemConfig.superchainConfig().pause(address(0));
-        vm.stopPrank();
+        // CeloSuperchainConfig and upstream SuperchainConfig have different pause ABIs.
+        if (address(celoSuperchainConfig) != address(0)) {
+            vm.prank(celoSuperchainConfig.guardian());
+            celoSuperchainConfig.pause("test");
+        } else {
+            vm.prank(superchainConfig.guardian());
+            superchainConfig.pause(address(0));
+        }
 
         vm.expectRevert(IOptimismPortal.OptimismPortal_CallPaused.selector);
         optimismPortal2.proveWithdrawalTransaction({

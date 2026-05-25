@@ -20,6 +20,7 @@ import { LibString } from "@solady/utils/LibString.sol";
 
 // Interfaces
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
 import { IPermissionedDisputeGame } from "interfaces/dispute/IPermissionedDisputeGame.sol";
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
@@ -131,6 +132,17 @@ contract ForkLive is Deployer, StdAssertions {
         // Core contracts
         artifacts.save("ProxyAdmin", vm.parseTomlAddress(opToml, ".addresses.ProxyAdmin"));
         saveProxyAndImpl("SystemConfig", opToml, ".addresses.SystemConfigProxy");
+
+        // CeloSuperchainConfig: on Celo, SystemConfig.superchainConfig() returns the CSC proxy.
+        // On non-Celo forks it returns the upstream SuperchainConfig, which has a different ABI.
+        // Probe with SUPERCHAIN_CONFIG_SLOT() — only CSC exposes it. If the probe reverts, leave
+        // the artifact unset; non-Celo tests don't need CSC.
+        address sysCfg = artifacts.mustGetAddress("SystemConfigProxy");
+        try ISystemConfig(sysCfg).superchainConfig() returns (ISuperchainConfig sc) {
+            try ICeloSuperchainConfig(address(sc)).SUPERCHAIN_CONFIG_SLOT() returns (bytes32) {
+                artifacts.save("CeloSuperchainConfigProxy", address(sc));
+            } catch { }
+        } catch { }
 
         // Bridge contracts
         address optimismPortal = vm.parseTomlAddress(opToml, ".addresses.OptimismPortalProxy");

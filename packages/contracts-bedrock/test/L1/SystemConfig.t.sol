@@ -1102,7 +1102,9 @@ contract SystemConfig_Guardian_Test is SystemConfig_TestInit {
 contract SystemConfig_SuperchainConfig_Test is SystemConfig_TestInit {
     /// @notice Tests that `superchainConfig()` returns the correct address.
     function test_superchainConfig_succeeds() external view {
-        assertEq(address(systemConfig.superchainConfig()), address(superchainConfig));
+        address expected =
+            address(celoSuperchainConfig) != address(0) ? address(celoSuperchainConfig) : address(superchainConfig);
+        assertEq(address(systemConfig.superchainConfig()), expected);
     }
 }
 

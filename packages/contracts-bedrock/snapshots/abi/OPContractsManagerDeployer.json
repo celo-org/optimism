@@ -235,6 +235,11 @@
             "internalType": "Duration",
             "name": "disputeMaxClockDuration",
             "type": "uint64"
+          },
+          {
+            "internalType": "address",
+            "name": "superchainConfigOverride",
+            "type": "address"
           }
         ],
         "internalType": "struct OPContractsManager.DeployInput",

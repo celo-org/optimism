@@ -8,6 +8,7 @@ import { Chains } from "scripts/libraries/Chains.sol";
 import { Types } from "scripts/libraries/Types.sol";
 
 // Interfaces
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
 import { IDelayedWETH } from "interfaces/dispute/IDelayedWETH.sol";
@@ -85,6 +86,7 @@ contract DeployImplementations is Script {
         IOptimismMintableERC20Factory optimismMintableERC20FactoryImpl;
         IDisputeGameFactory disputeGameFactoryImpl;
         IAnchorStateRegistry anchorStateRegistryImpl;
+        ICeloSuperchainConfig celoSuperchainConfigImpl;
         ISuperchainConfig superchainConfigImpl;
         IProtocolVersions protocolVersionsImpl;
         IFaultDisputeGameV2 faultDisputeGameV2Impl;
@@ -105,6 +107,7 @@ contract DeployImplementations is Script {
         assertValidInput(_input);
 
         // Deploy the implementations.
+        deployCeloSuperchainConfigImpl(output_);
         deploySuperchainConfigImpl(output_);
         deployProtocolVersionsImpl(output_);
         deploySystemConfigImpl(output_);
@@ -244,6 +247,18 @@ contract DeployImplementations is Script {
     }
 
     // --- Core Contracts ---
+
+    function deployCeloSuperchainConfigImpl(Output memory _output) private {
+        ICeloSuperchainConfig impl = ICeloSuperchainConfig(
+            DeployUtils.createDeterministic({
+                _name: "CeloSuperchainConfig",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloSuperchainConfig.__constructor__, ())),
+                _salt: _salt
+            })
+        );
+        vm.label(address(impl), "CeloSuperchainConfigImpl");
+        _output.celoSuperchainConfigImpl = impl;
+    }
 
     function deploySuperchainConfigImpl(Output memory _output) private {
         ISuperchainConfig impl = ISuperchainConfig(
@@ -709,6 +724,7 @@ contract DeployImplementations is Script {
             address(_output.delayedWETHImpl),
             address(_output.preimageOracleSingleton),
             address(_output.mipsSingleton),
+            address(_output.celoSuperchainConfigImpl),
             address(_output.superchainConfigImpl),
             address(_output.protocolVersionsImpl)
         );

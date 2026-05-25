@@ -30,6 +30,7 @@ import { GameType, Claim, GameTypes, Proposal, Hash } from "src/dispute/lib/Type
 import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
@@ -118,6 +119,7 @@ contract Deploy is Deployer {
             SystemConfig: artifacts.getAddress("SystemConfigProxy"),
             L1ERC721Bridge: artifacts.getAddress("L1ERC721BridgeProxy"),
             ProtocolVersions: artifacts.getAddress("ProtocolVersionsProxy"),
+            CeloSuperchainConfig: artifacts.getAddress("CeloSuperchainConfigProxy"),
             SuperchainConfig: artifacts.getAddress("SuperchainConfigProxy")
         });
     }
@@ -130,6 +132,61 @@ contract Deploy is Deployer {
     function run() public {
         console.log("Deploying a fresh OP Stack including SuperchainConfig");
         _run({ _needsSuperchain: true });
+    }
+
+    /// @notice Test-only entrypoint: skip the fresh SuperchainConfig deploy when false.
+    function run(bool _needsSuperchain) public {
+        _run({ _needsSuperchain: _needsSuperchain });
+    }
+
+    /// @notice Deploy a fresh OP Stack for Celo, wrapping cfg.externalSuperchainConfig() as the
+    ///         SuperchainConfig. ProtocolVersions is passed in; SuperchainProxyAdmin is deployed
+    ///         fresh so Celo owns it.
+    /// @param _protocolVersionsProxy Address of the existing ProtocolVersions proxy.
+    function runCelo(address payable _protocolVersionsProxy) public {
+        address externalSC = cfg.externalSuperchainConfig();
+        require(externalSC != address(0), "Deploy: must provide externalSuperchainConfig in deploy config");
+        require(_protocolVersionsProxy != address(0), "Deploy: must specify address for protocol versions proxy");
+
+        vm.chainId(cfg.l1ChainID());
+
+        console.log("Deploying OP Stack for Celo, wrapping external SuperchainConfig at %s", externalSC);
+
+        artifacts.save("SuperchainConfigImpl", EIP1967Helper.getImplementation(externalSC));
+        artifacts.save("SuperchainConfigProxy", externalSC);
+
+        artifacts.save("ProtocolVersionsImpl", EIP1967Helper.getImplementation(_protocolVersionsProxy));
+        artifacts.save("ProtocolVersionsProxy", _protocolVersionsProxy);
+
+        _deploySuperchainProxyAdmin();
+
+        _run({ _needsSuperchain: false });
+
+        // Celo: transfer last so the CeloSuperchainConfig upgrade inside _run broadcasts as the
+        //       deployer, not the final multisig owner.
+        _transferSuperchainProxyAdminOwnership();
+    }
+
+    /// @notice Deploy a fresh SuperchainProxyAdmin owned by the deployer.
+    function _deploySuperchainProxyAdmin() internal {
+        vm.broadcast(msg.sender);
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(
+            DeployUtils.create1({
+                _name: "ProxyAdmin",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(IProxyAdmin.__constructor__, (msg.sender)))
+            })
+        );
+
+        vm.label(address(superchainProxyAdmin), "SuperchainProxyAdmin");
+        artifacts.save("SuperchainProxyAdmin", address(superchainProxyAdmin));
+    }
+
+    /// @notice Hand SuperchainProxyAdmin ownership to `cfg.finalSystemOwner()`.
+    function _transferSuperchainProxyAdminOwnership() internal {
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
+        vm.startBroadcast(msg.sender);
+        superchainProxyAdmin.transferOwnership(cfg.finalSystemOwner());
+        vm.stopBroadcast();
     }
 
     /// @notice Deploy a new OP Chain using an existing SuperchainConfig and ProtocolVersions
@@ -151,6 +208,10 @@ contract Deploy is Deployer {
         artifacts.save("ProtocolVersionsImpl", pvProxy.implementation());
         artifacts.save("ProtocolVersionsProxy", _protocolVersionsProxy);
 
+        // setupCeloSuperchainConfig() (called inside _run) needs SuperchainProxyAdmin.
+        // Use the existing proxy admin of the supplied SuperchainConfig.
+        artifacts.save("SuperchainProxyAdmin", EIP1967Helper.getAdmin(_superchainConfigProxy));
+
         _run({ _needsSuperchain: false });
     }
 
@@ -167,15 +228,41 @@ contract Deploy is Deployer {
         // Set up the Superchain if needed.
         if (_needsSuperchain) {
             deploySuperchain();
+        } else {
+            // No fresh superchain. If SuperchainConfigProxy isn't already pre-saved (e.g. by
+            // runCelo / runWithSuperchain), fall back to cfg.externalSuperchainConfig().
+            if (artifacts.getAddress("SuperchainConfigProxy") == address(0)) {
+                address externalSC = cfg.externalSuperchainConfig();
+                require(externalSC != address(0), "Deploy: externalSuperchainConfig is zero");
+                console.log("Using external SuperchainConfig at %s", externalSC);
+                artifacts.save("SuperchainConfigProxy", externalSC);
+            }
+            // PV + SuperchainProxyAdmin are still required downstream; fail fast with a useful
+            // message instead of letting DeploymentDoesNotExist surface deep in the deploy.
+            require(
+                artifacts.getAddress("ProtocolVersionsProxy") != address(0),
+                "Deploy: ProtocolVersionsProxy not seeded (use runCelo / runWithSuperchain)"
+            );
+            require(
+                artifacts.getAddress("SuperchainProxyAdmin") != address(0),
+                "Deploy: SuperchainProxyAdmin not seeded (use runCelo / runWithSuperchain)"
+            );
         }
 
         deployImplementations({ _isInterop: cfg.useInterop() });
+
+        // Must run before deployOpChain so CeloSuperchainConfigProxy resolves in _proxies().
+        setupCeloSuperchainConfig();
 
         // Deploy Current OPChain Contracts
         deployOpChain();
 
         // Set the respected game type according to the deploy config
-        vm.startPrank(ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy")).guardian());
+        address guardianSuperchainConfig = artifacts.getAddress("CeloSuperchainConfigProxy");
+        if (guardianSuperchainConfig == address(0)) {
+            guardianSuperchainConfig = artifacts.mustGetAddress("SuperchainConfigProxy");
+        }
+        vm.startPrank(ISuperchainConfig(guardianSuperchainConfig).guardian());
         IAnchorStateRegistry(artifacts.mustGetAddress("AnchorStateRegistryProxy")).setRespectedGameType(
             GameType.wrap(uint32(cfg.respectedGameType()))
         );
@@ -302,6 +389,7 @@ contract Deploy is Deployer {
         artifacts.save("DelayedWETHImpl", address(dio.delayedWETHImpl));
         artifacts.save("PreimageOracle", address(dio.preimageOracleSingleton));
         artifacts.save("SystemConfigImpl", address(dio.systemConfigImpl));
+        artifacts.save("CeloSuperchainConfigImpl", address(dio.celoSuperchainConfigImpl));
 
         // Get a contract set from the implementation addresses which were just deployed.
         Types.ContractSet memory impls = ChainAssertions.dioToContractSet(dio);
@@ -391,6 +479,38 @@ contract Deploy is Deployer {
         });
     }
 
+    /// @notice Deploy the CeloSuperchainConfig proxy under SuperchainProxyAdmin and initialize
+    ///         it. The implementation is deployed earlier by DeployImplementations.
+    function setupCeloSuperchainConfig() public {
+        console.log("Setting up CeloSuperchainConfig");
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
+        deployERC1967ProxyWithOwner("CeloSuperchainConfigProxy", address(superchainProxyAdmin));
+        initializeCeloSuperchainConfig();
+    }
+
+    /// @notice Upgrade the CeloSuperchainConfig proxy to its impl and initialize it with the
+    ///         Celo guardian and the SuperchainConfig pointer.
+    function initializeCeloSuperchainConfig() public {
+        address payable superchainConfigProxy = artifacts.mustGetAddress("SuperchainConfigProxy");
+        address payable celoSuperchainConfigProxy = artifacts.mustGetAddress("CeloSuperchainConfigProxy");
+        address celoSuperchainConfigImpl = artifacts.mustGetAddress("CeloSuperchainConfigImpl");
+        IProxyAdmin superchainProxyAdmin = IProxyAdmin(artifacts.mustGetAddress("SuperchainProxyAdmin"));
+
+        vm.startBroadcast(superchainProxyAdmin.owner());
+        superchainProxyAdmin.upgradeAndCall({
+            _proxy: celoSuperchainConfigProxy,
+            _implementation: celoSuperchainConfigImpl,
+            _data: abi.encodeCall(
+                ICeloSuperchainConfig.initialize,
+                (cfg.superchainConfigGuardian(), false, superchainConfigProxy)
+            )
+        });
+        vm.stopBroadcast();
+
+        // Assumes the wrapped (external) SuperchainConfig isn't paused at deploy time.
+        ChainAssertions.checkCeloSuperchainConfig({ _contracts: _proxies(), _cfg: cfg, _isPaused: false });
+    }
+
     ////////////////////////////////////////////////////////////////
     //                Proxy Deployment Functions                  //
     ////////////////////////////////////////////////////////////////
@@ -462,7 +582,7 @@ contract Deploy is Deployer {
                         gasPayingToken: customGasTokenAddress
                     }),
                     cfg.l2ChainID(),
-                    ISuperchainConfig(artifacts.mustGetAddress("SuperchainConfigProxy"))
+                    ISuperchainConfig(artifacts.mustGetAddress("CeloSuperchainConfigProxy"))
                 )
             )
         });
@@ -526,7 +646,8 @@ contract Deploy is Deployer {
             disputeMaxGameDepth: cfg.faultGameMaxDepth(),
             disputeSplitDepth: cfg.faultGameSplitDepth(),
             disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
-            disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration()))
+            disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
+            superchainConfigOverride: artifacts.getAddress("CeloSuperchainConfigProxy")
         });
     }
 
