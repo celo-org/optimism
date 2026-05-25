@@ -45,7 +45,7 @@ contract BatchAuthenticator is
     /// @dev When true the Espresso batcher is active; when false the fallback batcher is active.
     bool public activeIsEspresso;
 
-    /// @notice The SystemConfig contract, used to check the paused status.
+    /// @notice The SystemConfig contract, used to resolve the fallback batcher address.
     ISystemConfig public systemConfig;
 
     /// @notice Append-only history of authorized Espresso batcher addresses
@@ -100,11 +100,6 @@ contract BatchAuthenticator is
     /// @notice Returns the owner of the contract.
     function owner() public view override(IBatchAuthenticator, OwnableUpgradeable) returns (address) {
         return super.owner();
-    }
-
-    /// @notice Getter for the current paused status.
-    function paused() public view returns (bool) {
-        return systemConfig.paused();
     }
 
     /// @notice Toggles the active batcher between the Espresso and fallback batcher.
@@ -167,8 +162,6 @@ contract BatchAuthenticator is
     }
 
     function authenticateBatchInfo(bytes32 _commitment, bytes calldata _signature) external {
-        if (paused()) revert BatchAuthenticator_Paused();
-
         if (activeIsEspresso) {
             // TEE batcher path: verify via registered TEE signer.
             // Setting TEEType as Nitro because OP integration only supports AWS Nitro currently.
@@ -193,8 +186,6 @@ contract BatchAuthenticator is
     ///         An attacker would need to compromise governance (to whitelist a malicious enclave hash), forge
     ///         an AWS Nitro signature, or break the Succinct ZK proof — all outside the contract's threat model.
     function registerSigner(bytes calldata _verificationData, bytes calldata _data) external {
-        if (paused()) revert BatchAuthenticator_Paused();
-
         espressoTEEVerifier.registerService(_verificationData, _data, IEspressoTEEVerifier.TeeType.NITRO);
         emit SignerRegistrationInitiated(msg.sender);
     }

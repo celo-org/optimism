@@ -8,9 +8,6 @@ interface IBatchAuthenticator {
     /// @notice Error thrown when an invalid address (zero address) is provided.
     error InvalidAddress(address contract_);
 
-    /// @notice Error thrown when the contract is paused.
-    error BatchAuthenticator_Paused();
-
     /// @notice Error thrown when the fallback batcher caller does not match the expected address.
     error UnauthorizedFallbackBatcher(address sender, address expected);
 
@@ -65,8 +62,6 @@ interface IBatchAuthenticator {
     function activeIsEspresso() external view returns (bool);
 
     function systemConfig() external view returns (ISystemConfig);
-
-    function paused() external view returns (bool);
 
     function switchBatcher() external;
 
