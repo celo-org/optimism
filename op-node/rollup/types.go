@@ -167,16 +167,16 @@ type Config struct {
 	// epoch.
 	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
 
-	// EspressoEnforcementTime sets the activation time of the Espresso enforcement upgrade.
+	// EspressoTime sets the activation time of the Espresso upgrade.
 	// Pre-fork, the derivation pipeline behaves exactly as upstream Optimism: batches are
 	// accepted based on the L1 transaction sender matching the SystemConfig batcher address.
 	// Post-fork, batches must be authenticated via BatchInfoAuthenticated events emitted by
 	// the BatchAuthenticator contract; sender-based authorization is rejected.
-	// Active if EspressoEnforcementTime != nil && L2 block timestamp >= *EspressoEnforcementTime.
-	EspressoEnforcementTime *uint64 `json:"espresso_enforcement_time,omitempty"`
+	// Active if EspressoTime != nil && L2 block timestamp >= *EspressoTime.
+	EspressoTime *uint64 `json:"espresso_time,omitempty"`
 
 	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
-	// BatchInfoAuthenticated(bytes32) events the derivation pipeline scans post-EspressoEnforcement.
+	// BatchInfoAuthenticated(bytes32) events the derivation pipeline scans post-Espresso.
 	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
 
 	// BatchAuthLookbackWindow is the number of L1 blocks to scan for BatchInfoAuthenticated events.
@@ -888,9 +888,9 @@ func (c *Config) forEachFork(callback func(name string, logName string, time *ui
 	callback("Jovian", "jovian_time", c.JovianTime)
 	callback("Karst", "karst_time", c.KarstTime)
 	callback("Interop", "interop_time", c.InteropTime)
-	if c.EspressoEnforcementTime != nil {
+	if c.EspressoTime != nil {
 		// only report if config is set
-		callback("Espresso Enforcement", "espresso_enforcement_time", c.EspressoEnforcementTime)
+		callback("Espresso", "espresso_time", c.EspressoTime)
 	}
 }
 

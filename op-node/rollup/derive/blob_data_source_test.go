@@ -123,9 +123,9 @@ func TestDataAndHashesFromTxs(t *testing.T) {
 // TestDataAndHashesFromTxsEventAuth tests event-based batch authentication for both
 // calldata and blob transactions in the blob data source path.
 //
-// Event-based authentication is only active post-EspressoEnforcement; the fixture
+// Event-based authentication is only active post-Espresso; the fixture
 // activates the fork at L1 origin time 0 (genesis) so all test refs satisfy
-// ref.Time >= *EspressoEnforcementTime.
+// ref.Time >= *EspressoTime.
 func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 	rng := rand.New(rand.NewSource(9999))
 	privateKey := testutils.InsecureRandomKey(rng)
@@ -137,13 +137,13 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 
 	chainId := new(big.Int).SetUint64(rng.Uint64())
 	signer := types.NewPragueSigner(chainId)
-	enforcementTime := uint64(0)
+	espressoTime := uint64(0)
 	config := DataSourceConfig{
 		l1Signer:                  signer,
 		batchInboxAddress:         batchInboxAddr,
 		batchAuthenticatorAddress: authenticatorAddr,
 		batchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
-		espressoEnforcementTime:   &enforcementTime,
+		espressoTime:              &espressoTime,
 	}
 
 	ctx := context.Background()

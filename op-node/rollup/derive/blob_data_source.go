@@ -119,21 +119,20 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // creates a placeholder blobOrCalldata element for each returned blob hash that must be populated
 // by fillBlobPointers after blob bodies are retrieved.
 //
-// Pre-EspressoEnforcement (the L1 origin time of `ref` is < *EspressoEnforcementTime,
-// or unset), this runs upstream Optimism semantics: filter by batch inbox + sender ==
+// Pre-Espresso (the L1 origin time of `ref` is < *EspressoTime, or unset),
+// this runs upstream Optimism semantics: filter by batch inbox + sender ==
 // batcher.
 //
-// Post-EspressoEnforcement, it collects all authenticated batch hashes from a
-// lookback window once and rejects any batch whose commitment hash is not in the
-// authenticated set. For blob transactions, the batch hash is computed from the
-// concatenated blob versioned hashes.
+// Post-Espresso, it collects all authenticated batch hashes from a lookback
+// window once and rejects any batch whose commitment hash is not in the
+// authenticated set. For blob transactions, the batch hash is computed from
+// the concatenated blob versioned hashes.
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
-	// Only collect authenticated batch hashes when the Espresso enforcement fork
-	// is active at the L1 origin time of the block we're scanning. Pre-fork, the
-	// upstream sender-based authorization path is used and authenticatedHashes is
-	// unused.
+	// Only collect authenticated batch hashes when the Espresso fork is active
+	// at the L1 origin time of the block we're scanning. Pre-fork, the upstream
+	// sender-based authorization path is used and authenticatedHashes is unused.
 	var authenticatedHashes map[common.Hash]bool
-	if config.isEspressoEnforcement(ref.Time) {
+	if config.isEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
 			ctx, fetcher, ref, config.batchAuthenticatorAddress, config.batchAuthLookbackWindow, logger,

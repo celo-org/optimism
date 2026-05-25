@@ -125,9 +125,9 @@ func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1Block
 // TestDataFromEVMTransactionsEventAuth tests event-based batch authentication
 // where a BatchInfoAuthenticated event in the lookback window authorizes a batch.
 //
-// Event-based authentication is only active post-EspressoEnforcement; the fixture
+// Event-based authentication is only active post-Espresso; the fixture
 // activates the fork at L1 origin time 0 (genesis) so all test refs satisfy
-// ref.Time >= *EspressoEnforcementTime.
+// ref.Time >= *EspressoTime.
 func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 	rng := rand.New(rand.NewSource(42))
 	batcherPriv := testutils.RandomKey()
@@ -137,13 +137,13 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 	batcherAddr := crypto.PubkeyToAddress(batcherPriv.PublicKey)
 	signer := types.NewCancunSigner(big.NewInt(100))
 
-	enforcementTime := uint64(0)
+	espressoTime := uint64(0)
 	dsCfg := DataSourceConfig{
 		l1Signer:                  signer,
 		batchInboxAddress:         batchInboxAddr,
 		batchAuthenticatorAddress: authenticatorAddr,
 		batchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
-		espressoEnforcementTime:   &enforcementTime,
+		espressoTime:              &espressoTime,
 	}
 
 	ctx := context.Background()
@@ -374,7 +374,7 @@ func TestDataFromEVMTransactions(t *testing.T) {
 			}
 		}
 
-		// Legacy mode (no batch authenticator, EspressoEnforcement inactive) — uses sender-based auth
+		// Legacy mode (no batch authenticator, Espresso inactive) — uses sender-based auth
 		dsCfg := DataSourceConfig{
 			l1Signer:          cfg.L1Signer(),
 			batchInboxAddress: cfg.BatchInboxAddress,
