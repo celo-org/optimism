@@ -389,9 +389,12 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
         address newEspressoBatcher = address(0x9999);
 
+        // Roll forward so the new entry lands in a new block (avoid same-block overwrite).
+        vm.roll(block.number + 1);
+
         // ProxyAdmin owner can set.
-        vm.expectEmit(true, true, false, false);
-        emit EspressoBatcherUpdated(espressoBatcher, newEspressoBatcher);
+        vm.expectEmit(true, true, true, false);
+        emit EspressoBatcherUpdated(espressoBatcher, newEspressoBatcher, uint64(block.number));
         vm.prank(proxyAdminOwner);
         authenticator.setEspressoBatcher(newEspressoBatcher);
         assertEq(authenticator.espressoBatcher(), newEspressoBatcher);
@@ -409,13 +412,189 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         authenticator.setEspressoBatcher(address(0x8888));
     }
 
-    /// @notice Test that setEspressoBatcher reverts when zero address is provided.
-    function test_setEspressoBatcher_whenZeroAddress_reverts() external {
+    /// @notice `setEspressoBatcher(address(0))` is allowed and represents an
+    ///         explicit revocation without replacement.
+    function test_setEspressoBatcher_zeroAddress_revokes() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
+        vm.roll(block.number + 1);
+        uint64 revokeBlock = uint64(block.number);
+
+        vm.expectEmit(true, true, true, false);
+        emit EspressoBatcherUpdated(espressoBatcher, address(0), revokeBlock);
         vm.prank(proxyAdminOwner);
-        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.InvalidAddress.selector, address(0)));
         authenticator.setEspressoBatcher(address(0));
+
+        assertEq(authenticator.espressoBatcher(), address(0));
+        assertEq(authenticator.espressoBatcherHistoryLength(), 2);
+    }
+
+    /// @notice `setEspressoBatcher` reverts with `NoChange` when called with
+    ///         the value that is already the active batcher.
+    function test_setEspressoBatcher_noChange_reverts() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        // Replacing with the same non-zero address reverts.
+        vm.roll(block.number + 1);
+        vm.prank(proxyAdminOwner);
+        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.NoChange.selector, espressoBatcher));
+        authenticator.setEspressoBatcher(espressoBatcher);
+
+        // Revoking-when-already-revoked also reverts.
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(address(0));
+
+        vm.roll(block.number + 1);
+        vm.prank(proxyAdminOwner);
+        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.NoChange.selector, address(0)));
+        authenticator.setEspressoBatcher(address(0));
+    }
+
+    /// @notice History length is 1 immediately after initialize, with the seed
+    ///         entry's `fromBlock` equal to the deployment block.
+    function test_history_seededByInitialize() external {
+        uint256 deployBlock = block.number;
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        assertEq(authenticator.espressoBatcherHistoryLength(), 1);
+        (address b0, uint64 f0) = authenticator.espressoBatcherAt(0);
+        assertEq(b0, espressoBatcher);
+        assertEq(uint256(f0), deployBlock);
+        assertEq(authenticator.espressoBatcher(), espressoBatcher);
+    }
+
+    /// @notice Two `setEspressoBatcher` calls in different blocks append two
+    ///         new history entries.
+    function test_setEspressoBatcher_appendsAcrossBlocks() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        address b1 = address(0x1111);
+        address b2 = address(0x2222);
+
+        vm.roll(block.number + 5);
+        uint64 f1 = uint64(block.number);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b1);
+
+        vm.roll(block.number + 7);
+        uint64 f2 = uint64(block.number);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b2);
+
+        assertEq(authenticator.espressoBatcherHistoryLength(), 3);
+        (address a0,) = authenticator.espressoBatcherAt(0);
+        (address a1, uint64 ff1) = authenticator.espressoBatcherAt(1);
+        (address a2, uint64 ff2) = authenticator.espressoBatcherAt(2);
+        assertEq(a0, espressoBatcher);
+        assertEq(a1, b1);
+        assertEq(uint256(ff1), uint256(f1));
+        assertEq(a2, b2);
+        assertEq(uint256(ff2), uint256(f2));
+        assertEq(authenticator.espressoBatcher(), b2);
+    }
+
+    /// @notice Two `setEspressoBatcher` calls in the same L1 block overwrite
+    ///         the last entry rather than appending a new one.
+    function test_setEspressoBatcher_sameBlockOverwrites() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        address b1 = address(0x1111);
+        address b2 = address(0x2222);
+
+        vm.roll(block.number + 1);
+        uint64 fBlock = uint64(block.number);
+
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b1);
+        // After first call: length=2.
+        assertEq(authenticator.espressoBatcherHistoryLength(), 2);
+
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b2);
+        // After second call in the same block: still length=2 (overwrite).
+        assertEq(authenticator.espressoBatcherHistoryLength(), 2);
+
+        (address a1, uint64 f1) = authenticator.espressoBatcherAt(1);
+        assertEq(a1, b2);
+        assertEq(uint256(f1), uint256(fBlock));
+    }
+
+    /// @notice Revoking then setting a new non-zero address succeeds and
+    ///         appends both entries.
+    function test_setEspressoBatcher_revokeThenReplace() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        vm.roll(block.number + 1);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(address(0));
+        assertEq(authenticator.espressoBatcher(), address(0));
+        assertEq(authenticator.espressoBatcherHistoryLength(), 2);
+
+        address b1 = address(0x1111);
+        vm.roll(block.number + 1);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b1);
+
+        assertEq(authenticator.espressoBatcher(), b1);
+        assertEq(authenticator.espressoBatcherHistoryLength(), 3);
+    }
+
+    /// @notice `espressoBatcherAtBlock` returns the correct historical address
+    ///         across the whole timeline.
+    function test_espressoBatcherAtBlock_lookup() external {
+        // Move forward a bit so f0 > 0 (lets us test "before first entry").
+        vm.roll(block.number + 10);
+        uint64 f0 = uint64(block.number);
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        // Append b1.
+        vm.roll(block.number + 5);
+        uint64 f1 = uint64(block.number);
+        address b1 = address(0x1111);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b1);
+
+        // Revoke.
+        vm.roll(block.number + 4);
+        uint64 f2 = uint64(block.number);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(address(0));
+
+        // Append b3.
+        vm.roll(block.number + 3);
+        uint64 f3 = uint64(block.number);
+        address b3 = address(0x3333);
+        vm.prank(proxyAdminOwner);
+        authenticator.setEspressoBatcher(b3);
+
+        // Before the first entry → address(0).
+        assertEq(authenticator.espressoBatcherAtBlock(f0 - 1), address(0));
+
+        // At exactly f0 → seed batcher.
+        assertEq(authenticator.espressoBatcherAtBlock(f0), espressoBatcher);
+
+        // In [f0, f1) → seed batcher.
+        assertEq(authenticator.espressoBatcherAtBlock(f1 - 1), espressoBatcher);
+
+        // In [f1, f2) → b1.
+        assertEq(authenticator.espressoBatcherAtBlock(f1), b1);
+        assertEq(authenticator.espressoBatcherAtBlock(f2 - 1), b1);
+
+        // In [f2, f3) → address(0) (revoked).
+        assertEq(authenticator.espressoBatcherAtBlock(f2), address(0));
+        assertEq(authenticator.espressoBatcherAtBlock(f3 - 1), address(0));
+
+        // At and after f3 → b3.
+        assertEq(authenticator.espressoBatcherAtBlock(f3), b3);
+        assertEq(authenticator.espressoBatcherAtBlock(f3 + 100), b3);
+    }
+
+    /// @notice `espressoBatcherAt` reverts on out-of-bounds index.
+    function test_espressoBatcherAt_outOfBounds_reverts() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+        // length == 1, so index 1 is out of bounds.
+        vm.expectRevert();
+        authenticator.espressoBatcherAt(1);
     }
 
     /// @notice Test upgrade to new implementation with comprehensive state preservation.
@@ -610,7 +789,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
     // Event declarations for expectEmit.
     event BatchInfoAuthenticated(bytes32 indexed commitment);
     event SignerRegistrationInitiated(address indexed caller);
-    event EspressoBatcherUpdated(address indexed oldEspressoBatcher, address indexed newEspressoBatcher);
+    event EspressoBatcherUpdated(
+        address indexed oldEspressoBatcher, address indexed newEspressoBatcher, uint64 indexed fromBlock
+    );
     event BatcherSwitched(bool indexed activeIsEspresso);
 
     /// @notice Deploy a Proxy without importing Proxy.sol to avoid duplicate compilation artifacts
@@ -825,7 +1006,9 @@ contract BatchAuthenticator_Fork_Test is Test {
     // Event declarations for expectEmit.
     event BatchInfoAuthenticated(bytes32 indexed commitment);
     event SignerRegistrationInitiated(address indexed caller);
-    event EspressoBatcherUpdated(address indexed oldEspressoBatcher, address indexed newEspressoBatcher);
+    event EspressoBatcherUpdated(
+        address indexed oldEspressoBatcher, address indexed newEspressoBatcher, uint64 indexed fromBlock
+    );
     event BatcherSwitched(bool indexed activeIsEspresso);
 
     /// @notice Deploy a Proxy without importing Proxy.sol to avoid duplicate compilation artifacts.
