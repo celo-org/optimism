@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {Script, console} from "forge-std/Script.sol";
-import {ISystemConfig} from "interfaces/L1/ISystemConfig.sol";
-import {IEspressoTEEVerifier} from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
-import {IProxy} from "interfaces/universal/IProxy.sol";
-import {IProxyAdmin} from "interfaces/universal/IProxyAdmin.sol";
-import {BatchAuthenticator} from "src/L1/BatchAuthenticator.sol";
+import { Script, console } from "forge-std/Script.sol";
+import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
+import { IProxy } from "interfaces/universal/IProxy.sol";
+import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
 
 /// @notice Deploys only the BatchAuthenticator (proxy + impl) against an existing TEEVerifier.
 ///
@@ -28,7 +28,9 @@ contract DeployBatchAuthenticator is Script {
         address _systemConfig,
         address _teeVerifier,
         address _proxyAdminOwner
-    ) public {
+    )
+        public
+    {
         require(_espressoBatcher != address(0), "DeployBatchAuthenticator: espressoBatcher required");
         require(_systemConfig != address(0), "DeployBatchAuthenticator: systemConfig required");
         require(_teeVerifier != address(0), "DeployBatchAuthenticator: teeVerifier required");
@@ -47,7 +49,9 @@ contract DeployBatchAuthenticator is Script {
         {
             bytes memory _initCode = abi.encodePacked(vm.getCode("ProxyAdmin"), abi.encode(msg.sender));
             address payable _addr;
-            assembly { _addr := create(0, add(_initCode, 0x20), mload(_initCode)) }
+            assembly {
+                _addr := create(0, add(_initCode, 0x20), mload(_initCode))
+            }
             require(_addr != address(0), "DeployBatchAuthenticator: ProxyAdmin deployment failed");
             proxyAdmin = IProxyAdmin(_addr);
         }
@@ -56,9 +60,12 @@ contract DeployBatchAuthenticator is Script {
         // Use the path-qualified form to disambiguate from OZ v5's proxy/Proxy.sol artifact.
         IProxy proxy;
         {
-            bytes memory initCode = abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(address(proxyAdmin)));
+            bytes memory initCode =
+                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(address(proxyAdmin)));
             address payable proxyAddr;
-            assembly { proxyAddr := create(0, add(initCode, 0x20), mload(initCode)) }
+            assembly {
+                proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
+            }
             require(proxyAddr != address(0), "DeployBatchAuthenticator: proxy deployment failed");
             proxy = IProxy(proxyAddr);
         }
@@ -78,11 +85,7 @@ contract DeployBatchAuthenticator is Script {
                 true
             )
         );
-        proxyAdmin.upgradeAndCall(
-            payable(address(proxy)),
-            address(impl),
-            initData
-        );
+        proxyAdmin.upgradeAndCall(payable(address(proxy)), address(impl), initData);
 
         if (_proxyAdminOwner != msg.sender) {
             proxyAdmin.transferOwnership(_proxyAdminOwner);
