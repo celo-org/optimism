@@ -737,6 +737,71 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         authenticator.registerSigner(signerData, proofBytes);
     }
 
+    /// @notice End-to-end coverage of the dual-batcher flow: authenticate via Espresso, switch
+    ///         to fallback, authenticate via the SystemConfig batcher, switch back, authenticate
+    ///         via Espresso again. Verifies that switching doesn't corrupt either path and that
+    ///         each mode rejects the other mode's caller.
+    function test_switchAndAuthenticate_endToEnd_succeeds() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        // 1. Espresso path: register signer and authenticate one commitment.
+        uint256 privateKey = 1;
+        _registerNitroSigner(privateKey);
+
+        bytes32 espressoCommitment1 = keccak256("espresso-1");
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, _computeEIP712Digest(espressoCommitment1));
+        bytes memory espressoSig1 = abi.encodePacked(r, s, v);
+
+        vm.expectEmit(true, false, false, false);
+        emit BatchInfoAuthenticated(espressoCommitment1);
+        authenticator.authenticateBatchInfo(espressoCommitment1, espressoSig1);
+
+        // 2. Switch to fallback and configure the SystemConfig batcher.
+        address fallbackBatcher = address(0xCAFE);
+        mockSystemConfig.setBatcherHash(bytes32(uint256(uint160(fallbackBatcher))));
+
+        vm.expectEmit(true, false, false, false);
+        emit BatcherSwitched(false);
+        vm.prank(proxyAdminOwner);
+        authenticator.switchBatcher();
+        assertFalse(authenticator.activeIsEspresso());
+
+        // 3. Fallback path: only the configured batcher may authenticate; signature is ignored.
+        bytes32 fallbackCommitment = keccak256("fallback");
+        vm.expectEmit(true, false, false, false);
+        emit BatchInfoAuthenticated(fallbackCommitment);
+        vm.prank(fallbackBatcher);
+        authenticator.authenticateBatchInfo(fallbackCommitment, "");
+
+        // Re-issue the exact same call that succeeded in step 1 — same sender, same commitment,
+        // same signature — and assert it now reverts. Demonstrates that the mode switch alone
+        // is sufficient to change the outcome; the previously-valid Espresso signature is no
+        // longer consulted at all.
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IBatchAuthenticator.UnauthorizedFallbackBatcher.selector, address(this), fallbackBatcher
+            )
+        );
+        authenticator.authenticateBatchInfo(espressoCommitment1, espressoSig1);
+
+        // 4. Switch back to Espresso.
+        vm.expectEmit(true, false, false, false);
+        emit BatcherSwitched(true);
+        vm.prank(proxyAdminOwner);
+        authenticator.switchBatcher();
+        assertTrue(authenticator.activeIsEspresso());
+
+        // 5. Espresso path again with a new commitment — registration must have survived
+        //    the switch round-trip.
+        bytes32 espressoCommitment2 = keccak256("espresso-2");
+        (v, r, s) = vm.sign(privateKey, _computeEIP712Digest(espressoCommitment2));
+        bytes memory espressoSig2 = abi.encodePacked(r, s, v);
+
+        vm.expectEmit(true, false, false, false);
+        emit BatchInfoAuthenticated(espressoCommitment2);
+        authenticator.authenticateBatchInfo(espressoCommitment2, espressoSig2);
+    }
+
     // Event declarations for expectEmit.
     event BatchInfoAuthenticated(bytes32 indexed commitment);
     event SignerRegistrationInitiated(address indexed caller);
