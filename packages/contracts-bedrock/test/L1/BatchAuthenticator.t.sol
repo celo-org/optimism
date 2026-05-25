@@ -700,24 +700,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         authenticator.authenticateBatchInfo(commitment, "");
     }
 
-    /// @notice Test that paused() delegates to SystemConfig.
-    function test_paused_succeeds() external {
-        BatchAuthenticator authenticator = _deployAndInitializeProxy();
-
-        // Initially not paused.
-        assertFalse(authenticator.paused());
-
-        // Pause the mock SystemConfig.
-        mockSystemConfig.setPaused(true);
-        assertTrue(authenticator.paused());
-
-        // Unpause.
-        mockSystemConfig.setPaused(false);
-        assertFalse(authenticator.paused());
-    }
-
-    /// @notice Test that authenticateBatchInfo reverts when paused.
-    function test_authenticateBatchInfo_whenPaused_reverts() external {
+    /// @notice Test that authenticateBatchInfo ignores the SystemConfig paused flag.
+    ///         The pause domain of the optimism stack must not gate batch authentication.
+    function test_authenticateBatchInfo_ignoresPause_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         uint256 privateKey = 1;
@@ -728,62 +713,28 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, _computeEIP712Digest(commitment));
         bytes memory signature = abi.encodePacked(r, s, v);
 
-        // Pause the system.
+        // Pause the SystemConfig — authentication must still succeed.
         mockSystemConfig.setPaused(true);
 
-        // Should revert with BatchAuthenticator_Paused.
-        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.BatchAuthenticator_Paused.selector));
-        authenticator.authenticateBatchInfo(commitment, signature);
-    }
-
-    /// @notice Test that authenticateBatchInfo succeeds when not paused.
-    function test_authenticateBatchInfo_whenNotPaused_succeeds() external {
-        BatchAuthenticator authenticator = _deployAndInitializeProxy();
-
-        uint256 privateKey = 1;
-        bytes32 commitment = keccak256("test commitment");
-
-        // Register signer and create valid signature.
-        _registerNitroSigner(privateKey);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, _computeEIP712Digest(commitment));
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        // Ensure not paused.
-        mockSystemConfig.setPaused(false);
-
-        // Should succeed.
         vm.expectEmit(true, false, false, false);
         emit BatchInfoAuthenticated(commitment);
         authenticator.authenticateBatchInfo(commitment, signature);
     }
 
-    /// @notice Test that registerSigner reverts when paused.
-    function test_registerSigner_whenPaused_reverts() external {
+    /// @notice Test that registerSigner ignores the SystemConfig paused flag.
+    function test_registerSigner_ignoresPause_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         uint256 privateKey = 1;
         bytes memory signerData = _nitroRegistrationOutputForPrivateKey(privateKey);
         bytes memory proofBytes = "";
 
-        // Pause the system.
+        // Pause the SystemConfig — registration must still succeed.
         mockSystemConfig.setPaused(true);
 
-        // Should revert with BatchAuthenticator_Paused.
-        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.BatchAuthenticator_Paused.selector));
+        vm.expectEmit(true, false, false, false);
+        emit SignerRegistrationInitiated(address(this));
         authenticator.registerSigner(signerData, proofBytes);
-    }
-
-    /// @notice Test that switchBatcher still works when paused (emergency recovery).
-    function test_switchBatcher_whenPaused_succeeds() external {
-        BatchAuthenticator authenticator = _deployAndInitializeProxy();
-
-        // Pause the system.
-        mockSystemConfig.setPaused(true);
-
-        // Owner can still switch batcher while paused.
-        vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
-        assertFalse(authenticator.activeIsEspresso());
     }
 
     // Event declarations for expectEmit.
