@@ -10,6 +10,10 @@ interface ICeloSequencerFeeVault {
         address indexed registered, address indexed actual, uint256 value, address indexed to, address from
     );
 
+    error CeloSequencerFeeVault_NotRegisteredFeeCurrency();
+    error CeloSequencerFeeVault_AdapterMismatch();
+    error CeloSequencerFeeVault_NoTokenBalance();
+
     receive() external payable;
 
     function MIN_WITHDRAWAL_AMOUNT() external view returns (uint256);

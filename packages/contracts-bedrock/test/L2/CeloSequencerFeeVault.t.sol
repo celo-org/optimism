@@ -302,7 +302,7 @@ contract CeloSequencerFeeVault_WithdrawToken_Test is CeloSequencerFeeVault_TestI
         TestERC20 token = new TestERC20();
         _mockCurrencyConfig(address(token), address(0));
 
-        vm.expectRevert("CeloSequencerFeeVault: token not a registered fee currency");
+        vm.expectRevert(ICeloSequencerFeeVault.CeloSequencerFeeVault_NotRegisteredFeeCurrency.selector);
         sequencerFeeVault.withdrawToken(address(token), address(token));
     }
 
@@ -314,7 +314,7 @@ contract CeloSequencerFeeVault_WithdrawToken_Test is CeloSequencerFeeVault_TestI
         _mockCurrencyConfig(adapter, ORACLE);
         _mockAdaptedToken(adapter, address(wrongUnderlying));
 
-        vm.expectRevert("CeloSequencerFeeVault: adapter mismatch");
+        vm.expectRevert(ICeloSequencerFeeVault.CeloSequencerFeeVault_AdapterMismatch.selector);
         sequencerFeeVault.withdrawToken(adapter, address(actualPassed));
     }
 
@@ -323,7 +323,7 @@ contract CeloSequencerFeeVault_WithdrawToken_Test is CeloSequencerFeeVault_TestI
         TestERC20 token = new TestERC20();
         _mockCurrencyConfig(address(token), ORACLE);
 
-        vm.expectRevert("CeloSequencerFeeVault: no token balance to withdraw");
+        vm.expectRevert(ICeloSequencerFeeVault.CeloSequencerFeeVault_NoTokenBalance.selector);
         sequencerFeeVault.withdrawToken(address(token), address(token));
     }
 

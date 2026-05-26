@@ -54,6 +54,16 @@ contract CeloSequencerFeeVault is FeeVault, ISemver {
         address indexed registered, address indexed actual, uint256 value, address indexed to, address from
     );
 
+    /// @notice Thrown when the supplied token is not a registered fee currency.
+    error CeloSequencerFeeVault_NotRegisteredFeeCurrency();
+
+    /// @notice Thrown when the underlying token of an adapter does not match the address passed as
+    ///         `_actual`.
+    error CeloSequencerFeeVault_AdapterMismatch();
+
+    /// @notice Thrown when the vault holds no balance of the requested token.
+    error CeloSequencerFeeVault_NoTokenBalance();
+
     /// @notice Constructs the CeloSequencerFeeVault contract.
     /// @param _recipient           Wallet that will receive the fees.
     /// @param _minWithdrawalAmount Minimum balance for withdrawals.
@@ -92,16 +102,14 @@ contract CeloSequencerFeeVault is FeeVault, ISemver {
             ICeloRegistry(CeloPredeploys.CELO_REGISTRY).getAddressForOrDie(FEE_CURRENCY_DIRECTORY_REGISTRY_ID);
         IFeeCurrencyDirectory.CurrencyConfig memory cfg =
             IFeeCurrencyDirectory(directory).getCurrencyConfig(_registered);
-        require(cfg.oracle != address(0), "CeloSequencerFeeVault: token not a registered fee currency");
+        if (cfg.oracle == address(0)) revert CeloSequencerFeeVault_NotRegisteredFeeCurrency();
 
-        if (_actual != _registered) {
-            require(
-                IFeeCurrencyAdapter(_registered).getAdaptedToken() == _actual, "CeloSequencerFeeVault: adapter mismatch"
-            );
+        if (_actual != _registered && IFeeCurrencyAdapter(_registered).getAdaptedToken() != _actual) {
+            revert CeloSequencerFeeVault_AdapterMismatch();
         }
 
         uint256 value = IERC20(_actual).balanceOf(address(this));
-        require(value > 0, "CeloSequencerFeeVault: no token balance to withdraw");
+        if (value == 0) revert CeloSequencerFeeVault_NoTokenBalance();
 
         totalProcessedToken[_actual] += value;
 
