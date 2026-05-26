@@ -6,6 +6,7 @@ toolchain go1.24.13
 
 require (
 	github.com/BurntSushi/toml v1.5.0
+	github.com/EspressoSystems/espresso-network/sdks/go v0.3.5-0.20260410134522-1a819609a513
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/andybalholm/brotli v1.1.0
 	github.com/base/go-bip39 v1.1.0
@@ -69,7 +70,10 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
+require (
+	github.com/ProjectZKM/Ziren/crates/go-runtime/zkvm_runtime v0.0.0-20251001021608-1fe7b43fc4d6 // indirect
+	github.com/sigurn/crc8 v0.0.0-20220107193325-2243fe600f9f // indirect
+)
 
 require (
 	github.com/benbjohnson/immutable v0.4.0 // indirect
