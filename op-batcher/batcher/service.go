@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -20,6 +22,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/params"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
+	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/httputil"
@@ -58,6 +61,11 @@ type BatcherConfig struct {
 	// and verifier evaluation time (containing L1 block). See
 	// isFallbackAuthRequired in espresso_active.go for details.
 	FallbackAuthLeadTime time.Duration
+
+	// Espresso groups all TEE-batcher-specific configuration. Defined in
+	// espresso_service.go to keep the upstream Optimism field block compact.
+	// Zero-valued when --espresso.enabled=false.
+	Espresso EspressoBatcherConfig
 }
 
 // BatcherService represents a full batch-submitter instance and its resources,
@@ -88,6 +96,14 @@ type BatcherService struct {
 	stopped         atomic.Bool
 
 	NotSubmittingOnStart bool
+
+	// Espresso runtime state. Defined in espresso_service.go to keep the
+	// upstream Optimism field block compact. EspressoClient and
+	// EspressoLightClient are nil when --espresso.enabled=false.
+	EspressoClient      *espressoClient.MultipleNodesClient
+	EspressoLightClient *espressoLightClient.LightclientCaller
+	opcrypto.ChainSigner
+	Attestation []byte
 }
 
 type DriverSetupOption func(setup *DriverSetup)
@@ -194,6 +210,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	}
 	if err := bs.initPProf(cfg); err != nil {
 		return fmt.Errorf("failed to init profiling: %w", err)
+	}
+	if err := bs.initEspresso(cfg); err != nil {
+		return fmt.Errorf("failed to init Espresso: %w", err)
 	}
 	bs.initDriver(opts...)
 	if err := bs.initRPCServer(cfg); err != nil {
@@ -367,6 +386,9 @@ func (bs *BatcherService) initTxManager(_ context.Context, cfg *CLIConfig) error
 		return err
 	}
 	bs.TxManager = txManager
+	if err := bs.initChainSigner(); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -419,6 +441,7 @@ func (bs *BatcherService) initDriver(opts ...DriverSetupOption) {
 		ChannelConfig:    bs.ChannelConfig,
 		AltDA:            bs.AltDA,
 	}
+	bs.applyEspressoDriverSetup(&ds)
 	for _, opt := range opts {
 		opt(&ds)
 	}
