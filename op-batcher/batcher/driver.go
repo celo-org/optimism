@@ -13,6 +13,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -21,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	"github.com/ethereum-optimism/optimism/espresso"
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher/throttler"
 	config "github.com/ethereum-optimism/optimism/op-batcher/config"
@@ -29,6 +31,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -86,6 +89,7 @@ func (r txRef) string(txIDStringer func(txID) string) string {
 type L1Client interface {
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
+	bind.ContractBackend
 }
 
 type L2Client interface {
@@ -113,6 +117,11 @@ type DriverSetup struct {
 	ChannelConfig     ChannelConfigProvider
 	AltDA             AltDAClient
 	ChannelOutFactory ChannelOutFactory
+
+	// Espresso groups all TEE-batcher-specific runtime state plumbed from
+	// BatcherService. Defined in espresso_driver.go to keep the upstream
+	// Optimism field block compact.
+	Espresso EspressoDriverSetup
 }
 
 // BatchSubmitter encapsulates a service responsible for submitting L2 tx
@@ -138,7 +147,7 @@ type BatchSubmitter struct {
 
 	publishSignal chan pubInfo
 
-	// authGroup tracks the fallback batcher's receipt-watcher goroutines (one
+	// authGroup tracks the fallback and TEE batchers' auth goroutines (one
 	// per auth+batch pair) so the publishing loop can drain them via
 	// waitForAuthGroup before closing receiptsCh. New watchers are back-pressured
 	// (not hard-bounded) by the txmgr Queue: queue.Send blocks at
@@ -146,6 +155,15 @@ type BatchSubmitter struct {
 	// though a slow receipts loop can briefly leave more than that parked on their
 	// final receiptsCh send.
 	authGroup sync.WaitGroup
+
+	espressoSubmitter *espressoTransactionSubmitter
+	espressoStreamer  espresso.EspressoStreamer[derive.EspressoBatch]
+
+	teeVerifierAddress common.Address
+
+	// degradedLog throttles repeated warnings from tick-driven loops so the
+	// log debouncer doesn't see the same message every poll interval.
+	degradedLog *oplog.RepeatStateLogger
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup
@@ -158,12 +176,15 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	batcher := &BatchSubmitter{
 		DriverSetup: setup,
 		channelMgr:  state,
+		degradedLog: oplog.NewRepeatStateLogger(),
 	}
 
 	err := batcher.SetThrottleController(setup.Config.ThrottleParams.ControllerType, setup.Config.ThrottleParams.PIDConfig)
 	if err != nil {
 		panic(err)
 	}
+
+	batcher.setupEspressoStreamer()
 
 	return batcher
 }
@@ -212,10 +233,16 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 		l.Log.Warn("Throttling loop is DISABLED due to 0 throttle-threshold. This should not be disabled in prod.")
 	}
 
-	l.wg.Add(3)
-	go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
-	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)               // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
-	go l.blockLoadingLoop(l.shutdownCtx, l.wg, unsafeBytesUpdated, publishSignal) // sends on unsafeBytesUpdated (if throttling enabled), and publishSignal. Closes them both when done
+	if l.Config.Espresso.Enabled {
+		if err := l.startEspressoLoops(receiptsCh, publishSignal); err != nil {
+			return err
+		}
+	} else {
+		l.wg.Add(3)
+		go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
+		go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)               // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
+		go l.blockLoadingLoop(l.shutdownCtx, l.wg, unsafeBytesUpdated, publishSignal) // sends on unsafeBytesUpdated (if throttling enabled), and publishSignal. Closes them both when done
+	}
 
 	l.Log.Info("Batch Submitter started")
 	return nil
@@ -857,6 +884,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 			l.channelMgrMutex.Lock()
 			defer l.channelMgrMutex.Unlock()
 			l.channelMgr.Clear(l1SafeOrigin)
+			l.resetEspressoStreamer()
 			return true
 		}
 	}

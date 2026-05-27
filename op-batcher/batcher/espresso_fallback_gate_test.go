@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -16,7 +17,11 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 )
 
+// mockFixedTimeL1Client is an L1Client whose tip header carries a fixed
+// timestamp. The embedded bind.ContractBackend satisfies the rest of the
+// L1Client interface; only HeaderByNumber is exercised by the gate.
 type mockFixedTimeL1Client struct {
+	bind.ContractBackend
 	time uint64
 }
 
