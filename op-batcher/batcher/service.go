@@ -50,6 +50,14 @@ type BatcherConfig struct {
 
 	// For throttling DA. See CLIConfig in config.go for details on these parameters.
 	ThrottleParams config.ThrottleParams
+
+	// FallbackAuthLeadTime is consulted by the fallback batcher's
+	// authentication gate to advance the switch to authenticated batches
+	// relative to the on-chain EspressoTime hardfork. It absorbs the
+	// worst-case L1 inclusion delay between batcher decision time (L1 tip)
+	// and verifier evaluation time (containing L1 block). See
+	// isFallbackAuthRequired in espresso_active.go for details.
+	FallbackAuthLeadTime time.Duration
 }
 
 // BatcherService represents a full batch-submitter instance and its resources,
@@ -109,6 +117,7 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	bs.NetworkTimeout = cfg.TxMgrConfig.NetworkTimeout
 	bs.CheckRecentTxsDepth = cfg.CheckRecentTxsDepth
 	bs.WaitNodeSync = cfg.WaitNodeSync
+	bs.FallbackAuthLeadTime = cfg.FallbackAuthLeadTime
 
 	bs.ThrottleParams = config.ThrottleParams{
 		LowerThreshold:      cfg.ThrottleConfig.LowerThreshold,

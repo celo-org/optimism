@@ -152,6 +152,11 @@ type CLIConfig struct {
 	PprofConfig   oppprof.CLIConfig
 	RPC           oprpc.CLIConfig
 	AltDA         altda.CLIConfig
+
+	// FallbackAuthLeadTime is the lead time for the fallback batcher's
+	// authentication gate. See BatcherConfig.FallbackAuthLeadTime in
+	// service.go and isFallbackAuthRequired in espresso_active.go.
+	FallbackAuthLeadTime time.Duration
 }
 
 func (c *CLIConfig) Check() error {
@@ -248,6 +253,7 @@ func NewConfig(ctx *cli.Context) *CLIConfig {
 		PprofConfig:                  oppprof.ReadCLIConfig(ctx),
 		RPC:                          oprpc.ReadCLIConfig(ctx),
 		AltDA:                        altda.ReadCLIConfig(ctx),
+		FallbackAuthLeadTime:         ctx.Duration(flags.FallbackAuthLeadTimeFlag.Name),
 		ThrottleConfig: ThrottleConfig{
 			AdditionalEndpoints: ctx.StringSlice(flags.AdditionalThrottlingEndpointsFlag.Name),
 			TxSizeLowerLimit:    ctx.Uint64(flags.ThrottleTxSizeLowerLimitFlag.Name),
