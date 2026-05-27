@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
 	"github.com/ethereum-optimism/optimism/op-batcher/compressor"
 	"github.com/ethereum-optimism/optimism/op-batcher/config"
@@ -481,6 +483,10 @@ func TestBatchSubmitter_CriticalError(t *testing.T) {
 
 // fakeL1Client is just a dummy struct. All fault injection is done via the fakeTxMgr (which doesn't interact with this fakeL1Client).
 type fakeL1Client struct {
+	// Embed bind.ContractBackend so the type satisfies the L1Client interface
+	// (which requires it for the BatchAuthenticator binding used by the
+	// fallback batcher). AltDA tests never exercise these methods.
+	bind.ContractBackend
 }
 
 func (f *fakeL1Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {

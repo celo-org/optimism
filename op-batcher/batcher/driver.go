@@ -12,6 +12,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -73,6 +74,7 @@ func (r txRef) string(txIDStringer func(txID) string) string {
 type L1Client interface {
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
+	bind.ContractBackend
 }
 
 type L2Client interface {
@@ -124,6 +126,12 @@ type BatchSubmitter struct {
 	throttleController *throttler.ThrottleController
 
 	publishSignal chan pubInfo
+
+	// authGroup serializes in-flight BatchAuthenticator submissions issued by
+	// the fallback batcher's authentication path so the publishing loop can
+	// drain them on shutdown. Bounded to fallbackAuthGroupLimit; see
+	// espresso_driver.go.
+	authGroup errgroup.Group
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup
@@ -142,6 +150,8 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	if err != nil {
 		panic(err)
 	}
+
+	batcher.initAuthGroup()
 
 	return batcher
 }
@@ -515,6 +525,12 @@ func (l *BatchSubmitter) publishingLoop(ctx context.Context, wg *sync.WaitGroup,
 			l.Log.Error("error waiting for DA requests to complete", "err", err)
 		}
 	}
+
+	// Wait for all in-flight fallback-auth submissions to complete to prevent
+	// new transactions being queued. No-op when the rollup is not configured
+	// with a BatchAuthenticator or when the EspressoTime hardfork has not
+	// activated.
+	l.waitForAuthGroup()
 
 	// We _must_ wait for all senders on receiptsCh to finish before we can close it.
 	if err := txQueue.Wait(); err != nil {
@@ -1033,6 +1049,13 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		l.Log.Warn("Failed to calculate floor data gas", "err", err)
 	} else {
 		candidate.GasLimit = floorDataGas
+	}
+
+	// Route through the fallback-auth path when a BatchAuthenticator is
+	// configured and the EspressoTime hardfork is active. Falls through to
+	// the upstream queue.Send path otherwise.
+	if l.dispatchAuthenticatedSendTx(txdata, isCancel, candidate, queue, receiptsCh) {
+		return
 	}
 
 	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}, *candidate, receiptsCh)
