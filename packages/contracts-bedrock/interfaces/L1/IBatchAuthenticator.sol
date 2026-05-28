@@ -15,6 +15,9 @@ interface IBatchAuthenticator {
     ///         that is already the currently-active batcher.
     error NoChange(address batcher);
 
+    /// @notice Error thrown when the Espresso TEE batcher caller does not match the configured espressoBatcher.
+    error UnauthorizedEspressoBatcher(address sender, address expected);
+
     /// @notice Emitted when a batch info is authenticated.
     event BatchInfoAuthenticated(bytes32 indexed commitment);
 
