@@ -147,6 +147,11 @@ contract BatchAuthenticator is
 
     function authenticateBatchInfo(bytes32 _commitment, bytes calldata _signature) external {
         if (activeIsEspresso) {
+            // Espresso batcher path: caller must be the configured espressoBatcher.
+            address activeEspressoBatcher = espressoBatcher();
+            if (msg.sender != activeEspressoBatcher) {
+                revert UnauthorizedEspressoBatcher(msg.sender, activeEspressoBatcher);
+            }
             // TEE batcher path: verify via registered TEE signer.
             // Setting TEEType as Nitro because OP integration only supports AWS Nitro currently.
             // `verify` is expected to revert on failure, but we still check the return value as a
