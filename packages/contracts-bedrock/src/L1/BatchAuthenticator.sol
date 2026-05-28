@@ -115,7 +115,15 @@ contract BatchAuthenticator is
         if (_newEspressoBatcher == oldEspressoBatcher) revert NoChange(_newEspressoBatcher);
 
         uint64 fromBlock = uint64(block.number);
-        _espressoBatcherHistory.push(EspressoBatcherEntry({ batcher: _newEspressoBatcher, fromBlock: fromBlock }));
+        // If a previous update already happened in this same L1 block, overwrite the last
+        // entry rather than appending a new one. This preserves the invariant that
+        // `fromBlock` values are strictly increasing across history entries, which the
+        // binary search in `espressoBatcherAtBlock` relies on.
+        if (last.fromBlock == fromBlock) {
+            last.batcher = _newEspressoBatcher;
+        } else {
+            _espressoBatcherHistory.push(EspressoBatcherEntry({ batcher: _newEspressoBatcher, fromBlock: fromBlock }));
+        }
         emit EspressoBatcherUpdated(oldEspressoBatcher, _newEspressoBatcher, fromBlock);
     }
 
