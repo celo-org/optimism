@@ -256,19 +256,6 @@
   },
   {
     "inputs": [],
-    "name": "paused",
-    "outputs": [
-      {
-        "internalType": "bool",
-        "name": "",
-        "type": "bool"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "pendingOwner",
     "outputs": [
       {
@@ -347,19 +334,25 @@
   {
     "inputs": [
       {
+        "internalType": "bool",
+        "name": "_desired",
+        "type": "bool"
+      }
+    ],
+    "name": "setActiveIsEspresso",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
         "internalType": "address",
         "name": "_newEspressoBatcher",
         "type": "address"
       }
     ],
     "name": "setEspressoBatcher",
-    "outputs": [],
-    "stateMutability": "nonpayable",
-    "type": "function"
-  },
-  {
-    "inputs": [],
-    "name": "switchBatcher",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -545,11 +538,6 @@
     "type": "event"
   },
   {
-    "inputs": [],
-    "name": "BatchAuthenticator_Paused",
-    "type": "error"
-  },
-  {
     "inputs": [
       {
         "internalType": "address",
@@ -568,6 +556,11 @@
   {
     "inputs": [],
     "name": "InvalidInitialization",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "InvalidSignature",
     "type": "error"
   },
   {

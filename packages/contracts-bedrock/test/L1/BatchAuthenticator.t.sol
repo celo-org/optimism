@@ -263,22 +263,22 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         assertFalse(BatchAuthenticator(address(proxy)).activeIsEspresso());
     }
 
-    /// @notice Test that switchBatcher can be called by owner or guardian.
-    function test_switchBatcher_ownerOrGuardian_succeeds() external {
+    /// @notice Test that setActiveIsEspresso can be called by owner or guardian.
+    function test_setActiveIsEspresso_ownerOrGuardian_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
-        // ProxyAdmin owner (now contract owner) can switch.
+        // ProxyAdmin owner (now contract owner) can set.
         vm.expectEmit(true, false, false, false);
         emit BatcherSwitched(false);
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
-        // Switch back.
+        // Set back.
         vm.expectEmit(true, false, false, false);
         emit BatcherSwitched(true);
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(true);
         assertTrue(authenticator.activeIsEspresso());
 
         // Add a guardian.
@@ -286,33 +286,63 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         authenticator.addGuardian(guardian);
         assertTrue(authenticator.isGuardian(guardian));
 
-        // Guardian can switch.
+        // Guardian can set.
         vm.expectEmit(true, false, false, false);
         emit BatcherSwitched(false);
         vm.prank(guardian);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
-        // Guardian can switch back.
+        // Guardian can set back.
         vm.expectEmit(true, false, false, false);
         emit BatcherSwitched(true);
         vm.prank(guardian);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(true);
         assertTrue(authenticator.activeIsEspresso());
 
-        // Unauthorized cannot switch.
+        // Unauthorized cannot set.
         vm.prank(unauthorized);
         vm.expectRevert(
             abi.encodeWithSelector(OwnableWithGuardiansUpgradeable.NotGuardianOrOwner.selector, unauthorized)
         );
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
 
-        // ProxyAdmin cannot switch.
+        // ProxyAdmin cannot set.
         vm.prank(address(proxyAdmin));
         vm.expectRevert(
             abi.encodeWithSelector(OwnableWithGuardiansUpgradeable.NotGuardianOrOwner.selector, address(proxyAdmin))
         );
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
+    }
+
+    /// @notice `setActiveIsEspresso` is a no-op (and emits no event) when the
+    ///         desired value already matches the current state.
+    function test_setActiveIsEspresso_noChange_noOps() external {
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+
+        // Initial state is `activeIsEspresso == true`.
+        assertTrue(authenticator.activeIsEspresso());
+
+        // Re-setting to `true` must NOT emit `BatcherSwitched`. `vm.recordLogs`
+        // captures every emitted log; asserting zero entries proves no event
+        // fired (a narrower `expectEmit(false)` doesn't exist).
+        vm.recordLogs();
+        vm.prank(proxyAdminOwner);
+        authenticator.setActiveIsEspresso(true);
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertTrue(authenticator.activeIsEspresso());
+
+        // Flip to `false` so we can re-test the no-op from the other state.
+        vm.prank(proxyAdminOwner);
+        authenticator.setActiveIsEspresso(false);
+        assertFalse(authenticator.activeIsEspresso());
+
+        // Re-setting to `false` is also a no-op.
+        vm.recordLogs();
+        vm.prank(proxyAdminOwner);
+        authenticator.setActiveIsEspresso(false);
+        assertEq(vm.getRecordedLogs().length, 0);
+        assertFalse(authenticator.activeIsEspresso());
     }
 
     /// @notice Test that authenticateBatchInfo works correctly.
@@ -613,7 +643,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
         // Switch batcher to test boolean flag preservation.
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
         // Deploy new implementation and upgrade.
@@ -638,7 +668,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
         // Switch to fallback mode.
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
         // Configure the SystemConfig batcher to a known address.
@@ -662,7 +692,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
         // Switch to fallback mode.
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
         address fallbackBatcher = address(0xCAFE);
@@ -763,7 +793,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         vm.expectEmit(true, false, false, false);
         emit BatcherSwitched(false);
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
         // 3. Fallback path: only the configured batcher may authenticate; signature is ignored.
@@ -788,7 +818,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         vm.expectEmit(true, false, false, false);
         emit BatcherSwitched(true);
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(true);
         assertTrue(authenticator.activeIsEspresso());
 
         // 5. Espresso path again with a new commitment — registration must have survived
@@ -946,17 +976,17 @@ contract BatchAuthenticator_Fork_Test is Test {
         assertEq(admin, address(proxyAdmin));
     }
 
-    /// @notice Test switchBatcher on the fork.
-    function test_switchBatcher_succeeds() external {
+    /// @notice Test setActiveIsEspresso on the fork.
+    function test_setActiveIsEspresso_succeeds() external {
         assertTrue(authenticator.activeIsEspresso());
 
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
 
         assertFalse(authenticator.activeIsEspresso());
 
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(true);
 
         assertTrue(authenticator.activeIsEspresso());
     }
@@ -995,7 +1025,7 @@ contract BatchAuthenticator_Fork_Test is Test {
 
         // Switch batcher
         vm.prank(proxyAdminOwner);
-        authenticator.switchBatcher();
+        authenticator.setActiveIsEspresso(false);
         assertFalse(authenticator.activeIsEspresso());
 
         // Deploy new implementation and upgrade.
