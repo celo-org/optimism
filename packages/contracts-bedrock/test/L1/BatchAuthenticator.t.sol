@@ -619,11 +619,12 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         assertEq(authenticator.espressoBatcherAtBlock(f3 + 100), b3);
     }
 
-    /// @notice `espressoBatcherAt` reverts on out-of-bounds index.
+    /// @notice `espressoBatcherAt` reverts on out-of-bounds index. The revert is the
+    ///         default Solidity array-out-of-bounds panic (0x32) from `Checkpoints.at`.
     function test_espressoBatcherAt_outOfBounds_reverts() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
         // length == 1, so index 1 is out of bounds.
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(bytes4(0x4e487b71), uint256(0x32)));
         authenticator.espressoBatcherAt(1);
     }
 

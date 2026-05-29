@@ -71,9 +71,9 @@
   {
     "inputs": [
       {
-        "internalType": "uint256",
+        "internalType": "uint32",
         "name": "index",
-        "type": "uint256"
+        "type": "uint32"
       }
     ],
     "name": "espressoBatcherAt",
@@ -536,6 +536,11 @@
     ],
     "name": "SignerRegistrationInitiated",
     "type": "event"
+  },
+  {
+    "inputs": [],
+    "name": "CheckpointUnorderedInsertion",
+    "type": "error"
   },
   {
     "inputs": [
