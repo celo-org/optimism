@@ -3,6 +3,7 @@ pragma solidity ^0.8.0;
 
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable-v5/access/OwnableUpgradeable.sol";
 import { ECDSA } from "@openzeppelin/contracts-v5/utils/cryptography/ECDSA.sol";
+import { Checkpoints } from "@openzeppelin/contracts-v5/utils/structs/Checkpoints.sol";
 import { ISemver } from "interfaces/universal/ISemver.sol";
 // espresso: use direct paths (not @espresso-tee-contracts/ remapping) so that Foundry's
 // context-specific remappings correctly apply to files within lib/espresso-tee-contracts/.
@@ -23,16 +24,7 @@ contract BatchAuthenticator is
     ProxyAdminOwnedBase,
     ReinitializableBase
 {
-    /// @notice One epoch in the Espresso-batcher history. The address is the
-    ///         authorized Espresso batcher signer starting at L1 block
-    ///         `fromBlock`. It remains the authorized batcher until the next
-    ///         entry's `fromBlock`, or — for the last entry — indefinitely.
-    /// @dev    `address` (20 bytes) + `uint64` (8 bytes) packs into a single
-    ///         storage slot.
-    struct EspressoBatcherEntry {
-        address batcher;
-        uint64 fromBlock;
-    }
+    using Checkpoints for Checkpoints.Trace160;
 
     /// @notice Semantic version.
     /// @custom:semver 1.2.0
@@ -48,9 +40,13 @@ contract BatchAuthenticator is
     /// @notice The SystemConfig contract, used to resolve the fallback batcher address.
     ISystemConfig public systemConfig;
 
-    /// @notice Append-only history of authorized Espresso batcher addresses
-    ///         and the L1 block at which each became active.
-    EspressoBatcherEntry[] internal _espressoBatcherHistory;
+    /// @notice Append-only history of authorized Espresso batcher addresses keyed by the L1 block
+    ///         at which each became active.
+    /// @dev    `Trace160` is OZ's `(uint96 key, uint160 value)` checkpoint variant — `uint160`
+    ///         exactly fits an address with no waste, and `uint96` easily covers L1 block numbers.
+    ///         An entry remains the authorized batcher until the next entry's key, or — for the
+    ///         last entry — indefinitely. 
+    Checkpoints.Trace160 internal _espressoBatcherHistory;
 
     /// @notice Constructor disables initializers on implementation
     constructor() ReinitializableBase(1) {
@@ -90,10 +86,10 @@ contract BatchAuthenticator is
         // history entries and emit a misleading `EspressoBatcherUpdated` event.
         // To update the batcher after deployment, callers must use
         // `setEspressoBatcher`.
-        if (_espressoBatcherHistory.length == 0) {
-            uint64 fromBlock = uint64(block.number);
-            _espressoBatcherHistory.push(EspressoBatcherEntry({ batcher: _espressoBatcher, fromBlock: fromBlock }));
-            emit EspressoBatcherUpdated(address(0), _espressoBatcher, fromBlock);
+        if (_espressoBatcherHistory.length() == 0) {
+            uint96 fromBlock = uint96(block.number);
+            _espressoBatcherHistory.push(fromBlock, uint160(_espressoBatcher));
+            emit EspressoBatcherUpdated(address(0), _espressoBatcher, uint64(fromBlock));
         }
     }
 
@@ -116,63 +112,37 @@ contract BatchAuthenticator is
 
     /// @notice Updates the Espresso batcher address.
     function setEspressoBatcher(address _newEspressoBatcher) external onlyOwner {
-        EspressoBatcherEntry storage last = _espressoBatcherHistory[_espressoBatcherHistory.length - 1];
-        address oldEspressoBatcher = last.batcher;
+        address oldEspressoBatcher = espressoBatcher();
         if (_newEspressoBatcher == oldEspressoBatcher) revert NoChange(_newEspressoBatcher);
 
-        uint64 fromBlock = uint64(block.number);
-        // If a previous update already happened in this same L1 block, overwrite the last
-        // entry rather than appending a new one. This preserves the invariant that
-        // `fromBlock` values are strictly increasing across history entries, which the
-        // binary search in `espressoBatcherAtBlock` relies on.
-        if (last.fromBlock == fromBlock) {
-            last.batcher = _newEspressoBatcher;
-        } else {
-            _espressoBatcherHistory.push(EspressoBatcherEntry({ batcher: _newEspressoBatcher, fromBlock: fromBlock }));
-        }
-        emit EspressoBatcherUpdated(oldEspressoBatcher, _newEspressoBatcher, fromBlock);
+        uint96 fromBlock = uint96(block.number);
+        _espressoBatcherHistory.push(fromBlock, uint160(_newEspressoBatcher));
+        emit EspressoBatcherUpdated(oldEspressoBatcher, _newEspressoBatcher, uint64(fromBlock));
     }
 
-    /// @notice Returns the currently-active Espresso batcher address.
+    /// @notice Returns the currently-active Espresso batcher address (the value of the most
+    ///         recent history entry).
     function espressoBatcher() public view returns (address) {
-        return _espressoBatcherHistory[_espressoBatcherHistory.length - 1].batcher;
+        return address(_espressoBatcherHistory.latest());
     }
 
     /// @notice Number of entries in the Espresso batcher history.
     function espressoBatcherHistoryLength() external view returns (uint256) {
-        return _espressoBatcherHistory.length;
+        return _espressoBatcherHistory.length();
     }
 
-    /// @notice Returns the Espresso batcher history entry at `index`
-    ///         (oldest first). Reverts on out-of-bounds index (default
-    ///         Solidity array bounds check).
-    function espressoBatcherAt(uint256 index) external view returns (address batcher, uint64 fromBlock) {
-        EspressoBatcherEntry storage entry = _espressoBatcherHistory[index];
-        return (entry.batcher, entry.fromBlock);
+    /// @notice Returns the Espresso batcher history entry at `index` (oldest first).
+    ///         Reverts on out-of-bounds index.
+    function espressoBatcherAt(uint32 index) external view returns (address batcher, uint64 fromBlock) {
+        Checkpoints.Checkpoint160 memory ckpt = _espressoBatcherHistory.at(index);
+        return (address(ckpt._value), uint64(ckpt._key));
     }
 
     /// @notice Returns the Espresso batcher address that was authorized at
     ///         L1 block `l1Block`. Returns `address(0)` if `l1Block` precedes
-    ///         the first entry. Uses binary search; history is monotonically
-    ///         non-decreasing by `fromBlock`.
+    ///         the first entry.
     function espressoBatcherAtBlock(uint64 l1Block) external view returns (address) {
-        uint256 len = _espressoBatcherHistory.length;
-
-        if (len == 0) return address(0);
-        if (l1Block < _espressoBatcherHistory[0].fromBlock) return address(0);
-
-        // Binary search for the greatest entry with `fromBlock <= l1Block`.
-        uint256 lo = 0;
-        uint256 hi = len; // exclusive upper bound
-        while (lo + 1 < hi) {
-            uint256 mid = (lo + hi) >> 1;
-            if (_espressoBatcherHistory[mid].fromBlock <= l1Block) {
-                lo = mid;
-            } else {
-                hi = mid;
-            }
-        }
-        return _espressoBatcherHistory[lo].batcher;
+        return address(_espressoBatcherHistory.upperLookupRecent(uint96(l1Block)));
     }
 
     function authenticateBatchInfo(bytes32 _commitment, bytes calldata _signature) external {
