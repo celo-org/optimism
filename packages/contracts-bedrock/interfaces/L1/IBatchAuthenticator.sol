@@ -63,7 +63,7 @@ interface IBatchAuthenticator {
 
     function systemConfig() external view returns (ISystemConfig);
 
-    function switchBatcher() external;
+    function setActiveIsEspresso(bool _desired) external;
 
     function setEspressoBatcher(address _newEspressoBatcher) external;
 }

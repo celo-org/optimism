@@ -102,10 +102,16 @@ contract BatchAuthenticator is
         return super.owner();
     }
 
-    /// @notice Toggles the active batcher between the Espresso and fallback batcher.
-    function switchBatcher() external onlyGuardianOrOwner {
-        activeIsEspresso = !activeIsEspresso;
-        emit BatcherSwitched(activeIsEspresso);
+    /// @notice Sets which batcher is active. Pass `true` to activate the Espresso batcher, or
+    ///         `false` to activate the fallback batcher. This is intentionally a setter rather
+    ///         than a toggle so that guardian/owner intent is explicit at the call site — the
+    ///         caller must name the target mode rather than rely on the contract's current state.
+    ///         No-ops (and skips the `BatcherSwitched` event) when `_desired` already matches
+    ///         the current state, so off-chain indexers only ever see real transitions.
+    function setActiveIsEspresso(bool _desired) external onlyGuardianOrOwner {
+        if (activeIsEspresso == _desired) return;
+        activeIsEspresso = _desired;
+        emit BatcherSwitched(_desired);
     }
 
     /// @notice Updates the Espresso batcher address.
