@@ -41,8 +41,8 @@ interface IBatchAuthenticator {
 
     function owner() external view returns (address);
 
-    /// @notice Returns the currently-active Espresso batcher address (the
-    ///         `batcher` field of the latest history entry).
+    /// @notice Returns the currently-active Espresso batcher address (the value of the
+    ///         latest history entry).
     function espressoBatcher() external view returns (address);
 
     /// @notice Number of entries in the Espresso batcher history.
@@ -50,11 +50,11 @@ interface IBatchAuthenticator {
 
     /// @notice Returns the Espresso batcher history entry at `index`
     ///         (oldest first). Reverts on out-of-bounds index.
-    function espressoBatcherAt(uint256 index) external view returns (address batcher, uint64 fromBlock);
+    function espressoBatcherAt(uint32 index) external view returns (address batcher, uint64 fromBlock);
 
     /// @notice Returns the Espresso batcher address that was authorized at
-    ///         L1 block `l1Block`. Returns `address(0)` if `l1Block` precedes
-    ///         the first entry.
+    ///         L1 block `l1Block`. Returns `address(0)` if `l1Block` precedes the first
+    ///         entry.
     function espressoBatcherAtBlock(uint64 l1Block) external view returns (address);
 
     function registerSigner(bytes memory verificationData, bytes memory data) external;
