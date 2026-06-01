@@ -39,7 +39,6 @@ compilation_restrictions = [
   { paths = "src/L1/opcm/OPContractsManagerUtils.sol", optimizer_runs = 5000 },
   { paths = "src/L1/opcm/OPContractsManagerUtilsCaller.sol", optimizer_runs = 5000 },
   { paths = "src/L1/OptimismPortal2.sol", optimizer_runs = 5000 },
-  { paths = "src/L1/StandardValidator.sol", optimizer_runs = 5000 },
   { paths = "src/universal/StorageSetter.sol", optimizer_runs = 5000 }
 ]
 
@@ -192,8 +191,7 @@ compilation_restrictions = [
   { paths = "src/L1/opcm/OPContractsManagerUtils.sol", optimizer_runs = 0 },
   { paths = "src/L1/opcm/OPContractsManagerUtilsCaller.sol", optimizer_runs = 0 },
   { paths = "src/L1/OptimismPortal2.sol", optimizer_runs = 0 },
-  { paths = "src/universal/StorageSetter.sol", optimizer_runs = 0 },
-  { paths = "src/L1/StandardValidator.sol", optimizer_runs = 5000 }
+  { paths = "src/universal/StorageSetter.sol", optimizer_runs = 0 }
 ]
 # Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
 jobs = 1
