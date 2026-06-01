@@ -9,8 +9,6 @@ import { IBatchAuthenticator } from "interfaces/L1/IBatchAuthenticator.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IEspressoNitroTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoNitroTEEVerifier.sol";
 import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
-import { EspressoTEEVerifier } from "@espresso-tee-contracts/EspressoTEEVerifier.sol";
-import { EspressoNitroTEEVerifier } from "@espresso-tee-contracts/EspressoNitroTEEVerifier.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
@@ -262,12 +260,25 @@ contract DeployEspresso is Script {
         // Deploy the implementation and initialize with the configured owner. The contract uses
         // OZ Ownable2Step under the hood, so setting the final owner via `initialize` avoids
         // the two-step transfer dance.
-        vm.broadcast(msg.sender);
-        EspressoTEEVerifier teeImpl = new EspressoTEEVerifier();
-        vm.label(address(teeImpl), "TEEVerifierImpl");
+        // Use vm.getCode against the submodule's own out/ to avoid pulling the impl closure
+        // (TEEHelper, JournalValidation, aws-nitro-enclave-attestation) into OP's compile group.
+        address payable teeImplAddr;
+        {
+            bytes memory teeImplCode =
+                vm.getCode("lib/espresso-tee-contracts/out/EspressoTEEVerifier.sol/EspressoTEEVerifier.json");
+            vm.broadcast(msg.sender);
+            assembly {
+                teeImplAddr := create(0, add(teeImplCode, 0x20), mload(teeImplCode))
+            }
+            require(teeImplAddr != address(0), "DeployEspresso: EspressoTEEVerifier impl deployment failed");
+        }
+        IEspressoTEEVerifier teeImpl = IEspressoTEEVerifier(teeImplAddr);
+        vm.label(teeImplAddr, "TEEVerifierImpl");
 
-        bytes memory initData =
-            abi.encodeCall(EspressoTEEVerifier.initialize, (proxyAdminOwner, IEspressoNitroTEEVerifier(address(0))));
+        // initialize(address _owner, address _espressoNitroTEEVerifier)
+        bytes memory initData = abi.encodeWithSignature(
+            "initialize(address,address)", proxyAdminOwner, address(0)
+        );
         vm.broadcast(msg.sender);
         proxyAdmin.upgradeAndCall(teeProxyAddr, address(teeImpl), initData);
 
@@ -277,9 +288,24 @@ contract DeployEspresso is Script {
         }
 
         // Deploy NitroTEEVerifier (no proxy; it stores teeProxy for access control).
-        vm.broadcast(msg.sender);
-        EspressoNitroTEEVerifier nitroVerifier = new EspressoNitroTEEVerifier(teeProxyAddr, _nitroEnclaveVerifier);
-        vm.label(address(nitroVerifier), "NitroTEEVerifier");
+        // Use vm.getCode against the submodule's own out/ to avoid pulling the impl closure
+        // into OP's compile group.
+        address nitroVerifierAddr;
+        {
+            bytes memory nitroImplCode = abi.encodePacked(
+                vm.getCode(
+                    "lib/espresso-tee-contracts/out/EspressoNitroTEEVerifier.sol/EspressoNitroTEEVerifier.json"
+                ),
+                abi.encode(teeProxyAddr, _nitroEnclaveVerifier)
+            );
+            vm.broadcast(msg.sender);
+            assembly {
+                nitroVerifierAddr := create(0, add(nitroImplCode, 0x20), mload(nitroImplCode))
+            }
+            require(nitroVerifierAddr != address(0), "DeployEspresso: EspressoNitroTEEVerifier deployment failed");
+        }
+        IEspressoNitroTEEVerifier nitroVerifier = IEspressoNitroTEEVerifier(nitroVerifierAddr);
+        vm.label(nitroVerifierAddr, "NitroTEEVerifier");
 
         // Wire the verifier into the TEE verifier. `setEspressoNitroTEEVerifier` is onlyOwner,
         // so this implicitly requires msg.sender == proxyAdminOwner (same constraint the
