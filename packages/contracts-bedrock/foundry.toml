@@ -93,13 +93,13 @@ fs_permissions = [
   { access='read', path='./lib/superchain-registry/superchain/extra/' },
   { access='read', path='./lib/superchain-registry/validation/standard/' },
   { access='read', path='../../op-core/nuts/' },
+  { access='read', path='./lib/espresso-tee-contracts/out/' },
 ]
 
 # 5159 = selfdestruct deprecation
 # 8429 = virtual modifiers deprecated (solc 0.8.31, triggered by solmate)
 # 2424 = natspec memory-safe-assembly comment deprecated (solc 0.8.31, triggered by forge-std)
-# 6321 = unnamed return variable; 5667 = unused param (lib/espresso-tee-contracts mocks); 1878 = missing SPDX (lib/espresso-tee-contracts scripts)
-ignored_error_codes = ["transient-storage", "code-size", "init-code-size", "too-many-warnings", 5159, 8429, 2424, 6321, 5667, 1878]
+ignored_error_codes = ["transient-storage", "code-size", "init-code-size", "too-many-warnings", 5159, 8429, 2424]
 deny = "warnings"
 ffi = true
 
@@ -109,13 +109,6 @@ ffi = true
 # limit prior to https://github.com/foundry-rs/foundry/pull/8274. Due to toml-rs limitations, if
 # you increase the gas limit above this value it must be a string.
 gas_limit = 9223372036854775807
-
-# Disable forge lint during build so 287+ linter warnings (e.g. unsafe-typecast) don't fail the build.
-# Run `forge lint` separately when fixing style.
-# Note: [lint] is a Foundry 1.5+ top-level section. Forge 1.2.x treats it as a deprecated profile
-# notation and emits a harmless warning; lint_on_build has no effect there (feature didn't exist yet).
-[lint]
-lint_on_build = false
 
 [fuzz]
 runs = 64
