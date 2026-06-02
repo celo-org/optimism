@@ -572,6 +572,24 @@ func TestConfig_Check(t *testing.T) {
 			modifier:    func(cfg *Config) { cfg.L2ChainID = big.NewInt(0) },
 			expectedErr: ErrL2ChainIDNotPositive,
 		},
+		{
+			name: "EspressoEnabledWithoutBatchAuthenticatorAddress",
+			modifier: func(cfg *Config) {
+				espressoTime := uint64(1)
+				cfg.EspressoTime = &espressoTime
+				cfg.BatchAuthenticatorAddress = common.Address{}
+			},
+			expectedErr: ErrMissingBatchAuthenticatorAddress,
+		},
+		{
+			name: "EspressoEnabledWithBatchAuthenticatorAddress",
+			modifier: func(cfg *Config) {
+				espressoTime := uint64(1)
+				cfg.EspressoTime = &espressoTime
+				cfg.BatchAuthenticatorAddress = common.Address{0x01}
+			},
+			expectedErr: nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

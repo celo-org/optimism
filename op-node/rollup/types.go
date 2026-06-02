@@ -38,6 +38,8 @@ var (
 	ErrChainIDsSame                  = errors.New("L1 and L2 chain IDs must be different")
 	ErrL1ChainIDNotPositive          = errors.New("L1 chain ID must be non-zero and positive")
 	ErrL2ChainIDNotPositive          = errors.New("L2 chain ID must be non-zero and positive")
+
+	ErrMissingBatchAuthenticatorAddress = errors.New("missing batch authenticator address when Espresso is enabled")
 )
 
 type Genesis struct {
@@ -384,6 +386,12 @@ func (cfg *Config) Check() error {
 	}
 	if err := checkFork(cfg.HoloceneTime, cfg.IsthmusTime, forks.Holocene, forks.Isthmus); err != nil {
 		return err
+	}
+
+	// When Espresso is enabled, batches must be authenticated via BatchInfoAuthenticated events
+	// emitted by the BatchAuthenticator contract, so a non-zero authenticator address is required.
+	if cfg.EspressoTime != nil && cfg.BatchAuthenticatorAddress == (common.Address{}) {
+		return ErrMissingBatchAuthenticatorAddress
 	}
 
 	return nil
