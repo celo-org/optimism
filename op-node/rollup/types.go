@@ -174,7 +174,11 @@ type Config struct {
 	// accepted based on the L1 transaction sender matching the SystemConfig batcher address.
 	// Post-fork, batches must be authenticated via BatchInfoAuthenticated events emitted by
 	// the BatchAuthenticator contract; sender-based authorization is rejected.
-	// Active if EspressoTime != nil && L2 block timestamp >= *EspressoTime.
+	// EspressoTime is conceptually an L2-timestamp fork activation time, but the
+	// derivation pipeline gates on it by comparing against the L1 origin time of the
+	// enclosing L1 block (the L2 epoch's L1 origin), mirroring upstream's ecotoneTime
+	// treatment, to keep a consistent batch-authorization decision per L2 epoch.
+	// Active if EspressoTime != nil && the block's L1 origin time >= *EspressoTime.
 	EspressoTime *uint64 `json:"espresso_time,omitempty"`
 
 	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
