@@ -143,6 +143,7 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 		batchInboxAddress:         batchInboxAddr,
 		batchAuthenticatorAddress: authenticatorAddr,
 		batchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
+		batchAuthCaches:           NewBatchAuthCaches(espresso.DefaultBatchAuthLookbackWindow),
 		espressoTime:              &espressoTime,
 	}
 
