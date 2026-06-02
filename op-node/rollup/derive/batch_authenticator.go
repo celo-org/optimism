@@ -3,7 +3,6 @@ package derive
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 
@@ -21,49 +20,30 @@ var (
 	// The commitment is an unindexed (data) argument; only caller is indexed.
 	BatchInfoAuthenticatedABI     = "BatchInfoAuthenticated(bytes32,address)"
 	BatchInfoAuthenticatedABIHash = crypto.Keccak256Hash([]byte(BatchInfoAuthenticatedABI))
-
-	// batchAuthCache is a global LRU cache mapping L1 block hash to the set of
-	// authenticated batch commitments found in that block's receipts, where each
-	// commitment maps to the caller (the address that emitted the auth event).
-	// Keyed by block hash so it is naturally reorg-safe: after a reorg the
-	// parent-hash traversal follows a different chain and stale entries are
-	// never hit. Thread-safe via lru.Cache's internal mutex.
-	batchAuthCache     *lru.Cache[common.Hash, map[common.Hash]common.Address]
-	batchAuthCacheOnce sync.Once
-
-	// blockRefCache is a global LRU cache mapping L1 block hash to its L1BlockRef.
-	// This avoids redundant L1BlockRefByHash RPC calls during the lookback window
-	// traversal: consecutive L1 blocks share ~99 blocks in their lookback windows,
-	// so almost every parent-hash lookup hits the cache after the first full traversal.
-	// Keyed by block hash for natural reorg safety (same rationale as batchAuthCache).
-	blockRefCache     *lru.Cache[common.Hash, eth.L1BlockRef]
-	blockRefCacheOnce sync.Once
 )
 
-// resetBatchAuthCaches resets both global caches (receipt and block ref).
-// This is only intended for use in tests to ensure isolation between test cases.
-func resetBatchAuthCaches() {
-	batchAuthCache = nil
-	batchAuthCacheOnce = sync.Once{}
-	blockRefCache = nil
-	blockRefCacheOnce = sync.Once{}
+// BatchAuthCaches holds the LRU caches used by CollectAuthenticatedBatches.
+// Keyed by block hash so they are naturally reorg-safe: after a reorg the
+// parent-hash traversal follows a different chain and stale entries are
+// never hit. Thread-safe via lru.Cache's internal mutex.
+type BatchAuthCaches struct {
+	// AuthCache maps L1 block hash to the set of authenticated batch
+	// commitments found in that block's receipts, where each commitment maps to
+	// the caller (the address that emitted the auth event).
+	AuthCache *lru.Cache[common.Hash, map[common.Hash]common.Address]
+	// RefCache maps L1 block hash to its L1BlockRef, avoiding redundant
+	// L1BlockRefByHash RPC calls during lookback window traversal.
+	RefCache *lru.Cache[common.Hash, eth.L1BlockRef]
 }
 
-func getCache[T any](cache **lru.Cache[common.Hash, T], once *sync.Once, size int) *lru.Cache[common.Hash, T] {
-	once.Do(func() {
-		// lookbackWindow past blocks + 1 current block + 1 LRU overhead.
-		// lru.New only errors on size <= 0.
-		*cache, _ = lru.New[common.Hash, T](size + 2)
-	})
-	return *cache
-}
-
-func getBatchAuthCache(lookbackWindow uint64) *lru.Cache[common.Hash, map[common.Hash]common.Address] {
-	return getCache(&batchAuthCache, &batchAuthCacheOnce, int(lookbackWindow))
-}
-
-func getBlockRefCache(lookbackWindow uint64) *lru.Cache[common.Hash, eth.L1BlockRef] {
-	return getCache(&blockRefCache, &blockRefCacheOnce, int(lookbackWindow))
+// NewBatchAuthCaches creates caches sized for the given lookback window.
+func NewBatchAuthCaches(lookbackWindow uint64) *BatchAuthCaches {
+	// lookbackWindow past blocks + 1 current block + 1 LRU overhead.
+	// lru.New only errors on size <= 0.
+	size := int(lookbackWindow) + 2
+	authCache, _ := lru.New[common.Hash, map[common.Hash]common.Address](size)
+	refCache, _ := lru.New[common.Hash, eth.L1BlockRef](size)
+	return &BatchAuthCaches{AuthCache: authCache, RefCache: refCache}
 }
 
 // ComputeCalldataBatchHash computes keccak256(calldata), matching the BatchAuthenticator
@@ -121,10 +101,10 @@ func collectAuthEventsFromReceipts(receipts types.Receipts, authenticatorAddr co
 // The scan walks newest block to oldest; when the same commitment is authenticated
 // in more than one block, the newest event's caller is retained.
 //
-// Results are cached per block hash in a global LRU cache. For consecutive L1 blocks
-// the lookback windows overlap by ~99 blocks, so only one new block's receipts need
-// to be fetched on each call. The cache is keyed by block hash (not number) so it is
-// naturally reorg-safe.
+// Results are cached per block hash in the provided BatchAuthCaches. For consecutive
+// L1 blocks the lookback windows overlap by ~99 blocks, so only one new block's
+// receipts need to be fetched on each call. The cache is keyed by block hash (not
+// number) so it is naturally reorg-safe.
 //
 // Using event scanning (rather than L1 contract state reads) keeps the derivation
 // pipeline compatible with the op-program fault proof environment, which can only
@@ -135,10 +115,11 @@ func CollectAuthenticatedBatches(
 	ref eth.L1BlockRef,
 	authenticatorAddr common.Address,
 	lookbackWindow uint64,
+	caches *BatchAuthCaches,
 	logger log.Logger,
 ) (map[common.Hash]common.Address, error) {
-	cache := getBatchAuthCache(lookbackWindow)
-	refCache := getBlockRefCache(lookbackWindow)
+	cache := caches.AuthCache
+	refCache := caches.RefCache
 
 	// Cache the starting block ref so future calls that traverse through this
 	// block (as part of their lookback window) can resolve it without an RPC call.

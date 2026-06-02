@@ -48,12 +48,18 @@ type DataSourceFactory struct {
 }
 
 func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1Fetcher, blobsFetcher L1BlobsFetcher, altDAFetcher AltDAInputFetcher) *DataSourceFactory {
+	lookbackWindow := cfg.BatchAuthLookbackWindowOrDefault()
+	var caches *BatchAuthCaches
+	if cfg.EspressoTime != nil {
+		caches = NewBatchAuthCaches(lookbackWindow)
+	}
 	config := DataSourceConfig{
 		l1Signer:                  cfg.L1Signer(),
 		batchInboxAddress:         cfg.BatchInboxAddress,
 		altDAEnabled:              cfg.AltDAEnabled(),
 		batchAuthenticatorAddress: cfg.BatchAuthenticatorAddress,
-		batchAuthLookbackWindow:   cfg.BatchAuthLookbackWindowOrDefault(),
+		batchAuthLookbackWindow:   lookbackWindow,
+		batchAuthCaches:           caches,
 		espressoTime:              cfg.EspressoTime,
 	}
 	return &DataSourceFactory{
@@ -104,6 +110,9 @@ type DataSourceConfig struct {
 	batchAuthenticatorAddress common.Address
 	// batchAuthLookbackWindow is the number of L1 blocks to scan for BatchInfoAuthenticated events.
 	batchAuthLookbackWindow uint64
+	// batchAuthCaches holds the LRU caches for batch authentication lookback
+	// window traversal. Nil when Espresso is not configured.
+	batchAuthCaches *BatchAuthCaches
 	// espressoTime is the activation timestamp of the Espresso hardfork. When the
 	// L1 origin time of the block being scanned is >= *espressoTime (and this
 	// pointer is non-nil), batches must be authenticated by emitted
