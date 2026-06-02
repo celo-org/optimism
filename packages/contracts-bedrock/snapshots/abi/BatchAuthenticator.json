@@ -681,6 +681,22 @@
         "type": "address"
       }
     ],
+    "name": "UnauthorizedEspressoBatcher",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "sender",
+        "type": "address"
+      },
+      {
+        "internalType": "address",
+        "name": "expected",
+        "type": "address"
+      }
+    ],
     "name": "UnauthorizedFallbackBatcher",
     "type": "error"
   }
