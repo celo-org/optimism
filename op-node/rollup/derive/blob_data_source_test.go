@@ -140,12 +140,14 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 	signer := types.NewPragueSigner(chainId)
 	espressoTime := uint64(0)
 	config := DataSourceConfig{
-		l1Signer:                  signer,
-		batchInboxAddress:         batchInboxAddr,
-		batchAuthenticatorAddress: authenticatorAddr,
-		batchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
-		batchAuthCaches:           NewBatchAuthCaches(espresso.DefaultBatchAuthLookbackWindow),
-		espressoTime:              &espressoTime,
+		l1Signer:          signer,
+		batchInboxAddress: batchInboxAddr,
+		rollupCfg: &rollup.Config{
+			EspressoTime:              &espressoTime,
+			BatchAuthenticatorAddress: authenticatorAddr,
+			BatchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
+		},
+		batchAuthCaches: NewBatchAuthCaches(espresso.DefaultBatchAuthLookbackWindow),
 	}
 
 	ctx := context.Background()
