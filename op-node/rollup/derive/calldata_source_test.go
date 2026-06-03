@@ -139,11 +139,12 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 
 	espressoTime := uint64(0)
 	dsCfg := DataSourceConfig{
-		l1Signer:                  signer,
-		batchInboxAddress:         batchInboxAddr,
-		batchAuthenticatorAddress: authenticatorAddr,
-		batchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
-		espressoTime:              &espressoTime,
+		l1Signer:          signer,
+		batchInboxAddress: batchInboxAddr,
+		rollupCfg: &rollup.Config{
+			EspressoTime:              &espressoTime,
+			BatchAuthenticatorAddress: authenticatorAddr,
+		},
 	}
 
 	ctx := context.Background()
@@ -378,6 +379,7 @@ func TestDataFromEVMTransactions(t *testing.T) {
 		dsCfg := DataSourceConfig{
 			l1Signer:          cfg.L1Signer(),
 			batchInboxAddress: cfg.BatchInboxAddress,
+			rollupCfg:         cfg,
 		}
 		ref := eth.L1BlockRef{Number: 1}
 		// In legacy mode, no L1Fetcher calls are needed for auth (sender check is local)

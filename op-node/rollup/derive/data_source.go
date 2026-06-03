@@ -49,12 +49,10 @@ type DataSourceFactory struct {
 
 func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1Fetcher, blobsFetcher L1BlobsFetcher, altDAFetcher AltDAInputFetcher) *DataSourceFactory {
 	config := DataSourceConfig{
-		l1Signer:                  cfg.L1Signer(),
-		batchInboxAddress:         cfg.BatchInboxAddress,
-		altDAEnabled:              cfg.AltDAEnabled(),
-		batchAuthenticatorAddress: cfg.BatchAuthenticatorAddress,
-		batchAuthLookbackWindow:   cfg.BatchAuthLookbackWindowOrDefault(),
-		espressoTime:              cfg.EspressoTime,
+		l1Signer:          cfg.L1Signer(),
+		batchInboxAddress: cfg.BatchInboxAddress,
+		altDAEnabled:      cfg.AltDAEnabled(),
+		rollupCfg:         cfg,
 	}
 	return &DataSourceFactory{
 		log:          log,
@@ -98,26 +96,10 @@ type DataSourceConfig struct {
 	l1Signer          types.Signer
 	batchInboxAddress common.Address
 	altDAEnabled      bool
-	// batchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract.
-	// Event-based authentication via this contract is required only post-Espresso
-	// activation; pre-fork the data source uses upstream sender-based authorization.
-	batchAuthenticatorAddress common.Address
-	// batchAuthLookbackWindow is the number of L1 blocks to scan for BatchInfoAuthenticated events.
-	batchAuthLookbackWindow uint64
-	// espressoTime is the activation timestamp of the Espresso hardfork. When the
-	// L1 origin time of the block being scanned is >= *espressoTime (and this
-	// pointer is non-nil), batches must be authenticated by emitted
-	// BatchInfoAuthenticated events. Otherwise upstream sender-based
-	// authorization applies.
-	espressoTime *uint64
-}
-
-// isEspresso returns true if the Espresso hardfork is active for the given L1
-// origin time. The fork is conceptually an L2-timestamp hardfork but the
-// per-L1-block data-source decision is gated on L1 origin time, mirroring
-// upstream's ecotoneTime treatment.
-func (c DataSourceConfig) isEspresso(l1OriginTime uint64) bool {
-	return c.espressoTime != nil && l1OriginTime >= *c.espressoTime
+	// rollupCfg provides Espresso-specific configuration (EspressoTime,
+	// BatchAuthenticatorAddress, BatchAuthLookbackWindow) consulted when
+	// post-Espresso event-based batch authentication is active.
+	rollupCfg *rollup.Config
 }
 
 // isValidBatchTx checks basic transaction validity for batch submission:
@@ -181,7 +163,7 @@ func isBatchTxAuthorized(
 	l1OriginTime uint64,
 	logger log.Logger,
 ) bool {
-	if !dsCfg.isEspresso(l1OriginTime) {
+	if !dsCfg.rollupCfg.IsEspresso(l1OriginTime) {
 		// Pre-fork: upstream sender-based authorization.
 		return isAuthorizedBatchSender(tx, dsCfg.l1Signer, batcherAddr, logger)
 	}

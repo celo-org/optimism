@@ -99,10 +99,10 @@ func DataFromEVMTransactions(ctx context.Context, dsCfg DataSourceConfig, batche
 	// sender-based authorization path inside isBatchTxAuthorized is used and
 	// the authenticatedHashes map is unused.
 	var authenticatedHashes map[common.Hash]bool
-	if dsCfg.isEspresso(ref.Time) {
+	if dsCfg.rollupCfg.IsEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
-			ctx, fetcher, ref, dsCfg.batchAuthenticatorAddress, dsCfg.batchAuthLookbackWindow, log,
+			ctx, fetcher, ref, dsCfg.rollupCfg.BatchAuthenticatorAddress, dsCfg.rollupCfg.BatchAuthLookbackWindowOrDefault(), log,
 		)
 		if err != nil {
 			return nil, err

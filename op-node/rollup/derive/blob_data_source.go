@@ -132,10 +132,10 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 	// at the L1 origin time of the block we're scanning. Pre-fork, the upstream
 	// sender-based authorization path is used and authenticatedHashes is unused.
 	var authenticatedHashes map[common.Hash]bool
-	if config.isEspresso(ref.Time) {
+	if config.rollupCfg.IsEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
-			ctx, fetcher, ref, config.batchAuthenticatorAddress, config.batchAuthLookbackWindow, logger,
+			ctx, fetcher, ref, config.rollupCfg.BatchAuthenticatorAddress, config.rollupCfg.BatchAuthLookbackWindowOrDefault(), logger,
 		)
 		if err != nil {
 			return nil, nil, err
