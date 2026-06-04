@@ -688,7 +688,8 @@ jobs:
     description: "Build a Rust workspace with target directory caching"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: xlarge
+    # celo: use self-hosted runner
+    resource_class: celo-org/xlarge
     parameters:
       directory:
         description: "Directory containing the Cargo workspace"
@@ -754,7 +755,8 @@ jobs:
   rust-build-submodule:
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: xlarge
+    # celo: use self-hosted runner
+    resource_class: celo-org/xlarge
     parameters:
       directory:
         description: "Directory containing the Cargo workspace"
@@ -3032,10 +3034,12 @@ workflows:
             - slack
 
   l2-fork-test-workflow:
-    when:
-      and:
-        - equal: [true, << pipeline.parameters.c-l2_fork_test_dispatch >>]
-        - equal: ["api", << pipeline.trigger_source >>]
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when:
+    # and:
+    # - equal: [true, << pipeline.parameters.c-l2_fork_test_dispatch >>]
+    # - equal: ["api", << pipeline.trigger_source >>]
     jobs:
       - contracts-bedrock-tests-l2-fork:
           name: contracts-bedrock-tests-l2-fork-dispatch op-mainnet
@@ -3048,10 +3052,12 @@ workflows:
             - slack
 
   scheduled-weekly-tests:
-    when:
-      or:
-        - equal: [build_weekly, <<pipeline.schedule.name>>]
-        - equal: [true, << pipeline.parameters.c-l2_fork_weekly_dispatch >>]
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when:
+    # or:
+    # - equal: [build_weekly, <<pipeline.schedule.name>>]
+    # - equal: [true, << pipeline.parameters.c-l2_fork_weekly_dispatch >>]
     jobs:
       - contracts-bedrock-tests-l2-fork:
           matrix:
@@ -3103,19 +3109,22 @@ workflows:
           features: <<matrix.features>>
           matrix:
             parameters:
+              # celo: trim feature matrix to the variants we ship. The disabled
+              # variants include fault-proof features (CANNON_KONA, ZK_DISPUTE_GAME,
+              # SUPER_ROOT_GAMES_MIGRATION) that Celo does not use.
               features: &features_matrix
                 - main
-                - CUSTOM_GAS_TOKEN
-                - OPTIMISM_PORTAL_INTEROP
+                # - CUSTOM_GAS_TOKEN
+                # - OPTIMISM_PORTAL_INTEROP
                 - OPCM_V2
-                - OPCM_V2,CUSTOM_GAS_TOKEN
-                - OPCM_V2,OPTIMISM_PORTAL_INTEROP
-                - OPCM_V2,ZK_DISPUTE_GAME
-                - OPCM_V2,CANNON_KONA
-                - OPCM_V2,SUPER_ROOT_GAMES_MIGRATION
-                - L2CM
-                - L2CM,CUSTOM_GAS_TOKEN
-                - L2CM,OPTIMISM_PORTAL_INTEROP
+                # - OPCM_V2,CUSTOM_GAS_TOKEN
+                # - OPCM_V2,OPTIMISM_PORTAL_INTEROP
+                # - OPCM_V2,ZK_DISPUTE_GAME
+                # - OPCM_V2,CANNON_KONA
+                # - OPCM_V2,SUPER_ROOT_GAMES_MIGRATION
+                # - L2CM
+                # - L2CM,CUSTOM_GAS_TOKEN
+                # - L2CM,OPTIMISM_PORTAL_INTEROP
           context:
             - circleci-repo-readonly-authenticated-github-token
             - slack

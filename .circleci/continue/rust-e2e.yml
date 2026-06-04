@@ -313,29 +313,30 @@ workflows:
           build_args: --skip test
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - cannon-prestate: &rust-e2e-job-base
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-build-binary: &cannon-kona-host
-          name: cannon-kona-host
-          directory: rust
-          profile: release
-          binary: "kona-host"
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-build-binary: &kona-build-release
-          name: kona-build-release
-          directory: rust
-          profile: release
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - rust-build-binary:
-          name: op-reth-build
-          directory: rust
-          profile: release
-          binary: "op-reth"
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable cannon/fault-proof — Celo uses neither cannon nor fault proofs.
+      # - cannon-prestate: &rust-e2e-job-base
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - rust-build-binary: &cannon-kona-host
+      #     name: cannon-kona-host
+      #     directory: rust
+      #     profile: release
+      #     binary: "kona-host"
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - rust-build-binary: &kona-build-release
+      #     name: kona-build-release
+      #     directory: rust
+      #     profile: release
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - rust-build-binary:
+      #     name: op-reth-build
+      #     directory: rust
+      #     profile: release
+      #     binary: "op-reth"
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       # celo: Skip e2e tests until we support Celo in op-reth and kona-node
       # - rust-e2e-sysgo-tests:
       #     name: rust-e2e-<<matrix.devnet_config>>
@@ -365,15 +366,15 @@ workflows:
       #       - cannon-prestate
       #       - cannon-kona-host
       #       - kona-build-release
-      # Proof tests - single kind only, interop excluded per original config
-      - kona-proof-action-tests:
-          name: kona-proof-action-single
-          kind: single
-          requires:
-            - kona-build-release
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable cannon/fault-proof — kona proof action tests not used by Celo.
+      # - kona-proof-action-tests:
+      #     name: kona-proof-action-single
+      #     kind: single
+      #     requires:
+      #       - kona-build-release
+      #       - contracts-bedrock-build
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       # -----------------------------------------------------------------------
       # Required gate — fans in on all E2E test jobs
       # -----------------------------------------------------------------------
@@ -384,7 +385,9 @@ workflows:
             # - rust-e2e-simple-kona-geth
             # - rust-e2e-simple-kona-sequencer
             # - rust-e2e-restart
-            - kona-proof-action-single
+            # celo: disable cannon/fault-proof — kona proof action tests not used by Celo.
+            # - kona-proof-action-single
+            - contracts-bedrock-build
 
   # Required Rust E2E gate (skip) — runs when no rust changes and no dispatch
   # Just runs action tests
@@ -399,23 +402,25 @@ workflows:
           build_args: --skip test
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - rust-build-binary:
-          name: kona-build-release
-          directory: rust
-          profile: release
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      # Proof tests - single kind only, interop excluded per original config
-      - kona-proof-action-tests:
-          name: kona-proof-action-single
-          kind: single
-          requires:
-            - kona-build-release
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable cannon/fault-proof — kona proof action tests not used by Celo.
+      # - rust-build-binary:
+      #     name: kona-build-release
+      #     directory: rust
+      #     profile: release
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - kona-proof-action-tests:
+      #     name: kona-proof-action-single
+      #     kind: single
+      #     requires:
+      #       - kona-build-release
+      #       - contracts-bedrock-build
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
 
       - required-rust-e2e:
           requires:
-            - kona-proof-action-single
+            # celo: disable cannon/fault-proof — kona proof action tests not used by Celo.
+            # - kona-proof-action-single
+            - contracts-bedrock-build
 

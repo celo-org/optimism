@@ -1054,25 +1054,27 @@ workflows:
 
       # -----------------------------------------------------------------------
       # Kona crate-specific jobs (lint, FPVM builds, benches, coverage)
+      # celo: disable cannon/fault-proof — Celo uses neither cannon nor fault
+      # proofs. General kona linting is still covered by rust-clippy (--workspace).
       # -----------------------------------------------------------------------
-      - kona-cargo-lint:
-          name: kona-lint-cannon
-          target: "cannon"
-          context: *rust-ci-context
+      # - kona-cargo-lint:
+      #     name: kona-lint-cannon
+      #     target: "cannon"
+      #     context: *rust-ci-context
 
-      - kona-build-fpvm:
-          name: kona-build-fpvm-cannon-client
-          target: "cannon-client"
-          context: *rust-ci-context
+      # - kona-build-fpvm:
+      #     name: kona-build-fpvm-cannon-client
+      #     target: "cannon-client"
+      #     context: *rust-ci-context
 
-      - kona-coverage:
-          context: *rust-ci-context
-          requires:
-            - rust-tests
+      # - kona-coverage:
+      #     context: *rust-ci-context
+      #     requires:
+      #       - rust-tests
 
-      - kona-host-client-offline:
-          name: kona-host-client-offline-cannon
-          context: *rust-ci-context
+      # - kona-host-client-offline:
+      #     name: kona-host-client-offline-cannon
+      #     context: *rust-ci-context
 
       # -----------------------------------------------------------------------
       # Required gate — fans in on required Rust CI jobs
@@ -1106,16 +1108,18 @@ workflows:
           cache_profile: debug
           context: *rust-ci-context
 
-      - kona-build-fpvm:
-          name: kona-build-fpvm-cannon-client
-          target: "cannon-client"
-          context: *rust-ci-context
+      # celo: disable cannon/fault-proof — Celo uses neither cannon nor fault proofs.
+      # - kona-build-fpvm:
+      #     name: kona-build-fpvm-cannon-client
+      #     target: "cannon-client"
+      #     context: *rust-ci-context
 
       - required-rust-ci:
           requires:
             - rust-tests
             - op-reth-integration-tests
-            - kona-build-fpvm-cannon-client
+            # celo: disable cannon/fault-proof — kona-build-fpvm removed above.
+            # - kona-build-fpvm-cannon-client
 
   # ==========================================================================
   # Kona scheduled workflows
@@ -1130,11 +1134,13 @@ workflows:
 
   # Kona publish prestate artifacts - on push to develop
   kona-publish-prestates:
-    when:
-      and:
-        - equal: ["develop", <<pipeline.git.branch>>]
-        - equal: ["webhook", << pipeline.trigger_source >>] # Only trigger on push to develop, not scheduled runs
-        - << pipeline.parameters.c-rust_changes_detected >> # Only publish when rust paths changed
+    # celo: disable cannon/fault-proof — Celo does not publish kona fault-proof prestates.
+    when: false
+    # when:
+    # and:
+    # - equal: ["develop", <<pipeline.git.branch>>]
+    # - equal: ["webhook", << pipeline.trigger_source >>] # Only trigger on push to develop, not scheduled runs
+    # - << pipeline.parameters.c-rust_changes_detected >> # Only publish when rust paths changed
     jobs:
       - kona-publish-prestate-artifacts:
           name: kona-publish-<<matrix.version>>
