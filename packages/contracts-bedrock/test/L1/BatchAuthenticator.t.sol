@@ -360,8 +360,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Authenticate.
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(commitment);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(commitment, espressoBatcher);
 
         vm.prank(espressoBatcher);
         authenticator.authenticateBatchInfo(commitment, signature);
@@ -683,8 +683,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         bytes32 commitment = keccak256("fallback commitment");
 
         // The fallback batcher path ignores the signature; pass empty bytes.
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(commitment);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(commitment, fallbackBatcher);
 
         vm.prank(fallbackBatcher);
         authenticator.authenticateBatchInfo(commitment, "");
@@ -752,8 +752,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         // Pause the SystemConfig — authentication must still succeed.
         mockSystemConfig.setPaused(true);
 
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(commitment);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(commitment, espressoBatcher);
         vm.prank(espressoBatcher);
         authenticator.authenticateBatchInfo(commitment, signature);
     }
@@ -789,8 +789,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, _computeEIP712Digest(espressoCommitment1));
         bytes memory espressoSig1 = abi.encodePacked(r, s, v);
 
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(espressoCommitment1);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(espressoCommitment1, espressoBatcher);
         vm.prank(espressoBatcher);
         authenticator.authenticateBatchInfo(espressoCommitment1, espressoSig1);
 
@@ -806,8 +806,8 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
         // 3. Fallback path: only the configured batcher may authenticate; signature is ignored.
         bytes32 fallbackCommitment = keccak256("fallback");
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(fallbackCommitment);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(fallbackCommitment, fallbackBatcher);
         vm.prank(fallbackBatcher);
         authenticator.authenticateBatchInfo(fallbackCommitment, "");
 
@@ -835,14 +835,14 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         (v, r, s) = vm.sign(privateKey, _computeEIP712Digest(espressoCommitment2));
         bytes memory espressoSig2 = abi.encodePacked(r, s, v);
 
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(espressoCommitment2);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(espressoCommitment2, espressoBatcher);
         vm.prank(espressoBatcher);
         authenticator.authenticateBatchInfo(espressoCommitment2, espressoSig2);
     }
 
     // Event declarations for expectEmit.
-    event BatchInfoAuthenticated(bytes32 indexed commitment);
+    event BatchInfoAuthenticated(bytes32 commitment, address indexed caller);
     event SignerRegistrationInitiated(address indexed caller);
     event EspressoBatcherUpdated(
         address indexed oldEspressoBatcher, address indexed newEspressoBatcher, uint64 indexed fromBlock
@@ -1014,8 +1014,8 @@ contract BatchAuthenticator_Fork_Test is Test {
         bytes memory signature = abi.encodePacked(r, s, v);
 
         // Authenticate.
-        vm.expectEmit(true, false, false, false);
-        emit BatchInfoAuthenticated(commitment);
+        vm.expectEmit(true, false, false, true);
+        emit BatchInfoAuthenticated(commitment, espressoBatcher);
         vm.prank(espressoBatcher);
         authenticator.authenticateBatchInfo(commitment, signature);
     }
@@ -1061,7 +1061,7 @@ contract BatchAuthenticator_Fork_Test is Test {
     }
 
     // Event declarations for expectEmit.
-    event BatchInfoAuthenticated(bytes32 indexed commitment);
+    event BatchInfoAuthenticated(bytes32 commitment, address indexed caller);
     event SignerRegistrationInitiated(address indexed caller);
     event EspressoBatcherUpdated(
         address indexed oldEspressoBatcher, address indexed newEspressoBatcher, uint64 indexed fromBlock
