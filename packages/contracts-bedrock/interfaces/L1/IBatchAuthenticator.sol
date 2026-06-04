@@ -18,8 +18,9 @@ interface IBatchAuthenticator {
     /// @notice Error thrown when the Espresso TEE batcher caller does not match the configured espressoBatcher.
     error UnauthorizedEspressoBatcher(address sender, address expected);
 
-    /// @notice Emitted when a batch info is authenticated.
-    event BatchInfoAuthenticated(bytes32 indexed commitment);
+    /// @notice Emitted when a batch info is authenticated. `caller` is the
+    ///         address that invoked `authenticateBatchInfo`.
+    event BatchInfoAuthenticated(bytes32 commitment, address indexed caller);
 
     /// @notice Emitted when a signer registration is initiated through this contract.
     event SignerRegistrationInitiated(address indexed caller);
