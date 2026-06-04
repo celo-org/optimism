@@ -166,7 +166,7 @@ contract BatchAuthenticator is
             if (msg.sender != fallbackBatcher) revert UnauthorizedFallbackBatcher(msg.sender, fallbackBatcher);
         }
 
-        emit BatchInfoAuthenticated(_commitment);
+        emit BatchInfoAuthenticated(_commitment, msg.sender);
     }
 
     /// @notice Permissionless registration of a TEE-generated signer.
