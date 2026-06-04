@@ -5,10 +5,18 @@ import { Script, console } from "forge-std/Script.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
-import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
 
-/// @notice Deploys only the BatchAuthenticator (proxy + impl) against an existing TEEVerifier.
+/// @notice Deploys only the BatchAuthenticator (proxy + impl) against an existing TEEVerifier and
+///         wires the proxy to an existing (shared) OP Stack ProxyAdmin.
+///
+/// @dev The proxy is deployed with the deployer as its transient admin so the deployer can call
+///      `upgradeToAndCall` to initialize it directly, then `changeAdmin` hands the proxy over to the
+///      shared ProxyAdmin (same pattern as DeployAltDA / DeployFeesDepositor).
+///
+/// @dev `_batchAuthenticatorOwner` is the application-level (OZ Ownable / OwnableWithGuardians) owner,
+///      which gates operational setters (setEspressoBatcher, setActiveIsEspresso). It is distinct from
+///      `_proxyAdmin`'s owner, which controls upgrades and `initialize` after the `changeAdmin`.
 ///
 /// Usage:
 ///   forge script scripts/deploy/DeployBatchAuthenticator.s.sol:DeployBatchAuthenticator \
@@ -17,52 +25,41 @@ import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
 ///     --private-key <DEPLOYER_KEY> \
 ///     --verify \
 ///     --etherscan-api-key <API_KEY> \
-///     --sig "run(address,address,address,address)" \
+///     --sig "run(address,address,address,address,address)" \
 ///     <ESPRESSO_BATCHER_ADDRESS> \
 ///     <SYSTEM_CONFIG_ADDRESS> \
 ///     <TEE_VERIFIER_ADDRESS> \
-///     <PROXY_ADMIN_OWNER>
+///     <PROXY_ADMIN_ADDRESS> \
+///     <BATCH_AUTHENTICATOR_OWNER>
 contract DeployBatchAuthenticator is Script {
     function run(
         address _espressoBatcher,
         address _systemConfig,
         address _teeVerifier,
-        address _proxyAdminOwner
+        address _proxyAdmin,
+        address _batchAuthenticatorOwner
     )
         public
     {
         require(_espressoBatcher != address(0), "DeployBatchAuthenticator: espressoBatcher required");
         require(_systemConfig != address(0), "DeployBatchAuthenticator: systemConfig required");
         require(_teeVerifier != address(0), "DeployBatchAuthenticator: teeVerifier required");
+        require(_proxyAdmin != address(0), "DeployBatchAuthenticator: proxyAdmin required");
 
-        if (_proxyAdminOwner == address(0)) {
-            _proxyAdminOwner = msg.sender;
-            console.log("WARN: proxyAdminOwner not set, defaulting to msg.sender");
+        if (_batchAuthenticatorOwner == address(0)) {
+            _batchAuthenticatorOwner = msg.sender;
+            console.log("WARN: batchAuthenticatorOwner not set, defaulting to msg.sender");
         }
 
         vm.startBroadcast(msg.sender);
 
-        // Deploy ProxyAdmin via vm.getCode to avoid importing src/universal/ProxyAdmin.sol or
-        // scripts/libraries/DeployUtils.sol, which would merge into the 0.8.28 compilation group
-        // alongside files that import src/universal/Proxy.sol, creating duplicate Proxy artifacts.
-        IProxyAdmin proxyAdmin;
-        {
-            bytes memory _initCode =
-                abi.encodePacked(vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json"), abi.encode(msg.sender));
-            address payable _addr;
-            assembly {
-                _addr := create(0, add(_initCode, 0x20), mload(_initCode))
-            }
-            require(_addr != address(0), "DeployBatchAuthenticator: ProxyAdmin deployment failed");
-            proxyAdmin = IProxyAdmin(_addr);
-        }
-        vm.label(address(proxyAdmin), "BatchAuthenticatorProxyAdmin");
-        // Deploy Proxy without importing Proxy.sol to avoid duplicate compilation artifacts.
-        // Use the path-qualified form to disambiguate from OZ v5's proxy/Proxy.sol artifact.
+        // Deploy the Proxy with the deployer as its transient admin so the deployer can initialize it
+        // directly below. Deploy without importing Proxy.sol to avoid duplicate compilation artifacts;
+        // use the path-qualified form to disambiguate from OZ v5's proxy/Proxy.sol artifact.
         IProxy proxy;
         {
             bytes memory initCode =
-                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(address(proxyAdmin)));
+                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             address payable proxyAddr;
             assembly {
                 proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
@@ -71,7 +68,6 @@ contract DeployBatchAuthenticator is Script {
             proxy = IProxy(proxyAddr);
         }
         vm.label(address(proxy), "BatchAuthenticatorProxy");
-        proxyAdmin.setProxyType(address(proxy), IProxyAdmin.ProxyType.ERC1967);
         BatchAuthenticator impl = new BatchAuthenticator();
         vm.label(address(impl), "BatchAuthenticatorImpl");
 
@@ -81,21 +77,24 @@ contract DeployBatchAuthenticator is Script {
                 IEspressoTEEVerifier(_teeVerifier),
                 _espressoBatcher,
                 ISystemConfig(_systemConfig),
-                _proxyAdminOwner,
+                _batchAuthenticatorOwner,
                 // First deployment: start with the Espresso batcher active.
                 true
             )
         );
-        proxyAdmin.upgradeAndCall(payable(address(proxy)), address(impl), initData);
+        // Initialize directly via the proxy. The deployer is still the proxy admin at this point, so
+        // BatchAuthenticator.initialize's `_assertOnlyProxyAdminOrProxyAdminOwner` check passes.
+        proxy.upgradeToAndCall(address(impl), initData);
 
-        if (_proxyAdminOwner != msg.sender) {
-            proxyAdmin.transferOwnership(_proxyAdminOwner);
-        }
+        // Hand the proxy over to the shared OP Stack ProxyAdmin. No setProxyType call is needed: the
+        // ProxyAdmin treats unregistered proxies as ProxyType.ERC1967 (enum value 0), which matches
+        // src/universal/Proxy.sol.
+        proxy.changeAdmin(_proxyAdmin);
 
         vm.stopBroadcast();
 
         console.log("BatchAuthenticator (proxy):", address(proxy));
         console.log("BatchAuthenticator (impl): ", address(impl));
-        console.log("ProxyAdmin:                ", address(proxyAdmin));
+        console.log("ProxyAdmin (shared):       ", _proxyAdmin);
     }
 }
