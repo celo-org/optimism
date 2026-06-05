@@ -382,7 +382,11 @@ func (h *Host) Call(from common.Address, to common.Address, input []byte, gas ui
 					ok = true
 				}
 			}
-			if !ok || !strings.Contains(strings.ToLower(rStr), "revision id 1") {
+			// An expected EVM revert in the forked script host surfaces as op-geth's
+			// "revision id <N> cannot be reverted" snapshot panic. The revision number
+			// depends on how many snapshots the underlying geth fork has taken, so match
+			// on the invariant phrase rather than a specific id.
+			if !ok || !strings.Contains(strings.ToLower(rStr), "cannot be reverted") {
 				fmt.Println("panic", rStr)
 				panic(r)
 			}
