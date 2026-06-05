@@ -2717,35 +2717,39 @@ workflows:
             - cannon-prestate
             - rust-binaries-for-sysgo
             - go-binaries-for-sysgo
-      # IN-MEMORY - op-node/op-reth
-      - op-acceptance-tests:
-          name: memory-all-opn-op-reth
-          l2_el_kind: op-reth
-          no_output_timeout: 120m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - rust-binaries-for-sysgo
-            - go-binaries-for-sysgo
-      # IN-MEMORY - kona/op-reth
-      - op-acceptance-tests:
-          name: memory-all-kona-op-reth
-          l2_cl_kind: kona-node
-          l2_el_kind: op-reth
-          no_output_timeout: 120m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - rust-binaries-for-sysgo
-            - go-binaries-for-sysgo
+      # celo: op-reth and kona-node carry no Celo changes in this repo — they live
+      # in a separate repo — so these EL/CL variants run non-Celo binaries and fail
+      # Celo-specific tests (e.g. base-fee routing to the FeeHandler). Only the
+      # op-geth variant above exercises the Celo stack.
+      # # IN-MEMORY - op-node/op-reth
+      # - op-acceptance-tests:
+      #     name: memory-all-opn-op-reth
+      #     l2_el_kind: op-reth
+      #     no_output_timeout: 120m
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
+      #       - discord
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - rust-binaries-for-sysgo
+      #       - go-binaries-for-sysgo
+      # # IN-MEMORY - kona/op-reth
+      # - op-acceptance-tests:
+      #     name: memory-all-kona-op-reth
+      #     l2_cl_kind: kona-node
+      #     l2_el_kind: op-reth
+      #     no_output_timeout: 120m
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
+      #       - discord
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - rust-binaries-for-sysgo
+      #       - go-binaries-for-sysgo
       # Gate job - single stable job used as GitHub required status check for develop.
       # Uses terminal requires so it always runs (even when deps fail), giving the
       # merge queue an immediate failure signal instead of a timeout.
@@ -2758,8 +2762,9 @@ workflows:
             - semgrep-scan-local: terminal
             - go-tests-short: terminal
             - memory-all-opn-op-geth: terminal
-            - memory-all-opn-op-reth: terminal
-            - memory-all-kona-op-reth: terminal
+            # celo: op-reth/kona acceptance variants removed (no Celo changes in this repo)
+            # - memory-all-opn-op-reth: terminal
+            # - memory-all-kona-op-reth: terminal
           context:
             - circleci-api-token
           filters:
