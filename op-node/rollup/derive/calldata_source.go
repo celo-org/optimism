@@ -102,7 +102,7 @@ func DataFromEVMTransactions(ctx context.Context, dsCfg DataSourceConfig, batche
 	if dsCfg.rollupCfg.IsEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
-			ctx, fetcher, ref, dsCfg.rollupCfg.BatchAuthenticatorAddress, dsCfg.rollupCfg.BatchAuthLookbackWindowOrDefault(), dsCfg.batchAuthCaches, log,
+			ctx, fetcher, ref, dsCfg.rollupCfg.BatchAuthenticatorAddress, dsCfg.batchAuthCaches, log,
 		)
 		if err != nil {
 			return nil, err

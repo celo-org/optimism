@@ -136,7 +136,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 	if config.rollupCfg.IsEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
-			ctx, fetcher, ref, config.rollupCfg.BatchAuthenticatorAddress, config.rollupCfg.BatchAuthLookbackWindowOrDefault(), config.batchAuthCaches, logger,
+			ctx, fetcher, ref, config.rollupCfg.BatchAuthenticatorAddress, config.batchAuthCaches, logger,
 		)
 		if err != nil {
 			return nil, nil, err

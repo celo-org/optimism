@@ -184,13 +184,6 @@ type Config struct {
 	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
 	// BatchInfoAuthenticated(bytes32,address) events the derivation pipeline scans post-Espresso.
 	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
-
-	// BatchAuthLookbackWindow is the number of L1 blocks to scan for BatchInfoAuthenticated events.
-	// Zero means use the default (espresso.DefaultBatchAuthLookbackWindow = 100).
-	// Resolve via BatchAuthLookbackWindowOrDefault (defined in espresso_config.go); that helper
-	// is the only mips64-reachable consumer of the espresso package, and it imports only the
-	// constants.go file which is mips64-clean.
-	BatchAuthLookbackWindow uint64 `json:"batch_auth_lookback_window,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.

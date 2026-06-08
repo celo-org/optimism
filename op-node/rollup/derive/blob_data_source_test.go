@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 
-	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -145,9 +144,8 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		rollupCfg: &rollup.Config{
 			EspressoTime:              &espressoTime,
 			BatchAuthenticatorAddress: authenticatorAddr,
-			BatchAuthLookbackWindow:   espresso.DefaultBatchAuthLookbackWindow,
 		},
-		batchAuthCaches: NewBatchAuthCaches(espresso.DefaultBatchAuthLookbackWindow),
+		batchAuthCaches: NewBatchAuthCaches(),
 	}
 
 	ctx := context.Background()
