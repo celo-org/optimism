@@ -36,7 +36,7 @@ workdir=$(mktemp -d)
 # Clone the registry
 echo "Cloning SR..."
 cd "$repodir"
-git clone --no-checkout --depth 1 --shallow-submodules https://github.com/ethereum-optimism/superchain-registry.git
+git clone --no-checkout --depth 1 --shallow-submodules https://github.com/celo-org/superchain-registry.git
 cd "$repodir/superchain-registry"
 git fetch --depth 1 origin "$REGISTRY_COMMIT"
 git checkout "$REGISTRY_COMMIT"
