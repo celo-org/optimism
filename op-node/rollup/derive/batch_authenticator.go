@@ -16,16 +16,19 @@ import (
 )
 
 var (
-	// BatchInfoAuthenticatedABI is the event signature for BatchInfoAuthenticated(bytes32 indexed commitment).
-	BatchInfoAuthenticatedABI     = "BatchInfoAuthenticated(bytes32)"
+	// BatchInfoAuthenticatedABI is the event signature for
+	// BatchInfoAuthenticated(bytes32 commitment, address indexed caller).
+	// The commitment is an unindexed (data) argument; only caller is indexed.
+	BatchInfoAuthenticatedABI     = "BatchInfoAuthenticated(bytes32,address)"
 	BatchInfoAuthenticatedABIHash = crypto.Keccak256Hash([]byte(BatchInfoAuthenticatedABI))
 
 	// batchAuthCache is a global LRU cache mapping L1 block hash to the set of
-	// authenticated batch commitment hashes found in that block's receipts.
+	// authenticated batch commitments found in that block's receipts, where each
+	// commitment maps to the caller (the address that emitted the auth event).
 	// Keyed by block hash so it is naturally reorg-safe: after a reorg the
 	// parent-hash traversal follows a different chain and stale entries are
 	// never hit. Thread-safe via lru.Cache's internal mutex.
-	batchAuthCache     *lru.Cache[common.Hash, map[common.Hash]bool]
+	batchAuthCache     *lru.Cache[common.Hash, map[common.Hash]common.Address]
 	batchAuthCacheOnce sync.Once
 
 	// blockRefCache is a global LRU cache mapping L1 block hash to its L1BlockRef.
@@ -55,7 +58,7 @@ func getCache[T any](cache **lru.Cache[common.Hash, T], once *sync.Once, size in
 	return *cache
 }
 
-func getBatchAuthCache(lookbackWindow uint64) *lru.Cache[common.Hash, map[common.Hash]bool] {
+func getBatchAuthCache(lookbackWindow uint64) *lru.Cache[common.Hash, map[common.Hash]common.Address] {
 	return getCache(&batchAuthCache, &batchAuthCacheOnce, int(lookbackWindow))
 }
 
@@ -79,10 +82,13 @@ func ComputeBlobBatchHash(blobHashes []common.Hash) common.Hash {
 	return crypto.Keccak256Hash(concatenated)
 }
 
-// FindBatchAuthEvent scans the given receipts for a BatchInfoAuthenticated event
-// emitted by authenticatorAddr with a commitment matching batchHash.
-// Returns true if such an event is found.
-func FindBatchAuthEvent(receipts types.Receipts, authenticatorAddr common.Address, batchHash common.Hash) bool {
+// collectAuthEventsFromReceipts extracts all authenticated batch commitments from
+// the given receipts, mapping each commitment to the caller that emitted the
+// BatchInfoAuthenticated event (the indexed Topics[1]). The caller is later
+// matched against the batch transaction's L1 sender, so a batch is only accepted
+// if the same address both authenticated and submitted it.
+func collectAuthEventsFromReceipts(receipts types.Receipts, authenticatorAddr common.Address) map[common.Hash]common.Address {
+	result := make(map[common.Hash]common.Address)
 	for _, receipt := range receipts {
 		if receipt.Status != types.ReceiptStatusSuccessful {
 			continue
@@ -91,31 +97,10 @@ func FindBatchAuthEvent(receipts types.Receipts, authenticatorAddr common.Addres
 			if lg.Address != authenticatorAddr {
 				continue
 			}
-			// BatchInfoAuthenticated has 2 topics: event sig, indexed commitment
-			if len(lg.Topics) >= 2 &&
-				lg.Topics[0] == BatchInfoAuthenticatedABIHash &&
-				lg.Topics[1] == batchHash {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// collectAuthEventsFromReceipts extracts all authenticated batch hashes from the given receipts.
-// It returns the set of commitment hashes that have been authenticated by the given authenticator.
-func collectAuthEventsFromReceipts(receipts types.Receipts, authenticatorAddr common.Address) map[common.Hash]bool {
-	result := make(map[common.Hash]bool)
-	for _, receipt := range receipts {
-		if receipt.Status != types.ReceiptStatusSuccessful {
-			continue
-		}
-		for _, lg := range receipt.Logs {
-			if lg.Address != authenticatorAddr {
-				continue
-			}
-			if len(lg.Topics) >= 2 && lg.Topics[0] == BatchInfoAuthenticatedABIHash {
-				result[lg.Topics[1]] = true
+			if len(lg.Topics) >= 2 && lg.Topics[0] == BatchInfoAuthenticatedABIHash && len(lg.Data) >= 32 {
+				commitment := common.BytesToHash(lg.Data[:32])
+				caller := common.BytesToAddress(lg.Topics[1][:])
+				result[commitment] = caller
 			}
 		}
 	}
@@ -123,12 +108,18 @@ func collectAuthEventsFromReceipts(receipts types.Receipts, authenticatorAddr co
 }
 
 // CollectAuthenticatedBatches scans L1 receipts in the range
-// [ref.Number - lookbackWindow, ref.Number] and returns the set of all
-// batch commitment hashes that were authenticated via BatchInfoAuthenticated events.
+// [ref.Number - lookbackWindow, ref.Number] and returns a map from each batch
+// commitment hash that was authenticated via a BatchInfoAuthenticated event to
+// the caller that emitted it (the event's indexed `caller`). Callers use this to
+// require that a batch transaction's L1 sender matches the address that
+// authenticated the batch.
 //
 // This is called once per L1 block by the data source, and the returned set is checked
 // against each candidate batch transaction. This avoids rescanning the lookback window
 // for every individual batch transaction.
+//
+// The scan walks newest block to oldest; when the same commitment is authenticated
+// in more than one block, the newest event's caller is retained.
 //
 // Results are cached per block hash in a global LRU cache. For consecutive L1 blocks
 // the lookback windows overlap by ~99 blocks, so only one new block's receipts need
@@ -145,7 +136,7 @@ func CollectAuthenticatedBatches(
 	authenticatorAddr common.Address,
 	lookbackWindow uint64,
 	logger log.Logger,
-) (map[common.Hash]bool, error) {
+) (map[common.Hash]common.Address, error) {
 	cache := getBatchAuthCache(lookbackWindow)
 	refCache := getBlockRefCache(lookbackWindow)
 
@@ -153,7 +144,17 @@ func CollectAuthenticatedBatches(
 	// block (as part of their lookback window) can resolve it without an RPC call.
 	refCache.Add(ref.Hash, ref)
 
-	allAuthenticated := make(map[common.Hash]bool)
+	// Traversal is newest-block-first, so a commitment already in the map was
+	// seen in a newer block; mergeNewest keeps that newer caller (see doc above).
+	allAuthenticated := make(map[common.Hash]common.Address)
+	mergeNewest := func(src map[common.Hash]common.Address) {
+		for commitment, caller := range src {
+			if _, seen := allAuthenticated[commitment]; !seen {
+				allAuthenticated[commitment] = caller
+			}
+		}
+	}
+
 	currentBlock := ref
 	receiptCacheHits := 0
 	refCacheHits := 0
@@ -161,9 +162,7 @@ func CollectAuthenticatedBatches(
 	for {
 		// Check receipt cache first
 		if cached, ok := cache.Get(currentBlock.Hash); ok {
-			for h := range cached {
-				allAuthenticated[h] = true
-			}
+			mergeNewest(cached)
 			receiptCacheHits++
 		} else {
 			// Cache miss: fetch receipts, extract events, cache the result
@@ -173,9 +172,7 @@ func CollectAuthenticatedBatches(
 			}
 			events := collectAuthEventsFromReceipts(receipts, authenticatorAddr)
 			cache.Add(currentBlock.Hash, events)
-			for h := range events {
-				allAuthenticated[h] = true
-			}
+			mergeNewest(events)
 		}
 
 		if currentBlock.Number == 0 || ref.Number-currentBlock.Number >= lookbackWindow {

@@ -60,9 +60,13 @@ type calldataTest struct {
 // builds a chain of L1BlockRef values with proper parent-hash linkage, sets up FetchReceipts
 // for each block, and L1BlockRefByHash for each parent.
 //
+// The auth events are emitted with `caller` as the indexed caller, which the
+// pipeline matches against the batch transaction's L1 sender. Tests pass the
+// expected batcher address here.
+//
 // Returns the updated ref with its ParentHash properly set to the chain. Callers must use
 // the returned ref when calling functions that invoke CollectAuthenticatedBatches.
-func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1BlockRef, authenticatorAddr common.Address, authenticated []common.Hash) eth.L1BlockRef {
+func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1BlockRef, authenticatorAddr, caller common.Address, authenticated []common.Hash) eth.L1BlockRef {
 	startBlock := ref.Number
 	if startBlock > espresso.DefaultBatchAuthLookbackWindow {
 		startBlock = ref.Number - espresso.DefaultBatchAuthLookbackWindow
@@ -71,15 +75,17 @@ func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1Block
 	}
 	windowSize := ref.Number - startBlock + 1
 
-	// Build the auth receipts for the ref block
+	// Build the auth receipts for the ref block. The commitment is the unindexed
+	// data argument; only the caller is indexed (Topics[1]).
 	var authLogs []*types.Log
 	for _, bh := range authenticated {
 		authLogs = append(authLogs, &types.Log{
 			Address: authenticatorAddr,
 			Topics: []common.Hash{
 				BatchInfoAuthenticatedABIHash,
-				bh,
+				common.BytesToHash(caller.Bytes()),
 			},
+			Data: bh.Bytes(),
 		})
 	}
 	authReceipts := types.Receipts{}
@@ -135,6 +141,7 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 	batchInboxAddr := testutils.RandomAddress(rng)
 	authenticatorAddr := testutils.RandomAddress(rng)
 	batcherAddr := crypto.PubkeyToAddress(batcherPriv.PublicKey)
+	altAuthorAddr := crypto.PubkeyToAddress(altAuthor.PublicKey)
 	signer := types.NewCancunSigner(big.NewInt(100))
 
 	espressoTime := uint64(0)
@@ -162,7 +169,7 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 		// Use block number 1 so lookback window is [0, 1] — only 2 blocks to mock
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(txData)
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 
 		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
 		require.NoError(t, err)
@@ -183,7 +190,7 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		// No auth events — empty authenticated list
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
 
 		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
 		require.NoError(t, err)
@@ -204,7 +211,7 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 		require.NoError(t, err)
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
 
 		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
 		require.NoError(t, err)
@@ -228,7 +235,7 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		// Mock the lookback window scan (returns no authenticated hashes)
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
 
 		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
 		require.NoError(t, err)
@@ -267,8 +274,9 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		batchHash1 := ComputeCalldataBatchHash(txData1)
-		// Only tx1 has an auth event. tx2 and tx3 do not — both should be rejected.
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash1})
+		// Only tx1 has an auth event (caller = batcherAddr, matching tx1's sender).
+		// tx2 and tx3 do not — both should be rejected.
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash1})
 
 		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx1, tx2, tx3}, l1F, ref, logger)
 		require.NoError(t, err)
@@ -277,8 +285,10 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 		l1F.AssertExpectations(t)
 	})
 
-	t.Run("sender doesn't matter with event auth", func(t *testing.T) {
-		// In event-based mode, any sender is accepted if the auth event exists
+	t.Run("auth event accepts a non-batcher sender that matches its caller", func(t *testing.T) {
+		// Event-based mode does not require the SystemConfig batcher: any sender is
+		// accepted as long as it matches the caller that emitted the auth event.
+		// Here altAuthor both submits the batch and is the auth event caller.
 		l1F := &testutils.MockL1Source{}
 		txData := testutils.RandomData(rng, 100)
 		tx, err := types.SignNewTx(altAuthor, signer, &types.DynamicFeeTx{
@@ -290,12 +300,35 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(txData)
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, altAuthorAddr, []common.Hash{batchHash})
 
 		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
 		require.NoError(t, err)
 		require.Len(t, out, 1)
 		require.Equal(t, eth.Data(txData), out[0])
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("authenticated batch from a different sender than the caller is rejected", func(t *testing.T) {
+		// The batch commitment is authenticated, but by batcherAddr; the batch tx is
+		// submitted by altAuthor. The sender must match the auth event caller, so the
+		// batch is rejected even though the commitment was authenticated.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx, err := types.SignNewTx(altAuthor, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txData,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		batchHash := ComputeCalldataBatchHash(txData)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 0, "batch authenticated by a different address than the submitter must be rejected")
 		l1F.AssertExpectations(t)
 	})
 }

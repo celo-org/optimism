@@ -171,13 +171,17 @@ func isAuthorizedBatchSender(tx *types.Transaction, l1Signer types.Signer, batch
 //
 //	the batch's commitment hash must appear in authenticatedHashes (i.e. a
 //	BatchInfoAuthenticated event was emitted for this commitment within the
-//	derivation pipeline's lookback window). Sender-based authorization is rejected.
+//	derivation pipeline's lookback window) AND the L1 sender of the batch
+//	transaction must equal the caller that emitted that event. This binds each
+//	batch to the address that authenticated it, so a batch authenticated by one
+//	batcher cannot be submitted by another. Sender-based-only authorization is
+//	rejected.
 func isBatchTxAuthorized(
 	tx *types.Transaction,
 	dsCfg DataSourceConfig,
 	batcherAddr common.Address,
 	batchHash common.Hash,
-	authenticatedHashes map[common.Hash]bool,
+	authenticatedHashes map[common.Hash]common.Address,
 	l1OriginTime uint64,
 	logger log.Logger,
 ) bool {
@@ -185,11 +189,24 @@ func isBatchTxAuthorized(
 		// Pre-fork: upstream sender-based authorization.
 		return isAuthorizedBatchSender(tx, dsCfg.l1Signer, batcherAddr, logger)
 	}
-	// Post-fork: event-based authorization only.
-	if authenticatedHashes[batchHash] {
-		return true
+	// Post-fork: the commitment must have been authenticated within the lookback window.
+	authCaller, ok := authenticatedHashes[batchHash]
+	if !ok {
+		logger.Warn("batch not authenticated",
+			"txHash", tx.Hash(), "batchHash", batchHash)
+		return false
 	}
-	logger.Warn("batch not authenticated",
-		"txHash", tx.Hash(), "batchHash", batchHash)
-	return false
+	// The batch tx must be submitted by the same address that authenticated it.
+	sender, err := dsCfg.l1Signer.Sender(tx)
+	if err != nil {
+		logger.Warn("authenticated batch tx with invalid signature",
+			"txHash", tx.Hash(), "batchHash", batchHash, "err", err)
+		return false
+	}
+	if sender != authCaller {
+		logger.Warn("authenticated batch submitted by a different sender than the authenticating caller",
+			"txHash", tx.Hash(), "batchHash", batchHash, "sender", sender, "authCaller", authCaller)
+		return false
+	}
+	return true
 }

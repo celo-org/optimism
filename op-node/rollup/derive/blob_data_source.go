@@ -128,10 +128,11 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // authenticated set. For blob transactions, the batch hash is computed from
 // the concatenated blob versioned hashes.
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
-	// Only collect authenticated batch hashes when the Espresso fork is active
-	// at the L1 origin time of the block we're scanning. Pre-fork, the upstream
-	// sender-based authorization path is used and authenticatedHashes is unused.
-	var authenticatedHashes map[common.Hash]bool
+	// Only collect authenticated batch commitments when the Espresso fork is
+	// active at the L1 origin time of the block we're scanning. Pre-fork, the
+	// upstream sender-based authorization path is used and authenticatedHashes
+	// is unused.
+	var authenticatedHashes map[common.Hash]common.Address
 	if config.isEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
