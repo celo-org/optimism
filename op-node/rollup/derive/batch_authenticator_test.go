@@ -241,7 +241,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 			100: olderReceipts,    // caller2
 		})
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		require.Equal(t, caller, result[batchHash])

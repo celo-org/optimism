@@ -9,5 +9,5 @@ package rollup
 // BatchAuthenticator contract). When inactive, the pipeline behaves exactly as
 // upstream Optimism.
 func (c *Config) IsEspresso(timestamp uint64) bool {
-	return c.EspressoTime != nil && timestamp >= *c.EspressoTime
+	return c != nil && c.EspressoTime != nil && timestamp >= *c.EspressoTime
 }
