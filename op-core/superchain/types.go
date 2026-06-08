@@ -5,11 +5,14 @@ import (
 )
 
 type ChainConfig struct {
-	Name                 string       `toml:"name"`
-	PublicRPC            string       `toml:"public_rpc"`
-	SequencerRPC         string       `toml:"sequencer_rpc"`
-	Explorer             string       `toml:"explorer"`
-	GovernedByOptimism   bool         `toml:"governed_by_optimism"`
+	Name               string `toml:"name"`
+	PublicRPC          string `toml:"public_rpc"`
+	SequencerRPC       string `toml:"sequencer_rpc"`
+	Explorer           string `toml:"explorer"`
+	GovernedByOptimism bool   `toml:"governed_by_optimism"`
+	// SuperchainLevel is accepted for compatibility with celo's superchain-registry
+	// fork, which still carries the key upstream removed. The value is unused.
+	SuperchainLevel      *uint64      `toml:"superchain_level,omitempty"`
 	SuperchainTime       *uint64      `toml:"superchain_time"`
 	DataAvailabilityType string       `toml:"data_availability_type"`
 	DeploymentTxHash     *common.Hash `toml:"deployment_tx_hash"`
@@ -25,6 +28,9 @@ type ChainConfig struct {
 	Optimism          *OptimismConfig `toml:"optimism,omitempty"`
 
 	AltDA *AltDAConfig `toml:"alt_da,omitempty"`
+
+	// Celo carries celo-specific chain parameters from celo's superchain-registry fork.
+	Celo *CeloConfig `toml:"celo,omitempty"`
 
 	Genesis GenesisConfig `toml:"genesis"`
 
@@ -58,7 +64,16 @@ type HardforkConfig struct {
 	PectraBlobScheduleTime *uint64 `toml:"pectra_blob_schedule_time,omitempty"`
 
 	// Celo
-	Cel2Time *uint64 `toml:"cel2_time,omitempty"`
+	Cel2Time     *uint64 `toml:"cel2_time,omitempty"`
+	EspressoTime *uint64 `toml:"espresso_time,omitempty"`
+	// InteropTime is accepted for compatibility with celo's superchain-registry fork,
+	// which still uses the pre-Lagoon fork name. The value is unused.
+	InteropTime *uint64 `toml:"interop_time,omitempty"`
+}
+
+// CeloConfig models the [celo] table in celo's superchain-registry fork.
+type CeloConfig struct {
+	EIP1559BaseFeeFloor uint64 `toml:"eip1559_base_fee_floor"`
 }
 
 type OptimismConfig struct {
@@ -124,4 +139,7 @@ type AddressesConfig struct {
 	PermissionedDisputeGame           *common.Address `toml:"PermissionedDisputeGame,omitempty" json:"PermissionedDisputeGame,omitempty"`
 	PreimageOracle                    *common.Address `toml:"PreimageOracle,omitempty" json:"PreimageOracle,omitempty"`
 	DAChallengeAddress                *common.Address `toml:"DAChallengeAddress,omitempty" json:"DAChallengeAddress,omitempty"`
+	// BatchAuthenticator is the L1 BatchAuthenticator contract used by celo's Espresso
+	// integration; only set on chains with espresso_time scheduled.
+	BatchAuthenticator *common.Address `toml:"BatchAuthenticator,omitempty" json:"BatchAuthenticator,omitempty"`
 }
