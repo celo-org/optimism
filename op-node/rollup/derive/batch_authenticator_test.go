@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
@@ -88,7 +87,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 	logger := testlog.Logger(t, log.LevelDebug)
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(1234))
-	caches := NewBatchAuthCaches(espresso.DefaultBatchAuthLookbackWindow)
+	caches := NewBatchAuthCaches()
 
 	authenticatorAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
 	caller := common.HexToAddress("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
@@ -136,7 +135,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 			200: matchingReceipts,
 		})
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
 		require.NoError(t, err)
 		require.Equal(t, caller, result[batchHash])
 		require.Len(t, result, 1)
@@ -153,7 +152,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 			100: matchingReceipts,
 		})
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
 		require.NoError(t, err)
 		require.Equal(t, caller, result[batchHash])
 		require.Len(t, result, 1)
@@ -168,7 +167,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 		// No auth event in any block in the window
 		expectChainTraversal(l1F, chain, 100, 200, nil)
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
 		require.NoError(t, err)
 		require.Len(t, result, 0)
 		l1F.AssertExpectations(t)
@@ -184,7 +183,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 			10: matchingReceipts,
 		})
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
 		require.NoError(t, err)
 		require.Equal(t, caller, result[batchHash])
 		require.Len(t, result, 1)
@@ -213,7 +212,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 			10: multiReceipts,
 		})
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
 		require.NoError(t, err)
 		require.Len(t, result, 2)
 		require.Equal(t, caller, result[batchHash])
@@ -241,7 +240,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 			100: olderReceipts,    // caller2
 		})
 
-		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
 		require.NoError(t, err)
 		require.Len(t, result, 1)
 		require.Equal(t, caller, result[batchHash])
@@ -258,7 +257,7 @@ func TestCollectAuthenticatedBatchesBlockRefCache(t *testing.T) {
 	logger := testlog.Logger(t, log.LevelDebug)
 	ctx := context.Background()
 	rng := rand.New(rand.NewSource(5678))
-	caches := NewBatchAuthCaches(espresso.DefaultBatchAuthLookbackWindow)
+	caches := NewBatchAuthCaches()
 
 	authenticatorAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
 	emptyReceipts := types.Receipts{}
@@ -278,7 +277,7 @@ func TestCollectAuthenticatedBatchesBlockRefCache(t *testing.T) {
 		}
 	}
 
-	result, err := CollectAuthenticatedBatches(ctx, l1F, chain[200], authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+	result, err := CollectAuthenticatedBatches(ctx, l1F, chain[200], authenticatorAddr, caches, logger)
 	require.NoError(t, err)
 	require.Len(t, result, 0)
 	l1F.AssertExpectations(t)
@@ -295,7 +294,7 @@ func TestCollectAuthenticatedBatchesBlockRefCache(t *testing.T) {
 	// All block refs in [101, 200] are cached from the first call, and block 200
 	// was cached as the ref argument. No L1BlockRefByHash calls expected.
 
-	result2, err := CollectAuthenticatedBatches(ctx, l1F2, chain[201], authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, caches, logger)
+	result2, err := CollectAuthenticatedBatches(ctx, l1F2, chain[201], authenticatorAddr, caches, logger)
 	require.NoError(t, err)
 	require.Len(t, result2, 0)
 	l1F2.AssertExpectations(t)

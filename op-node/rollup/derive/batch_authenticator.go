@@ -36,11 +36,11 @@ type BatchAuthCaches struct {
 	RefCache *lru.Cache[common.Hash, eth.L1BlockRef]
 }
 
-// NewBatchAuthCaches creates caches sized for the given lookback window.
-func NewBatchAuthCaches(lookbackWindow uint64) *BatchAuthCaches {
-	// lookbackWindow past blocks + 1 current block + 1 LRU overhead.
+// NewBatchAuthCaches creates caches sized for the BatchAuthLookbackWindow.
+func NewBatchAuthCaches() *BatchAuthCaches {
+	// BatchAuthLookbackWindow past blocks + 1 current block + 1 LRU overhead.
 	// lru.New only errors on size <= 0.
-	size := int(lookbackWindow) + 2
+	size := int(BatchAuthLookbackWindow) + 2
 	authCache, _ := lru.New[common.Hash, map[common.Hash]common.Address](size)
 	refCache, _ := lru.New[common.Hash, eth.L1BlockRef](size)
 	return &BatchAuthCaches{AuthCache: authCache, RefCache: refCache}
@@ -114,7 +114,6 @@ func CollectAuthenticatedBatches(
 	fetcher L1Fetcher,
 	ref eth.L1BlockRef,
 	authenticatorAddr common.Address,
-	lookbackWindow uint64,
 	caches *BatchAuthCaches,
 	logger log.Logger,
 ) (map[common.Hash]common.Address, error) {
@@ -156,7 +155,7 @@ func CollectAuthenticatedBatches(
 			mergeNewest(events)
 		}
 
-		if currentBlock.Number == 0 || ref.Number-currentBlock.Number >= lookbackWindow {
+		if currentBlock.Number == 0 || ref.Number-currentBlock.Number >= BatchAuthLookbackWindow {
 			break
 		}
 

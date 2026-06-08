@@ -50,7 +50,7 @@ type DataSourceFactory struct {
 func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1Fetcher, blobsFetcher L1BlobsFetcher, altDAFetcher AltDAInputFetcher) *DataSourceFactory {
 	var caches *BatchAuthCaches
 	if cfg.EspressoTime != nil {
-		caches = NewBatchAuthCaches(cfg.BatchAuthLookbackWindowOrDefault())
+		caches = NewBatchAuthCaches()
 	}
 	config := DataSourceConfig{
 		l1Signer:          cfg.L1Signer(),
@@ -102,8 +102,8 @@ type DataSourceConfig struct {
 	batchInboxAddress common.Address
 	altDAEnabled      bool
 	// rollupCfg provides Espresso-specific configuration (EspressoTime,
-	// BatchAuthenticatorAddress, BatchAuthLookbackWindow) consulted when
-	// post-Espresso event-based batch authentication is active.
+	// BatchAuthenticatorAddress) consulted when post-Espresso event-based
+	// batch authentication is active.
 	rollupCfg *rollup.Config
 	// batchAuthCaches holds the LRU caches for batch authentication lookback
 	// window traversal. Nil when Espresso is not configured.
