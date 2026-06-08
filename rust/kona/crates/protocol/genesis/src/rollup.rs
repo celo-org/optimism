@@ -777,6 +777,7 @@ mod tests {
                 karst_time: Some(110),
                 keep_karst_upgrade_gas: false,
                 lagoon_time: Some(120),
+                cel2_time: None,
             },
             block_time: 2,
             ..Default::default()

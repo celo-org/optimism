@@ -80,6 +80,7 @@ impl OverrideArgs {
                 .keep_karst_upgrade_gas_override
                 .unwrap_or(config.hardforks.keep_karst_upgrade_gas),
             lagoon_time: self.lagoon_override.map(Some).unwrap_or(config.hardforks.lagoon_time),
+            cel2_time: None,
         };
         RollupConfig { hardforks, ..config }
     }
@@ -145,6 +146,7 @@ mod tests {
                 karst_time: Some(1750000000),
                 keep_karst_upgrade_gas: true,
                 lagoon_time: Some(1755000000),
+                cel2_time: None,
             }
         );
     }
