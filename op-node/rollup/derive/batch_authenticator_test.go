@@ -17,6 +17,21 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
 
+// batchAuthLog builds a BatchInfoAuthenticated log as emitted by the
+// BatchAuthenticator contract at address authenticatorAddr: Topics[0] is the
+// event signature hash, Topics[1] is the indexed caller (the address that
+// emitted the event), and the commitment is the first 32 bytes of the data.
+func batchAuthLog(authenticatorAddr, caller common.Address, commitment common.Hash) *types.Log {
+	return &types.Log{
+		Address: authenticatorAddr,
+		Topics: []common.Hash{
+			BatchInfoAuthenticatedABIHash,
+			common.BytesToHash(caller.Bytes()),
+		},
+		Data: commitment.Bytes(),
+	}
+}
+
 func TestComputeCalldataBatchHash(t *testing.T) {
 	data := []byte("hello world")
 	hash := ComputeCalldataBatchHash(data)
@@ -51,116 +66,6 @@ func TestComputeBlobBatchHashSingle(t *testing.T) {
 	require.Equal(t, expected, hash)
 }
 
-func TestFindBatchAuthEvent(t *testing.T) {
-	authenticatorAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
-	batchHash := crypto.Keccak256Hash([]byte("test batch data"))
-
-	t.Run("event found", func(t *testing.T) {
-		receipts := types.Receipts{
-			{
-				Status: types.ReceiptStatusSuccessful,
-				Logs: []*types.Log{
-					{
-						Address: authenticatorAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							batchHash,
-						},
-					},
-				},
-			},
-		}
-		require.True(t, FindBatchAuthEvent(receipts, authenticatorAddr, batchHash))
-	})
-
-	t.Run("event not found - wrong hash", func(t *testing.T) {
-		wrongHash := crypto.Keccak256Hash([]byte("wrong data"))
-		receipts := types.Receipts{
-			{
-				Status: types.ReceiptStatusSuccessful,
-				Logs: []*types.Log{
-					{
-						Address: authenticatorAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							wrongHash,
-						},
-					},
-				},
-			},
-		}
-		require.False(t, FindBatchAuthEvent(receipts, authenticatorAddr, batchHash))
-	})
-
-	t.Run("event not found - wrong address", func(t *testing.T) {
-		wrongAddr := common.HexToAddress("0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
-		receipts := types.Receipts{
-			{
-				Status: types.ReceiptStatusSuccessful,
-				Logs: []*types.Log{
-					{
-						Address: wrongAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							batchHash,
-						},
-					},
-				},
-			},
-		}
-		require.False(t, FindBatchAuthEvent(receipts, authenticatorAddr, batchHash))
-	})
-
-	t.Run("event not found - reverted receipt", func(t *testing.T) {
-		receipts := types.Receipts{
-			{
-				Status: types.ReceiptStatusFailed,
-				Logs: []*types.Log{
-					{
-						Address: authenticatorAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							batchHash,
-						},
-					},
-				},
-			},
-		}
-		require.False(t, FindBatchAuthEvent(receipts, authenticatorAddr, batchHash))
-	})
-
-	t.Run("event not found - empty receipts", func(t *testing.T) {
-		require.False(t, FindBatchAuthEvent(types.Receipts{}, authenticatorAddr, batchHash))
-	})
-
-	t.Run("event found among multiple receipts", func(t *testing.T) {
-		receipts := types.Receipts{
-			{
-				Status: types.ReceiptStatusSuccessful,
-				Logs: []*types.Log{
-					{
-						Address: common.HexToAddress("0x1111"),
-						Topics:  []common.Hash{common.HexToHash("0xdead")},
-					},
-				},
-			},
-			{
-				Status: types.ReceiptStatusSuccessful,
-				Logs: []*types.Log{
-					{
-						Address: authenticatorAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							batchHash,
-						},
-					},
-				},
-			},
-		}
-		require.True(t, FindBatchAuthEvent(receipts, authenticatorAddr, batchHash))
-	})
-}
-
 // buildL1Chain creates a chain of L1BlockRef values with proper parent-hash linkage.
 // The chain goes from block number `start` to `end` (inclusive).
 // Returns a slice indexed by block number (relative to start), and the full map by number.
@@ -186,21 +91,14 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 	rng := rand.New(rand.NewSource(1234))
 
 	authenticatorAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
+	caller := common.HexToAddress("0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
 	batchHash := crypto.Keccak256Hash([]byte("test batch data"))
 
 	// Build a matching receipt
 	matchingReceipts := types.Receipts{
 		{
 			Status: types.ReceiptStatusSuccessful,
-			Logs: []*types.Log{
-				{
-					Address: authenticatorAddr,
-					Topics: []common.Hash{
-						BatchInfoAuthenticatedABIHash,
-						batchHash,
-					},
-				},
-			},
+			Logs:   []*types.Log{batchAuthLog(authenticatorAddr, caller, batchHash)},
 		},
 	}
 	emptyReceipts := types.Receipts{}
@@ -240,7 +138,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 
 		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, logger)
 		require.NoError(t, err)
-		require.True(t, result[batchHash])
+		require.Equal(t, caller, result[batchHash])
 		require.Len(t, result, 1)
 		l1F.AssertExpectations(t)
 	})
@@ -257,7 +155,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 
 		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, logger)
 		require.NoError(t, err)
-		require.True(t, result[batchHash])
+		require.Equal(t, caller, result[batchHash])
 		require.Len(t, result, 1)
 		l1F.AssertExpectations(t)
 	})
@@ -288,7 +186,7 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 
 		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, logger)
 		require.NoError(t, err)
-		require.True(t, result[batchHash])
+		require.Equal(t, caller, result[batchHash])
 		require.Len(t, result, 1)
 		l1F.AssertExpectations(t)
 	})
@@ -299,24 +197,13 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 		ref := chain[10]
 
 		batchHash2 := crypto.Keccak256Hash([]byte("second batch"))
+		caller2 := common.HexToAddress("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
 		multiReceipts := types.Receipts{
 			{
 				Status: types.ReceiptStatusSuccessful,
 				Logs: []*types.Log{
-					{
-						Address: authenticatorAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							batchHash,
-						},
-					},
-					{
-						Address: authenticatorAddr,
-						Topics: []common.Hash{
-							BatchInfoAuthenticatedABIHash,
-							batchHash2,
-						},
-					},
+					batchAuthLog(authenticatorAddr, caller, batchHash),
+					batchAuthLog(authenticatorAddr, caller2, batchHash2),
 				},
 			},
 		}
@@ -329,8 +216,35 @@ func TestCollectAuthenticatedBatches(t *testing.T) {
 		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, logger)
 		require.NoError(t, err)
 		require.Len(t, result, 2)
-		require.True(t, result[batchHash])
-		require.True(t, result[batchHash2])
+		require.Equal(t, caller, result[batchHash])
+		require.Equal(t, caller2, result[batchHash2])
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("newest caller wins when commitment authenticated twice", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		chain := buildL1Chain(rng, 100, 200)
+		ref := chain[200]
+
+		caller2 := common.HexToAddress("0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+		// Older block 100 authenticates batchHash with caller2; newer block 200
+		// authenticates the same batchHash with caller. The newest (block 200)
+		// caller must win.
+		olderReceipts := types.Receipts{
+			{
+				Status: types.ReceiptStatusSuccessful,
+				Logs:   []*types.Log{batchAuthLog(authenticatorAddr, caller2, batchHash)},
+			},
+		}
+		expectChainTraversal(l1F, chain, 100, 200, map[uint64]types.Receipts{
+			200: matchingReceipts, // caller
+			100: olderReceipts,    // caller2
+		})
+
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, espresso.DefaultBatchAuthLookbackWindow, logger)
+		require.NoError(t, err)
+		require.Len(t, result, 1)
+		require.Equal(t, caller, result[batchHash])
 		l1F.AssertExpectations(t)
 	})
 }
@@ -388,7 +302,8 @@ func TestCollectAuthenticatedBatchesBlockRefCache(t *testing.T) {
 }
 
 func TestBatchInfoAuthenticatedABIHash(t *testing.T) {
-	// Verify the ABI hash matches what Solidity would compute
-	expected := crypto.Keccak256Hash([]byte("BatchInfoAuthenticated(bytes32)"))
+	// Verify the ABI hash matches what Solidity would compute for
+	// BatchInfoAuthenticated(bytes32 commitment, address indexed caller).
+	expected := crypto.Keccak256Hash([]byte("BatchInfoAuthenticated(bytes32,address)"))
 	require.Equal(t, expected, BatchInfoAuthenticatedABIHash)
 }

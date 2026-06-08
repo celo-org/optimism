@@ -182,7 +182,7 @@ type Config struct {
 	EspressoTime *uint64 `json:"espresso_time,omitempty"`
 
 	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
-	// BatchInfoAuthenticated(bytes32) events the derivation pipeline scans post-Espresso.
+	// BatchInfoAuthenticated(bytes32,address) events the derivation pipeline scans post-Espresso.
 	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
 
 	// BatchAuthLookbackWindow is the number of L1 blocks to scan for BatchInfoAuthenticated events.

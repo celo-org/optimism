@@ -131,6 +131,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 	privateKey := testutils.InsecureRandomKey(rng)
 	altKey := testutils.InsecureRandomKey(rng)
 	batcherAddr := crypto.PubkeyToAddress(*privateKey.Public().(*ecdsa.PublicKey))
+	altAddr := crypto.PubkeyToAddress(*altKey.Public().(*ecdsa.PublicKey))
 	batchInboxAddr := testutils.RandomAddress(rng)
 	authenticatorAddr := testutils.RandomAddress(rng)
 	logger := testlog.Logger(t, log.LvlInfo)
@@ -162,7 +163,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(calldataTx.Data())
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
@@ -186,7 +187,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeBlobBatchHash([]common.Hash{blobHash})
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{blobTx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
@@ -210,7 +211,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		calldataTx, _ := types.SignNewTx(altKey, signer, txData)
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil) // no auth events
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil) // no auth events
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
@@ -234,7 +235,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		calldataTx, _ := types.SignNewTx(privateKey, signer, txData)
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, nil) // no auth events
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil) // no auth events
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
@@ -243,7 +244,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		l1F.AssertExpectations(t)
 	})
 
-	t.Run("any sender accepted with auth event", func(t *testing.T) {
+	t.Run("non-batcher sender accepted when it matches the auth caller", func(t *testing.T) {
 		l1F := &testutils.MockL1Source{}
 		txData := &types.LegacyTx{
 			Nonce:    rng.Uint64(),
@@ -253,16 +254,42 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 			Value:    big.NewInt(10),
 			Data:     testutils.RandomData(rng, 200),
 		}
-		// Signed by alt key (not batcher), but has auth event — should be accepted
+		// Signed by alt key (not the SystemConfig batcher), and the auth event was
+		// emitted by that same alt address — should be accepted.
 		calldataTx, _ := types.SignNewTx(altKey, signer, txData)
 
 		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(calldataTx.Data())
-		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, []common.Hash{batchHash})
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, altAddr, []common.Hash{batchHash})
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(data))
+		require.Equal(t, 0, len(blobHashes))
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("authenticated tx rejected when sender differs from auth caller", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		txData := &types.LegacyTx{
+			Nonce:    rng.Uint64(),
+			GasPrice: new(big.Int).SetUint64(rng.Uint64()),
+			Gas:      2_000_000,
+			To:       &batchInboxAddr,
+			Value:    big.NewInt(10),
+			Data:     testutils.RandomData(rng, 200),
+		}
+		// Signed by alt key, but the commitment was authenticated by batcherAddr.
+		// The submitter must match the auth caller — should be rejected.
+		calldataTx, _ := types.SignNewTx(altKey, signer, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		batchHash := ComputeCalldataBatchHash(calldataTx.Data())
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
+
+		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(data), "batch authenticated by a different address than the submitter must be rejected")
 		require.Equal(t, 0, len(blobHashes))
 		l1F.AssertExpectations(t)
 	})

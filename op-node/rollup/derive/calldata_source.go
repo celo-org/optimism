@@ -94,11 +94,11 @@ func (ds *CalldataSource) Next(ctx context.Context) (eth.Data, error) {
 // window once and rejects any batch whose commitment hash is not in the
 // authenticated set.
 func DataFromEVMTransactions(ctx context.Context, dsCfg DataSourceConfig, batcherAddr common.Address, txs types.Transactions, fetcher L1Fetcher, ref eth.L1BlockRef, log log.Logger) ([]eth.Data, error) {
-	// Only collect authenticated batch hashes when the Espresso fork is active
-	// at the L1 origin time of the block we're scanning. Pre-fork, the upstream
-	// sender-based authorization path inside isBatchTxAuthorized is used and
-	// the authenticatedHashes map is unused.
-	var authenticatedHashes map[common.Hash]bool
+	// Only collect authenticated batch commitments when the Espresso fork is
+	// active at the L1 origin time of the block we're scanning. Pre-fork, the
+	// upstream sender-based authorization path inside isBatchTxAuthorized is used
+	// and the authenticatedHashes map is unused.
+	var authenticatedHashes map[common.Hash]common.Address
 	if dsCfg.isEspresso(ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
