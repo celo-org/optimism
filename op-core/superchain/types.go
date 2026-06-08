@@ -26,6 +26,9 @@ type ChainConfig struct {
 
 	AltDA *AltDAConfig `toml:"alt_da,omitempty"`
 
+	// Celo carries celo-specific chain parameters from celo's superchain-registry fork.
+	Celo *CeloConfig `toml:"celo,omitempty"`
+
 	Genesis GenesisConfig `toml:"genesis"`
 
 	Roles RolesConfig `toml:"roles"`
@@ -58,7 +61,13 @@ type HardforkConfig struct {
 	PectraBlobScheduleTime *uint64 `toml:"pectra_blob_schedule_time,omitempty"`
 
 	// Celo
-	Cel2Time *uint64 `toml:"cel2_time,omitempty"`
+	Cel2Time     *uint64 `toml:"cel2_time,omitempty"`
+	EspressoTime *uint64 `toml:"espresso_time,omitempty"`
+}
+
+// CeloConfig models the [celo] table in celo's superchain-registry fork.
+type CeloConfig struct {
+	EIP1559BaseFeeFloor uint64 `toml:"eip1559_base_fee_floor"`
 }
 
 type OptimismConfig struct {
@@ -124,4 +133,7 @@ type AddressesConfig struct {
 	PermissionedDisputeGame           *common.Address `toml:"PermissionedDisputeGame,omitempty" json:"PermissionedDisputeGame,omitempty"`
 	PreimageOracle                    *common.Address `toml:"PreimageOracle,omitempty" json:"PreimageOracle,omitempty"`
 	DAChallengeAddress                *common.Address `toml:"DAChallengeAddress,omitempty" json:"DAChallengeAddress,omitempty"`
+	// BatchAuthenticator is the L1 BatchAuthenticator contract used by celo's Espresso
+	// integration; only set on chains with espresso_time scheduled.
+	BatchAuthenticator *common.Address `toml:"BatchAuthenticator,omitempty" json:"BatchAuthenticator,omitempty"`
 }

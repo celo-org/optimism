@@ -2060,6 +2060,9 @@
           "Explorer": "https://celoscan.io/",
           "GovernedByOptimism": false,
           "SuperchainTime": null,
+          "celo": {
+            "eip1559_base_fee_floor": 25000000000
+          },
           "DataAvailabilityType": "alt-da",
           "l2_chain_id": 42220,
           "batch_inbox_address": "0xff00000000000000000000000000000000042220",
@@ -2074,14 +2077,22 @@
             "fjord_time": 0,
             "granite_time": 0,
             "holocene_time": 1752073200,
-            "isthmus_time": 1752073200
+            "pectra_blob_schedule_time": 1752073200,
+            "isthmus_time": 1752073200,
+            "jovian_time": 1774958788,
+            "cel2_time": 1742957258
           },
           "optimism": {
             "eip1559Elasticity": 5,
             "eip1559Denominator": 400,
             "eip1559DenominatorCanyon": 400
           },
-          "alt_da": null,
+          "alt_da": {
+            "da_challenge_address": "0x0000000000000000000000000000000000000000",
+            "da_challenge_window": 1,
+            "da_resolve_window": 1,
+            "da_commitment_type": "GenericCommitment"
+          },
           "genesis": {
             "l1": {
               "number": 22128103,
@@ -4130,6 +4141,9 @@
           "Explorer": "https://celo-sepolia.blockscout.com",
           "GovernedByOptimism": false,
           "SuperchainTime": null,
+          "celo": {
+            "eip1559_base_fee_floor": 25000000000
+          },
           "DataAvailabilityType": "alt-da",
           "l2_chain_id": 11142220,
           "batch_inbox_address": "0x00076c1f80cdb1d670046465c5ccd04e9e78c1f0",
@@ -4143,7 +4157,10 @@
             "ecotone_time": 0,
             "fjord_time": 0,
             "granite_time": 0,
-            "holocene_time": 0
+            "holocene_time": 0,
+            "isthmus_time": 0,
+            "jovian_time": 1773749037,
+            "cel2_time": 0
           },
           "optimism": {
             "eip1559Elasticity": 5,
@@ -4163,7 +4180,7 @@
             },
             "l2": {
               "number": 0,
-              "hash": "0x1b65cd292881564a4ba788e0822ef07f6dd558c76466ee9d1f07b57065b392f4"
+              "hash": "0xabcc77fb92a7ea1e7d330042d81200585d251355b33408ed1c27fb54175b1fe2"
             },
             "l2_time": 1753283988,
             "system_config": {

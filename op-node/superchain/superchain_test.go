@@ -67,6 +67,7 @@ func fullyPopulatedChainConfig() *registry.ChainConfig {
 			KeepKarstUpgradeGas:    true,
 			LagoonTime:             ptr.New(uint64(10)),
 			PectraBlobScheduleTime: ptr.New(uint64(11)),
+			Cel2Time:               ptr.New(uint64(12)),
 		},
 	}
 }

@@ -13,11 +13,15 @@ func TestGetChain(t *testing.T) {
 		require.NotNil(t, chain)
 	})
 
-	// Celo mainnet skipped due to custom genesis
-	t.Run("Celo Mainnet skipped", func(t *testing.T) {
+	// celo: Celo Mainnet must be in the bundle — op-node --network=celo-mainnet resolves here.
+	t.Run("Celo Mainnet present", func(t *testing.T) {
 		chain, err := GetChain(42220)
-		require.Error(t, err)
-		require.Nil(t, chain)
+		require.NoError(t, err)
+		require.NotNil(t, chain)
+		cfg, err := chain.Config()
+		require.NoError(t, err)
+		require.EqualValues(t, 42220, cfg.ChainID)
+		require.NotNil(t, cfg.Hardforks.Cel2Time, "celo mainnet config must carry cel2_time")
 	})
 }
 

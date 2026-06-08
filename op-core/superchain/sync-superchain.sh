@@ -87,13 +87,15 @@ process_network_dir() {
         chain_id=$(yq -r '.chain_id' "$toml_file")
         chain_name="$(basename "${toml_file%.*}")"
 
+        # celo: unlike upstream, do NOT skip Celo Mainnet (42220). op-node --network=celo-mainnet
+        # resolves through this bundle since the op-geth decoupling; the "non-standard genesis"
+        # only affects Chain.GenesisData() (used by the offline check-prestate tool), not the
+        # rollup-config path.
         if [[ -z "$chain_id"
               # Boba Sepolia
               || "$chain_id" -eq 28882
               # Boba Mainnet
-              || "$chain_id" -eq 288
-              # Celo Mainnet: non-standard genesis format (forked from Ethereum, then converted to L2)
-              || "$chain_id" -eq 42220 ]];
+              || "$chain_id" -eq 288 ]];
         then
             echo "Skipping $network_name/$chain_name ($chain_id)"
             rm "$toml_file"
