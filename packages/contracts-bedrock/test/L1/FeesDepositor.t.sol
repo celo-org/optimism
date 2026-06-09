@@ -38,9 +38,12 @@ contract FeesDepositor_TestInit is CommonTest {
         });
 
         // Deploy proxy pointing to proxyAdmin (without importing Proxy.sol to avoid duplicate artifacts)
-        bytes memory initCode = abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(address(proxyAdmin)));
+        bytes memory initCode =
+            abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(address(proxyAdmin)));
         address payable proxyAddr;
-        assembly { proxyAddr := create(0, add(initCode, 0x20), mload(initCode)) }
+        assembly {
+            proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
+        }
         IProxy proxy = IProxy(proxyAddr);
 
         // Set implementation
