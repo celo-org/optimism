@@ -45,7 +45,7 @@ contract BatchAuthenticator is
     /// @dev    `Trace160` is OZ's `(uint96 key, uint160 value)` checkpoint variant — `uint160`
     ///         exactly fits an address with no waste, and `uint96` easily covers L1 block numbers.
     ///         An entry remains the authorized batcher until the next entry's key, or — for the
-    ///         last entry — indefinitely. 
+    ///         last entry — indefinitely.
     Checkpoints.Trace160 internal _espressoBatcherHistory;
 
     /// @notice Constructor disables initializers on implementation
