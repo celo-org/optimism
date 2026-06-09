@@ -731,7 +731,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         // Any non-espressoBatcher sender must revert with UnauthorizedEspressoBatcher.
         vm.prank(fallbackBatcher);
         vm.expectRevert(
-            abi.encodeWithSelector(IBatchAuthenticator.UnauthorizedEspressoBatcher.selector, fallbackBatcher, espressoBatcher)
+            abi.encodeWithSelector(
+                IBatchAuthenticator.UnauthorizedEspressoBatcher.selector, fallbackBatcher, espressoBatcher
+            )
         );
         authenticator.authenticateBatchInfo(commitment, "");
     }

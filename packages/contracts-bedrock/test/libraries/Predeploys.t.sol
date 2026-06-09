@@ -61,7 +61,8 @@ abstract contract Predeploys_TestInit is CommonTest {
         uint256 count = 2048;
         uint160 prefix = uint160(0x420) << 148;
 
-        bytes memory proxyCode = vm.getDeployedCode("src/universal/Proxy.sol:Proxy"); // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
+        bytes memory proxyCode = vm.getDeployedCode("src/universal/Proxy.sol:Proxy"); // Espresso: disambiguate from OZ
+            // v5 proxy/Proxy.sol artifact
 
         for (uint256 i = 0; i < count; i++) {
             address addr = address(prefix | uint160(i));
