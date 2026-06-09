@@ -379,7 +379,10 @@ library ChainAssertions {
         );
 
         Blueprint.Preamble memory proxyPreamble = Blueprint.parseBlueprintPreamble(address(blueprints.proxy).code);
-        require(keccak256(proxyPreamble.initcode) == keccak256(DeployUtils.getCode("src/universal/Proxy.sol:Proxy")), "CHECK-OPCM-170"); // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
+        require(
+            keccak256(proxyPreamble.initcode) == keccak256(DeployUtils.getCode("src/universal/Proxy.sol:Proxy")),
+            "CHECK-OPCM-170"
+        ); // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
 
         Blueprint.Preamble memory proxyAdminPreamble =
             Blueprint.parseBlueprintPreamble(address(blueprints.proxyAdmin).code);

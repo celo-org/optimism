@@ -97,7 +97,8 @@ contract DeployPeriphery is Script {
     function deployFaucetProxy() public broadcast returns (address addr_) {
         addr_ = _deployCreate2({
             _name: "FaucetProxy",
-            _creationCode: vm.getCode("src/universal/Proxy.sol:Proxy"), // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
+            _creationCode: vm.getCode("src/universal/Proxy.sol:Proxy"), // Espresso: disambiguate from OZ v5
+                // proxy/Proxy.sol artifact
             _constructorParams: abi.encode(artifacts.mustGetAddress("ProxyAdmin"))
         });
 
