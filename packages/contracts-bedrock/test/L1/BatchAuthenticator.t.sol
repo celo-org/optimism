@@ -242,7 +242,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
     ///         Guards against the non-idempotent-init footgun: if a future `initVersion()` bump
     ///         re-runs `initialize` with `_activeIsEspresso = false`, the contract must reflect
     ///         that — not silently revert to a hardcoded default.
-    function test_constructor_respectsActiveIsEspressoFalse() external {
+    function test_constructor_respectsActiveIsEspressoFalse_succeeds() external {
         IProxy proxy = _newProxy(address(proxyAdmin));
         vm.prank(proxyAdminOwner);
         proxyAdmin.setProxyType(address(proxy), IProxyAdmin.ProxyType.ERC1967);
@@ -317,7 +317,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice `setActiveIsEspresso` is a no-op (and emits no event) when the
     ///         desired value already matches the current state.
-    function test_setActiveIsEspresso_noChange_noOps() external {
+    function test_setActiveIsEspresso_noChange_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         // Initial state is `activeIsEspresso == true`.
@@ -447,7 +447,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice `setEspressoBatcher(address(0))` is allowed and represents an
     ///         explicit revocation without replacement.
-    function test_setEspressoBatcher_zeroAddress_revokes() external {
+    function test_setEspressoBatcher_zeroAddress_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         vm.roll(block.number + 1);
@@ -485,7 +485,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice History length is 1 immediately after initialize, with the seed
     ///         entry's `fromBlock` equal to the deployment block.
-    function test_history_seededByInitialize() external {
+    function test_history_seededByInitialize_succeeds() external {
         uint256 deployBlock = block.number;
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
@@ -498,7 +498,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice Two `setEspressoBatcher` calls in different blocks append two
     ///         new history entries.
-    function test_setEspressoBatcher_appendsAcrossBlocks() external {
+    function test_setEspressoBatcher_appendsAcrossBlocks_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         address b1 = address(0x1111);
@@ -528,7 +528,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice Two `setEspressoBatcher` calls in the same L1 block overwrite
     ///         the last entry rather than appending a new one.
-    function test_setEspressoBatcher_sameBlockOverwrites() external {
+    function test_setEspressoBatcher_sameBlockOverwrites_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         address b1 = address(0x1111);
@@ -554,7 +554,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice Revoking then setting a new non-zero address succeeds and
     ///         appends both entries.
-    function test_setEspressoBatcher_revokeThenReplace() external {
+    function test_setEspressoBatcher_revokeThenReplace_succeeds() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         vm.roll(block.number + 1);
@@ -574,7 +574,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice `espressoBatcherAtBlock` returns the correct historical address
     ///         across the whole timeline.
-    function test_espressoBatcherAtBlock_lookup() external {
+    function test_espressoBatcherAtBlock_lookup_succeeds() external {
         // Move forward a bit so f0 > 0 (lets us test "before first entry").
         vm.roll(block.number + 10);
         uint64 f0 = uint64(block.number);
@@ -692,7 +692,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice Test that authenticateBatchInfo reverts in fallback mode when called by
     ///         a sender that is not the SystemConfig batcher address.
-    function test_authenticateBatchInfo_fallback_revertsOnWrongSender() external {
+    function test_authenticateBatchInfo_fallbackWrongSender_reverts() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         // Switch to fallback mode.
@@ -717,7 +717,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
     /// @notice Test that in Espresso (default) mode, any sender (including the fallback batcher)
     ///         other than espressoBatcher is rejected before signature verification.
-    function test_authenticateBatchInfo_espresso_revertsOnUnauthorizedSender() external {
+    function test_authenticateBatchInfo_espressoUnauthorizedSender_reverts() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
         // Sanity: still in Espresso mode.
         assertTrue(authenticator.activeIsEspresso());
