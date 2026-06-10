@@ -3,7 +3,6 @@ pragma solidity ^0.8.0;
 
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
 import { Script } from "forge-std/Script.sol";
-import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 import { IBatchAuthenticator } from "interfaces/L1/IBatchAuthenticator.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
