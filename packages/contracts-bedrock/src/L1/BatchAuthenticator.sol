@@ -2,7 +2,6 @@
 pragma solidity ^0.8.0;
 
 import { OwnableUpgradeable } from "@openzeppelin/contracts-upgradeable-v5/access/OwnableUpgradeable.sol";
-import { ECDSA } from "@openzeppelin/contracts-v5/utils/cryptography/ECDSA.sol";
 import { Checkpoints } from "@openzeppelin/contracts-v5/utils/structs/Checkpoints.sol";
 import { ISemver } from "interfaces/universal/ISemver.sol";
 // espresso: use direct paths (not @espresso-tee-contracts/ remapping) so that Foundry's
