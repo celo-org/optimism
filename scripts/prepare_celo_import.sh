@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+#
 # Prepare and run the Celo L1 state import into op-reth.
 # See rust/op-reth/CELO_MIGRATION.md for details.
 
