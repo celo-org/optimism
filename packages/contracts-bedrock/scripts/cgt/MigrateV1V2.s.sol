@@ -155,6 +155,10 @@ contract MigrateV1V2 is Script {
     /// @notice Canonical Multicall3 address (same on every chain).
     address internal constant MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
+    /// @notice PortalMigrator's migration flag, written to PROXY storage by migrate(). Must match
+    ///         PortalMigrator.MIGRATED_SLOT.
+    bytes32 internal constant MIGRATED_SLOT = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
+
     // ---------- Phase 1: Preflight ----------
 
     function preflight(MigrateV1V2Input _input) public view {
@@ -176,27 +180,30 @@ contract MigrateV1V2 is Script {
         );
         console.log("OK  legacy CGT v1 active (isCustomGasToken() == true pre-upgrade)");
 
-        // Asserts ProxyAdmin is owned by the governance Safe (so the Safe can drive upgrades).
+        // ProxyAdmin must be owned by the governance Safe.
         require(
             IProxyAdmin(_input.proxyAdmin()).owner() == _input.safe(),
             "MigrateV1V2: ProxyAdmin owner is not the governance Safe"
         );
         console.log("OK  ProxyAdmin.owner == governance Safe");
 
-        // Asserts PortalMigrator is deployed and configured for this exact balance + bridge.
+        // PortalMigrator must be deployed and configured for this balance + bridge.
         PortalMigrator migrator = PortalMigrator(payable(_input.portalMigratorImpl()));
         require(address(migrator.CELO_TOKEN()) == address(_input.celoToken()), "MigrateV1V2: migrator CELO_TOKEN mismatch");
         require(migrator.CELO_GAS_BRIDGE_L1() == _input.bridgeL1Proxy(), "MigrateV1V2: migrator gas bridge mismatch");
         require(migrator.LEGACY_PORTAL_BALANCE() == _input.legacyPortalBalance(), "MigrateV1V2: migrator LEGACY_PORTAL_BALANCE mismatch");
-        require(!migrator.migrated(), "MigrateV1V2: migrator already used");
+        require(
+            vm.load(_input.portalProxy(), MIGRATED_SLOT) == bytes32(0),
+            "MigrateV1V2: portal already migrated"
+        );
         console.log("OK  PortalMigrator configuration matches");
 
-        // Asserts the current portal impl matches _originalPortalImpl.
+        // Current portal impl must match _originalPortalImpl.
         address currentImpl = IProxyAdmin(_input.proxyAdmin()).getProxyImplementation(_input.portalProxy());
         require(currentImpl == _input.originalPortalImpl(), "MigrateV1V2: current portal impl != originalPortalImpl");
         console.log("OK  current portal impl matches originalPortalImpl");
 
-        // Asserts the L1 bridge is deployed, initialized and wired, and not yet escrow-seeded.
+        // L1 bridge must be initialized, wired, and not yet escrow-seeded.
         ICeloGasBridgeL1 bridge = ICeloGasBridgeL1(payable(_input.bridgeL1Proxy()));
         require(address(bridge.CELO_TOKEN()) == address(_input.celoToken()), "MigrateV1V2: bridge CELO_TOKEN mismatch");
         require(address(bridge.systemConfig()) == _input.systemConfig(), "MigrateV1V2: bridge systemConfig not wired");
@@ -306,12 +313,12 @@ contract MigrateV1V2 is Script {
         require(currentImpl != _input.originalPortalImpl(), "MigrateV1V2: portal impl not upgraded by OPCM");
         console.log("OK  portal implementation upgraded by OPCM (v6)");
 
-        // Migrator should record the migration as completed.
+        // Migration flag should be set.
         require(
-            PortalMigrator(payable(_input.portalMigratorImpl())).migrated(),
-            "MigrateV1V2: PortalMigrator.migrated() != true"
+            vm.load(_input.portalProxy(), MIGRATED_SLOT) == bytes32(uint256(1)),
+            "MigrateV1V2: portal not migrated"
         );
-        console.log("OK  PortalMigrator.migrated() == true");
+        console.log("OK  portal migration flag set (proxy storage)");
 
         // Escrow must be seeded and covered by the bridge's actual CELO balance.
         ICeloGasBridgeL1 bridge = ICeloGasBridgeL1(payable(_input.bridgeL1Proxy()));

@@ -21,6 +21,7 @@ import { IL1Withdrawer } from "interfaces/L2/IL1Withdrawer.sol";
 import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
 import { ILiquidityController } from "interfaces/L2/ILiquidityController.sol";
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+import { ICeloGasBridgeL2 } from "interfaces/celo/ICeloGasBridgeL2.sol";
 import { INativeAssetLiquidity } from "interfaces/L2/INativeAssetLiquidity.sol";
 import { Types } from "src/libraries/Types.sol";
 
@@ -217,6 +218,10 @@ abstract contract L2Genesis_TestInit is Test {
         // Verify predeploys have code
         assertGt(Predeploys.LIQUIDITY_CONTROLLER.code.length, 0);
         assertGt(Predeploys.NATIVE_ASSET_LIQUIDITY.code.length, 0);
+        assertGt(CeloPredeploys.CELO_GAS_BRIDGE_L2.code.length, 0);
+
+        ICeloGasBridgeL2 bridge = ICeloGasBridgeL2(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2));
+        assertEq(address(bridge.otherBridge()), input.celoGasBridgeL1Proxy);
     }
 }
 
@@ -232,6 +237,7 @@ contract L2Genesis_Run_Test is L2Genesis_TestInit {
             l1CrossDomainMessengerProxy: payable(address(0x0000000000000000000000000000000000000001)),
             l1StandardBridgeProxy: payable(address(0x0000000000000000000000000000000000000002)),
             l1ERC721BridgeProxy: payable(address(0x0000000000000000000000000000000000000003)),
+            celoGasBridgeL1Proxy: payable(address(0x000000000000000000000000000000000000000A)),
             opChainProxyAdminOwner: address(0x0000000000000000000000000000000000000004),
             sequencerFeeVaultRecipient: address(0x0000000000000000000000000000000000000005),
             sequencerFeeVaultMinimumWithdrawalAmount: 1,

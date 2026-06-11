@@ -98,6 +98,7 @@ abstract contract CommonTest is Test, Setup, Events {
             deploy.cfg().setGasPayingTokenName("Custom Gas Token");
             deploy.cfg().setGasPayingTokenSymbol("CGT");
             deploy.cfg().setNativeAssetLiquidityAmount(type(uint248).max);
+            deploy.cfg().setCeloGasBridgeL1Proxy(makeAddr("celoGasBridgeL1Proxy"));
             deploy.cfg().setBaseFeeVaultWithdrawalNetwork(1);
             deploy.cfg().setL1FeeVaultWithdrawalNetwork(1);
             deploy.cfg().setSequencerFeeVaultWithdrawalNetwork(1);
