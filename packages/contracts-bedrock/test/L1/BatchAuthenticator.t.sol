@@ -901,7 +901,7 @@ contract BatchAuthenticator_Fork_Test is Test {
 
     function setUp() public {
         // Skip unless fork tests are explicitly enabled.
-        if (!Config.forkTest()) {
+        if (!Config.l1ForkTest()) {
             vm.skip(true);
             return;
         }
