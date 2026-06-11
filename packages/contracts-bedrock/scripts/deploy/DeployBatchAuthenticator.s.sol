@@ -6,6 +6,7 @@ import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
+import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 
 /// @notice Deploys only the BatchAuthenticator (proxy + impl) against an existing TEEVerifier and
 ///         wires the proxy to an existing (shared) OP Stack ProxyAdmin.
@@ -59,7 +60,7 @@ contract DeployBatchAuthenticator is Script {
         IProxy proxy;
         {
             bytes memory initCode =
-                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
+                abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             address payable proxyAddr;
             assembly {
                 proxyAddr := create(0, add(initCode, 0x20), mload(initCode))

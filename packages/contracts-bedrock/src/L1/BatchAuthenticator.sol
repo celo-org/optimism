@@ -130,18 +130,18 @@ contract BatchAuthenticator is
         return _espressoBatcherHistory.length();
     }
 
-    /// @notice Returns the Espresso batcher history entry at `index` (oldest first).
+    /// @notice Returns the Espresso batcher history entry at `_index` (oldest first).
     ///         Reverts on out-of-bounds index.
-    function espressoBatcherAt(uint32 index) external view returns (address batcher, uint64 fromBlock) {
-        Checkpoints.Checkpoint160 memory ckpt = _espressoBatcherHistory.at(index);
+    function espressoBatcherAt(uint32 _index) external view returns (address batcher_, uint64 fromBlock_) {
+        Checkpoints.Checkpoint160 memory ckpt = _espressoBatcherHistory.at(_index);
         return (address(ckpt._value), uint64(ckpt._key));
     }
 
     /// @notice Returns the Espresso batcher address that was authorized at
-    ///         L1 block `l1Block`. Returns `address(0)` if `l1Block` precedes
+    ///         L1 block `_l1Block`. Returns `address(0)` if `_l1Block` precedes
     ///         the first entry.
-    function espressoBatcherAtBlock(uint64 l1Block) external view returns (address) {
-        return address(_espressoBatcherHistory.upperLookupRecent(uint96(l1Block)));
+    function espressoBatcherAtBlock(uint64 _l1Block) external view returns (address) {
+        return address(_espressoBatcherHistory.upperLookupRecent(uint96(_l1Block)));
     }
 
     function authenticateBatchInfo(bytes32 _commitment, bytes calldata _signature) external {
