@@ -299,6 +299,120 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 	})
 }
 
+// TestDataAndHashesFromTxsForkBoundary exercises the Espresso fork gate flipping in the
+// blob data source path (dataAndHashesFromTxs) across a single fixed DataSourceConfig.
+//
+// This is the path a chain with Ecotone active actually runs: OpenData always selects the
+// blob source, and calldata (type-2) batches flow through its non-blob branch. Pre-Espresso
+// (L1 origin time < EspressoTime) must use upstream sender-based authorization with no event
+// scanning; at and after activation it must switch to event-based authentication. The gate is
+// implemented separately here from the calldata source, so this mirrors
+// TestDataFromEVMTransactionsForkBoundary to pin both copies.
+func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
+	rng := rand.New(rand.NewSource(7777))
+	privateKey := testutils.InsecureRandomKey(rng)
+	altKey := testutils.InsecureRandomKey(rng)
+	batcherAddr := crypto.PubkeyToAddress(*privateKey.Public().(*ecdsa.PublicKey))
+	batchInboxAddr := testutils.RandomAddress(rng)
+	authenticatorAddr := testutils.RandomAddress(rng)
+	logger := testlog.Logger(t, log.LvlInfo)
+
+	chainId := new(big.Int).SetUint64(rng.Uint64())
+	signer := types.NewPragueSigner(chainId)
+
+	// Fork activates at L1 origin time 1000. A single config is reused across all
+	// sub-tests; only ref.Time changes to cross the boundary.
+	espressoTime := uint64(1000)
+	config := DataSourceConfig{
+		l1Signer:          signer,
+		batchInboxAddress: batchInboxAddr,
+		rollupCfg: &rollup.Config{
+			EspressoTime:              &espressoTime,
+			BatchAuthenticatorAddress: authenticatorAddr,
+		},
+		batchAuthCaches: NewBatchAuthCaches(),
+	}
+
+	ctx := context.Background()
+
+	// newCalldataBatchTx builds a type-2 calldata batch tx to the inbox (the tx shape an
+	// Ecotone-active, calldata-batching chain submits through the blob source).
+	newCalldataBatchTx := func(t *testing.T, author *ecdsa.PrivateKey, data []byte) *types.Transaction {
+		t.Helper()
+		tx, err := types.SignNewTx(author, signer, &types.DynamicFeeTx{
+			ChainID: chainId, Nonce: rng.Uint64(), Gas: 2_000_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: data,
+		})
+		require.NoError(t, err)
+		return tx
+	}
+
+	t.Run("pre-fork: batcher accepted via sender auth, no event scan", func(t *testing.T) {
+		// The empty mock asserts pre-fork derivation performs zero L1 receipt scanning:
+		// any FetchReceipts/L1BlockRefByHash call would be an unexpected call and panic.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 200)
+		tx := newCalldataBatchTx(t, privateKey, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime - 1, Hash: testutils.RandomHash(rng)}
+		data, hashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(data), "pre-fork batcher tx should be accepted via sender-based auth")
+		require.Equal(t, 0, len(hashes))
+		require.NotNil(t, data[0].calldata)
+		require.Equal(t, eth.Data(txData), *data[0].calldata)
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("pre-fork: non-batcher sender rejected", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		tx := newCalldataBatchTx(t, altKey, testutils.RandomData(rng, 200))
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime - 1, Hash: testutils.RandomHash(rng)}
+		data, hashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(data), "pre-fork tx from a non-batcher sender should be rejected")
+		require.Equal(t, 0, len(hashes))
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("activation block: same batcher tx rejected without auth event", func(t *testing.T) {
+		// At the exact activation time (ref.Time == EspressoTime) the event-based path is
+		// active, so a sender-only batcher tx is no longer sufficient.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 200)
+		tx := newCalldataBatchTx(t, privateKey, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime, Hash: testutils.RandomHash(rng)}
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
+
+		data, hashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 0, len(data), "post-fork batcher tx without an auth event must be rejected")
+		require.Equal(t, 0, len(hashes))
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("activation block: same batcher tx accepted with auth event", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 200)
+		tx := newCalldataBatchTx(t, privateKey, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime, Hash: testutils.RandomHash(rng)}
+		batchHash := ComputeCalldataBatchHash(tx.Data())
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
+
+		data, hashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(data), "post-fork batcher tx with a matching auth event must be accepted")
+		require.Equal(t, 0, len(hashes))
+		require.NotNil(t, data[0].calldata)
+		require.Equal(t, eth.Data(txData), *data[0].calldata)
+		l1F.AssertExpectations(t)
+	})
+}
+
 func TestFillBlobPointers(t *testing.T) {
 	blob := eth.Blob{}
 	rng := rand.New(rand.NewSource(1234))
