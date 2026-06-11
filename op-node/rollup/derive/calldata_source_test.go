@@ -332,6 +332,147 @@ func TestDataFromEVMTransactionsEventAuth(t *testing.T) {
 		require.Len(t, out, 0, "batch authenticated by a different address than the submitter must be rejected")
 		l1F.AssertExpectations(t)
 	})
+
+	t.Run("multiple authenticated txs each accepted for their own commitment", func(t *testing.T) {
+		// Two distinct batches, each authenticated by its own commitment event from the
+		// batcher. Both must be accepted, in order, each mapped to its own data — verifying
+		// every tx is matched against its own commitment, not just "some" authenticated entry.
+		l1F := &testutils.MockL1Source{}
+		txDataA := testutils.RandomData(rng, 100)
+		txA, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txDataA,
+		})
+		require.NoError(t, err)
+		txDataB := testutils.RandomData(rng, 100)
+		txB, err := types.SignNewTx(batcherPriv, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 1, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: txDataB,
+		})
+		require.NoError(t, err)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr,
+			[]common.Hash{ComputeCalldataBatchHash(txDataA), ComputeCalldataBatchHash(txDataB)})
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{txA, txB}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 2)
+		require.Equal(t, eth.Data(txDataA), out[0], "first tx must map to its own data")
+		require.Equal(t, eth.Data(txDataB), out[1], "second tx must map to its own data")
+		l1F.AssertExpectations(t)
+	})
+}
+
+// TestDataFromEVMTransactionsForkBoundary exercises the Espresso fork gate flipping
+// across a single fixed DataSourceConfig. Pre-Espresso (L1 origin time < EspressoTime)
+// must use upstream sender-based authorization with no event scanning at all; at and
+// after activation (L1 origin time >= EspressoTime) it must switch to event-based
+// authentication.
+//
+// This pins the gate boundary — the IsEspresso(ref.Time) check (`timestamp >=
+// *EspressoTime`) consulted in DataFromEVMTransactions and isBatchTxAuthorized. The same
+// batcher transaction is accepted pre-fork without any auth event, but rejected at the
+// activation block unless a BatchInfoAuthenticated event authorizes it. A regression in
+// the boundary is caught in both directions: a pre-fork block would start scanning
+// receipts (unexpected mock calls panic), and the activation block would otherwise accept
+// an unauthenticated batch.
+func TestDataFromEVMTransactionsForkBoundary(t *testing.T) {
+	rng := rand.New(rand.NewSource(99))
+	batcherPriv := testutils.RandomKey()
+	altAuthor := testutils.RandomKey()
+	batchInboxAddr := testutils.RandomAddress(rng)
+	authenticatorAddr := testutils.RandomAddress(rng)
+	batcherAddr := crypto.PubkeyToAddress(batcherPriv.PublicKey)
+	signer := types.NewCancunSigner(big.NewInt(100))
+
+	// Fork activates at L1 origin time 1000. A single config is reused across all
+	// sub-tests; only ref.Time changes to cross the boundary.
+	espressoTime := uint64(1000)
+	dsCfg := DataSourceConfig{
+		l1Signer:          signer,
+		batchInboxAddress: batchInboxAddr,
+		rollupCfg: &rollup.Config{
+			EspressoTime:              &espressoTime,
+			BatchAuthenticatorAddress: authenticatorAddr,
+		},
+		batchAuthCaches: NewBatchAuthCaches(),
+	}
+
+	ctx := context.Background()
+	logger := testlog.Logger(t, log.LevelDebug)
+
+	newBatchTx := func(t *testing.T, author *ecdsa.PrivateKey, data []byte) *types.Transaction {
+		t.Helper()
+		tx, err := types.SignNewTx(author, signer, &types.DynamicFeeTx{
+			ChainID: big.NewInt(100), Nonce: 0, Gas: 100_000,
+			GasTipCap: big.NewInt(2 * params.GWei), GasFeeCap: big.NewInt(30 * params.GWei),
+			To: &batchInboxAddr, Data: data,
+		})
+		require.NoError(t, err)
+		return tx
+	}
+
+	t.Run("pre-fork: batcher accepted via sender auth, no event scan", func(t *testing.T) {
+		// The empty mock asserts pre-fork derivation performs zero L1 receipt scanning:
+		// any FetchReceipts/L1BlockRefByHash call would be an unexpected call and panic.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx := newBatchTx(t, batcherPriv, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime - 1, Hash: testutils.RandomHash(rng)}
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 1, "pre-fork batcher tx should be accepted via sender-based auth")
+		require.Equal(t, eth.Data(txData), out[0])
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("pre-fork: non-batcher sender rejected", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx := newBatchTx(t, altAuthor, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime - 1, Hash: testutils.RandomHash(rng)}
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 0, "pre-fork tx from a non-batcher sender should be rejected")
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("activation block: same batcher tx rejected without auth event", func(t *testing.T) {
+		// At the exact activation time (ref.Time == EspressoTime) the event-based path is
+		// active, so a sender-only batcher tx is no longer sufficient.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx := newBatchTx(t, batcherPriv, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime, Hash: testutils.RandomHash(rng)}
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 0, "post-fork batcher tx without an auth event must be rejected")
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("activation block: same batcher tx accepted with auth event", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 100)
+		tx := newBatchTx(t, batcherPriv, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime, Hash: testutils.RandomHash(rng)}
+		batchHash := ComputeCalldataBatchHash(txData)
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
+
+		out, err := DataFromEVMTransactions(ctx, dsCfg, batcherAddr, types.Transactions{tx}, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Len(t, out, 1, "post-fork batcher tx with a matching auth event must be accepted")
+		require.Equal(t, eth.Data(txData), out[0])
+		l1F.AssertExpectations(t)
+	})
 }
 
 // TestDataFromEVMTransactions creates some transactions from a specified template and asserts
