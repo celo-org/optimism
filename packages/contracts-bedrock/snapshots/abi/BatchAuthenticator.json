@@ -72,7 +72,7 @@
     "inputs": [
       {
         "internalType": "uint32",
-        "name": "index",
+        "name": "_index",
         "type": "uint32"
       }
     ],
@@ -80,12 +80,12 @@
     "outputs": [
       {
         "internalType": "address",
-        "name": "batcher",
+        "name": "batcher_",
         "type": "address"
       },
       {
         "internalType": "uint64",
-        "name": "fromBlock",
+        "name": "fromBlock_",
         "type": "uint64"
       }
     ],
@@ -96,7 +96,7 @@
     "inputs": [
       {
         "internalType": "uint64",
-        "name": "l1Block",
+        "name": "_l1Block",
         "type": "uint64"
       }
     ],

@@ -7,6 +7,7 @@ import { Script } from "forge-std/Script.sol";
 
 import { Config } from "scripts/libraries/Config.sol";
 import { Artifacts } from "scripts/Artifacts.s.sol";
+import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { PeripheryDeployConfig } from "scripts/periphery/deploy/PeripheryDeployConfig.s.sol";
 
 import { IProxy } from "interfaces/universal/IProxy.sol";
@@ -85,7 +86,7 @@ contract DeployPeriphery is Script {
     function deployProxyAdmin() public broadcast returns (address addr_) {
         addr_ = _deployCreate2({
             _name: "ProxyAdmin",
-            _creationCode: vm.getCode("ProxyAdmin"),
+            _creationCode: DeployUtils.getCode("ProxyAdmin"),
             _constructorParams: abi.encode(msg.sender)
         });
 
@@ -97,8 +98,8 @@ contract DeployPeriphery is Script {
     function deployFaucetProxy() public broadcast returns (address addr_) {
         addr_ = _deployCreate2({
             _name: "FaucetProxy",
-            _creationCode: vm.getCode("src/universal/Proxy.sol:Proxy"), // Espresso: disambiguate from OZ v5
-                // proxy/Proxy.sol artifact
+            _creationCode: DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), // Espresso: disambiguate from
+                // OZ v5 proxy/Proxy.sol artifact
             _constructorParams: abi.encode(artifacts.mustGetAddress("ProxyAdmin"))
         });
 

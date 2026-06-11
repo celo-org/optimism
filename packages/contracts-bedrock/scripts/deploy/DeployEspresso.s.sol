@@ -10,6 +10,7 @@ import { IEspressoNitroTEEVerifier } from "@espresso-tee-contracts/interface/IEs
 import { IEspressoTEEVerifier } from "@espresso-tee-contracts/interface/IEspressoTEEVerifier.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { BatchAuthenticator } from "src/L1/BatchAuthenticator.sol";
+import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { MockEspressoTEEVerifier } from "test/mocks/MockEspressoTEEVerifiers.sol";
 import { MockEspressoNitroTEEVerifier } from "test/mocks/MockEspressoTEEVerifiers.sol";
 
@@ -135,7 +136,7 @@ contract DeployEspresso is Script {
         IProxy proxy;
         {
             bytes memory initCode =
-                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
+                abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             address payable proxyAddr;
             vm.broadcast(msg.sender);
             assembly {
@@ -238,7 +239,7 @@ contract DeployEspresso is Script {
         address payable teeProxyAddr;
         {
             bytes memory initCode =
-                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
+                abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             vm.broadcast(msg.sender);
             assembly {
                 teeProxyAddr := create(0, add(initCode, 0x20), mload(initCode))
@@ -253,7 +254,7 @@ contract DeployEspresso is Script {
         address payable teeImplAddr;
         {
             bytes memory teeImplCode =
-                vm.getCode("lib/espresso-tee-contracts/out/EspressoTEEVerifier.sol/EspressoTEEVerifier.json");
+                DeployUtils.getCode("lib/espresso-tee-contracts/out/EspressoTEEVerifier.sol/EspressoTEEVerifier.json");
             vm.broadcast(msg.sender);
             assembly {
                 teeImplAddr := create(0, add(teeImplCode, 0x20), mload(teeImplCode))
@@ -271,7 +272,9 @@ contract DeployEspresso is Script {
         address nitroVerifierAddr;
         {
             bytes memory nitroImplCode = abi.encodePacked(
-                vm.getCode("lib/espresso-tee-contracts/out/EspressoNitroTEEVerifier.sol/EspressoNitroTEEVerifier.json"),
+                DeployUtils.getCode(
+                    "lib/espresso-tee-contracts/out/EspressoNitroTEEVerifier.sol/EspressoNitroTEEVerifier.json"
+                ),
                 abi.encode(teeProxyAddr, _nitroEnclaveVerifier)
             );
             vm.broadcast(msg.sender);
@@ -286,6 +289,11 @@ contract DeployEspresso is Script {
         // initialize(address _owner, address _espressoNitroTEEVerifier). Sets the final contract owner
         // and wires the Nitro verifier in one shot, so no post-init onlyOwner call is needed. The
         // deployer is still the proxy admin at this point, so it can call upgradeToAndCall directly.
+        // abi.encodeCall would require importing the concrete EspressoTEEVerifier type, which pulls its
+        // impl closure (TEEHelper, JournalValidation, aws-nitro-enclave-attestation) into OP's compile
+        // group; that is exactly what deploying the impl from the submodule's own artifact avoids. The
+        // initialize selector is not declared on the imported IEspressoTEEVerifier interface.
+        // nosemgrep: sol-style-use-abi-encodecall
         bytes memory initData =
             abi.encodeWithSignature("initialize(address,address)", teeVerifierOwner, nitroVerifierAddr);
         vm.broadcast(msg.sender);

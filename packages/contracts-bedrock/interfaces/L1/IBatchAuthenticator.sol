@@ -52,14 +52,14 @@ interface IBatchAuthenticator {
     /// @notice Number of entries in the Espresso batcher history.
     function espressoBatcherHistoryLength() external view returns (uint256);
 
-    /// @notice Returns the Espresso batcher history entry at `index`
+    /// @notice Returns the Espresso batcher history entry at `_index`
     ///         (oldest first). Reverts on out-of-bounds index.
-    function espressoBatcherAt(uint32 index) external view returns (address batcher, uint64 fromBlock);
+    function espressoBatcherAt(uint32 _index) external view returns (address batcher_, uint64 fromBlock_);
 
     /// @notice Returns the Espresso batcher address that was authorized at
-    ///         L1 block `l1Block`. Returns `address(0)` if `l1Block` precedes the first
+    ///         L1 block `_l1Block`. Returns `address(0)` if `_l1Block` precedes the first
     ///         entry.
-    function espressoBatcherAtBlock(uint64 l1Block) external view returns (address);
+    function espressoBatcherAtBlock(uint64 _l1Block) external view returns (address);
 
     function registerSigner(bytes memory verificationData, bytes memory data) external;
 
