@@ -12,6 +12,7 @@ import { OutputMode, OutputModeUtils, Fork, ForkUtils } from "scripts/libraries/
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { Preinstalls } from "src/libraries/Preinstalls.sol";
 import { Types } from "src/libraries/Types.sol";
 
@@ -22,6 +23,7 @@ import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMin
 import { IL2StandardBridge } from "interfaces/L2/IL2StandardBridge.sol";
 import { IL2ERC721Bridge } from "interfaces/L2/IL2ERC721Bridge.sol";
 import { IStandardBridge } from "interfaces/universal/IStandardBridge.sol";
+import { ICeloGasBridgeL2 } from "interfaces/celo/ICeloGasBridgeL2.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { IL2CrossDomainMessenger } from "interfaces/L2/IL2CrossDomainMessenger.sol";
 import { IGasPriceOracle } from "interfaces/L2/IGasPriceOracle.sol";
@@ -55,6 +57,7 @@ contract L2Genesis is Script {
         address payable l1CrossDomainMessengerProxy;
         address payable l1StandardBridgeProxy;
         address payable l1ERC721BridgeProxy;
+        address payable celoGasBridgeL1Proxy;
         address opChainProxyAdminOwner;
         address sequencerFeeVaultRecipient;
         uint256 sequencerFeeVaultMinimumWithdrawalAmount;
@@ -267,6 +270,7 @@ contract L2Genesis is Script {
         if (_input.useCustomGasToken) {
             setLiquidityController(_input); // 29
             setNativeAssetLiquidity(_input); // 2A
+            setCeloGasBridgeL2(_input.celoGasBridgeL1Proxy); // 1023
         }
     }
 
@@ -313,6 +317,22 @@ contract L2Genesis is Script {
 
         IL2StandardBridge(payable(Predeploys.L2_STANDARD_BRIDGE)).initialize({
             _otherBridge: IStandardBridge(_l1StandardBridgeProxy)
+        });
+    }
+
+    /// @notice This predeploy is following the safety invariant #1.
+    function setCeloGasBridgeL2(address payable _celoGasBridgeL1Proxy) internal {
+        bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
+        vm.etch(CeloPredeploys.CELO_GAS_BRIDGE_L2, code);
+        EIP1967Helper.setAdmin(CeloPredeploys.CELO_GAS_BRIDGE_L2, Predeploys.PROXY_ADMIN);
+
+        address payable impl = payable(_setImplementationCode(CeloPredeploys.CELO_GAS_BRIDGE_L2));
+        EIP1967Helper.setImplementation(CeloPredeploys.CELO_GAS_BRIDGE_L2, impl);
+
+        ICeloGasBridgeL2(impl).initialize({ _otherBridge: IStandardBridge(payable(address(0))) });
+
+        ICeloGasBridgeL2(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2)).initialize({
+            _otherBridge: IStandardBridge(_celoGasBridgeL1Proxy)
         });
     }
 
@@ -562,6 +582,11 @@ contract L2Genesis is Script {
             _gasPayingTokenName: _input.gasPayingTokenName,
             _gasPayingTokenSymbol: _input.gasPayingTokenSymbol
         });
+
+        // Authorize the L2 gas bridge as a minter for new chains. Existing chains receive this
+        // through op-node/op-reth during the CGT fork.
+        vm.prank(_input.liquidityControllerOwner);
+        ILiquidityController(Predeploys.LIQUIDITY_CONTROLLER).authorizeMinter(CeloPredeploys.CELO_GAS_BRIDGE_L2);
     }
 
     /// @notice This predeploy is following the safety invariant #1.
@@ -683,8 +708,9 @@ contract L2Genesis is Script {
 
     /// @notice Sets the bytecode in state
     function _setImplementationCode(address _addr) internal returns (address) {
-        string memory cname = Predeploys.getName(_addr);
-        address impl = Predeploys.predeployToCodeNamespace(_addr);
+        bool isCeloGasBridge = _addr == CeloPredeploys.CELO_GAS_BRIDGE_L2;
+        string memory cname = isCeloGasBridge ? CeloPredeploys.getName(_addr) : Predeploys.getName(_addr);
+        address impl = isCeloGasBridge ? CeloPredeploys.celoPredeployToCodeNamespace(_addr) : Predeploys.predeployToCodeNamespace(_addr);
         vm.etch(impl, vm.getDeployedCode(string.concat(cname, ".sol:", cname)));
         return impl;
     }

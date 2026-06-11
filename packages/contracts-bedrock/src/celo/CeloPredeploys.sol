@@ -14,6 +14,7 @@ library CeloPredeploys {
     address internal constant FEE_CURRENCY = 0x4200000000000000000000000000000000001022;
     address internal constant FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
     address internal constant cUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
+    address internal constant CELO_GAS_BRIDGE_L2 = 0x4200000000000000000000000000000000001023;
 
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {
@@ -29,7 +30,17 @@ library CeloPredeploys {
         if (_addr == FEE_CURRENCY) return "FeeCurrency";
         if (_addr == FEE_CURRENCY_DIRECTORY) return "FeeCurrencyDirectory";
         if (_addr == cUSD) return "cUSD";
+        if (_addr == CELO_GAS_BRIDGE_L2) return "CeloGasBridgeL2";
 
         revert("Predeploys: unnamed predeploy");
+    }
+
+    /// @notice Like `Predeploys.predeployToCodeNamespace`, but for Celo predeploys outside the OP range.
+    /// @param _addr Celo predeploy proxy address.
+    /// @return The address that holds the predeploy's implementation bytecode.
+    function celoPredeployToCodeNamespace(address _addr) internal pure returns (address) {
+        return address(
+            uint160(uint256(uint160(_addr)) & 0xffff | uint256(uint160(0xc0D3C0d3C0d3C0D3c0d3C0d3c0D3C0d3c0d30000)))
+        );
     }
 }

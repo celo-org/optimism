@@ -85,6 +85,7 @@ contract DeployConfig is Script {
     string public gasPayingTokenSymbol;
     uint256 public nativeAssetLiquidityAmount;
     address public liquidityControllerOwner;
+    address public celoGasBridgeL1Proxy;
 
     // V2 Dispute Game Configuration
     uint256 public faultGameV2MaxGameDepth;
@@ -152,6 +153,7 @@ contract DeployConfig is Script {
         gasPayingTokenSymbol = _readOr(_json, "$.gasPayingTokenSymbol", "");
         nativeAssetLiquidityAmount = _readOr(_json, "$.nativeAssetLiquidityAmount", 0);
         liquidityControllerOwner = _readOr(_json, "$.liquidityControllerOwner", finalSystemOwner);
+        celoGasBridgeL1Proxy = _readOr(_json, "$.celoGasBridgeL1Proxy", address(0));
 
         enableGovernance = _readOr(_json, "$.enableGovernance", false);
         systemConfigStartBlock = stdJson.readUint(_json, "$.systemConfigStartBlock");
@@ -295,6 +297,11 @@ contract DeployConfig is Script {
     /// @notice Allow the `nativeAssetLiquidityAmount` config to be overridden in testing environments
     function setNativeAssetLiquidityAmount(uint256 _nativeAssetLiquidityAmount) public {
         nativeAssetLiquidityAmount = _nativeAssetLiquidityAmount;
+    }
+
+    /// @notice Allow the `celoGasBridgeL1Proxy` config to be overridden in testing environments
+    function setCeloGasBridgeL1Proxy(address _celoGasBridgeL1Proxy) public {
+        celoGasBridgeL1Proxy = _celoGasBridgeL1Proxy;
     }
 
     /// @notice Allow the `baseFeeVaultWithdrawalNetwork` config to be overridden in testing environments

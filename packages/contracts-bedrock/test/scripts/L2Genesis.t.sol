@@ -20,6 +20,7 @@ import { IFeeSplitter } from "interfaces/L2/IFeeSplitter.sol";
 import { IL1Withdrawer } from "interfaces/L2/IL1Withdrawer.sol";
 import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
 import { ILiquidityController } from "interfaces/L2/ILiquidityController.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { INativeAssetLiquidity } from "interfaces/L2/INativeAssetLiquidity.sol";
 import { Types } from "src/libraries/Types.sol";
 
@@ -205,6 +206,9 @@ abstract contract L2Genesis_TestInit is Test {
         assertEq(controller.owner(), input.liquidityControllerOwner);
         assertEq(controller.gasPayingTokenName(), input.gasPayingTokenName);
         assertEq(controller.gasPayingTokenSymbol(), input.gasPayingTokenSymbol);
+
+        // The L2 gas bridge must be an authorized minter for CGT withdraw/finalizeDeposit to work.
+        assertTrue(controller.minters(CeloPredeploys.CELO_GAS_BRIDGE_L2));
 
         // Test NativeAssetLiquidity deployment and funding
         INativeAssetLiquidity liquidity = INativeAssetLiquidity(Predeploys.NATIVE_ASSET_LIQUIDITY);

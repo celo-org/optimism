@@ -322,6 +322,7 @@ abstract contract Setup is FeatureFlags {
                 l1CrossDomainMessengerProxy: payable(address(l1CrossDomainMessenger)),
                 l1StandardBridgeProxy: payable(address(l1StandardBridge)),
                 l1ERC721BridgeProxy: payable(address(l1ERC721Bridge)),
+                celoGasBridgeL1Proxy: payable(deploy.cfg().celoGasBridgeL1Proxy()),
                 opChainProxyAdminOwner: deploy.cfg().proxyAdminOwner(),
                 sequencerFeeVaultRecipient: deploy.cfg().sequencerFeeVaultRecipient(),
                 sequencerFeeVaultMinimumWithdrawalAmount: deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount(),
