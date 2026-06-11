@@ -170,7 +170,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(data))
 		require.Equal(t, 0, len(blobHashes))
-		require.NotNil(t, data[0].calldata)
+		require.Equal(t, eth.Data(calldataTx.Data()), *data[0].calldata)
 		l1F.AssertExpectations(t)
 	})
 
@@ -194,7 +194,9 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(data))
 		require.Equal(t, 1, len(blobHashes))
-		require.Nil(t, data[0].calldata) // blob placeholder
+		require.Equal(t, blobHash, blobHashes[0]) // the authenticated blob's hash, not just any
+		require.Nil(t, data[0].calldata)          // blob placeholder
+		require.Nil(t, data[0].blob)              // blob placeholder
 		l1F.AssertExpectations(t)
 	})
 
@@ -267,6 +269,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, len(data))
 		require.Equal(t, 0, len(blobHashes))
+		require.Equal(t, eth.Data(calldataTx.Data()), *data[0].calldata) // the authenticated tx, not just any
 		l1F.AssertExpectations(t)
 	})
 
