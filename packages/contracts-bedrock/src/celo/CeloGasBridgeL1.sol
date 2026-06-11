@@ -51,6 +51,9 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @notice Thrown when escrow seeding is attempted more than once.
     error CeloGasBridgeL1_EscrowAlreadySeeded();
 
+    /// @notice Thrown when depositing before the CGT v2 migration has seeded the escrow.
+    error CeloGasBridgeL1_NotActivated();
+
     // ================================================================
     //                            EVENTS
     // ================================================================
@@ -136,6 +139,7 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     function deposit(address _to, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData)
         external
     {
+        if (!escrowSeeded) revert CeloGasBridgeL1_NotActivated();
         if (paused()) revert CeloGasBridgeL1_Paused();
         if (!systemConfig.isCustomGasToken()) revert CeloGasBridgeL1_NotCgtMode();
         if (_to == address(0)) revert CeloGasBridgeL1_ZeroRecipient();

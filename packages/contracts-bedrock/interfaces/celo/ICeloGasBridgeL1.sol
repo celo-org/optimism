@@ -19,6 +19,7 @@ interface ICeloGasBridgeL1 is IStandardBridge, IProxyAdminOwnedBase, IReinitiali
     error CeloGasBridgeL1_Paused();
     error CeloGasBridgeL1_UnauthorizedSeeder();
     error CeloGasBridgeL1_EscrowAlreadySeeded();
+    error CeloGasBridgeL1_NotActivated();
 
     event EscrowSeeded(address indexed portal, uint256 amount);
 

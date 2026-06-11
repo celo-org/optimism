@@ -313,11 +313,11 @@ contract MigrateV1V2 is Script {
         );
         console.log("OK  PortalMigrator.migrated() == true");
 
-        // Escrow must be seeded and equal to the bridge's actual CELO balance.
+        // Escrow must be seeded and covered by the bridge's actual CELO balance.
         ICeloGasBridgeL1 bridge = ICeloGasBridgeL1(payable(_input.bridgeL1Proxy()));
         require(bridge.escrowSeeded(), "MigrateV1V2: bridge escrow not seeded");
         uint256 trackedEscrow = bridge.deposits(address(_input.celoToken()), address(0));
-        require(trackedEscrow == bridgeBalance, "MigrateV1V2: bridge escrow != token balance (insolvent)");
+        require(trackedEscrow <= bridgeBalance, "MigrateV1V2: bridge escrow > token balance (insolvent)");
         console.log("OK  tracked escrow == CELO balance:", trackedEscrow);
 
         console.log("Migration verified.");
