@@ -110,11 +110,21 @@ contract BatchAuthenticator is
     }
 
     /// @notice Updates the Espresso batcher address.
+    /// @dev    Reverts if a history entry already exists for the current block
+    ///         (from `initialize` or an earlier `setEspressoBatcher` in the same
+    ///         block). The history is keyed by block number, so a second push in
+    ///         the same block would overwrite the prior entry instead of
+    ///         appending, corrupting the record of which batcher was authorized.
     function setEspressoBatcher(address _newEspressoBatcher) external onlyOwner {
         address oldEspressoBatcher = espressoBatcher();
         if (_newEspressoBatcher == oldEspressoBatcher) revert NoChange(_newEspressoBatcher);
 
         uint96 fromBlock = uint96(block.number);
+        // The latest entry's key is the block of the most recent change. If it
+        // equals the current block, another change already happened this block.
+        (, uint96 latestBlock,) = _espressoBatcherHistory.latestCheckpoint();
+        if (latestBlock == fromBlock) revert BatcherChangedThisBlock(uint64(fromBlock));
+
         _espressoBatcherHistory.push(fromBlock, uint160(_newEspressoBatcher));
         emit EspressoBatcherUpdated(oldEspressoBatcher, _newEspressoBatcher, uint64(fromBlock));
     }

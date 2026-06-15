@@ -527,9 +527,10 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         assertEq(authenticator.espressoBatcher(), b2);
     }
 
-    /// @notice Two `setEspressoBatcher` calls in the same L1 block overwrite
-    ///         the last entry rather than appending a new one.
-    function test_setEspressoBatcher_sameBlockOverwrites_succeeds() external {
+    /// @notice A second `setEspressoBatcher` call in the same L1 block reverts
+    ///         rather than overwriting the prior entry, preventing history
+    ///         corruption.
+    function test_setEspressoBatcher_sameBlock_reverts() external {
         BatchAuthenticator authenticator = _deployAndInitializeProxy();
 
         address b1 = address(0x1111);
@@ -543,14 +544,35 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         // After first call: length=2.
         assertEq(authenticator.espressoBatcherHistoryLength(), 2);
 
+        // A second change in the same block reverts.
         vm.prank(proxyAdminOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(IBatchAuthenticator.BatcherChangedThisBlock.selector, fBlock)
+        );
         authenticator.setEspressoBatcher(b2);
-        // After second call in the same block: still length=2 (overwrite).
-        assertEq(authenticator.espressoBatcherHistoryLength(), 2);
 
+        // History is unchanged: still length=2 with b1 as the latest entry.
+        assertEq(authenticator.espressoBatcherHistoryLength(), 2);
         (address a1, uint64 f1) = authenticator.espressoBatcherAt(1);
-        assertEq(a1, b2);
+        assertEq(a1, b1);
         assertEq(uint256(f1), uint256(fBlock));
+        assertEq(authenticator.espressoBatcher(), b1);
+    }
+
+    /// @notice `setEspressoBatcher` reverts when called in the same block as
+    ///         `initialize` seeded the first history entry, since that would
+    ///         overwrite the seed entry.
+    function test_setEspressoBatcher_sameBlockAsInit_reverts() external {
+        // `_deployAndInitializeProxy` initializes at the current block, seeding
+        // the first history entry at `block.number`.
+        BatchAuthenticator authenticator = _deployAndInitializeProxy();
+        uint64 initBlock = uint64(block.number);
+
+        vm.prank(proxyAdminOwner);
+        vm.expectRevert(
+            abi.encodeWithSelector(IBatchAuthenticator.BatcherChangedThisBlock.selector, initBlock)
+        );
+        authenticator.setEspressoBatcher(address(0x1111));
     }
 
     /// @notice Revoking then setting a new non-zero address succeeds and

@@ -15,6 +15,12 @@ interface IBatchAuthenticator {
     ///         that is already the currently-active batcher.
     error NoChange(address batcher);
 
+    /// @notice Error thrown when `setEspressoBatcher` is called more than once
+    ///         in the same L1 block. The batcher history is keyed by block
+    ///         number, so a second change in the same block would overwrite the
+    ///         first rather than append, corrupting the history.
+    error BatcherChangedThisBlock(uint64 blockNumber);
+
     /// @notice Error thrown when the Espresso TEE batcher caller does not match the configured espressoBatcher.
     error UnauthorizedEspressoBatcher(address sender, address expected);
 
