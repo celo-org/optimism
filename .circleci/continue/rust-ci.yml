@@ -641,7 +641,7 @@ jobs:
           name: Generate compact vectors from base
           command: |
             # Use the main branch as the base
-            BASE_BRANCH="celo-rebase-17"
+            BASE_BRANCH="celo-rebase-18"
 
             # Save current state
             git stash || true

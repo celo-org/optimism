@@ -3242,11 +3242,17 @@ workflows:
       #       - circleci-repo-readonly-authenticated-github-token
       #       - circleci-repo-rpc-secrets
       #       - slack
-      - contracts-bedrock-checks-fast:
-          name: contracts-bedrock-checks-fast-feature-tests
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
+      # celo: disable contracts-bedrock-checks-fast. Contracts are managed on a
+      # separate branch; celo-rebase-18 is the no-contracts node/rust branch and
+      # already disables the other contracts jobs above. The op-node/v1.18.2
+      # rebase reshaped this job (new -feature-tests name + fail-closed
+      # semver-diff that needs a GitHub token from a context celo-org's CircleCI
+      # does not define), so it slipped past the disable list and 403s on PRs.
+      # - contracts-bedrock-checks-fast:
+      #     name: contracts-bedrock-checks-fast-feature-tests
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
       # -----------------------------------------------------------------------
       # required-contracts-ci: GitHub required status for this workflow. Terminal requires
       # keep this job scheduled even when upstream jobs fail; ci-gate then checks they passed.
@@ -3260,7 +3266,8 @@ workflows:
             # - contracts-bedrock-coverage main: terminal
             # celo: disable contracts-bedrock-tests-upgrade — job removed above.
             # - contracts-bedrock-tests-upgrade op-mainnet main: terminal
-            - contracts-bedrock-checks-fast-feature-tests: terminal
+            # celo: disable contracts-bedrock-checks-fast-feature-tests; see job above.
+            # - contracts-bedrock-checks-fast-feature-tests: terminal
           context:
             - circleci-api-token
 
