@@ -33,6 +33,8 @@ interface ISystemConfig is IProxyAdminOwnedBase {
     event FeatureSet(bytes32 indexed feature, bool indexed enabled);
     event Initialized(uint8 version);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event Paused(address identifier);
+    event Unpaused(address identifier);
 
     function BATCH_INBOX_SLOT() external view returns (bytes32);
     function L1_CROSS_DOMAIN_MESSENGER_SLOT() external view returns (bytes32);
@@ -106,6 +108,9 @@ interface ISystemConfig is IProxyAdminOwnedBase {
     function setFeature(bytes32 _feature, bool _enabled) external;
     function isFeatureEnabled(bytes32) external view returns (bool);
     function isCustomGasToken() external view returns (bool);
+    function celoPaused() external view returns (bool);
+    function pause() external;
+    function unpause() external;
 
     function __constructor__() external;
 }

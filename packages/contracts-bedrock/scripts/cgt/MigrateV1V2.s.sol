@@ -19,6 +19,7 @@ import { ICeloGasBridgeL1 } from "interfaces/celo/ICeloGasBridgeL1.sol";
 import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { ISemver } from "interfaces/universal/ISemver.sol";
 
 /// @title MigrateV1V2Input
 /// @notice Inputs for the `MigrateV1V2` migration script.
@@ -34,6 +35,10 @@ contract MigrateV1V2Input is BaseDeployIO {
     address internal _portalMigratorImpl;
     address internal _originalPortalImpl;
     address internal _bridgeL1Proxy;
+
+    // CeloSuperchainConfig -> SystemConfig storage
+    address internal _storageSetter;
+    address internal _externalSuperchainConfig;
 
     // CELO ERC-20 and expected pre-migration balance
     IERC20 internal _celoToken;
@@ -54,6 +59,8 @@ contract MigrateV1V2Input is BaseDeployIO {
         else if (_sel == this.portalMigratorImpl.selector) _portalMigratorImpl = _value;
         else if (_sel == this.originalPortalImpl.selector) _originalPortalImpl = _value;
         else if (_sel == this.bridgeL1Proxy.selector) _bridgeL1Proxy = _value;
+        else if (_sel == this.storageSetter.selector) _storageSetter = _value;
+        else if (_sel == this.externalSuperchainConfig.selector) _externalSuperchainConfig = _value;
         else if (_sel == this.celoToken.selector) _celoToken = IERC20(_value);
         else revert("MigrateV1V2Input: unknown selector");
     }
@@ -109,6 +116,16 @@ contract MigrateV1V2Input is BaseDeployIO {
         return _bridgeL1Proxy;
     }
 
+    function storageSetter() public view returns (address) {
+        require(_storageSetter != address(0), "MigrateV1V2Input: storageSetter not set");
+        return _storageSetter;
+    }
+
+    function externalSuperchainConfig() public view returns (address) {
+        require(_externalSuperchainConfig != address(0), "MigrateV1V2Input: externalSuperchainConfig not set");
+        return _externalSuperchainConfig;
+    }
+
     function celoToken() public view returns (IERC20) {
         require(address(_celoToken) != address(0), "MigrateV1V2Input: celoToken not set");
         return _celoToken;
@@ -130,7 +147,7 @@ contract MigrateV1V2Input is BaseDeployIO {
 /// @title MigrateV1V2
 /// @notice CGT v1 → v2 migration script. Three phases in one file.
 ///         Phase 1 — preflight checks (revert if any precondition fails).
-///         Phase 2 — build the three Safe tasks (target + calldata) and log/return them for
+///         Phase 2 — build the four Safe tasks (target + calldata) and log/return them for
 ///                   CeloSuperchainOps to sign. Does NOT broadcast or write files.
 ///         Phase 3 — post-execution verification (asserts post-state, called after Safe execution).
 ///
@@ -158,6 +175,12 @@ contract MigrateV1V2 is Script {
     /// @notice PortalMigrator's migration flag, written to PROXY storage by migrate(). Must match
     ///         PortalMigrator.MIGRATED_SLOT.
     bytes32 internal constant MIGRATED_SLOT = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
+
+    /// @notice Upstream storage slot of SystemConfig.superchainConfig (packed with minBaseFee at offset 20).
+    bytes32 internal constant SUPERCHAIN_CONFIG_SLOT = bytes32(uint256(108));
+
+    /// @notice EIP-1967 implementation slot.
+    bytes32 internal constant EIP1967_IMPL_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
 
     // ---------- Phase 1: Preflight ----------
 
@@ -212,17 +235,28 @@ contract MigrateV1V2 is Script {
         require(!bridge.escrowSeeded(), "MigrateV1V2: bridge escrow already seeded");
         console.log("OK  CeloGasBridgeL1 initialized, wired, and not yet seeded");
 
+        // StorageSetter and the external SuperchainConfig must be deployed for the Tx2.
+        require(_input.storageSetter().code.length > 0, "MigrateV1V2: storageSetter has no code");
+        address externalSc = _input.externalSuperchainConfig();
+        require(externalSc.code.length > 0, "MigrateV1V2: externalSuperchainConfig has no code");
+        require(
+            keccak256(bytes(ISemver(externalSc).version())) == keccak256("2.4.0"),
+            "MigrateV1V2: externalSuperchainConfig version != 2.4.0"
+        );
+        console.log("OK  StorageSetter + external SuperchainConfig deployed");
+
         console.log("Preflight passed");
     }
 
     // ---------- Phase 2: Build Safe tasks ----------
 
-    /// @notice Builds the three Safe tasks, logs each target + calldata, and returns them. Does NOT
-    ///         broadcast or write to disk. Three sequential DELEGATECALLs (operation = 1); order matters:
+    /// @notice Builds the four Safe tasks, logs each target + calldata, and returns them. Does NOT
+    ///         broadcast or write to disk. Four sequential DELEGATECALLs (operation = 1); order matters:
     ///           Tx1  Multicall3.aggregate3([ ProxyAdmin->PortalMigrator, portal.migrate(), ProxyAdmin->originalPortalImpl ])
-    ///           Tx2  OPCM.upgrade(OpChainConfig[])                — installs the v6 portal + SystemConfig impls
-    ///           Tx3  Multicall3.aggregate3([ SystemConfig.setFeature(CGT, true) ])  — needs the v6 SystemConfig impl
-    function buildBundle(MigrateV1V2Input _input) public view returns (Task[3] memory tasks_) {
+    ///           Tx2  Multicall3.aggregate3([ ProxyAdmin->StorageSetter, setBytes32(superchainConfig=externalSC), ProxyAdmin->liveImpl ])
+    ///           Tx3  OPCM.upgrade(OpChainConfig[])                — installs the v6 portal + SystemConfig impls
+    ///           Tx4  Multicall3.aggregate3([ SystemConfig.setFeature(CGT, true) ])  — needs the v6 SystemConfig impl
+    function buildBundle(MigrateV1V2Input _input) public view returns (Task[4] memory tasks_) {
         console.log("--- MigrateV1V2: Phase 2 build tasks ---");
 
         // --- Tx1: install migrator, drain, restore original portal impl (Multicall3 batch) ---
@@ -249,34 +283,62 @@ contract MigrateV1V2 is Script {
         bytes memory tx1Data = _encodeAggregate3(tx1Calls);
         console.log("Tx1: Multicall3.aggregate3[install migrator, migrate(), restore original portal]");
 
-        // --- Tx2: OPCM.upgrade (direct Safe -> OPCM delegatecall) ---
+        // --- Tx2: repoint superchainConfig CSC -> external SC via StorageSetter, restore the live impl ---
+        bytes32 slotData = _overwriteSuperchainConfig(
+            vm.load(_input.systemConfig(), SUPERCHAIN_CONFIG_SLOT), _input.externalSuperchainConfig()
+        );
+        address liveImpl = address(uint160(uint256(vm.load(_input.systemConfig(), EIP1967_IMPL_SLOT))));
+        IMulticall3.Call3[] memory tx2Calls = new IMulticall3.Call3[](3);
+        tx2Calls[0] = IMulticall3.Call3({
+            target: _input.proxyAdmin(),
+            allowFailure: false,
+            callData: abi.encodeWithSignature(
+                "upgrade(address,address)", _input.systemConfig(), _input.storageSetter()
+            )
+        });
+        tx2Calls[1] = IMulticall3.Call3({
+            target: _input.systemConfig(),
+            allowFailure: false,
+            callData: abi.encodeWithSignature("setBytes32(bytes32,bytes32)", SUPERCHAIN_CONFIG_SLOT, slotData)
+        });
+        tx2Calls[2] = IMulticall3.Call3({
+            target: _input.proxyAdmin(),
+            allowFailure: false,
+            callData: abi.encodeWithSignature("upgrade(address,address)", _input.systemConfig(), liveImpl)
+        });
+        bytes memory tx2Data = _encodeAggregate3(tx2Calls);
+        console.log("Tx2: Multicall3.aggregate3[repoint superchainConfig CSC -> external SC via StorageSetter]");
+
+        // --- Tx3: OPCM.upgrade (direct Safe -> OPCM delegatecall) ---
         IOPContractsManager.OpChainConfig[] memory configs = new IOPContractsManager.OpChainConfig[](1);
         configs[0] = IOPContractsManager.OpChainConfig({
             systemConfigProxy: ISystemConfig(_input.systemConfig()),
             cannonPrestate: Claim.wrap(_input.cannonPrestate()),
             cannonKonaPrestate: Claim.wrap(_input.cannonKonaPrestate())
         });
-        bytes memory tx2Data = abi.encodeCall(IOPContractsManager.upgrade, (configs));
-        console.log("Tx2: OPCM.upgrade(opChainConfigs) [direct delegatecall]");
+        bytes memory tx3Data = abi.encodeCall(IOPContractsManager.upgrade, (configs));
+        console.log("Tx3: OPCM.upgrade(opChainConfigs) [direct delegatecall]");
 
-        // --- Tx3: flip CGT feature flag (Multicall3 batch of one) ---
-        IMulticall3.Call3[] memory tx3Calls = new IMulticall3.Call3[](1);
-        tx3Calls[0] = IMulticall3.Call3({
+        // --- Tx4: flip CGT feature flag (Multicall3 batch of one) ---
+        IMulticall3.Call3[] memory tx4Calls = new IMulticall3.Call3[](1);
+        tx4Calls[0] = IMulticall3.Call3({
             target: _input.systemConfig(),
             allowFailure: false,
             callData: abi.encodeWithSignature("setFeature(bytes32,bool)", CUSTOM_GAS_TOKEN_FEATURE, true)
         });
-        bytes memory tx3Data = _encodeAggregate3(tx3Calls);
-        console.log("Tx3: Multicall3.aggregate3[SystemConfig.setFeature(CUSTOM_GAS_TOKEN, true)]");
+        bytes memory tx4Data = _encodeAggregate3(tx4Calls);
+        console.log("Tx4: Multicall3.aggregate3[SystemConfig.setFeature(CUSTOM_GAS_TOKEN, true)]");
 
         // --- Assemble tasks, log target + calldata for each ---
         tasks_[0] = Task({ target: MULTICALL3, calldata_: tx1Data });
-        tasks_[1] = Task({ target: _input.opcm(), calldata_: tx2Data });
-        tasks_[2] = Task({ target: MULTICALL3, calldata_: tx3Data });
+        tasks_[1] = Task({ target: MULTICALL3, calldata_: tx2Data });
+        tasks_[2] = Task({ target: _input.opcm(), calldata_: tx3Data });
+        tasks_[3] = Task({ target: MULTICALL3, calldata_: tx4Data });
 
         _logTask("tx1", tasks_[0]);
         _logTask("tx2", tasks_[1]);
         _logTask("tx3", tasks_[2]);
+        _logTask("tx4", tasks_[3]);
 
         console.log("Tasks built. Pass each target + calldata to CeloSuperchainOps for signing.");
     }
@@ -325,7 +387,14 @@ contract MigrateV1V2 is Script {
         require(bridge.escrowSeeded(), "MigrateV1V2: bridge escrow not seeded");
         uint256 trackedEscrow = bridge.deposits(address(_input.celoToken()), address(0));
         require(trackedEscrow <= bridgeBalance, "MigrateV1V2: bridge escrow > token balance (insolvent)");
-        console.log("OK  tracked escrow == CELO balance:", trackedEscrow);
+        console.log("OK  tracked escrow covered by CELO balance:", trackedEscrow);
+
+        // SystemConfig.superchainConfig must now resolve to the external SuperchainConfig.
+        require(
+            address(ISystemConfig(_input.systemConfig()).superchainConfig()) == _input.externalSuperchainConfig(),
+            "MigrateV1V2: superchainConfig not repointed to external SuperchainConfig"
+        );
+        console.log("OK  SystemConfig.superchainConfig == external SuperchainConfig");
 
         console.log("Migration verified.");
     }
@@ -335,6 +404,12 @@ contract MigrateV1V2 is Script {
     /// @notice ABI-encodes Multicall3.aggregate3((address,bool,bytes)[]) for the given calls.
     function _encodeAggregate3(IMulticall3.Call3[] memory _calls) internal pure returns (bytes memory) {
         return abi.encodeCall(IMulticall3.aggregate3, (_calls));
+    }
+
+    /// @notice Overwrites slot 108's low 160 bits (superchainConfig), preserving minBaseFee at offset 20.
+    function _overwriteSuperchainConfig(bytes32 _slot, address _superchainConfig) internal pure returns (bytes32) {
+        uint256 mask160 = type(uint160).max;
+        return bytes32((uint256(_slot) & ~mask160) | uint256(uint160(_superchainConfig)));
     }
 
     /// @notice Logs one task's target and calldata to stdout.

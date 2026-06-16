@@ -94,6 +94,9 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
     /// @notice Storage slot for block at which the op-node can start searching for logs from.
     bytes32 public constant START_BLOCK_SLOT = bytes32(uint256(keccak256("systemconfig.startBlock")) - 1);
 
+    /// @notice Storage slot for the Celo pause flag.
+    bytes32 internal constant CELO_PAUSED_SLOT = bytes32(uint256(keccak256("celo.op.systemconfig.paused")) - 1);
+
     /// @notice The maximum gas limit that can be set for L2 blocks. This limit is used to enforce that the blocks
     ///         on L2 are not too large to process and prove. Over time, this value can be increased as various
     ///         optimizations and improvements are made to the system at large.
@@ -164,6 +167,12 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
     /// @param feature Feature that was set.
     /// @param enabled Whether the feature is enabled.
     event FeatureSet(bytes32 indexed feature, bool indexed enabled);
+
+    /// @notice Emitted when the Celo owner-pause is triggered.
+    event Paused(address identifier);
+
+    /// @notice Emitted when the Celo owner-pause is lifted.
+    event Unpaused(address identifier);
 
     /// @notice Thrown when attempting to enable/disable a feature when already enabled/disabled,
     ///         respectively.
@@ -579,6 +588,23 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
         emit FeatureSet(_feature, _enabled);
     }
 
+    /// @notice Returns the Celo pause flag.
+    function celoPaused() public view returns (bool) {
+        return Storage.getBool(CELO_PAUSED_SLOT);
+    }
+
+    /// @notice Pauses the Celo system. Callable only by the SystemConfig owner.
+    function pause() external onlyOwner {
+        Storage.setBool(CELO_PAUSED_SLOT, true);
+        emit Paused(address(0));
+    }
+
+    /// @notice Unpauses the Celo system. Callable only by the SystemConfig owner.
+    function unpause() external onlyOwner {
+        Storage.setBool(CELO_PAUSED_SLOT, false);
+        emit Unpaused(address(0));
+    }
+
     /// @notice Returns the current pause state for this network. If the network is using
     ///         ETHLockbox, the system is paused if either the global pause is active or the pause
     ///         is active where the ETHLockbox address is used as the identifier. If the network is
@@ -592,7 +618,8 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
             : address(optimismPortal());
 
         // Check if either global or local pause is active.
-        return superchainConfig.paused(address(0)) || superchainConfig.paused(identifier);
+        return celoPaused() || superchainConfig.paused(address(0))
+            || superchainConfig.paused(identifier);
     }
 
     /// @notice Returns the guardian address of the SuperchainConfig.

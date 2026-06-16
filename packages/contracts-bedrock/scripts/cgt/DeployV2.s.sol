@@ -10,6 +10,7 @@ import { CeloGasBridgeL1 } from "src/celo/CeloGasBridgeL1.sol";
 import { PortalMigrator } from "src/celo/PortalMigrator.sol";
 import { Proxy } from "src/universal/Proxy.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
+import { StorageSetter } from "src/universal/StorageSetter.sol";
 
 // Libraries
 import { BaseDeployIO } from "scripts/deploy/BaseDeployIO.sol";
@@ -89,6 +90,7 @@ contract DeployV2Output is BaseDeployIO {
     CeloGasBridgeL1 internal _celoGasBridgeL1Impl;
     ICeloGasBridgeL1 internal _celoGasBridgeL1Proxy;
     PortalMigrator internal _portalMigratorImpl;
+    StorageSetter internal _storageSetter;
 
     function set(bytes4 _sel, address _value) public {
         require(_value != address(0), "DeployV2Output: cannot set zero address");
@@ -96,6 +98,7 @@ contract DeployV2Output is BaseDeployIO {
         if (_sel == this.celoGasBridgeL1Impl.selector) _celoGasBridgeL1Impl = CeloGasBridgeL1(payable(_value));
         else if (_sel == this.celoGasBridgeL1Proxy.selector) _celoGasBridgeL1Proxy = ICeloGasBridgeL1(payable(_value));
         else if (_sel == this.portalMigratorImpl.selector) _portalMigratorImpl = PortalMigrator(payable(_value));
+        else if (_sel == this.storageSetter.selector) _storageSetter = StorageSetter(_value);
         else revert("DeployV2Output: unknown selector");
     }
 
@@ -112,6 +115,11 @@ contract DeployV2Output is BaseDeployIO {
     function portalMigratorImpl() public view returns (PortalMigrator) {
         require(address(_portalMigratorImpl) != address(0), "DeployV2Output: portalMigratorImpl not set");
         return _portalMigratorImpl;
+    }
+
+    function storageSetter() public view returns (StorageSetter) {
+        require(address(_storageSetter) != address(0), "DeployV2Output: storageSetter not set");
+        return _storageSetter;
     }
 }
 
@@ -160,6 +168,11 @@ contract DeployV2 is Script {
         });
         _output.set(_output.portalMigratorImpl.selector, address(portalMigratorImpl));
         console.log("PortalMigrator implementation deployed at:", address(portalMigratorImpl));
+
+        // ---- Deploy StorageSetter (used to change SystemConfig.superchainConfig during migration) ----
+        StorageSetter storageSetter = new StorageSetter();
+        _output.set(_output.storageSetter.selector, address(storageSetter));
+        console.log("StorageSetter deployed at:", address(storageSetter));
 
         // ---- Stop broadcasting transactions ----
         vm.stopBroadcast();
