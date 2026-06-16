@@ -47,7 +47,7 @@ import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMin
 import { IAddressManager } from "interfaces/legacy/IAddressManager.sol";
 import { IOptimismSuperchainERC20Factory } from "interfaces/L2/IOptimismSuperchainERC20Factory.sol";
 import { IBaseFeeVault } from "interfaces/L2/IBaseFeeVault.sol";
-import { ISequencerFeeVault } from "interfaces/L2/ISequencerFeeVault.sol";
+import { ICeloSequencerFeeVault } from "interfaces/L2/ICeloSequencerFeeVault.sol";
 import { IL1FeeVault } from "interfaces/L2/IL1FeeVault.sol";
 import { IOperatorFeeVault } from "interfaces/L2/IOperatorFeeVault.sol";
 import { IGasPriceOracle } from "interfaces/L2/IGasPriceOracle.sol";
@@ -138,7 +138,7 @@ abstract contract Setup is FeatureFlags {
     IOptimismMintableERC721Factory l2OptimismMintableERC721Factory =
         IOptimismMintableERC721Factory(Predeploys.OPTIMISM_MINTABLE_ERC721_FACTORY);
     IBaseFeeVault baseFeeVault = IBaseFeeVault(payable(Predeploys.BASE_FEE_VAULT));
-    ISequencerFeeVault sequencerFeeVault = ISequencerFeeVault(payable(Predeploys.SEQUENCER_FEE_WALLET));
+    ICeloSequencerFeeVault sequencerFeeVault = ICeloSequencerFeeVault(payable(Predeploys.SEQUENCER_FEE_WALLET));
     IL1FeeVault l1FeeVault = IL1FeeVault(payable(Predeploys.L1_FEE_VAULT));
     IOperatorFeeVault operatorFeeVault = IOperatorFeeVault(payable(Predeploys.OPERATOR_FEE_VAULT));
     IGasPriceOracle gasPriceOracle = IGasPriceOracle(Predeploys.GAS_PRICE_ORACLE);

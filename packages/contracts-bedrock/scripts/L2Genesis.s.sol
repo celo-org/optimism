@@ -708,11 +708,19 @@ contract L2Genesis is Script {
 
     /// @notice Sets the bytecode in state
     function _setImplementationCode(address _addr) internal returns (address) {
-        bool isCeloGasBridge = _addr == CeloPredeploys.CELO_GAS_BRIDGE_L2;
-        string memory cname = isCeloGasBridge ? CeloPredeploys.getName(_addr) : Predeploys.getName(_addr);
-        address impl = isCeloGasBridge ? CeloPredeploys.celoPredeployToCodeNamespace(_addr) : Predeploys.predeployToCodeNamespace(_addr);
+        string memory cname = _implementationName(_addr);
+        address impl = _addr == CeloPredeploys.CELO_GAS_BRIDGE_L2
+            ? CeloPredeploys.celoPredeployToCodeNamespace(_addr)
+            : Predeploys.predeployToCodeNamespace(_addr);
         vm.etch(impl, vm.getDeployedCode(string.concat(cname, ".sol:", cname)));
         return impl;
+    }
+
+    /// @notice Resolves the contract name whose bytecode backs a predeploy, applying Celo overrides.
+    function _implementationName(address _addr) internal pure returns (string memory) {
+        if (_addr == Predeploys.SEQUENCER_FEE_WALLET) return "CeloSequencerFeeVault";
+        if (_addr == CeloPredeploys.CELO_GAS_BRIDGE_L2) return CeloPredeploys.getName(_addr);
+        return Predeploys.getName(_addr);
     }
 
     /// @notice Helper function to set up a fee vault predeploy with revenue sharing support.

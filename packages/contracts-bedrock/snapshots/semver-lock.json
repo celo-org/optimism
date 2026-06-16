@@ -55,6 +55,10 @@
     "initCodeHash": "0x838bbd7f381e84e21887f72bd1da605bfc4588b3c39aed96cbce67c09335b3ee",
     "sourceCodeHash": "0xcb329746df0baddd3dc03c6c88da5d6bdc0f0a96d30e6dc78d0891bb1e935032"
   },
+  "src/L2/CeloSequencerFeeVault.sol:CeloSequencerFeeVault": {
+    "initCodeHash": "0x3dc461e84fa0ef0fca52bcb6dfdeb144d3aa9e5906577f9de2433ebae7cd38ee",
+    "sourceCodeHash": "0xf959f92d476d9d08ff93803d8aeb1b16791039c19709be7504c1d3139d060ec4"
+  },
   "src/L2/CrossL2Inbox.sol:CrossL2Inbox": {
     "initCodeHash": "0x56f868e561c4abe539043f98b16aad9305479e68fd03ece2233249b0c73a24ea",
     "sourceCodeHash": "0x7c6d362a69a480a06a079542a7fd2ce48cb1dd80d6b9043fba60218569371349"
