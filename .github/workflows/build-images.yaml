@@ -22,9 +22,9 @@ on:
       - '.github/workflows/build-images.yaml'
       - '.github/images.json'
       - '.github/actions/docker-build-prep/**'
-  schedule:
-    # Daily build of all images at 02:00 UTC (matches the previous CircleCI schedule).
-    - cron: '0 2 * * *'
+  # No nightly schedule on the Celo fork: this workflow publishes to Optimism Labs'
+  # registry (oplabs-tools-artifacts), which the fork has no access to. Image builds
+  # for the fork are handled by docker-build-scan.yaml. Kept for manual/upstream parity.
   workflow_dispatch:
 
 jobs:
