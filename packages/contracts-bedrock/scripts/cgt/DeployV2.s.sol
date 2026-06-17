@@ -24,7 +24,7 @@ import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 /// @title DeployV2Input
 /// @notice Inputs for the `DeployV2` pre-deployment script.
 contract DeployV2Input is BaseDeployIO {
-    IERC20 internal _celoToken;
+    IERC20 internal _celoTokenL1;
     address internal _l1CrossDomainMessenger;
     address internal _systemConfig;
     address internal _l1BridgeProxyAdmin;
@@ -35,7 +35,7 @@ contract DeployV2Input is BaseDeployIO {
     function set(bytes4 _sel, address _value) public {
         require(_value != address(0), "DeployV2Input: cannot set zero address");
 
-        if (_sel == this.celoToken.selector) _celoToken = IERC20(_value);
+        if (_sel == this.celoTokenL1.selector) _celoTokenL1 = IERC20(_value);
         else if (_sel == this.l1CrossDomainMessenger.selector) _l1CrossDomainMessenger = _value;
         else if (_sel == this.systemConfig.selector) _systemConfig = _value;
         else if (_sel == this.l1BridgeProxyAdmin.selector) _l1BridgeProxyAdmin = _value;
@@ -49,9 +49,9 @@ contract DeployV2Input is BaseDeployIO {
         else revert("DeployV2Input: unknown selector");
     }
 
-    function celoToken() public view returns (IERC20) {
-        require(address(_celoToken) != address(0), "DeployV2Input: celoToken not set");
-        return _celoToken;
+    function celoTokenL1() public view returns (IERC20) {
+        require(address(_celoTokenL1) != address(0), "DeployV2Input: celoTokenL1 not set");
+        return _celoTokenL1;
     }
 
     function l1CrossDomainMessenger() public view returns (address) {
@@ -132,7 +132,7 @@ contract DeployV2 is Script {
         vm.startBroadcast(msg.sender);
 
         // ---- Deploy CeloGasBridgeL1 implementation ----
-        CeloGasBridgeL1 celoGasBridgeL1Impl = new CeloGasBridgeL1(_input.celoToken());
+        CeloGasBridgeL1 celoGasBridgeL1Impl = new CeloGasBridgeL1();
         _output.set(_output.celoGasBridgeL1Impl.selector, address(celoGasBridgeL1Impl));
         console.log("CeloGasBridgeL1 implementation deployed at:", address(celoGasBridgeL1Impl));
 
@@ -149,7 +149,8 @@ contract DeployV2 is Script {
                 (
                     ICrossDomainMessenger(_input.l1CrossDomainMessenger()),
                     ISystemConfig(_input.systemConfig()),
-                    StandardBridge(payable(_input.otherBridge()))
+                    StandardBridge(payable(_input.otherBridge())),
+                    _input.celoTokenL1()
                 )
             )
         );
@@ -162,7 +163,7 @@ contract DeployV2 is Script {
         // ---- Deploy PortalMigrator implementation ----
         PortalMigrator portalMigratorImpl = new PortalMigrator({
             _proofMaturityDelaySeconds: _input.proofMaturityDelaySeconds(),
-            _celoToken: _input.celoToken(),
+            _celoTokenL1: _input.celoTokenL1(),
             _gasBridge: address(celoGasBridgeL1Proxy),
             _legacyPortalBalance: _input.legacyPortalBalance()
         });

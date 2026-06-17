@@ -19,7 +19,7 @@ contract PortalMigrator is OptimismPortal2, IPortalMigrator {
     using SafeERC20 for IERC20;
 
     /// @notice CELO token held by the portal before the migration.
-    IERC20 public immutable override CELO_TOKEN;
+    IERC20 public immutable override CELO_TOKEN_L1;
 
     /// @notice L1 gas bridge that receives the full CELO balance during migration.
     address public immutable override CELO_GAS_BRIDGE_L1;
@@ -32,18 +32,18 @@ contract PortalMigrator is OptimismPortal2, IPortalMigrator {
     bytes32 internal constant MIGRATED_SLOT = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
 
     /// @param _proofMaturityDelaySeconds Proof maturity delay passed through to OptimismPortal2.
-    /// @param _celoToken                 CELO ERC-20 held by the portal.
+    /// @param _celoTokenL1                 CELO ERC-20 held by the portal.
     /// @param _gasBridge                 Destination L1 gas bridge.
     /// @param _legacyPortalBalance       Exact CELO balance expected during migration.
     constructor(
         uint256 _proofMaturityDelaySeconds,
-        IERC20 _celoToken,
+        IERC20 _celoTokenL1,
         address _gasBridge,
         uint256 _legacyPortalBalance
     )
         OptimismPortal2(_proofMaturityDelaySeconds)
     {
-        CELO_TOKEN = _celoToken;
+        CELO_TOKEN_L1 = _celoTokenL1;
         CELO_GAS_BRIDGE_L1 = _gasBridge;
         LEGACY_PORTAL_BALANCE = _legacyPortalBalance;
     }
@@ -65,14 +65,14 @@ contract PortalMigrator is OptimismPortal2, IPortalMigrator {
         }
 
         // Drain the full balance.
-        uint256 balance = CELO_TOKEN.balanceOf(address(this));
+        uint256 balance = CELO_TOKEN_L1.balanceOf(address(this));
         if (balance != LEGACY_PORTAL_BALANCE) {
             emit BalanceMismatch(LEGACY_PORTAL_BALANCE, balance);
         }
 
         // Migrate funds & seed the bridge escrow with the drained amount, set migration flag.
         StorageSlot.getBooleanSlot(MIGRATED_SLOT).value = true;
-        CELO_TOKEN.safeTransfer(CELO_GAS_BRIDGE_L1, balance);
+        CELO_TOKEN_L1.safeTransfer(CELO_GAS_BRIDGE_L1, balance);
         ICeloGasBridgeL1(payable(CELO_GAS_BRIDGE_L1)).seedEscrow(balance);
         emit CeloMigrated(CELO_GAS_BRIDGE_L1, balance);
     }

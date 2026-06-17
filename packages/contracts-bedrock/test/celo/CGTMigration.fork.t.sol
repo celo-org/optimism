@@ -70,7 +70,7 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
         0x03b7eaa4e3cbce90381921a4b48008f4769871d64f93d113fcadca08ecee503b;
     bytes32 internal constant SENT_MESSAGE_SIG = keccak256("SentMessage(address,address,bytes,uint256,uint256)");
 
-    IERC20 internal celoToken;
+    IERC20 internal celoTokenL1;
     GnosisSafe internal parentSafe;
     IL1CrossDomainMessenger internal messenger;
     IOPContractsManager internal opcm;
@@ -104,21 +104,22 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
         portal = IOptimismPortal(payable(PORTAL_PROXY));
         parentSafe = GnosisSafe(payable(PARENT_SAFE));
         messenger = IL1CrossDomainMessenger(systemConfig.l1CrossDomainMessenger());
-        celoToken = IERC20(_resolveCeloToken());
+        celoTokenL1 = IERC20(_resolveCeloToken());
         safeOwner = _resolveSafeOwner();
 
         require(address(systemConfig.optimismPortal()) == PORTAL_PROXY, "portal mismatch");
         require(address(proxyAdmin.owner()) == PARENT_SAFE, "safe mismatch");
-        require(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)) == ORIGINAL_PORTAL_IMPL, "portal impl mismatch");
+        require(
+            proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)) == ORIGINAL_PORTAL_IMPL, "portal impl mismatch"
+        );
 
-        legacyPortalBalance = celoToken.balanceOf(PORTAL_PROXY);
+        legacyPortalBalance = celoTokenL1.balanceOf(PORTAL_PROXY);
         (cannonPrestate, cannonKonaPrestate) = _resolvePrestates();
         opcm = IOPContractsManager(_bootstrapOpcm());
 
         bridge = _deployBridge();
-        portalMigrator = new PortalMigrator(
-            portal.proofMaturityDelaySeconds(), celoToken, address(bridge), legacyPortalBalance
-        );
+        portalMigrator =
+            new PortalMigrator(portal.proofMaturityDelaySeconds(), celoTokenL1, address(bridge), legacyPortalBalance);
 
         migrator = new MigrateV1V2();
         input = new MigrateV1V2Input();
@@ -132,7 +133,7 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
         input.set(input.bridgeL1Proxy.selector, address(bridge));
         input.set(input.storageSetter.selector, address(new StorageSetter()));
         input.set(input.externalSuperchainConfig.selector, EXTERNAL_SUPERCHAIN_CONFIG);
-        input.set(input.celoToken.selector, address(celoToken));
+        input.set(input.celoTokenL1.selector, address(celoTokenL1));
         input.set(input.legacyPortalBalance.selector, legacyPortalBalance);
         input.set(input.cannonPrestate.selector, cannonPrestate);
         input.set(input.cannonKonaPrestate.selector, cannonKonaPrestate);
@@ -157,9 +158,9 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
 
         _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_);
 
-        assertEq(celoToken.balanceOf(PORTAL_PROXY), 0);
-        assertEq(celoToken.balanceOf(address(bridge)), legacyPortalBalance);
-        assertEq(bridge.deposits(address(celoToken), address(0)), legacyPortalBalance);
+        assertEq(celoTokenL1.balanceOf(PORTAL_PROXY), 0);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), legacyPortalBalance);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), legacyPortalBalance);
         assertTrue(bridge.escrowSeeded());
         assertEq(vm.load(PORTAL_PROXY, MIGRATED_SLOT), bytes32(uint256(1)));
         assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
@@ -184,21 +185,21 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
 
         migrator.verify(input);
 
-        uint256 trackedBefore = bridge.deposits(address(celoToken), address(0));
-        uint256 bridgeBalanceBefore = celoToken.balanceOf(address(bridge));
+        uint256 trackedBefore = bridge.deposits(address(celoTokenL1), address(0));
+        uint256 bridgeBalanceBefore = celoTokenL1.balanceOf(address(bridge));
         uint256 nonceBefore = messenger.messageNonce();
         address recipient = makeAddr("postMigrationRecipient");
         bytes memory extraData = hex"1234";
 
-        deal(address(celoToken), address(this), DEPOSIT_AMOUNT, true);
-        celoToken.approve(address(bridge), DEPOSIT_AMOUNT);
+        deal(address(celoTokenL1), address(this), DEPOSIT_AMOUNT, true);
+        celoTokenL1.approve(address(bridge), DEPOSIT_AMOUNT);
 
         vm.recordLogs();
         bridge.deposit(recipient, DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, extraData);
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        assertEq(bridge.deposits(address(celoToken), address(0)), trackedBefore + DEPOSIT_AMOUNT);
-        assertEq(celoToken.balanceOf(address(bridge)), bridgeBalanceBefore + DEPOSIT_AMOUNT);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), trackedBefore + DEPOSIT_AMOUNT);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), bridgeBalanceBefore + DEPOSIT_AMOUNT);
         assertEq(messenger.messageNonce(), nonceBefore + 1);
         assertTrue(_sawSentMessage(logs, address(messenger), address(bridge.otherBridge())));
     }
@@ -263,8 +264,8 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
         assertTrue(v6Portal.paused());
 
         // Bridge deposit is gated by the owner-pause.
-        deal(address(celoToken), address(this), DEPOSIT_AMOUNT, true);
-        celoToken.approve(address(bridge), DEPOSIT_AMOUNT);
+        deal(address(celoTokenL1), address(this), DEPOSIT_AMOUNT, true);
+        celoTokenL1.approve(address(bridge), DEPOSIT_AMOUNT);
         vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_Paused.selector);
         bridge.deposit(makeAddr("recipient"), DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, hex"");
 
@@ -294,8 +295,8 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
         assertFalse(_execSafeDelegateCallAllowFail(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_));
 
         // Whole tx reverted: portal not drained, impl unchanged, escrow never seeded.
-        assertEq(celoToken.balanceOf(PORTAL_PROXY), legacyPortalBalance);
-        assertEq(celoToken.balanceOf(address(bridge)), 0);
+        assertEq(celoTokenL1.balanceOf(PORTAL_PROXY), legacyPortalBalance);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), 0);
         assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
         assertFalse(bridge.escrowSeeded());
     }
@@ -309,7 +310,7 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
     }
 
     function _deployBridge() internal returns (ICeloGasBridgeL1 bridge_) {
-        CeloGasBridgeL1 implementation = new CeloGasBridgeL1(celoToken);
+        CeloGasBridgeL1 implementation = new CeloGasBridgeL1();
         Proxy proxy = new Proxy(address(this));
         bridge_ = ICeloGasBridgeL1(payable(address(proxy)));
 
@@ -321,7 +322,8 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
                 (
                     ICrossDomainMessenger(address(messenger)),
                     systemConfig,
-                    IStandardBridge(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2))
+                    IStandardBridge(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2)),
+                    celoTokenL1
                 )
             )
         );
@@ -360,10 +362,10 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
         opcm_ = address(output.opcm);
     }
 
-    function _resolveCeloToken() internal view returns (address celoToken_) {
-        celoToken_ = CELO_TOKEN_PROXY;
-        if (celoToken_ == address(0)) {
-            (celoToken_,) = IL1BlockCGT(CeloPredeploys.CELO_GAS_BRIDGE_L2).gasPayingToken();
+    function _resolveCeloToken() internal view returns (address celoTokenL1_) {
+        celoTokenL1_ = CELO_TOKEN_PROXY;
+        if (celoTokenL1_ == address(0)) {
+            (celoTokenL1_,) = IL1BlockCGT(CeloPredeploys.CELO_GAS_BRIDGE_L2).gasPayingToken();
         }
     }
 

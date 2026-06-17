@@ -35,7 +35,7 @@ abstract contract PortalMigrator_TestInit is Test {
     address internal bridge;
 
     ProxyAdmin internal proxyAdmin;
-    TestERC20 internal celoToken;
+    TestERC20 internal celoTokenL1;
     MockSeedBridge internal mockBridge;
     PortalMigrator internal portalMigrator;
 
@@ -43,18 +43,18 @@ abstract contract PortalMigrator_TestInit is Test {
         adminOwner = makeAddr("adminOwner");
 
         proxyAdmin = new ProxyAdmin(adminOwner);
-        celoToken = new TestERC20();
+        celoTokenL1 = new TestERC20();
         mockBridge = new MockSeedBridge();
         bridge = address(mockBridge);
-        portalMigrator = _deployPortalMigrator(IERC20(address(celoToken)), LEGACY_PORTAL_BALANCE);
+        portalMigrator = _deployPortalMigrator(IERC20(address(celoTokenL1)), LEGACY_PORTAL_BALANCE);
         mockBridge.setOptimismPortal(address(portalMigrator));
     }
 
-    function _deployPortalMigrator(IERC20 _celoToken, uint256 _legacyPortalBalance)
+    function _deployPortalMigrator(IERC20 _celoTokenL1, uint256 _legacyPortalBalance)
         internal
         returns (PortalMigrator portalMigrator_)
     {
-        portalMigrator_ = new PortalMigrator(PROOF_MATURITY_DELAY_SECONDS, _celoToken, bridge, _legacyPortalBalance);
+        portalMigrator_ = new PortalMigrator(PROOF_MATURITY_DELAY_SECONDS, _celoTokenL1, bridge, _legacyPortalBalance);
         vm.store(
             address(portalMigrator_),
             Constants.PROXY_OWNER_ADDRESS,
@@ -63,7 +63,7 @@ abstract contract PortalMigrator_TestInit is Test {
     }
 
     function _mintExpectedBalance() internal {
-        celoToken.mint(address(portalMigrator), LEGACY_PORTAL_BALANCE);
+        celoTokenL1.mint(address(portalMigrator), LEGACY_PORTAL_BALANCE);
     }
 
     function _assertMigrated(address _token, uint256 _amount) internal view {
@@ -80,7 +80,7 @@ abstract contract PortalMigrator_TestInit is Test {
 contract PortalMigrator_Constructor_Test is PortalMigrator_TestInit {
     function test_constructor_succeeds() external view {
         assertEq(portalMigrator.proofMaturityDelaySeconds(), PROOF_MATURITY_DELAY_SECONDS);
-        assertEq(address(portalMigrator.CELO_TOKEN()), address(celoToken));
+        assertEq(address(portalMigrator.CELO_TOKEN_L1()), address(celoTokenL1));
         assertEq(portalMigrator.CELO_GAS_BRIDGE_L1(), bridge);
         assertEq(portalMigrator.LEGACY_PORTAL_BALANCE(), LEGACY_PORTAL_BALANCE);
         assertFalse(portalMigrator.migrated());
@@ -99,7 +99,7 @@ contract PortalMigrator_Migrate_Test is PortalMigrator_TestInit {
         vm.prank(adminOwner);
         portalMigrator.migrate();
 
-        _assertMigrated(address(celoToken), LEGACY_PORTAL_BALANCE);
+        _assertMigrated(address(celoTokenL1), LEGACY_PORTAL_BALANCE);
     }
 
     function test_storageLayout_migratedInUnstructuredSlot() external {
@@ -118,7 +118,7 @@ contract PortalMigrator_Migrate_Test is PortalMigrator_TestInit {
 
     function test_migrate_balanceTooHigh_drainsAndEmits() external {
         uint256 actual = LEGACY_PORTAL_BALANCE + 1;
-        celoToken.mint(address(portalMigrator), actual);
+        celoTokenL1.mint(address(portalMigrator), actual);
 
         vm.expectEmit(address(portalMigrator));
         emit BalanceMismatch(LEGACY_PORTAL_BALANCE, actual);
@@ -126,12 +126,12 @@ contract PortalMigrator_Migrate_Test is PortalMigrator_TestInit {
         vm.prank(adminOwner);
         portalMigrator.migrate();
 
-        _assertMigrated(address(celoToken), actual);
+        _assertMigrated(address(celoTokenL1), actual);
     }
 
     function test_migrate_balanceTooLow_drainsAndEmits() external {
         uint256 actual = LEGACY_PORTAL_BALANCE - 1;
-        celoToken.mint(address(portalMigrator), actual);
+        celoTokenL1.mint(address(portalMigrator), actual);
 
         vm.expectEmit(address(portalMigrator));
         emit BalanceMismatch(LEGACY_PORTAL_BALANCE, actual);
@@ -139,7 +139,7 @@ contract PortalMigrator_Migrate_Test is PortalMigrator_TestInit {
         vm.prank(adminOwner);
         portalMigrator.migrate();
 
-        _assertMigrated(address(celoToken), actual);
+        _assertMigrated(address(celoTokenL1), actual);
     }
 }
 

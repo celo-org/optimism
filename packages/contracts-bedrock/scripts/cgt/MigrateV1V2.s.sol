@@ -41,7 +41,7 @@ contract MigrateV1V2Input is BaseDeployIO {
     address internal _externalSuperchainConfig;
 
     // CELO ERC-20 and expected pre-migration balance
-    IERC20 internal _celoToken;
+    IERC20 internal _celoTokenL1;
     uint256 internal _legacyPortalBalance;
 
     // OPCM upgrade prestates
@@ -61,7 +61,7 @@ contract MigrateV1V2Input is BaseDeployIO {
         else if (_sel == this.bridgeL1Proxy.selector) _bridgeL1Proxy = _value;
         else if (_sel == this.storageSetter.selector) _storageSetter = _value;
         else if (_sel == this.externalSuperchainConfig.selector) _externalSuperchainConfig = _value;
-        else if (_sel == this.celoToken.selector) _celoToken = IERC20(_value);
+        else if (_sel == this.celoTokenL1.selector) _celoTokenL1 = IERC20(_value);
         else revert("MigrateV1V2Input: unknown selector");
     }
 
@@ -126,9 +126,9 @@ contract MigrateV1V2Input is BaseDeployIO {
         return _externalSuperchainConfig;
     }
 
-    function celoToken() public view returns (IERC20) {
-        require(address(_celoToken) != address(0), "MigrateV1V2Input: celoToken not set");
-        return _celoToken;
+    function celoTokenL1() public view returns (IERC20) {
+        require(address(_celoTokenL1) != address(0), "MigrateV1V2Input: celoTokenL1 not set");
+        return _celoTokenL1;
     }
 
     function legacyPortalBalance() public view returns (uint256) {
@@ -188,7 +188,7 @@ contract MigrateV1V2 is Script {
         console.log("--- MigrateV1V2: Phase 1 preflight ---");
 
         // Warn-only on balance drift
-        uint256 portalBalance = _input.celoToken().balanceOf(_input.portalProxy());
+        uint256 portalBalance = _input.celoTokenL1().balanceOf(_input.portalProxy());
         if (portalBalance != _input.legacyPortalBalance()) {
             console.log("WARN portal CELO balance drifted from expected. expected:", _input.legacyPortalBalance());
             console.log("WARN actual portal CELO balance:", portalBalance);
@@ -212,13 +212,16 @@ contract MigrateV1V2 is Script {
 
         // PortalMigrator must be deployed and configured for this balance + bridge.
         PortalMigrator migrator = PortalMigrator(payable(_input.portalMigratorImpl()));
-        require(address(migrator.CELO_TOKEN()) == address(_input.celoToken()), "MigrateV1V2: migrator CELO_TOKEN mismatch");
-        require(migrator.CELO_GAS_BRIDGE_L1() == _input.bridgeL1Proxy(), "MigrateV1V2: migrator gas bridge mismatch");
-        require(migrator.LEGACY_PORTAL_BALANCE() == _input.legacyPortalBalance(), "MigrateV1V2: migrator LEGACY_PORTAL_BALANCE mismatch");
         require(
-            vm.load(_input.portalProxy(), MIGRATED_SLOT) == bytes32(0),
-            "MigrateV1V2: portal already migrated"
+            address(migrator.CELO_TOKEN_L1()) == address(_input.celoTokenL1()),
+            "MigrateV1V2: migrator CELO_TOKEN_L1 mismatch"
         );
+        require(migrator.CELO_GAS_BRIDGE_L1() == _input.bridgeL1Proxy(), "MigrateV1V2: migrator gas bridge mismatch");
+        require(
+            migrator.LEGACY_PORTAL_BALANCE() == _input.legacyPortalBalance(),
+            "MigrateV1V2: migrator LEGACY_PORTAL_BALANCE mismatch"
+        );
+        require(vm.load(_input.portalProxy(), MIGRATED_SLOT) == bytes32(0), "MigrateV1V2: portal already migrated");
         console.log("OK  PortalMigrator configuration matches");
 
         // Current portal impl must match _originalPortalImpl.
@@ -228,7 +231,9 @@ contract MigrateV1V2 is Script {
 
         // L1 bridge must be initialized, wired, and not yet escrow-seeded.
         ICeloGasBridgeL1 bridge = ICeloGasBridgeL1(payable(_input.bridgeL1Proxy()));
-        require(address(bridge.CELO_TOKEN()) == address(_input.celoToken()), "MigrateV1V2: bridge CELO_TOKEN mismatch");
+        require(
+            address(bridge.celoTokenL1()) == address(_input.celoTokenL1()), "MigrateV1V2: bridge celoTokenL1 mismatch"
+        );
         require(address(bridge.systemConfig()) == _input.systemConfig(), "MigrateV1V2: bridge systemConfig not wired");
         require(address(bridge.messenger()) != address(0), "MigrateV1V2: bridge messenger not wired");
         require(address(bridge.otherBridge()) != address(0), "MigrateV1V2: bridge otherBridge not wired");
@@ -264,9 +269,7 @@ contract MigrateV1V2 is Script {
         tx1Calls[0] = IMulticall3.Call3({
             target: _input.proxyAdmin(),
             allowFailure: false,
-            callData: abi.encodeWithSignature(
-                "upgrade(address,address)", _input.portalProxy(), _input.portalMigratorImpl()
-            )
+            callData: abi.encodeWithSignature("upgrade(address,address)", _input.portalProxy(), _input.portalMigratorImpl())
         });
         tx1Calls[1] = IMulticall3.Call3({
             target: _input.portalProxy(),
@@ -276,9 +279,7 @@ contract MigrateV1V2 is Script {
         tx1Calls[2] = IMulticall3.Call3({
             target: _input.proxyAdmin(),
             allowFailure: false,
-            callData: abi.encodeWithSignature(
-                "upgrade(address,address)", _input.portalProxy(), _input.originalPortalImpl()
-            )
+            callData: abi.encodeWithSignature("upgrade(address,address)", _input.portalProxy(), _input.originalPortalImpl())
         });
         bytes memory tx1Data = _encodeAggregate3(tx1Calls);
         console.log("Tx1: Multicall3.aggregate3[install migrator, migrate(), restore original portal]");
@@ -292,9 +293,7 @@ contract MigrateV1V2 is Script {
         tx2Calls[0] = IMulticall3.Call3({
             target: _input.proxyAdmin(),
             allowFailure: false,
-            callData: abi.encodeWithSignature(
-                "upgrade(address,address)", _input.systemConfig(), _input.storageSetter()
-            )
+            callData: abi.encodeWithSignature("upgrade(address,address)", _input.systemConfig(), _input.storageSetter())
         });
         tx2Calls[1] = IMulticall3.Call3({
             target: _input.systemConfig(),
@@ -349,12 +348,12 @@ contract MigrateV1V2 is Script {
         console.log("--- MigrateV1V2: Phase 3 verification ---");
 
         // Portal CELO balance should be zero after migration.
-        uint256 portalBalance = _input.celoToken().balanceOf(_input.portalProxy());
+        uint256 portalBalance = _input.celoTokenL1().balanceOf(_input.portalProxy());
         require(portalBalance == 0, "MigrateV1V2: portal still holds CELO");
         console.log("OK  portal CELO balance == 0");
 
         // CeloGasBridgeL1 holds the migrated CELO; warn if the amount drifted from expected.
-        uint256 bridgeBalance = _input.celoToken().balanceOf(_input.bridgeL1Proxy());
+        uint256 bridgeBalance = _input.celoTokenL1().balanceOf(_input.bridgeL1Proxy());
         if (bridgeBalance != _input.legacyPortalBalance()) {
             console.log("WARN CeloGasBridgeL1 balance differs from expected. expected:", _input.legacyPortalBalance());
             console.log("WARN actual CeloGasBridgeL1 balance:", bridgeBalance);
@@ -376,16 +375,13 @@ contract MigrateV1V2 is Script {
         console.log("OK  portal implementation upgraded by OPCM (v6)");
 
         // Migration flag should be set.
-        require(
-            vm.load(_input.portalProxy(), MIGRATED_SLOT) == bytes32(uint256(1)),
-            "MigrateV1V2: portal not migrated"
-        );
+        require(vm.load(_input.portalProxy(), MIGRATED_SLOT) == bytes32(uint256(1)), "MigrateV1V2: portal not migrated");
         console.log("OK  portal migration flag set (proxy storage)");
 
         // Escrow must be seeded and covered by the bridge's actual CELO balance.
         ICeloGasBridgeL1 bridge = ICeloGasBridgeL1(payable(_input.bridgeL1Proxy()));
         require(bridge.escrowSeeded(), "MigrateV1V2: bridge escrow not seeded");
-        uint256 trackedEscrow = bridge.deposits(address(_input.celoToken()), address(0));
+        uint256 trackedEscrow = bridge.deposits(address(_input.celoTokenL1()), address(0));
         require(trackedEscrow <= bridgeBalance, "MigrateV1V2: bridge escrow > token balance (insolvent)");
         console.log("OK  tracked escrow covered by CELO balance:", trackedEscrow);
 

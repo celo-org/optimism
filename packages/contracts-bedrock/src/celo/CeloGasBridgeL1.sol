@@ -14,6 +14,9 @@ import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { ISemver } from "interfaces/universal/ISemver.sol";
 
+// Libraries
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
+
 /// @custom:proxied true
 /// @title CeloGasBridgeL1
 /// @notice Single-asset L1 bridge for CELO under CGT v2.
@@ -66,7 +69,8 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     // ================================================================
 
     /// @notice CELO token bridged by this contract.
-    IERC20 public immutable CELO_TOKEN;
+    /// @custom:network-specific
+    IERC20 public celoTokenL1;
 
     /// @notice Address of the SystemConfig contract.
     ISystemConfig public systemConfig;
@@ -76,7 +80,7 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
 
     /// @notice Reserved storage slots for future upgrades. Sized to leave the parent's storage
     ///         contiguous and to allow new state in subsequent versions without layout shifts.
-    uint256[49] private __gap;
+    uint256[48] private __gap;
 
     /// @notice Semantic version.
     /// @custom:semver 1.0.0
@@ -86,9 +90,7 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     //                           EXTERNAL
     // ================================================================
 
-    /// @param _celoToken CELO token on L1.
-    constructor(IERC20 _celoToken) StandardBridge() ReinitializableBase(1) {
-        CELO_TOKEN = _celoToken;
+    constructor() StandardBridge() ReinitializableBase(1) {
         _disableInitializers();
     }
 
@@ -96,16 +98,19 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @param _messenger Contract for the CrossDomainMessenger on this network.
     /// @param _systemConfig Contract for the SystemConfig on this network.
     /// @param _otherBridge Contract for the bridge on the other network.
+    /// @param _celoTokenL1 CELO token on L1.
     function initialize(
         ICrossDomainMessenger _messenger,
         ISystemConfig _systemConfig,
-        StandardBridge _otherBridge
+        StandardBridge _otherBridge,
+        IERC20 _celoTokenL1
     )
         external
         reinitializer(initVersion())
     {
         _assertOnlyProxyAdminOrProxyAdminOwner();
 
+        celoTokenL1 = _celoTokenL1;
         systemConfig = _systemConfig;
         __StandardBridge_init({ _messenger: _messenger, _otherBridge: _otherBridge });
     }
@@ -118,7 +123,7 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         if (escrowSeeded) revert CeloGasBridgeL1_EscrowAlreadySeeded();
 
         escrowSeeded = true;
-        deposits[address(CELO_TOKEN)][address(0)] = _amount;
+        deposits[address(celoTokenL1)][address(0)] = _amount;
 
         emit EscrowSeeded(portal, _amount);
     }
@@ -129,16 +134,11 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     }
 
     /// @notice Deposits CELO into escrow for later L2 finalization.
-    /// @dev    TODO: op-node MUST install the CeloGasBridgeL2 predeploy before this deposit is
-    ///         relayed; a relay to the codeless address silently succeeds with no L2 mint -> funds
-    ///         stuck. See CeloGasBridgeL2 documentation.
     /// @param _to Recipient on L2.
     /// @param _amount Amount of CELO to deposit.
     /// @param _minGasLimit Minimum gas limit for the L2 deposit transaction.
     /// @param _extraData Additional data attached to the deposit.
-    function deposit(address _to, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData)
-        external
-    {
+    function deposit(address _to, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData) external {
         if (!escrowSeeded) revert CeloGasBridgeL1_NotActivated();
         if (paused()) revert CeloGasBridgeL1_Paused();
         if (!systemConfig.isCustomGasToken()) revert CeloGasBridgeL1_NotCgtMode();
@@ -146,9 +146,10 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         if (_to == address(this) || _to == address(messenger)) revert CeloGasBridgeL1_InvalidRecipient();
         if (_amount == 0) revert CeloGasBridgeL1_ZeroAmount();
 
-        CELO_TOKEN.safeTransferFrom(msg.sender, address(this), _amount);
-        deposits[address(CELO_TOKEN)][address(0)] += _amount;
-        _emitERC20BridgeInitiated(address(CELO_TOKEN), address(0), msg.sender, _to, _amount, _extraData);
+        celoTokenL1.safeTransferFrom(msg.sender, address(this), _amount);
+        deposits[address(celoTokenL1)][address(0)] += _amount;
+        // localToken = L1 CELO (celoTokenL1); remoteToken = L2 CELO (GOLD_TOKEN).
+        _emitERC20BridgeInitiated(address(celoTokenL1), CeloPredeploys.GOLD_TOKEN, msg.sender, _to, _amount, _extraData);
 
         messenger.sendMessage({
             _target: address(otherBridge),
@@ -162,7 +163,12 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @param _to Recipient on L1.
     /// @param _amount Amount of CELO to release.
     /// @param _extraData Additional data attached to the withdrawal.
-    function finalizeWithdrawal(address _from, address _to, uint256 _amount, bytes calldata _extraData)
+    function finalizeWithdrawal(
+        address _from,
+        address _to,
+        uint256 _amount,
+        bytes calldata _extraData
+    )
         external
         onlyOtherBridge
     {
@@ -170,12 +176,12 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         if (_to == address(0)) revert CeloGasBridgeL1_ZeroRecipient();
         if (_to == address(this) || _to == address(messenger)) revert CeloGasBridgeL1_InvalidRecipient();
 
-        deposits[address(CELO_TOKEN)][address(0)] -= _amount;
-        CELO_TOKEN.safeTransfer(_to, _amount);
+        deposits[address(celoTokenL1)][address(0)] -= _amount;
+        celoTokenL1.safeTransfer(_to, _amount);
 
         // Emit event directly. `_emitERC20BridgeFinalized` reverts to disable the
-        // inherited `finalizeBridgeERC20` path.
-        emit ERC20BridgeFinalized(address(CELO_TOKEN), address(0), _from, _to, _amount, _extraData);
+        // inherited `finalizeBridgeERC20` path. remoteToken = GOLD_TOKEN (L2 CELO id).
+        emit ERC20BridgeFinalized(address(celoTokenL1), CeloPredeploys.GOLD_TOKEN, _from, _to, _amount, _extraData);
     }
 
     /// @dev Disabled — inherited from StandardBridge.

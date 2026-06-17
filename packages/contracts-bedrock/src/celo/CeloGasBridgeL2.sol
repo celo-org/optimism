@@ -13,6 +13,7 @@ import { ISemver } from "interfaces/universal/ISemver.sol";
 
 // Libraries
 import { Predeploys } from "src/libraries/Predeploys.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 
 /// @custom:proxied true
 /// @custom:predeploy 0x4200000000000000000000000000000000001023
@@ -21,8 +22,6 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 /// @dev    Inherited `bridgeETH`, `bridgeETHTo`, `finalizeBridgeETH`, and `finalizeBridgeERC20`
 ///         are not marked `virtual` in upstream OP v6.0.0. They are disabled via the virtual
 ///         `_emit*` hook overrides below, which always revert in practice.
-/// @dev    TODO: op-node MUST install this predeploy before relaying any user deposit in the
-///         first post-flag L2 block. Otherwise, funds can be stuck.
 contract CeloGasBridgeL2 is StandardBridge, ISemver {
     // ================================================================
     //                            ERRORS
@@ -50,6 +49,12 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
     //                            STORAGE
     // ================================================================
 
+    /// @notice L1 CELO ERC20 address; emitted as the remote token in bridge events.
+    address public celoTokenL1;
+
+    /// @notice Reserved storage slots for future upgrades.
+    uint256[49] private __gap;
+
     /// @notice Semantic version.
     /// @custom:semver 1.0.0
     string public constant version = "1.0.0";
@@ -64,7 +69,9 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
 
     /// @notice Initializer.
     /// @param _otherBridge Contract for the bridge on the other network.
-    function initialize(StandardBridge _otherBridge) external initializer {
+    /// @param _celoTokenL1 L1 CELO ERC20 address, emitted as the remote token in bridge events.
+    function initialize(StandardBridge _otherBridge, address _celoTokenL1) external initializer {
+        celoTokenL1 = _celoTokenL1;
         __StandardBridge_init({
             _messenger: ICrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER),
             _otherBridge: _otherBridge
@@ -95,9 +102,8 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
 
         ILiquidityController(Predeploys.LIQUIDITY_CONTROLLER).burn{ value: _amount }();
 
-        // Both token fields are zero: on L2, CELO is the native asset, not an ERC20.
-        // TODO: address(CELO_TOKEN) for indexer correlation — TBD.
-        emit ERC20BridgeInitiated(address(0), address(0), msg.sender, _to, _amount, _extraData);
+        // localToken = L2 CELO (GOLD_TOKEN); remoteToken = L1 CELO (celoTokenL1).
+        emit ERC20BridgeInitiated(CeloPredeploys.GOLD_TOKEN, celoTokenL1, msg.sender, _to, _amount, _extraData);
 
         messenger.sendMessage({
             _target: address(otherBridge),
@@ -120,9 +126,8 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
 
         ILiquidityController(Predeploys.LIQUIDITY_CONTROLLER).mint(_to, _amount);
 
-        // NOTE: Both localToken and remoteToken are address(0)
-        // TODO: address(CELO_TOKEN) for indexer correlation — TBD.
-        emit ERC20BridgeFinalized(address(0), address(0), _from, _to, _amount, _extraData);
+        // localToken = L2 CELO (GOLD_TOKEN); remoteToken = L1 CELO (celoTokenL1).
+        emit ERC20BridgeFinalized(CeloPredeploys.GOLD_TOKEN, celoTokenL1, _from, _to, _amount, _extraData);
     }
 
     /// @dev Disabled — inherited from StandardBridge.

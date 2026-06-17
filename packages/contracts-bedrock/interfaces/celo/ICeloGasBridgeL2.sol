@@ -13,7 +13,9 @@ interface ICeloGasBridgeL2 is IStandardBridge, ISemver {
     error CeloGasBridgeL2_ValueMismatch();
     error CeloGasBridgeL2_ZeroAmount();
 
-    function initialize(IStandardBridge _otherBridge) external;
+    function initialize(IStandardBridge _otherBridge, address _celoTokenL1) external;
+
+    function celoTokenL1() external view returns (address);
 
     function withdraw(address _to, uint256 _amount, uint32 _minGasLimit, bytes memory _extraData) external payable;
 

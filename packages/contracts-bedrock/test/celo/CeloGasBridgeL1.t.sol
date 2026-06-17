@@ -11,6 +11,7 @@ import { StandardBridge } from "src/universal/StandardBridge.sol";
 
 // Libraries
 import { Constants } from "src/libraries/Constants.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 
 // Mocks
 import {
@@ -41,7 +42,7 @@ abstract contract CeloGasBridgeL1_TestInit is Test {
     address internal optimismPortal;
     address internal proxyAdminOwnerAddr;
 
-    MockERC20 internal celoToken;
+    MockERC20 internal celoTokenL1;
     MockSystemConfig internal systemConfig;
     MockCrossDomainMessenger internal messenger;
     MockProxyAdmin internal proxyAdminContract;
@@ -56,7 +57,7 @@ abstract contract CeloGasBridgeL1_TestInit is Test {
         optimismPortal = makeAddr("optimismPortal");
         proxyAdminOwnerAddr = makeAddr("proxyAdminOwner");
 
-        celoToken = new MockERC20();
+        celoTokenL1 = new MockERC20();
         systemConfig = new MockSystemConfig();
         systemConfig.setIsCustomGasToken(true);
         systemConfig.setOptimismPortal(optimismPortal);
@@ -64,7 +65,7 @@ abstract contract CeloGasBridgeL1_TestInit is Test {
 
         proxyAdminContract = new MockProxyAdmin(proxyAdminOwnerAddr);
 
-        implementation = new CeloGasBridgeL1(IERC20(address(celoToken)));
+        implementation = new CeloGasBridgeL1();
 
         bridge = _deployBridge();
     }
@@ -75,7 +76,9 @@ abstract contract CeloGasBridgeL1_TestInit is Test {
         bridge_ = ICeloGasBridgeL1(payable(address(proxy)));
 
         // Stash ProxyAdmin in PROXY_OWNER_ADDRESS so ProxyAdminOwnedBase reads it during initialize().
-        vm.store(address(bridge_), Constants.PROXY_OWNER_ADDRESS, bytes32(uint256(uint160(address(proxyAdminContract)))));
+        vm.store(
+            address(bridge_), Constants.PROXY_OWNER_ADDRESS, bytes32(uint256(uint160(address(proxyAdminContract))))
+        );
 
         vm.prank(address(proxyAdminContract));
         proxy.upgradeToAndCall(
@@ -85,7 +88,8 @@ abstract contract CeloGasBridgeL1_TestInit is Test {
                 (
                     ICrossDomainMessenger(address(messenger)),
                     ISystemConfig(address(systemConfig)),
-                    IStandardBridge(otherBridge)
+                    IStandardBridge(otherBridge),
+                    IERC20(address(celoTokenL1))
                 )
             )
         );
@@ -118,12 +122,9 @@ contract CeloGasBridgeL1_Constructor_Test is CeloGasBridgeL1_TestInit {
         implementation.initialize(
             ICrossDomainMessenger(address(messenger)),
             ISystemConfig(address(systemConfig)),
-            StandardBridge(otherBridge)
+            StandardBridge(otherBridge),
+            IERC20(address(celoTokenL1))
         );
-    }
-
-    function test_constructor_celoTokenImmutable_succeeds() external view {
-        assertEq(address(implementation.CELO_TOKEN()), address(celoToken));
     }
 }
 
@@ -131,13 +132,13 @@ contract CeloGasBridgeL1_Constructor_Test is CeloGasBridgeL1_TestInit {
 /// @notice Tests the `initialize` function of the `CeloGasBridgeL1` contract.
 contract CeloGasBridgeL1_Initialize_Test is CeloGasBridgeL1_TestInit {
     function test_initialize_succeeds() external view {
-        assertEq(address(bridge.CELO_TOKEN()), address(celoToken));
+        assertEq(address(bridge.celoTokenL1()), address(celoTokenL1));
         assertEq(address(bridge.systemConfig()), address(systemConfig));
         assertEq(address(bridge.MESSENGER()), address(messenger));
         assertEq(address(bridge.messenger()), address(messenger));
         assertEq(address(bridge.OTHER_BRIDGE()), otherBridge);
         assertEq(address(bridge.otherBridge()), otherBridge);
-        assertEq(bridge.deposits(address(celoToken), address(0)), 0);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), 0);
         assertFalse(bridge.escrowSeeded());
     }
 
@@ -147,7 +148,8 @@ contract CeloGasBridgeL1_Initialize_Test is CeloGasBridgeL1_TestInit {
         bridge.initialize(
             ICrossDomainMessenger(address(messenger)),
             ISystemConfig(address(systemConfig)),
-            IStandardBridge(otherBridge)
+            IStandardBridge(otherBridge),
+            IERC20(address(celoTokenL1))
         );
     }
 }
@@ -163,18 +165,18 @@ contract CeloGasBridgeL1_SeedEscrow_Test is CeloGasBridgeL1_TestInit {
 
         _seedEscrow(bridge, amount);
 
-        assertEq(bridge.deposits(address(celoToken), address(0)), amount);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
         assertTrue(bridge.escrowSeeded());
     }
 
     function test_seedEscrow_solvent_succeeds() external {
         uint256 amount = 700;
-        celoToken.mint(address(bridge), amount);
+        celoTokenL1.mint(address(bridge), amount);
 
         _seedEscrow(bridge, amount);
 
-        assertEq(bridge.deposits(address(celoToken), address(0)), celoToken.balanceOf(address(bridge)));
-        assertEq(celoToken.balanceOf(address(bridge)), amount);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), celoTokenL1.balanceOf(address(bridge)));
+        assertEq(celoTokenL1.balanceOf(address(bridge)), amount);
     }
 }
 
@@ -238,20 +240,20 @@ contract CeloGasBridgeL1_Deposit_Test is CeloGasBridgeL1_TestInit {
         uint256 amount = 100;
         uint32 minGasLimit = 250_000;
 
-        celoToken.mint(alice, amount);
+        celoTokenL1.mint(alice, amount);
 
         vm.prank(alice, alice);
-        celoToken.approve(address(bridge), amount);
+        celoTokenL1.approve(address(bridge), amount);
 
         vm.expectEmit(address(bridge));
-        emit ERC20BridgeInitiated(address(celoToken), address(0), alice, bob, amount, extraData);
+        emit ERC20BridgeInitiated(address(celoTokenL1), CeloPredeploys.GOLD_TOKEN, alice, bob, amount, extraData);
 
         vm.prank(alice, alice);
         bridge.deposit(bob, amount, minGasLimit, extraData);
 
-        assertEq(celoToken.balanceOf(alice), 0);
-        assertEq(celoToken.balanceOf(address(bridge)), amount);
-        assertEq(bridge.deposits(address(celoToken), address(0)), amount);
+        assertEq(celoTokenL1.balanceOf(alice), 0);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), amount);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
 
         assertEq(messenger.lastTarget(), otherBridge);
         assertEq(
@@ -305,12 +307,12 @@ contract CeloGasBridgeL1_Deposit_Test is CeloGasBridgeL1_TestInit {
     function test_deposit_fromContract_succeeds() external {
         // Contracts may bridge now that `onlyEOA` is removed; `_to` is explicit.
         uint256 amount = 100;
-        celoToken.mint(address(this), amount);
-        celoToken.approve(address(bridge), amount);
+        celoTokenL1.mint(address(this), amount);
+        celoTokenL1.approve(address(bridge), amount);
 
         bridge.deposit(bob, amount, 250_000, hex"");
 
-        assertEq(bridge.deposits(address(celoToken), address(0)), amount);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
         assertEq(messenger.lastTarget(), otherBridge);
     }
 }
@@ -330,24 +332,24 @@ contract CeloGasBridgeL1_FinalizeWithdrawal_Test is CeloGasBridgeL1_TestInit {
     function test_finalizeWithdrawal_succeeds() external {
         uint256 amount = 100;
         bytes memory extraData = hex"1234";
-        celoToken.mint(address(bridge), amount);
+        celoTokenL1.mint(address(bridge), amount);
 
         // Set the deposits mapping to reflect that this amount was previously bridged.
         vm.store(
             address(bridge),
-            keccak256(abi.encode(address(0), keccak256(abi.encode(address(celoToken), uint256(2))))),
+            keccak256(abi.encode(address(0), keccak256(abi.encode(address(celoTokenL1), uint256(2))))),
             bytes32(amount)
         );
 
         _asOtherBridge();
 
         vm.expectEmit(address(bridge));
-        emit ERC20BridgeFinalized(address(celoToken), address(0), alice, bob, amount, extraData);
+        emit ERC20BridgeFinalized(address(celoTokenL1), CeloPredeploys.GOLD_TOKEN, alice, bob, amount, extraData);
 
         bridge.finalizeWithdrawal(alice, bob, amount, extraData);
 
-        assertEq(celoToken.balanceOf(bob), amount);
-        assertEq(celoToken.balanceOf(address(bridge)), 0);
+        assertEq(celoTokenL1.balanceOf(bob), amount);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), 0);
     }
 
     function test_finalizeWithdrawal_paused_reverts() external {
@@ -393,15 +395,15 @@ contract CeloGasBridgeL1_FinalizeWithdrawal_Test is CeloGasBridgeL1_TestInit {
         // First withdrawal on a freshly-migrated bridge (escrow seeded, CELO in) must work without a prior deposit.
         uint256 seed = 500;
         ICeloGasBridgeL1 seeded = _deployBridge();
-        celoToken.mint(address(seeded), seed);
+        celoTokenL1.mint(address(seeded), seed);
         _seedEscrow(seeded, seed);
 
         messenger.setXDomainMessageSender(otherBridge);
         vm.prank(address(messenger));
         seeded.finalizeWithdrawal(alice, bob, seed, hex"");
 
-        assertEq(celoToken.balanceOf(bob), seed);
-        assertEq(seeded.deposits(address(celoToken), address(0)), 0);
+        assertEq(celoTokenL1.balanceOf(bob), seed);
+        assertEq(seeded.deposits(address(celoTokenL1), address(0)), 0);
     }
 }
 

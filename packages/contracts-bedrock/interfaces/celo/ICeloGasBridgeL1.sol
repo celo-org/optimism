@@ -23,7 +23,7 @@ interface ICeloGasBridgeL1 is IStandardBridge, IProxyAdminOwnedBase, IReinitiali
 
     event EscrowSeeded(address indexed portal, uint256 amount);
 
-    function CELO_TOKEN() external view returns (IERC20);
+    function celoTokenL1() external view returns (IERC20);
     function systemConfig() external view returns (ISystemConfig);
     function escrowSeeded() external view returns (bool);
     function seedEscrow(uint256 _amount) external;
@@ -31,7 +31,8 @@ interface ICeloGasBridgeL1 is IStandardBridge, IProxyAdminOwnedBase, IReinitiali
     function initialize(
         ICrossDomainMessenger _messenger,
         ISystemConfig _systemConfig,
-        IStandardBridge _otherBridge
+        IStandardBridge _otherBridge,
+        IERC20 _celoTokenL1
     )
         external;
 

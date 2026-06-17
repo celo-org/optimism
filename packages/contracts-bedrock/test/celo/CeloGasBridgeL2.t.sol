@@ -34,6 +34,7 @@ abstract contract CeloGasBridgeL2_TestInit is Test {
     address internal bob;
     address payable internal otherBridge;
     address internal proxyAdmin;
+    address internal celoTokenL1;
 
     CeloGasBridgeL2 internal implementation;
     ICeloGasBridgeL2 internal bridge;
@@ -46,6 +47,7 @@ abstract contract CeloGasBridgeL2_TestInit is Test {
         bob = makeAddr("bob");
         otherBridge = payable(makeAddr("otherBridge"));
         proxyAdmin = makeAddr("proxyAdmin");
+        celoTokenL1 = makeAddr("l1CeloToken");
 
         vm.etch(Predeploys.L1_BLOCK_ATTRIBUTES, address(new MockL1Block()).code);
         vm.etch(Predeploys.LIQUIDITY_CONTROLLER, address(new MockLiquidityController()).code);
@@ -64,7 +66,7 @@ abstract contract CeloGasBridgeL2_TestInit is Test {
 
         vm.prank(proxyAdmin);
         proxy.upgradeToAndCall(
-            address(implementation), abi.encodeCall(ICeloGasBridgeL2.initialize, (IStandardBridge(otherBridge)))
+            address(implementation), abi.encodeCall(ICeloGasBridgeL2.initialize, (IStandardBridge(otherBridge), celoTokenL1))
         );
     }
 
@@ -87,7 +89,7 @@ contract CeloGasBridgeL2_Version_Test is CeloGasBridgeL2_TestInit {
 contract CeloGasBridgeL2_Constructor_Test is CeloGasBridgeL2_TestInit {
     function test_constructor_initializeImplementation_reverts() external {
         vm.expectRevert("Initializable: contract is already initialized");
-        implementation.initialize(StandardBridge(otherBridge));
+        implementation.initialize(StandardBridge(otherBridge), celoTokenL1);
     }
 }
 
@@ -99,11 +101,12 @@ contract CeloGasBridgeL2_Initialize_Test is CeloGasBridgeL2_TestInit {
         assertEq(address(bridge.messenger()), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
         assertEq(address(bridge.OTHER_BRIDGE()), otherBridge);
         assertEq(address(bridge.otherBridge()), otherBridge);
+        assertEq(bridge.celoTokenL1(), celoTokenL1);
     }
 
     function test_initialize_alreadyInitialized_reverts() external {
         vm.expectRevert("Initializable: contract is already initialized");
-        bridge.initialize(IStandardBridge(payable(makeAddr("newOtherBridge"))));
+        bridge.initialize(IStandardBridge(payable(makeAddr("newOtherBridge"))), celoTokenL1);
     }
 }
 
@@ -135,7 +138,7 @@ contract CeloGasBridgeL2_Withdraw_Test is CeloGasBridgeL2_TestInit {
         vm.deal(alice, amount);
 
         vm.expectEmit(true, true, true, true, address(bridge));
-        emit ERC20BridgeInitiated(address(0), address(0), alice, bob, amount, extraData);
+        emit ERC20BridgeInitiated(CeloPredeploys.GOLD_TOKEN, celoTokenL1, alice, bob, amount, extraData);
 
         vm.prank(alice, alice);
         bridge.withdraw{ value: amount }(bob, amount, minGasLimit, extraData);
@@ -235,7 +238,7 @@ contract CeloGasBridgeL2_FinalizeDeposit_Test is CeloGasBridgeL2_TestInit {
 
         _authorizeFinalizeDeposit();
         vm.expectEmit(true, true, true, true, address(bridge));
-        emit ERC20BridgeFinalized(address(0), address(0), alice, bob, 100, extraData);
+        emit ERC20BridgeFinalized(CeloPredeploys.GOLD_TOKEN, celoTokenL1, alice, bob, 100, extraData);
         bridge.finalizeDeposit(alice, bob, 100, extraData);
 
         assertEq(liquidityController.lastMintCaller(), address(bridge));

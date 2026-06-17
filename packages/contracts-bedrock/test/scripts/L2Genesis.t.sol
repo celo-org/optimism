@@ -222,6 +222,7 @@ abstract contract L2Genesis_TestInit is Test {
 
         ICeloGasBridgeL2 bridge = ICeloGasBridgeL2(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2));
         assertEq(address(bridge.otherBridge()), input.celoGasBridgeL1Proxy);
+        assertEq(bridge.celoTokenL1(), input.celoTokenL1);
     }
 }
 
@@ -238,6 +239,7 @@ contract L2Genesis_Run_Test is L2Genesis_TestInit {
             l1StandardBridgeProxy: payable(address(0x0000000000000000000000000000000000000002)),
             l1ERC721BridgeProxy: payable(address(0x0000000000000000000000000000000000000003)),
             celoGasBridgeL1Proxy: payable(address(0x000000000000000000000000000000000000000A)),
+            celoTokenL1: address(0x000000000000000000000000000000000000000b),
             opChainProxyAdminOwner: address(0x0000000000000000000000000000000000000004),
             sequencerFeeVaultRecipient: address(0x0000000000000000000000000000000000000005),
             sequencerFeeVaultMinimumWithdrawalAmount: 1,

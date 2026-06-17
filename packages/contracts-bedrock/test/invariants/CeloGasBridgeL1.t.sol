@@ -31,7 +31,7 @@ import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenge
 contract CeloGasBridgeL1_Handler is StdUtils {
     Vm internal immutable vm;
     ICeloGasBridgeL1 internal immutable bridge;
-    MockERC20 internal immutable celoToken;
+    MockERC20 internal immutable celoTokenL1;
     MockCrossDomainMessenger internal immutable messenger;
     address internal immutable portal;
     address internal immutable otherBridge;
@@ -45,14 +45,14 @@ contract CeloGasBridgeL1_Handler is StdUtils {
     constructor(
         Vm _vm,
         ICeloGasBridgeL1 _bridge,
-        MockERC20 _celoToken,
+        MockERC20 _celoTokenL1,
         MockCrossDomainMessenger _messenger,
         address _portal,
         address _otherBridge
     ) {
         vm = _vm;
         bridge = _bridge;
-        celoToken = _celoToken;
+        celoTokenL1 = _celoTokenL1;
         messenger = _messenger;
         portal = _portal;
         otherBridge = _otherBridge;
@@ -62,7 +62,7 @@ contract CeloGasBridgeL1_Handler is StdUtils {
     function seedEscrow(uint256 _amount) external {
         if (seeded) return;
         _amount = bound(_amount, 0, type(uint96).max);
-        celoToken.mint(address(bridge), _amount);
+        celoTokenL1.mint(address(bridge), _amount);
         vm.prank(portal);
         bridge.seedEscrow(_amount);
         seedAmount = _amount;
@@ -73,15 +73,15 @@ contract CeloGasBridgeL1_Handler is StdUtils {
     function deposit(uint256 _amount) external {
         if (!seeded) return;
         _amount = bound(_amount, 1, type(uint96).max);
-        celoToken.mint(address(this), _amount);
-        celoToken.approve(address(bridge), _amount);
+        celoTokenL1.mint(address(this), _amount);
+        celoTokenL1.approve(address(bridge), _amount);
         bridge.deposit(address(0xBEEF), _amount, 200_000, hex"");
         totalDeposited += _amount;
     }
 
     /// @notice Finalize a withdrawal via the messenger; bounded to tracked escrow to avoid trivial reverts.
     function finalizeWithdrawal(uint256 _amount) external {
-        uint256 tracked = bridge.deposits(address(celoToken), address(0));
+        uint256 tracked = bridge.deposits(address(celoTokenL1), address(0));
         if (tracked == 0) return;
         _amount = bound(_amount, 1, tracked);
         messenger.setXDomainMessageSender(otherBridge);
@@ -93,14 +93,14 @@ contract CeloGasBridgeL1_Handler is StdUtils {
     /// @notice Direct CELO donation: must never break solvency (proves the `<=` invariant choice).
     function donate(uint256 _amount) external {
         _amount = bound(_amount, 0, type(uint96).max);
-        celoToken.mint(address(bridge), _amount);
+        celoTokenL1.mint(address(bridge), _amount);
     }
 }
 
 /// @title CeloGasBridgeL1_Solvency_Invariant
 /// @notice Escrow accounting stays solvent and exact across any action sequence.
 contract CeloGasBridgeL1_Solvency_Invariant is StdInvariant, Test {
-    MockERC20 internal celoToken;
+    MockERC20 internal celoTokenL1;
     MockSystemConfig internal systemConfig;
     MockCrossDomainMessenger internal messenger;
     MockProxyAdmin internal proxyAdminContract;
@@ -111,14 +111,14 @@ contract CeloGasBridgeL1_Solvency_Invariant is StdInvariant, Test {
     address payable internal otherBridge = payable(makeAddr("otherBridge"));
 
     function setUp() public {
-        celoToken = new MockERC20();
+        celoTokenL1 = new MockERC20();
         systemConfig = new MockSystemConfig();
         systemConfig.setIsCustomGasToken(true);
         systemConfig.setOptimismPortal(portal);
         messenger = new MockCrossDomainMessenger();
         proxyAdminContract = new MockProxyAdmin(makeAddr("proxyAdminOwner"));
 
-        CeloGasBridgeL1 implementation = new CeloGasBridgeL1(IERC20(address(celoToken)));
+        CeloGasBridgeL1 implementation = new CeloGasBridgeL1();
         Proxy proxy = new Proxy(address(proxyAdminContract));
         bridge = ICeloGasBridgeL1(payable(address(proxy)));
         vm.store(address(bridge), Constants.PROXY_OWNER_ADDRESS, bytes32(uint256(uint160(address(proxyAdminContract)))));
@@ -127,19 +127,24 @@ contract CeloGasBridgeL1_Solvency_Invariant is StdInvariant, Test {
             address(implementation),
             abi.encodeCall(
                 ICeloGasBridgeL1.initialize,
-                (ICrossDomainMessenger(address(messenger)), ISystemConfig(address(systemConfig)), IStandardBridge(otherBridge))
+                (
+                    ICrossDomainMessenger(address(messenger)),
+                    ISystemConfig(address(systemConfig)),
+                    IStandardBridge(otherBridge),
+                    IERC20(address(celoTokenL1))
+                )
             )
         );
 
-        handler = new CeloGasBridgeL1_Handler(vm, bridge, celoToken, messenger, portal, otherBridge);
+        handler = new CeloGasBridgeL1_Handler(vm, bridge, celoTokenL1, messenger, portal, otherBridge);
         targetContract(address(handler));
     }
 
     /// @notice Tracked escrow never exceeds the bridge's actual CELO balance (no theft; donations safe).
     function invariant_escrowCoveredByBalance() public view {
         assertLe(
-            bridge.deposits(address(celoToken), address(0)),
-            celoToken.balanceOf(address(bridge)),
+            bridge.deposits(address(celoTokenL1), address(0)),
+            celoTokenL1.balanceOf(address(bridge)),
             "escrow exceeds CELO balance"
         );
     }
@@ -147,7 +152,7 @@ contract CeloGasBridgeL1_Solvency_Invariant is StdInvariant, Test {
     /// @notice Tracked escrow exactly equals seed + deposits - withdrawals (no leaks either direction).
     function invariant_escrowMatchesGhostAccounting() public view {
         assertEq(
-            bridge.deposits(address(celoToken), address(0)),
+            bridge.deposits(address(celoTokenL1), address(0)),
             handler.seedAmount() + handler.totalDeposited() - handler.totalWithdrawn(),
             "escrow != seed + deposits - withdrawals"
         );

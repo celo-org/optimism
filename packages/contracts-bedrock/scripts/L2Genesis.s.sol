@@ -58,6 +58,7 @@ contract L2Genesis is Script {
         address payable l1StandardBridgeProxy;
         address payable l1ERC721BridgeProxy;
         address payable celoGasBridgeL1Proxy;
+        address celoTokenL1;
         address opChainProxyAdminOwner;
         address sequencerFeeVaultRecipient;
         uint256 sequencerFeeVaultMinimumWithdrawalAmount;
@@ -270,7 +271,7 @@ contract L2Genesis is Script {
         if (_input.useCustomGasToken) {
             setLiquidityController(_input); // 29
             setNativeAssetLiquidity(_input); // 2A
-            setCeloGasBridgeL2(_input.celoGasBridgeL1Proxy); // 1023
+            setCeloGasBridgeL2(_input.celoGasBridgeL1Proxy, _input.celoTokenL1); // 1023
         }
     }
 
@@ -321,7 +322,7 @@ contract L2Genesis is Script {
     }
 
     /// @notice This predeploy is following the safety invariant #1.
-    function setCeloGasBridgeL2(address payable _celoGasBridgeL1Proxy) internal {
+    function setCeloGasBridgeL2(address payable _celoGasBridgeL1Proxy, address _celoTokenL1) internal {
         bytes memory code = vm.getDeployedCode("Proxy.sol:Proxy");
         vm.etch(CeloPredeploys.CELO_GAS_BRIDGE_L2, code);
         EIP1967Helper.setAdmin(CeloPredeploys.CELO_GAS_BRIDGE_L2, Predeploys.PROXY_ADMIN);
@@ -329,10 +330,11 @@ contract L2Genesis is Script {
         address payable impl = payable(_setImplementationCode(CeloPredeploys.CELO_GAS_BRIDGE_L2));
         EIP1967Helper.setImplementation(CeloPredeploys.CELO_GAS_BRIDGE_L2, impl);
 
-        ICeloGasBridgeL2(impl).initialize({ _otherBridge: IStandardBridge(payable(address(0))) });
+        ICeloGasBridgeL2(impl).initialize({ _otherBridge: IStandardBridge(payable(address(0))), _celoTokenL1: address(0) });
 
         ICeloGasBridgeL2(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2)).initialize({
-            _otherBridge: IStandardBridge(_celoGasBridgeL1Proxy)
+            _otherBridge: IStandardBridge(_celoGasBridgeL1Proxy),
+            _celoTokenL1: _celoTokenL1
         });
     }
 
