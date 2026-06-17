@@ -546,9 +546,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
 
         // A second change in the same block reverts.
         vm.prank(proxyAdminOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(IBatchAuthenticator.BatcherChangedThisBlock.selector, fBlock)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.BatcherChangedThisBlock.selector, fBlock));
         authenticator.setEspressoBatcher(b2);
 
         // History is unchanged: still length=2 with b1 as the latest entry.
@@ -569,9 +567,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         uint64 initBlock = uint64(block.number);
 
         vm.prank(proxyAdminOwner);
-        vm.expectRevert(
-            abi.encodeWithSelector(IBatchAuthenticator.BatcherChangedThisBlock.selector, initBlock)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IBatchAuthenticator.BatcherChangedThisBlock.selector, initBlock));
         authenticator.setEspressoBatcher(address(0x1111));
     }
 
