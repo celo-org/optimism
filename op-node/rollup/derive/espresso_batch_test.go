@@ -2,6 +2,7 @@ package derive_test
 
 import (
 	"bytes"
+	"context"
 	"math/big"
 	"math/rand"
 	"slices"
@@ -11,11 +12,20 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	derive "github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	dtest "github.com/ethereum-optimism/optimism/op-node/rollup/derive/test"
+	"github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/signer"
+	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum/common"
 	gethTypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
+	gethCrypto "github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
+)
+
+const (
+	testMnemonic = "test test test test test test test test test test test junk"
+	testHDPath   = "m/44'/60'/0'/0/1"
 )
 
 var defaultTestRollUpConfig = &rollup.Config{
@@ -89,7 +99,7 @@ func TestUnmarshalEspressoTransactionTooShort(t *testing.T) {
 	cases := [][]byte{
 		nil,
 		{},
-		make([]byte, crypto.SignatureLength-1),
+		make([]byte, gethCrypto.SignatureLength-1),
 	}
 	for _, data := range cases {
 		_, err := derive.UnmarshalEspressoTransaction(data)
@@ -149,10 +159,6 @@ func TestEspressoBatchConversion(t *testing.T) {
 
 	if have, want := decodedBlock.ExcessBlobGas(), originalBlock.ExcessBlobGas(); have != want {
 		t.Errorf("decoded block excess blob gas mismatch:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
-	}
-
-	if have, want := decodedBlock.ExecutionWitness(), originalBlock.ExecutionWitness(); have != want {
-		t.Errorf("decoded block execution witness mismatch:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
 	}
 
 	if have, want := decodedBlock.Extra(), originalBlock.Extra(); !bytes.Equal(have, want) {
@@ -234,4 +240,50 @@ func TestEspressoBatchConversion(t *testing.T) {
 	if have, want := decodedBlock.WithdrawalsRoot(), originalBlock.WithdrawalsRoot(); have != want {
 		t.Errorf("decoded block withdrawals root mismatch:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
 	}
+}
+
+// TestBatchRoundtrip exercises the batcher serialization path
+// (BlockToEspressoBatch -> ToEspressoTransaction) against the derivation
+// deserialization path (UnmarshalEspressoTransaction): a block packed and signed
+// by the batcher must decode back to an equivalent batch, and the signer address
+// recovered from the payload signature must match the batcher's address.
+func TestBatchRoundtrip(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+
+	originalBlock := dtest.RandomL2BlockWithChainIdAndTime(rng, 10, defaultTestRollUpConfig.L2ChainID, time.Now())
+
+	batch, err := derive.BlockToEspressoBatch(defaultTestRollUpConfig, originalBlock)
+	require.NoError(t, err, "failed to convert block to batch")
+
+	signerFactory, batcherAddress, err := crypto.ChainSignerFactoryFromConfig(
+		testlog.Logger(t, log.LevelDebug),
+		"",
+		testMnemonic,
+		testHDPath,
+		signer.NewCLIConfig(),
+	)
+	require.NoError(t, err, "failed to build chain signer factory")
+	chainSigner := signerFactory(defaultTestRollUpConfig.L2ChainID, batcherAddress)
+
+	transaction, err := batch.ToEspressoTransaction(
+		context.Background(),
+		defaultTestRollUpConfig.L2ChainID.Uint64(),
+		chainSigner,
+	)
+	require.NoError(t, err, "failed to serialize batch to Espresso transaction")
+
+	decodedBatch, err := derive.UnmarshalEspressoTransaction(transaction.Payload)
+	require.NoError(t, err, "failed to deserialize Espresso transaction back to batch")
+
+	// The signer recovered from the payload signature must be the batcher.
+	require.Equal(t, batcherAddress, decodedBatch.SignerAddress, "recovered signer address mismatch")
+
+	// The decoded batch must be equivalent to the original (the recovered
+	// SignerAddress is populated only on decode, so compare the encoded fields).
+	require.Equal(t, 0, compareHeader(decodedBatch.BatchHeader, batch.BatchHeader), "decoded batch header mismatch")
+	require.Equal(t, 0, compareTransaction(decodedBatch.L1InfoDeposit, batch.L1InfoDeposit), "decoded batch L1 info deposit mismatch")
+	require.Equal(t, batch.Batch.EpochNum, decodedBatch.Batch.EpochNum, "decoded batch epoch num mismatch")
+	require.Equal(t, batch.Batch.EpochHash, decodedBatch.Batch.EpochHash, "decoded batch epoch hash mismatch")
+	require.Equal(t, batch.Batch.Timestamp, decodedBatch.Batch.Timestamp, "decoded batch timestamp mismatch")
+	require.Equal(t, batch.Batch.Transactions, decodedBatch.Batch.Transactions, "decoded batch transactions mismatch")
 }
