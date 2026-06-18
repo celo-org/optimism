@@ -5,6 +5,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/ethereum-optimism/optimism/espresso/bindings"
@@ -77,33 +78,71 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
+	// Private buffered channels: queue.Send forwards exactly one receipt to each, so the watcher
+	// reads exactly once per channel (even on context cancellation, the queue still emits a
+	// ctx-error receipt). These never reach handleReceipt; only the synthetic receipt below does.
+	authReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
+	batchReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
+
 	l.Log.Debug(
 		"Sending fallback authenticateBatchInfo transaction",
 		"txRef", transactionReference,
 		"commitment", hexutil.Encode(commitment[:]),
 		"address", l.RollupConfig.BatchAuthenticatorAddress.String(),
 	)
-	verificationReceipt, err := l.Txmgr.Send(l.killCtx, verifyCandidate)
-	if err != nil {
-		l.Log.Error("Failed to send fallback authenticateBatchInfo transaction", "txRef", transactionReference, "err", err)
+	// Submit the auth tx then the batch tx, in order, on the publishing-loop goroutine so their
+	// nonces are assigned in submission order. Each Send blocks here when the queue is at its
+	// MaxPendingTransactions limit.
+	queue.Send(transactionReference, verifyCandidate, authReceiptCh)
+	queue.Send(transactionReference, *candidate, batchReceiptCh)
+
+	l.authGroup.Go(func() error {
+		l.watchFallbackAuthReceipts(transactionReference, authReceiptCh, batchReceiptCh, receiptsCh)
+		return nil
+	})
+}
+
+// watchFallbackAuthReceipts collects the auth and batch receipts for a fallback-auth pair,
+// validates that the batch tx landed within the lookback window of the auth tx, and forwards a
+// single synthetic receipt keyed to the batch txData onto receiptsCh. Any failure produces an
+// error receipt so the channel manager rewinds and resubmits the frame set.
+func (l *BatchSubmitter) watchFallbackAuthReceipts(transactionReference txRef, authReceiptCh, batchReceiptCh chan txmgr.TxReceipt[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
+	authResult := <-authReceiptCh
+	batchResult := <-batchReceiptCh
+
+	if authResult.Err != nil {
+		l.Log.Error("Failed to send fallback authenticateBatchInfo transaction", "txRef", transactionReference, "err", authResult.Err)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: fmt.Errorf("failed to send fallback authenticateBatchInfo transaction: %w", err),
+			Err: fmt.Errorf("failed to send fallback authenticateBatchInfo transaction: %w", authResult.Err),
 		}
 		return
 	}
 
-	receipt, err := l.Txmgr.Send(l.killCtx, *candidate)
-	if err != nil {
-		l.Log.Error("Failed to send batch inbox transaction", "txRef", transactionReference, "err", err)
+	// txmgr returns a receipt as soon as the tx is mined, regardless of execution status. A
+	// reverted authenticateBatchInfo call emits no BatchInfoAuthenticated event, so the verifier
+	// drops the batch and the safe head stalls; report failure so the frames are re-queued. The
+	// batch inbox tx needs no such check: derivation reads its data by L1 inclusion, not by
+	// execution status.
+	if authResult.Receipt.Status != types.ReceiptStatusSuccessful {
+		l.Log.Error("Fallback authenticateBatchInfo transaction reverted", "txRef", transactionReference, "txHash", authResult.Receipt.TxHash)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: fmt.Errorf("failed to send batch inbox transaction: %w", err),
+			Err: fmt.Errorf("fallback authenticateBatchInfo transaction reverted: %s", authResult.Receipt.TxHash),
 		}
 		return
 	}
 
-	distance := new(big.Int).Sub(receipt.BlockNumber, verificationReceipt.BlockNumber)
+	if batchResult.Err != nil {
+		l.Log.Error("Failed to send batch inbox transaction", "txRef", transactionReference, "err", batchResult.Err)
+		receiptsCh <- txmgr.TxReceipt[txRef]{
+			ID:  transactionReference,
+			Err: fmt.Errorf("failed to send batch inbox transaction: %w", batchResult.Err),
+		}
+		return
+	}
+
+	distance := new(big.Int).Sub(batchResult.Receipt.BlockNumber, authResult.Receipt.BlockNumber)
 	lookbackWindow := new(big.Int).SetUint64(derive.BatchAuthLookbackWindow)
 	if distance.Sign() < 0 || distance.Cmp(lookbackWindow) >= 0 {
 		l.Log.Error("authenticateBatchInfo transaction too far from batch inbox transaction", "txRef", transactionReference, "distance", distance)
@@ -116,7 +155,7 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 
 	receiptsCh <- txmgr.TxReceipt[txRef]{
 		ID:      transactionReference,
-		Receipt: receipt,
+		Receipt: batchResult.Receipt,
 		Err:     nil,
 	}
 }

@@ -127,10 +127,12 @@ type BatchSubmitter struct {
 
 	publishSignal chan pubInfo
 
-	// authGroup serializes in-flight BatchAuthenticator submissions issued by
-	// the fallback batcher's authentication path so the publishing loop can
-	// drain them on shutdown. Bounded to fallbackAuthGroupLimit; see
-	// espresso_driver.go.
+	// authGroup tracks the fallback batcher's receipt-watcher goroutines (one
+	// per auth+batch pair) so the publishing loop can drain them via
+	// waitForAuthGroup before closing receiptsCh. It is intentionally unbounded:
+	// pending-tx throttling is enforced by the txmgr Queue (queue.Send blocks at
+	// MaxPendingTransactions), and the live watcher count is derived from the
+	// queue's in-flight tx count, so it inherits the same bound.
 	authGroup errgroup.Group
 }
 
@@ -150,8 +152,6 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	if err != nil {
 		panic(err)
 	}
-
-	batcher.initAuthGroup()
 
 	return batcher
 }
