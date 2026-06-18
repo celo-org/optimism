@@ -103,4 +103,6 @@ contracts = [
     "LivenessModule2_TestUtils",                # Test utils library in LivenessModule2 test file
     "L1Block_SetCustomGasToken_Test",           # Custom gas token tests hosted in the L1Block test file
     "OPContractsManagerV2_Upgrade_TestInit",    # Test initialization contract with non-standard naming pattern (4 parts instead of 3)
+    "BatchAuthenticator_Fork_Test",             # Espresso fork tests - 'Fork' is a descriptor, not a function name
+    "MockSystemConfig",                         # Espresso mock helper contract inside BatchAuthenticator.t.sol
 ]
