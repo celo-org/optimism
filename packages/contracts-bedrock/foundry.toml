@@ -7,7 +7,12 @@
 src = 'src'
 out = 'forge-artifacts'
 script = 'scripts'
+# espresso: explicitly set libs to prevent Forge from searching espresso-tee-contracts/lib
+# nested subdirectories, which causes ambiguous import errors for openzeppelin-contracts.
+libs = ['lib']
 build_info_path = 'artifacts/build-info'
+snapshots = 'notarealpath'               # workaround for foundry#9477
+allow_internal_expect_revert = true      # workaround described in https://github.com/PaulRBerg/prb-math/issues/248
 
 optimizer = true
 optimizer_runs = 999999
@@ -19,6 +24,7 @@ optimizer_runs = 999999
 # entire build directory.
 additional_compiler_profiles = [
   { name = "dispute", optimizer_runs = 5000 },
+  { name = "via-ir", via_ir = true },
 ]
 compilation_restrictions = [
   { paths = "src/dispute/FaultDisputeGame.sol", optimizer_runs = 5000 },
@@ -37,18 +43,35 @@ ast = true
 evm_version = 'cancun'
 
 remappings = [
+  # Espresso-tee-contracts context-specific remappings (must come before general @openzeppelin remappings)
+  'lib/espresso-tee-contracts/:@espresso-tee/=lib/espresso-tee-contracts/src/',
+  'lib/espresso-tee-contracts/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts',
+  # espresso: OZ upgradeable v5 is at a top-level lib (not nested under espresso-tee-contracts/lib/)
+  # to avoid ambiguous import errors when Forge adds lib/espresso-tee-contracts/ as an include path.
+  'lib/espresso-tee-contracts/:@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable-v5/contracts',
+  'lib/espresso-tee-contracts/:aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src/',
+  'lib/espresso-tee-contracts/:solady/=lib/solady/src',
+  # Context remappings for OZ upgradeable v5: its @openzeppelin/contracts/ imports → OZ v5 non-upgradeable
+  'lib/openzeppelin-contracts-upgradeable-v5/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts',
+  # General remappings
   '@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts',
+  # espresso: OZ upgradeable v5 alias for src/ contracts (e.g. BatchAuthenticator.sol)
+  '@openzeppelin/contracts-upgradeable-v5/=lib/openzeppelin-contracts-upgradeable-v5/contracts',
+  '@espresso-tee-contracts/=lib/espresso-tee-contracts/src',
+  '@nitro-validator/=lib/espresso-tee-contracts/lib/nitro-validator/src',
+  'aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src',
   '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts',
   '@openzeppelin/contracts-v5/=lib/openzeppelin-contracts-v5/contracts',
   '@rari-capital/solmate/=lib/solmate',
   '@lib-keccak/=lib/lib-keccak/contracts/lib',
+  'solady/=lib/solady/',
   '@solady/=lib/solady/src',
   '@solady-v0.0.245/=lib/solady-v0.0.245/src',
   'forge-std/=lib/forge-std/src',
   'ds-test/=lib/forge-std/lib/ds-test/src',
   'safe-contracts/=lib/safe-contracts/contracts',
   'kontrol-cheatcodes/=lib/kontrol-cheatcodes/src',
-  'interfaces/=interfaces'
+  'interfaces/=interfaces',
 ]
 
 fs_permissions = [
@@ -64,6 +87,7 @@ fs_permissions = [
   { access='read', path='./test/fixtures' },
   { access='read', path='./lib/superchain-registry/superchain/configs/' },
   { access='read', path='./lib/superchain-registry/validation/standard/' },
+  { access='read', path='./lib/espresso-tee-contracts/out/' },
 ]
 
 # 5159 error code is selfdestruct error code
@@ -90,6 +114,16 @@ wrap_comments=true
 #                         PROFILE: CI                          #
 ################################################################
 
+[profile.ci]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+# Default is CPU count (8). With espresso-tee-contracts submodule deps, the two 0.8.15
+# groups (530 + 211 files) run together and exceed 16GB even at jobs=2. Serialize to 1.
+jobs = 1
+# Limit test execution threads to avoid OOM during forge test on xlarge (16GB) runners.
+# espresso-tee-contracts increases per-test memory pressure; default (8 threads on xlarge)
+# can exhaust 16GB. 4 threads keeps memory within budget while retaining parallelism.
+threads = 4
+
 [profile.ci.fuzz]
 runs = 128
 
@@ -102,6 +136,9 @@ depth = 32
 ################################################################
 
 [profile.cicoverage]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+# espresso-tee-contracts adds additional compilation groups that exhaust memory without serialization.
+jobs = 1
 optimizer = false
 compilation_restrictions = []
 
@@ -115,6 +152,13 @@ depth = 1
 ################################################################
 #                       PROFILE: CIHEAVY                       #
 ################################################################
+
+[profile.ciheavy]
+additional_compiler_profiles = [
+  { name = "via-ir", via_ir = true },
+]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+jobs = 1
 
 [profile.ciheavy.fuzz]
 runs = 20000
@@ -130,6 +174,8 @@ timeout = 300
 ################################################################
 
 [profile.lite]
+# Limit parallel Solc jobs to avoid OOM on xlarge (16GB) runners.
+jobs = 1
 optimizer = false
 optimizer_runs = 0
 
