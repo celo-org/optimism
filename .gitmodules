@@ -32,3 +32,9 @@
 [submodule "packages/contracts-bedrock/lib/superchain-registry"]
 	path = packages/contracts-bedrock/lib/superchain-registry
 	url = https://github.com/ethereum-optimism/superchain-registry
+[submodule "packages/contracts-bedrock/lib/espresso-tee-contracts"]
+	path = packages/contracts-bedrock/lib/espresso-tee-contracts
+	url = https://github.com/EspressoSystems/espresso-tee-contracts
+[submodule "packages/contracts-bedrock/lib/openzeppelin-contracts-upgradeable-v5"]
+	path = packages/contracts-bedrock/lib/openzeppelin-contracts-upgradeable-v5
+	url = https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable
