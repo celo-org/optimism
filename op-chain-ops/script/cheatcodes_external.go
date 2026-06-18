@@ -50,6 +50,11 @@ func (c *CheatCodesPrecompile) getArtifact(input string) (*foundry.Artifact, err
 		name = parts[0]
 		contract = parts[1]
 	}
+	// Foundry accepts fully-qualified names of the form "path/to/File.sol:Contract"
+	// (e.g. "src/universal/Proxy.sol:Proxy", used to disambiguate from a shadowing
+	// library artifact). The artifacts FS is keyed by the source-file basename, so
+	// reduce any directory-qualified path to its basename before lookup.
+	name = path.Base(name)
 	return c.h.af.ReadArtifact(name, contract)
 }
 
