@@ -1338,10 +1338,14 @@ func (l *BatchSubmitter) GenerateZKProof(ctx context.Context, attestationBytes [
 	return &zkProof, nil
 }
 
-// sendTxWithEspresso uses the txmgr queue to send the given transaction candidate after setting
-// its gaslimit. It will block if the txmgr queue has reached its MaxPendingTransactions limit.
+// sendTxWithEspresso authenticates a batch transaction via the BatchAuthenticator contract using
+// a TEE-attested EIP-712 signature, then sends the batch data to the BatchInbox address. Both txs
+// are submitted through the ordered txmgr queue (auth first, batch second) so they are mined in
+// submission order, as required under Holocene, and both stay under MaxPendingTransactions
+// (queue.Send blocks when the queue is full). A watcher goroutine collects both receipts and
+// emits a single synthetic receipt for the batch txData.
 func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
-	transactionReference := txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob}
+	transactionReference := txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}
 	l.Log.Debug("Sending Espresso-enabled L1 transaction", "txRef", transactionReference)
 
 	commitment, err := computeCommitment(candidate)
@@ -1388,49 +1392,7 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
-	l.Log.Debug(
-		"Sending authenticateBatch transaction",
-		"txRef", transactionReference,
-		"commitment", hexutil.Encode(commitment[:]),
-		"sig", hexutil.Encode(signature),
-		"address", l.RollupConfig.BatchAuthenticatorAddress.String(),
-	)
-	verificationReceipt, err := l.Txmgr.Send(l.killCtx, verifyCandidate)
-	if err != nil {
-		l.Log.Error("Failed to send authenticateBatch transaction", "txRef", transactionReference, "err", err)
-		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
-			Err: fmt.Errorf("failed to send authenticateBatch transaction: %w", err),
-		}
-		return
-	}
-
-	receipt, err := l.Txmgr.Send(l.killCtx, *candidate)
-	if err != nil {
-		l.Log.Error("Failed to send batch inbox transaction", "txRef", transactionReference, "err", err)
-		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
-			Err: fmt.Errorf("failed to send batch inbox transaction: %w", err),
-		}
-		return
-	}
-
-	distance := new(big.Int).Sub(receipt.BlockNumber, verificationReceipt.BlockNumber)
-	lookbackWindow := new(big.Int).SetUint64(derive.BatchAuthLookbackWindow)
-	if distance.Sign() < 0 || distance.Cmp(lookbackWindow) >= 0 {
-		l.Log.Error("authenticateBatch transaction too far from batch inbox transaction", "txRef", transactionReference, "distance", distance)
-		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
-			Err: fmt.Errorf("authenticateBatch transaction too far from batch inbox transaction: %s", distance),
-		}
-		return
-	}
-
-	receiptsCh <- txmgr.TxReceipt[txRef]{
-		ID:      transactionReference,
-		Receipt: receipt,
-		Err:     nil,
-	}
+	l.submitAuthenticatedBatch(transactionReference, verifyCandidate, candidate, queue, receiptsCh)
 }
 
 // signEIP712Commitment creates an EIP-712 signature for the given commitment using the batcher's private key.
