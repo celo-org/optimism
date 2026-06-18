@@ -8,21 +8,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
-// authGroup serializes in-flight fallback-auth submissions so the
-// publishingLoop can drain them on shutdown. Initialized in
-// NewBatchSubmitter and lifted in waitForAuthGroup. The TEE batcher follow-up
-// PR reuses the same group.
-//
-// Bounded to a fixed concurrency limit to cap the number of BatchInbox
-// transactions simultaneously waiting on an authenticateBatchInfo
-// transaction to be confirmed.
-const fallbackAuthGroupLimit = 128
-
-// initAuthGroup applies the concurrency limit. Called from NewBatchSubmitter.
-func (l *BatchSubmitter) initAuthGroup() {
-	l.authGroup.SetLimit(fallbackAuthGroupLimit)
-}
-
 // waitForAuthGroup blocks until all in-flight fallback-auth submissions have
 // completed. Called from publishingLoop's tail; blocks until killCtx is
 // cancelled if any auth retries are still in flight.
@@ -62,11 +47,6 @@ func (l *BatchSubmitter) dispatchAuthenticatedSendTx(txdata txData, isCancel boo
 	if !fallbackAuthRequired {
 		return false
 	}
-	l.authGroup.Go(
-		func() error {
-			l.sendTxWithFallbackAuth(txdata, isCancel, candidate, queue, receiptsCh)
-			return nil
-		},
-	)
+	l.sendTxWithFallbackAuth(txdata, isCancel, candidate, queue, receiptsCh)
 	return true
 }
