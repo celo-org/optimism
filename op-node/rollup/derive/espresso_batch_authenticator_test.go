@@ -2,9 +2,11 @@ package derive
 
 import (
 	"context"
+	"errors"
 	"math/rand"
 	"testing"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -298,6 +300,76 @@ func TestCollectAuthenticatedBatchesBlockRefCache(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result2, 0)
 	l1F2.AssertExpectations(t)
+}
+
+// TestCollectAuthenticatedBatchesResetOnNotFound verifies that when an L1 block
+// in the lookback window is no longer available (FetchReceipts or L1BlockRefByHash
+// returns ethereum.NotFound, e.g. after a reorg orphaned it), CollectAuthenticatedBatches
+// returns a ResetError rather than a TemporaryError. A TemporaryError would cause the
+// pipeline to retry the same step forever (a silent stall); a ResetError makes it
+// re-derive from a canonical origin, matching how the calldata/blob data sources
+// classify a missing ref block.
+func TestCollectAuthenticatedBatchesResetOnNotFound(t *testing.T) {
+	logger := testlog.Logger(t, log.LevelDebug)
+	ctx := context.Background()
+	rng := rand.New(rand.NewSource(9012))
+
+	authenticatorAddr := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
+	emptyReceipts := types.Receipts{}
+
+	t.Run("FetchReceipts NotFound on an ancestor", func(t *testing.T) {
+		caches := NewBatchAuthCaches()
+		l1F := &testutils.MockL1Source{}
+		chain := buildL1Chain(rng, 100, 200)
+		ref := chain[200]
+
+		// Block 200 (ref) is fetched fine and its parent ref resolves, then the
+		// ancestor block 199's receipts come back NotFound.
+		l1F.ExpectFetchReceipts(chain[200].Hash, nil, emptyReceipts, nil)
+		l1F.ExpectL1BlockRefByHash(chain[199].Hash, chain[199], nil)
+		l1F.ExpectFetchReceipts(chain[199].Hash, nil, types.Receipts(nil), ethereum.NotFound)
+
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
+		require.Nil(t, result)
+		require.ErrorIs(t, err, ErrReset)
+		require.ErrorIs(t, err, ethereum.NotFound)
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("L1BlockRefByHash NotFound on an ancestor", func(t *testing.T) {
+		caches := NewBatchAuthCaches()
+		l1F := &testutils.MockL1Source{}
+		chain := buildL1Chain(rng, 100, 200)
+		ref := chain[200]
+
+		// Block 200 (ref) is fetched fine, but resolving its parent ref (block 199)
+		// comes back NotFound.
+		l1F.ExpectFetchReceipts(chain[200].Hash, nil, emptyReceipts, nil)
+		l1F.ExpectL1BlockRefByHash(chain[199].Hash, eth.L1BlockRef{}, ethereum.NotFound)
+
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
+		require.Nil(t, result)
+		require.ErrorIs(t, err, ErrReset)
+		require.ErrorIs(t, err, ethereum.NotFound)
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("non-NotFound error stays temporary", func(t *testing.T) {
+		caches := NewBatchAuthCaches()
+		l1F := &testutils.MockL1Source{}
+		chain := buildL1Chain(rng, 100, 200)
+		ref := chain[200]
+
+		// A transient RPC failure (not NotFound) must remain a TemporaryError so the
+		// pipeline retries rather than resetting.
+		l1F.ExpectFetchReceipts(chain[200].Hash, nil, types.Receipts(nil), errors.New("connection refused"))
+
+		result, err := CollectAuthenticatedBatches(ctx, l1F, ref, authenticatorAddr, caches, logger)
+		require.Nil(t, result)
+		require.ErrorIs(t, err, ErrTemporary)
+		require.NotErrorIs(t, err, ErrReset)
+		l1F.AssertExpectations(t)
+	})
 }
 
 func TestBatchInfoAuthenticatedABIHash(t *testing.T) {
