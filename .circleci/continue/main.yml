@@ -1831,6 +1831,11 @@ jobs:
           command: |
             ROOT_DIR="$(pwd)"
             echo "export RUST_BINARY_PATH_OP_RETH=$ROOT_DIR/rust/target/release/op-reth" >> "$BASH_ENV"
+      # Pin the solc set to match contracts-bedrock-build. op-deployer tests run
+      # `forge script` against the embedded artifact bundle; if forge auto-detects a
+      # newer solc than the bundle was built with (floating ^0.8.0 pragmas), it
+      # recompiles and breaks the "must not recompile" assertions.
+      - install-solc-compilers
       - go-restore-cache:
           namespace: go-tests
       - run:
