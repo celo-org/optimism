@@ -67,6 +67,31 @@ func TestScript(t *testing.T) {
 	require.NoError(t, h.cheatcodes.Precompile.DumpState("noop"))
 }
 
+func TestGetCodeArtifactResolution(t *testing.T) {
+	logger := testlog.Logger(t, log.LevelInfo)
+	af := foundry.OpenArtifactsDir("./testdata/test-artifacts")
+	h := NewHost(logger, af, nil, DefaultContext)
+	require.NoError(t, h.EnableCheats())
+
+	// The artifacts FS is keyed by the source-file basename. Foundry's getCode
+	// cheatcode accepts a "File.sol:Contract" identifier and a directory-qualified
+	// "path/to/File.sol:Contract" identifier. Both must resolve to the same
+	// artifact in the Go host.
+	want, err := af.ReadArtifact("ScriptExample.s.sol", "FooBar")
+	require.NoError(t, err)
+
+	for _, input := range []string{
+		"ScriptExample.s.sol:FooBar",
+		"some/nested/dir/ScriptExample.s.sol:FooBar",
+	} {
+		t.Run(input, func(t *testing.T) {
+			got, err := h.cheatcodes.Precompile.GetCode(input)
+			require.NoError(t, err)
+			require.Equal(t, []byte(want.Bytecode.Object), got)
+		})
+	}
+}
+
 func mustEncodeStringCalldata(t *testing.T, method, input string) []byte {
 	packer, err := abi.JSON(strings.NewReader(fmt.Sprintf(`[{"type":"function","name":"%s","inputs":[{"type":"string","name":"input"}]}]`, method)))
 	require.NoError(t, err)

@@ -38,9 +38,14 @@ forge-build *ARGS:
     --skip-simulation \
     2>/dev/null || true
 
-# Developer build command (faster).
+# Developer build command (faster). Skip forge lint-on-build so we don't fail on 287+ warnings (e.g. unsafe-typecast in deps).
 forge-build-dev *ARGS:
-  FOUNDRY_PROFILE=lite forge build {{ARGS}}
+  @# Use default profile (not lite) so the source build cache is shared — re-using
+  @# the default profile's compiled artifacts avoids recompiling 1000+ files from scratch
+  @# under the lite profile, which OOMs on xlarge (16GB) CI runners.
+  @# FOUNDRY_JOBS=1 serializes solc compilation to avoid OOM when adding test files to the
+  @# build (the default profile has no jobs limit, and 4 parallel solc groups exhaust 16GB).
+  FOUNDRY_JOBS=1 forge build {{ARGS}}
 
 # Builds source contracts only.
 build-source:
@@ -65,7 +70,6 @@ build-go-ffi:
 # Cleans build artifacts and deployments.
 clean:
   rm -rf ./artifacts ./forge-artifacts ./cache ./scripts/go-ffi/go-ffi ./deployments/hardhat/*
-
 
 ########################################################
 #                         TEST                         #
@@ -189,7 +193,7 @@ coverage: build-go-ffi
 
 # Runs contract coverage with lcov.
 coverage-lcov *ARGS: build-go-ffi
-  forge coverage {{ARGS}} --report lcov --report-file lcov.info
+  FOUNDRY_PROFILE="${FOUNDRY_PROFILE:-default}" forge coverage {{ARGS}} --report lcov --report-file lcov.info
 
 # Runs upgrade path variant of contract coverage tests.
 coverage-upgrade *ARGS:
@@ -334,7 +338,8 @@ lint-check:
 
 # Updates the selectors for the contracts
 update-selectors:
-  forge selectors up --all
+  @# FOUNDRY_JOBS=1 serializes solc groups to avoid OOM on CI runners (large: 7.5GB).
+  FOUNDRY_JOBS=1 forge selectors up --all
 
 # Checks for unused imports in Solidity contracts. Does not build contracts.
 unused-imports-check-no-build:

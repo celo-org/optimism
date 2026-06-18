@@ -1792,6 +1792,11 @@ jobs:
           enable-mise-cache: true
       - attach_workspace:
           at: .
+      # Pin the solc set to match contracts-bedrock-build. op-deployer tests run
+      # `forge script` against the embedded artifact bundle; if forge auto-detects a
+      # newer solc than the bundle was built with (floating ^0.8.0 pragmas), it
+      # recompiles and breaks the "must not recompile" assertions.
+      - install-solc-compilers
       - restore_cache:
           key: go-tests-v2-{{ checksum "go.mod" }}
       - run:
