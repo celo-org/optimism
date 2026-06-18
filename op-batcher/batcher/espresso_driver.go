@@ -167,12 +167,7 @@ func (l *BatchSubmitter) dispatchAuthenticatedSendTx(txdata txData, isCancel boo
 	}
 	// Espresso batcher: authenticate via BatchAuthenticator.
 	if l.Config.Espresso.Enabled {
-		l.authGroup.Go(
-			func() error {
-				l.sendTxWithEspresso(txdata, isCancel, candidate, queue, receiptsCh)
-				return nil
-			},
-		)
+		l.sendTxWithEspresso(txdata, isCancel, candidate, queue, receiptsCh)
 		return true
 	}
 	// Fallback batcher: authenticate via BatchAuthenticator only after the
