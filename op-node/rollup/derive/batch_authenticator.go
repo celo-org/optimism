@@ -38,7 +38,16 @@ type BatchAuthCaches struct {
 
 // NewBatchAuthCaches creates caches sized for the BatchAuthLookbackWindow.
 func NewBatchAuthCaches() *BatchAuthCaches {
-	// BatchAuthLookbackWindow past blocks + 1 current block + 1 LRU overhead.
+	// The lookback window covers 101 blocks (the ref block plus 100 ancestors),
+	// so 101 entries are live during any single traversal. We add +2 (not +1)
+	// because the traversal reads newest-to-oldest: the ref block is touched
+	// first and so becomes the LRU entry. With exactly 101 slots, inserting the
+	// next block's ref would evict the previous ref (its parent) — the very block
+	// we're about to read — triggering a cascade of evict-and-refetch through the
+	// whole window. The extra slot leaves room for the 101 new window entries plus
+	// one stale entry (the block that just fell out of the lookback window). That
+	// stale entry, untouched in the current traversal, is the LRU and gets evicted
+	// instead, so no cascade occurs.
 	// lru.New only errors on size <= 0.
 	size := int(BatchAuthLookbackWindow) + 2
 	authCache, _ := lru.New[common.Hash, map[common.Hash]common.Address](size)
