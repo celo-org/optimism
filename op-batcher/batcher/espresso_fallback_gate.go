@@ -24,13 +24,11 @@ func (l *BatchSubmitter) dispatchAuthenticatedSendTx(txdata txData, isCancel boo
 	if isCancel {
 		return false
 	}
-	// Espresso batcher: authenticate via BatchAuthenticator.
+	// Espresso batcher: authenticate via BatchAuthenticator. sendTxWithEspresso runs on the
+	// caller's goroutine and submits through the ordered queue (submitAuthenticatedBatch spawns
+	// its own authGroup-tracked watcher), so it must not be wrapped in a separate goroutine.
 	if l.Config.Espresso.Enabled {
-		l.authGroup.Add(1)
-		go func() {
-			defer l.authGroup.Done()
-			l.sendTxWithEspresso(txdata, isCancel, candidate, queue, receiptsCh)
-		}()
+		l.sendTxWithEspresso(txdata, isCancel, candidate, queue, receiptsCh)
 		return true
 	}
 	fallbackAuthRequired, err := l.isFallbackAuthRequired(l.killCtx)
