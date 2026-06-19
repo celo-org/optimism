@@ -3,6 +3,7 @@ package config
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"maps"
@@ -48,6 +49,10 @@ const (
 	LegacyLevelTrace
 )
 
+// ESPRESSO_TESTING_BATCHER_EPHEMERAL_KEY is the pre-approved ephemeral batcher key used by the
+// Espresso e2e devnet. It is a well-known dev key — never use it in production.
+const ESPRESSO_TESTING_BATCHER_EPHEMERAL_KEY = "404520dcd0335deccd7d4a01f29136dfd651b89ec3969d53a06c3cc5aae5f515"
+
 type AllocType string
 
 const (
@@ -56,6 +61,9 @@ const (
 	AllocTypeMTCannon     AllocType = "mt-cannon"
 	AllocTypeMTCannonNext AllocType = "mt-cannon-next"
 	AllocTypeFastGame     AllocType = "fast-game"
+
+	AllocTypeEspressoWithoutEnclave AllocType = "espresso-no-enclave"
+	AllocTypeEspressoWithEnclave    AllocType = "espresso-enclave"
 
 	DefaultAllocType = AllocTypeMTCannon
 )
@@ -69,14 +77,18 @@ func (a AllocType) Check() error {
 
 func (a AllocType) UsesProofs() bool {
 	switch a {
-	case AllocTypeMTCannon, AllocTypeMTCannonNext, AllocTypeAltDA, AllocTypeAltDAGeneric:
+	case AllocTypeMTCannon, AllocTypeMTCannonNext, AllocTypeAltDA, AllocTypeAltDAGeneric, AllocTypeEspressoWithEnclave, AllocTypeEspressoWithoutEnclave:
 		return true
 	default:
 		return false
 	}
 }
 
-var allocTypes = []AllocType{AllocTypeAltDA, AllocTypeAltDAGeneric, AllocTypeMTCannon, AllocTypeMTCannonNext, AllocTypeFastGame}
+func (a AllocType) IsEspresso() bool {
+	return a == AllocTypeEspressoWithEnclave || a == AllocTypeEspressoWithoutEnclave
+}
+
+var allocTypes = []AllocType{AllocTypeAltDA, AllocTypeAltDAGeneric, AllocTypeMTCannon, AllocTypeMTCannonNext, AllocTypeFastGame, AllocTypeEspressoWithEnclave, AllocTypeEspressoWithoutEnclave}
 
 var (
 	// All of the following variables are set in the init function
@@ -100,6 +112,10 @@ var (
 	deployConfigBytesByType = make(map[AllocType][]byte)
 	// EthNodeVerbosity is the (legacy geth) level of verbosity to output
 	EthNodeVerbosity int = 3
+
+	// espresso: tracks Espresso alloc types that failed to initialize (e.g. missing mock TEE
+	// contracts in --skip test builds). Tests can call IsAllocTypeAvailable() to skip gracefully.
+	unavailableEspressoAllocTypes = make(map[AllocType]bool)
 
 	// mtx is a lock to protect the above variables
 	mtx sync.RWMutex
@@ -158,6 +174,15 @@ func DeployConfig(allocType AllocType) *genesis.DeployConfig {
 	return dc
 }
 
+// IsAllocTypeAvailable reports whether allocType was successfully initialized.
+// Espresso alloc types are unavailable in CI builds compiled with --skip test, where mock TEE
+// contracts are not present.
+func IsAllocTypeAvailable(allocType AllocType) bool {
+	mtx.RLock()
+	defer mtx.RUnlock()
+	return !unavailableEspressoAllocTypes[allocType]
+}
+
 func init() {
 	// Used by the rust team, to skip legacy op-e2e init. Not used by devstack acceptance tests.
 	if os.Getenv("DISABLE_OP_E2E_LEGACY") == "true" {
@@ -204,22 +229,35 @@ func init() {
 	oplog.SetGlobalLogHandler(errHandler)
 
 	for _, allocType := range allocTypes {
-		initAllocType(root, allocType)
+		if err := initAllocType(root, allocType); err != nil {
+			if allocType.IsEspresso() {
+				// espresso: Espresso alloc types require mock TEE contracts that are compiled only
+				// when forge builds include test contracts (i.e. without --skip test).
+				fmt.Fprintf(os.Stderr, "WARNING: Espresso alloc type %q initialization failed "+
+					"(mock TEE contracts may not be available; rebuild with `just compile-contracts` "+
+					"to enable Espresso op-e2e tests): %v\n", allocType, err)
+				mtx.Lock()
+				unavailableEspressoAllocTypes[allocType] = true
+				mtx.Unlock()
+			} else {
+				panic(fmt.Errorf("failed to init alloc type %q: %w", allocType, err))
+			}
+		}
 	}
 
 	// Use regular level going forward.
 	oplog.SetGlobalLogHandler(handler)
 }
 
-func initAllocType(root string, allocType AllocType) {
+func initAllocType(root string, allocType AllocType) error {
 	artifactsPath := path.Join(root, "packages", "contracts-bedrock", "forge-artifacts")
 	if err := ensureDir(artifactsPath); err != nil {
-		panic(fmt.Errorf("invalid artifacts path: %w", err))
+		return fmt.Errorf("invalid artifacts path: %w (run `just compile-contracts` or `cd packages/contracts-bedrock && just build` to build contracts first)", err)
 	}
 
 	loc, err := artifacts.NewFileLocator(artifactsPath)
 	if err != nil {
-		panic(fmt.Errorf("failed to create artifacts locator: %w", err))
+		return fmt.Errorf("failed to create artifacts locator: %w", err)
 	}
 
 	lgr := log.New()
@@ -237,6 +275,8 @@ func initAllocType(root string, allocType AllocType) {
 
 	l2Alloc := make(map[genesis.L2AllocsMode]*foundry.ForgeAllocs)
 	var wg sync.WaitGroup
+	var initErr error
+	var errMu sync.Mutex
 
 	pk := secrets.DefaultSecrets.Deployer
 	deployerAddr := crypto.PubkeyToAddress(pk.PublicKey)
@@ -246,6 +286,13 @@ func initAllocType(root string, allocType AllocType) {
 		wg.Add(1)
 		go func(mode genesis.L2AllocsMode) {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					errMu.Lock()
+					initErr = errors.Join(initErr, fmt.Errorf("panic initializing alloc type %q mode %q: %v", allocType, mode, r))
+					errMu.Unlock()
+				}
+			}()
 
 			intent := defaultIntent(root, loc, deployerAddr, allocType)
 			if allocType == AllocTypeAltDA {
@@ -277,6 +324,16 @@ func initAllocType(root string, allocType AllocType) {
 							MakeRespected: true,
 						})
 				}
+			}
+
+			// Configure Espresso allocation types.
+			// The Espresso batcher uses a separate key (HD index 6) from the standard
+			// OP stack batcher (Roles.Batcher, HD index 2). The fallback batcher
+			// uses the SystemConfig batcher address (Roles.Batcher).
+			if allocType.IsEspresso() {
+				intent.Chains[0].EspressoEnabled = true
+				espressoBatcherKey := secrets.DefaultSecrets.AccountAtIdx(6)
+				intent.Chains[0].EspressoBatcher = crypto.PubkeyToAddress(espressoBatcherKey.PublicKey)
 			}
 
 			baseUpgradeSchedule := map[string]any{
@@ -363,7 +420,13 @@ func initAllocType(root string, allocType AllocType) {
 		}(mode)
 	}
 	wg.Wait()
+	if initErr != nil {
+		return initErr
+	}
+	mtx.Lock()
 	l2AllocsByType[allocType] = l2Alloc
+	mtx.Unlock()
+	return nil
 }
 
 func defaultIntent(root string, loc *artifacts.Locator, deployer common.Address, allocType AllocType) *state.Intent {
