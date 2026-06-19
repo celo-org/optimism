@@ -100,13 +100,23 @@ type BatcherService struct {
 	// Espresso runtime state. Defined in espresso_service.go to keep the
 	// upstream Optimism field block compact. EspressoClient and
 	// EspressoLightClient are nil when --espresso.enabled=false.
-	EspressoClient      *espressoClient.MultipleNodesClient
+	EspressoClient      espressoClient.EspressoClient
 	EspressoLightClient *espressoLightClient.LightclientCaller
 	opcrypto.ChainSigner
 	Attestation []byte
 }
 
 type DriverSetupOption func(setup *DriverSetup)
+
+// WithEspressoClientOverride returns a DriverSetupOption that replaces the Espresso
+// query-service client built from --espresso.query-service-urls with the provided
+// client. It is intended for tests that inject an in-memory Espresso fake in place of
+// a real espresso-dev-node; production code never sets it.
+func WithEspressoClientOverride(client espressoClient.EspressoClient) DriverSetupOption {
+	return func(setup *DriverSetup) {
+		setup.Espresso.Client = client
+	}
+}
 
 // BatcherServiceFromCLIConfig creates a new BatcherService from a CLIConfig.
 // The service components are fully started, except for the driver,
