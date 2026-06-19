@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 )
@@ -93,6 +94,11 @@ type EspressoDevNode interface {
 
 	// EspressoUrls returns the URLs of the Espresso node
 	EspressoUrls() []string
+
+	// Client returns the Espresso query-service client backing this dev node.
+	// For the in-memory mock dev node this is the shared mock client that the
+	// batchers also use, so tests submit/read against the same Espresso chain.
+	Client() espressoClient.EspressoClient
 
 	// Shut Down the Espresso Dev Node
 	Stop() error
