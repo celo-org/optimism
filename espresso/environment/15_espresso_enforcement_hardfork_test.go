@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher"
@@ -67,7 +66,7 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	l1Client := system.NodeClient(e2esys.RoleL1)
 	verifClient := system.NodeClient(e2esys.RoleVerif)
 	verifRollup := system.RollupClient(e2esys.RoleVerif)
-	espClient := espressoClient.NewClient(espressoDevNode.EspressoUrls()[0])
+	espClient := espressoDevNode.Client()
 
 	deployerTransactor, err := bind.NewKeyedTransactorWithChainID(
 		system.Config().Secrets.Deployer, system.Cfg.L1ChainIDBig())
