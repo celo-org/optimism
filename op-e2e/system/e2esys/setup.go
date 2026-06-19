@@ -398,6 +398,12 @@ type System struct {
 	Mocknet                mocknet.Mocknet
 	FakeAltDAServer        *altda.FakeDAServer
 
+	// EspressoClient is the shared in-memory mock Espresso client used by Espresso
+	// e2e systems in place of a real espresso-dev-node. It is nil for non-Espresso
+	// alloc types. All batchers (primary, fallback, and any started by tests) and the
+	// tests themselves share this single instance so they observe the same Espresso chain.
+	EspressoClient *espresso.MockEspressoClient
+
 	L1BeaconAPIAddr endpoint.RestHTTP
 
 	// TimeTravelClock is nil unless SystemConfig.SupportL1TimeTravel was set to true
@@ -581,6 +587,9 @@ func (sys *System) Close() {
 		if err := sys.FakeAltDAServer.Stop(); err != nil {
 			combinedErr = errors.Join(combinedErr, fmt.Errorf("stop FakeAltDAServer: %w", err))
 		}
+	}
+	if sys.EspressoClient != nil {
+		sys.EspressoClient.Close()
 	}
 	require.NoError(sys.t, combinedErr, "Failed to stop system")
 }
@@ -1054,6 +1063,18 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		VerifyReceiptRetryDelay:    espresso.DefaultVerifyReceiptRetryDelay,
 	}
 
+	// Espresso e2e systems use an in-memory mock Espresso client (shared across all
+	// batchers and the tests) in place of a real espresso-dev-node. The mock is
+	// injected into the batcher via WithEspressoClientOverride; the placeholder query
+	// service URLs only satisfy the SDK client's ">=2 URLs" validation and are never
+	// dialed.
+	var espressoOverrideOpts []bss.DriverSetupOption
+	if cfg.AllocType.IsEspresso() {
+		sys.EspressoClient = espresso.NewMockEspressoClient(250 * time.Millisecond)
+		espressoCfg.QueryServiceURLs = []string{"http://espresso-mock.invalid", "http://espresso-mock.invalid"}
+		espressoOverrideOpts = append(espressoOverrideOpts, bss.WithEspressoClientOverride(sys.EspressoClient))
+	}
+
 	// When Espresso is enabled, the primary batcher is the Espresso batcher which uses
 	// a dedicated key (HD index 6) distinct from the SystemConfig batcher (HD index 2).
 	batcherKey := cfg.Secrets.Batcher
@@ -1101,7 +1122,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		t.Fatalf("closeAppFn called, batcher hit a critical error: %v", cause)
 		batcherCancel()
 	}
-	batcher, err := bss.BatcherServiceFromCLIConfig(batcherContext, closeAppFn, "0.0.1", batcherCLIConfig, sys.Cfg.Loggers["batcher"])
+	batcher, err := bss.BatcherServiceFromCLIConfig(batcherContext, closeAppFn, "0.0.1", batcherCLIConfig, sys.Cfg.Loggers["batcher"], espressoOverrideOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup batch submitter: %w", err)
 	}
@@ -1124,7 +1145,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 			t.Fatalf("fallback closeAppFn called: %v", cause)
 			fallbackBatcherCancel()
 		}
-		fallbackBatcher, err := bss.BatcherServiceFromCLIConfig(fallbackBatcherCtx, fallbackCloseAppFn, "0.0.1", fallbackBatcherCliConfig, sys.Cfg.Loggers["batcher"])
+		fallbackBatcher, err := bss.BatcherServiceFromCLIConfig(fallbackBatcherCtx, fallbackCloseAppFn, "0.0.1", fallbackBatcherCliConfig, sys.Cfg.Loggers["batcher"], espressoOverrideOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to setup fallback batch submitter: %w", err)
 		}
