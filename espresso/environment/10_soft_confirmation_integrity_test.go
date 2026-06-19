@@ -25,8 +25,6 @@ import (
 	crypto_rand "crypto/rand"
 	"encoding/hex"
 	"math/big"
-	"net"
-	"net/url"
 	"testing"
 	"time"
 
@@ -521,19 +519,8 @@ func TestSequencerFeedConsistencyWithAttackOnEspresso(t *testing.T) {
 	defer env.Stop(t, system)
 	defer env.Stop(t, espressoDevNode)
 
-	_, port, err := net.SplitHostPort(espressoDevNode.SequencerPort())
-	if have, want := err, error(nil); have != want {
-		t.Fatalf("failed to parse sequencer port URL:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
-	}
-
-	espressoSequencerURL := url.URL{
-		Scheme: "http",
-		Host:   net.JoinHostPort("localhost", port),
-		Path:   "/",
-	}
-
 	l2Seq := system.NodeClient(e2esys.RoleSeq)
-	espCli := espressoClient.NewClient(espressoSequencerURL.String())
+	espCli := espressoDevNode.Client()
 	namespace := system.RollupConfig.L2ChainID.Uint64()
 
 	// Attack Espresso Integrity by Submitting Garbage Data to the Same
