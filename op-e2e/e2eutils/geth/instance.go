@@ -1,6 +1,9 @@
 package geth
 
 import (
+	"errors"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/node"
 
@@ -40,4 +43,16 @@ func (gi *GethInstance) AuthRPC() endpoint.RPC {
 
 func (gi *GethInstance) Close() error {
 	return gi.Node.Close()
+}
+
+// Fork reorganizes the L1 chain so that the block with parentHash becomes the new canonical head,
+// dropping any descendants. Used by e2e tests to simulate L1 reorgs.
+func (gi *GethInstance) Fork(parentHash common.Hash) error {
+	gi.Backend.TxPool().Clear()
+	parent := gi.Backend.BlockChain().GetBlockByHash(parentHash)
+	if parent == nil {
+		return errors.New("parent not found")
+	}
+	_, err := gi.Backend.BlockChain().SetCanonical(parent)
+	return err
 }
