@@ -98,6 +98,10 @@ type ChainState struct {
 
 	addresses.OpChainContracts
 
+	// BatchAuthenticatorAddress is the deployed Espresso BatchAuthenticator proxy address.
+	// Only set when the chain's intent has EspressoEnabled.
+	BatchAuthenticatorAddress common.Address `json:"batchAuthenticatorAddress,omitzero,omitempty"`
+
 	AdditionalDisputeGames []AdditionalDisputeGameState `json:"additionalDisputeGames"`
 
 	Allocs *GzipData[foundry.ForgeAllocs] `json:"allocs"`
