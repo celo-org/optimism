@@ -157,7 +157,9 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	espressoBatcherConfig.MaxChannelDuration = 10
 	espressoBatcherConfig.TargetNumFrames = 1
 	espressoBatcherConfig.MaxL1TxSize = 120_000
-	espressoBatcherConfig.Espresso.CaffeinationHeightEspresso = espHeight
+	// Caffeinate at espHeight-1 (last already-sealed block) so the streamer reads from
+	// espHeight inclusive and picks up the batches this batcher re-submits there.
+	espressoBatcherConfig.Espresso.CaffeinationHeightEspresso = espHeight - 1
 	espressoBatcherConfig.Espresso.CaffeinationHeightL2 = l2Height
 	// Inherited Stopped=true from WithBatcherStoppedInitially.
 	espressoBatcherConfig.Stopped = false
