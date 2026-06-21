@@ -40,14 +40,8 @@ func TestE2eDevnetWithEspressoAndAltDaSimpleTransactions(t *testing.T) {
 
 	launcher := new(env.EspressoDevNodeLauncherDocker)
 
-	// Start a temporary EigenDA Docker instance for this test
-	eigenda, err := env.StartEigenDA(ctx)
-	if err != nil {
-		t.Fatalf("failed to start EigenDA: %v", err)
-	}
-	// Stopped when the test exits
-	defer env.StopDockerContainer(eigenda.ContainerID)
-
+	// WithAltDa enables UseAltDA, which wires the e2e system to the in-process
+	// altda.FakeDAServer; no external EigenDA proxy is contacted.
 	system, espressoDevNode, err := launcher.StartE2eDevnet(ctx, t, env.WithAltDa())
 	if have, want := err, error(nil); have != want {
 		t.Fatalf("failed to start dev environment with espresso dev node:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
