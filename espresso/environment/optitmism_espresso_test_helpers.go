@@ -11,7 +11,6 @@ import (
 	"io"
 	"log/slog"
 	"math/big"
-	"net"
 	"net/http"
 	"os"
 	"testing"
@@ -74,12 +73,6 @@ const ESPRESSO_TESTING_BATCHER_KEY = "0xfad9c8855b740a0b7ed4c221dbad0f33a83a49ca
 
 // This is address that corresponds to the menmonic we pass to the espresso-dev-node
 var ESPRESSO_CONTRACT_ACCOUNT = common.HexToAddress("0x8943545177806ed17b9f23f0a21ee5948ecaa776")
-
-// EigenDA consstants
-const (
-	EIGENDA_DOCKER_PORT  = "3100"
-	EIGENDA_DOCKER_IMAGE = "ghcr.io/layr-labs/eigenda-proxy:2.2.1"
-)
 
 // ErrEspressoBlockHeightDidNotIncrease is a sentinel error that occurs when
 // the Espresso Block Height does not increase within the alloted context
@@ -169,17 +162,6 @@ type FailedToLoadEspressoAccount struct {
 // Error implements error
 func (f FailedToLoadEspressoAccount) Error() string {
 	return fmt.Sprintf("failed to load the espresso account: %v", f.Cause)
-}
-
-// FailedToLaunchDockerContainer represents a class of errors that occur when
-// we are unable to launch a docker container
-type FailedToLaunchDockerContainer struct {
-	Cause error
-}
-
-// Error implements error
-func (f FailedToLaunchDockerContainer) Error() string {
-	return fmt.Sprintf("failed to launch docker container: %v", f.Cause)
 }
 
 // EspressoNodeFailedToBecomeReady represents a class of errors that indicate
@@ -380,21 +362,6 @@ func (l *EspressoDevNodeLauncherDocker) StartE2eDevnet(ctx context.Context, t *t
 	return system, launchContext.EspressoDevNode, launchContext.Error
 }
 
-// This code is adapted from a gist file:
-// https://gist.github.com/sevkin/96bdae9274465b2d09191384f86ef39d
-func determineFreePort() (port int, err error) {
-	listener, err := net.Listen("tcp", ":0")
-	if err != nil {
-		return 0, err
-	}
-	defer func() {
-		err = listener.Close()
-	}()
-
-	addr := listener.Addr().(*net.TCPAddr)
-	return addr.Port, nil
-}
-
 func SetBatcherKey(privateKey ecdsa.PrivateKey) E2eDevnetLauncherOption {
 	return func(ct *E2eDevnetLauncherContext) E2eSystemOption {
 		return E2eSystemOption{
@@ -488,43 +455,6 @@ func Config(fn func(*e2esys.SystemConfig)) E2eDevnetLauncherOption {
 // method: `StartBatchSubmitting`.
 func WithBatcherStoppedInitially() E2eDevnetLauncherOption {
 	return Config(SystemConfigOptionDisableBatcher)
-}
-
-// getContainerRemappedHostPort is a helper function that takes the
-// containerListeningHostPort and returns the remapped host port
-// that the container is listening on.
-//
-// By default the mapped hosts and ports are in the form of
-// - 0.0.0.0:<port> for IPv4
-// - [::]:<port> for IPv6
-//
-// So this function will replace the host with "localhost" to allow
-// for communication with the host system.
-func getContainerRemappedHostPort(containerListeningHostPort string) (string, error) {
-	_, port, err := net.SplitHostPort(containerListeningHostPort)
-	if err != nil {
-		return "", ErrUnableToDetermineEspressoDevNodeSequencerHost
-	}
-
-	hostPort := net.JoinHostPort("localhost", port)
-
-	return hostPort, nil
-}
-
-// determineDockerNetworkMode is a helper function that determines the
-// docker network mode to use for the container.
-//
-// We launch in network mode host on linux, otherwise the container is not able
-// to communicate with the host system. We use host.docker.internal to do this
-// on platforms that are not running natively on linux, as this special address
-// achieves the same result.  But on linux, this does not work, and we need to
-// run on the host instead.
-func determineDockerNetworkMode() string {
-	if isRunningOnLinux {
-		return "host"
-	}
-
-	return ""
 }
 
 // launchEspressoDevNodeStartOption is E2eDevnetLauncherOption that launches the
@@ -665,51 +595,4 @@ func WaitForEspressoTx(ctx context.Context, txHash *espressoCommon.TaggedBase64,
 			return nil
 		}
 	}
-}
-
-// --- EigenDA test helpers ---
-
-// StartEigenDA launches a temporary EigenDA proxy in Docker for use in tests.
-// It blocks until the proxy port is reachable or the context times out.
-func StartEigenDA(ctx context.Context) (*DockerContainerInfo, error) {
-	cli := new(DockerCli)
-
-	cfg := DockerContainerConfig{
-		Image:   EIGENDA_DOCKER_IMAGE,
-		Network: determineDockerNetworkMode(),
-		Environment: map[string]string{
-			"EIGENDA_PROXY_MEMSTORE_ENABLED": "true",
-			"PORT":                           EIGENDA_DOCKER_PORT,
-		},
-		Ports: []string{EIGENDA_DOCKER_PORT},
-	}
-
-	container, err := cli.LaunchContainer(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-
-	// Wait for port to be reachable
-	timeout, cancel := context.WithTimeout(ctx, 2*time.Minute)
-	defer cancel()
-
-	for {
-		select {
-		case <-timeout.Done():
-			return nil, fmt.Errorf("EigenDA proxy did not become ready")
-		default:
-			conn, err := net.DialTimeout("tcp", "localhost:"+EIGENDA_DOCKER_PORT, time.Second)
-			if err == nil {
-				conn.Close()
-				return &container, nil
-			}
-			time.Sleep(200 * time.Millisecond)
-		}
-	}
-}
-
-// StopDockerContainer stops a Docker container by ID.
-// Errors are ignored as this is best-effort test cleanup.
-func StopDockerContainer(id string) {
-	_ = new(DockerCli).StopContainer(context.Background(), id)
 }
