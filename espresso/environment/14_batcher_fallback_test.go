@@ -136,7 +136,9 @@ func TestBatcherSwitching(t *testing.T) {
 	batcherConfig.MaxChannelDuration = 10
 	batcherConfig.TargetNumFrames = 1
 	batcherConfig.MaxL1TxSize = 120_000
-	batcherConfig.Espresso.CaffeinationHeightEspresso = espHeight
+	// Caffeinate at espHeight-1 (last already-sealed block) so the streamer reads from
+	// espHeight inclusive and picks up the batches this batcher re-submits there.
+	batcherConfig.Espresso.CaffeinationHeightEspresso = espHeight - 1
 	batcherConfig.Espresso.CaffeinationHeightL2 = l2Height
 	batcherCtx, cancelBatcher := context.WithCancelCause(ctx)
 	defer cancelBatcher(nil)
