@@ -21,6 +21,7 @@ func fullyPopulatedChainConfig() *registry.ChainConfig {
 	portal := common.HexToAddress("0x1111111111111111111111111111111111111111")
 	sysCfgProxy := common.HexToAddress("0x2222222222222222222222222222222222222222")
 	daChallenge := common.HexToAddress("0x3333333333333333333333333333333333333333")
+	batchAuth := common.HexToAddress("0x5555555555555555555555555555555555555555")
 
 	return &registry.ChainConfig{
 		ChainID:           10,
@@ -53,6 +54,7 @@ func fullyPopulatedChainConfig() *registry.ChainConfig {
 		Addresses: registry.AddressesConfig{
 			OptimismPortalProxy: &portal,
 			SystemConfigProxy:   &sysCfgProxy,
+			BatchAuthenticator:  &batchAuth,
 		},
 		Hardforks: registry.HardforkConfig{
 			CanyonTime:             ptr.New(uint64(1)),
@@ -68,6 +70,7 @@ func fullyPopulatedChainConfig() *registry.ChainConfig {
 			LagoonTime:             ptr.New(uint64(10)),
 			PectraBlobScheduleTime: ptr.New(uint64(11)),
 			Cel2Time:               ptr.New(uint64(12)),
+			EspressoTime:           ptr.New(uint64(13)),
 		},
 	}
 }

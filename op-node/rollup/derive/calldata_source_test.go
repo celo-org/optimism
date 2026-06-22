@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"math/big"
 	"math/rand"
@@ -115,14 +116,24 @@ func TestDataFromEVMTransactions(t *testing.T) {
 		var expectedData []eth.Data
 		var txs []*types.Transaction
 		for i, tx := range tc.txs {
-			txs = append(txs, tx.Create(t, signer, rng))
+			transaction := tx.Create(t, signer, rng)
+			txs = append(txs, transaction)
+
 			if tx.good {
 				expectedData = append(expectedData, txs[i].Data())
 			}
 		}
 
-		out := DataFromEVMTransactions(DataSourceConfig{cfg.L1Signer(), cfg.BatchInboxAddress, false}, batcherAddr, txs, testlog.Logger(t, log.LevelCrit))
+		// Legacy mode (no batch authenticator, Espresso inactive) — uses sender-based auth
+		dsCfg := DataSourceConfig{
+			l1Signer:          cfg.L1Signer(),
+			batchInboxAddress: cfg.BatchInboxAddress,
+			rollupCfg:         cfg,
+		}
+		ref := eth.L1BlockRef{Number: 1}
+		// In legacy mode, no L1Fetcher calls are needed for auth (sender check is local)
+		out, err := DataFromEVMTransactions(context.Background(), dsCfg, batcherAddr, txs, nil, ref, testlog.Logger(t, log.LevelCrit))
+		require.NoError(t, err)
 		require.ElementsMatch(t, expectedData, out)
 	}
-
 }
