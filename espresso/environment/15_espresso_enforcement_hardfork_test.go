@@ -44,12 +44,26 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	// Captured for the post-fork TEE batcher restart.
 	espressoBatcherConfig := &batcher.CLIConfig{}
 
+	// The batcher-config options run before GetBatcherConfig so the snapshot it
+	// takes into espressoBatcherConfig reflects them. Small frames + a long
+	// channel duration force multi-frame channels split across L1 blocks, which
+	// makes a batch tx land in an L1 block at/after the fork boundary likely so
+	// the lead-time auth gate is actually exercised.
 	system, espressoDevNode, err := launcher.StartE2eDevnet(ctx, t,
 		env.WithEspressoEnforcementOffset(enforcementOffset),
 		env.WithFallbackAuthLeadTime(fallbackAuthLeadTime),
 		env.WithL1FinalizedDistance(0),
 		env.WithSequencerUseFinalized(true),
 		env.WithBatcherStoppedInitially(),
+		env.WithBatcherTargetNumFrames(10),
+		env.WithBatcherMaxL1TxSize(250),
+		env.WithBatcherMaxChannelDuration(1000),
+		// Unbounded pending L1 txs so the Espresso auth+batch pairs (routed
+		// through the ordered txmgr queue) publish concurrently instead of
+		// one-per-L1-block; otherwise L1 data availability lags far behind the
+		// sequencer and the verifier cannot derive recent blocks within the
+		// test's confirmation windows.
+		env.WithBatcherMaxPendingTransactions(0),
 		env.GetBatcherConfig(espressoBatcherConfig),
 	)
 	require.NoError(t, err)
@@ -167,7 +181,8 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	teeCtx, teeCancel := context.WithCancelCause(ctx)
 	defer teeCancel(nil)
 	teeBatcher, err := batcher.BatcherServiceFromCLIConfig(
-		teeCtx, teeCancel, "0.0.1", espressoBatcherConfig, system.BatchSubmitter.Log)
+		teeCtx, teeCancel, "0.0.1", espressoBatcherConfig, system.BatchSubmitter.Log,
+		batcher.WithEspressoClientOverride(system.EspressoClient))
 	require.NoError(t, err)
 	require.NoError(t, teeBatcher.Start(teeCtx))
 
