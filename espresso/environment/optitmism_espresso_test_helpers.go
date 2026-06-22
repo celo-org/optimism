@@ -377,8 +377,10 @@ func SetBatcherKey(privateKey ecdsa.PrivateKey) E2eDevnetLauncherOption {
 	}
 }
 
-// *c will be set to batcher config. Any devnet launcher options that modify the batcher config
-// should be called before this one.
+// GetBatcherConfig snapshots the system batcher's fully-resolved CLIConfig into
+// *c so the caller can later start an additional batcher with identical wiring.
+// It does not modify the config; any launcher options that tweak the batcher
+// config must be passed before this one so the snapshot reflects them.
 func GetBatcherConfig(c *batcher.CLIConfig) E2eDevnetLauncherOption {
 	return func(ct *E2eDevnetLauncherContext) E2eSystemOption {
 		return E2eSystemOption{
@@ -386,9 +388,6 @@ func GetBatcherConfig(c *batcher.CLIConfig) E2eDevnetLauncherOption {
 				{
 					Role: "get-batcher-config",
 					BatcherMod: func(cfg *batcher.CLIConfig, sys *e2esys.System) {
-						cfg.TargetNumFrames = 10
-						cfg.MaxL1TxSize = 250
-						cfg.MaxChannelDuration = 1000
 						*c = *cfg
 					},
 				},

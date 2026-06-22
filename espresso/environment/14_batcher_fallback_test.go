@@ -72,9 +72,21 @@ func TestBatcherSwitching(t *testing.T) {
 	// with parameters tweaked.
 	batcherConfig := &batcher.CLIConfig{}
 	// L1FinalizedDistance(0) to avoid long delays after batcher switch.
+	// The batcher-config options run before GetBatcherConfig so the snapshot it
+	// takes into batcherConfig reflects them. Small frames + a long channel
+	// duration force multi-frame channels split across L1 blocks.
 	system, espressoDevNode, err := launcher.StartE2eDevnet(ctx, t,
 		env.WithL1FinalizedDistance(0),
 		env.WithSequencerUseFinalized(true),
+		env.WithBatcherTargetNumFrames(10),
+		env.WithBatcherMaxL1TxSize(250),
+		env.WithBatcherMaxChannelDuration(1000),
+		// Unbounded pending L1 txs so the Espresso auth+batch pairs (routed
+		// through the ordered txmgr queue) publish concurrently instead of
+		// one-per-L1-block; otherwise L1 data availability lags far behind the
+		// sequencer and the verifier cannot derive recent blocks within the
+		// test's confirmation windows.
+		env.WithBatcherMaxPendingTransactions(0),
 		env.GetBatcherConfig(batcherConfig))
 	require.NoError(t, err)
 
@@ -142,7 +154,8 @@ func TestBatcherSwitching(t *testing.T) {
 	batcherConfig.Espresso.CaffeinationHeightL2 = l2Height
 	batcherCtx, cancelBatcher := context.WithCancelCause(ctx)
 	defer cancelBatcher(nil)
-	newBatcher, err := batcher.BatcherServiceFromCLIConfig(batcherCtx, cancelBatcher, "0.0.1", batcherConfig, system.BatchSubmitter.Log)
+	newBatcher, err := batcher.BatcherServiceFromCLIConfig(batcherCtx, cancelBatcher, "0.0.1", batcherConfig, system.BatchSubmitter.Log,
+		batcher.WithEspressoClientOverride(system.EspressoClient))
 	require.NoError(t, err)
 	err = newBatcher.Start(batcherCtx)
 	require.NoError(t, err)
@@ -457,6 +470,13 @@ func TestFallbackMechanismIntegrationTestChannelNotClosed(t *testing.T) {
 		// Setting this to 0 explicitly disables the feature, and as a result
 		// it will only send the data when the previous conditions are met.
 		env.WithBatcherMaxChannelDuration(0),
+
+		// Unbounded pending L1 txs so the Espresso auth+batch pairs (routed
+		// through the ordered txmgr queue) publish concurrently instead of
+		// one-per-L1-block; otherwise L1 data availability lags far behind the
+		// sequencer and the verifier cannot derive recent blocks within the
+		// test's confirmation windows.
+		env.WithBatcherMaxPendingTransactions(0),
 	)
 
 	require.NoError(t, err)
