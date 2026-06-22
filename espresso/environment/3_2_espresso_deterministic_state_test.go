@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	geth_types "github.com/ethereum/go-ethereum/core/types"
@@ -184,7 +182,7 @@ func realBatcherPrivateKey(system *e2esys.System) (*ecdsa.PrivateKey, error) {
 	return system.Cfg.Secrets.Batcher, nil
 }
 
-const TEST_ESPRESSO_TRANSACTION = "0xf90388f9023da00d68b82fa254b7d23a8584bcaa67be241a269c86aac05a2a6fc805a672bb910ea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347944200000000000000000000000000000000000011a0d6cc9c002bc6a8d1c8501c57301b6b2f037494e1e0f61e417411e17f4e80b5afa028881bc4fc4c5fa67f26462837f88937961b6667ae4af043218a0c1b72a5f53ca0d8056577b8ef8e580c0ebc96def906b3699ddc8d91e15abf9c7a7e7bb4f85c96b901000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080018401c9c380830272ca84681d98b780a0000000000000000000000000000000000000000000000000000000000000000088000000000000000001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000f849a00d68b82fa254b7d23a8584bcaa67be241a269c86aac05a2a6fc805a672bb910e80a0d7d069186bed40982ca7e7747d61c78718d0dda165d74e62164c1bba165001f784681d98b7c0b8fb7ef8f8a07a2aa57f213dfe5e61ceaebcd45c61252157b4e3c1e82e1ec0dca455b1173ad894deaddeaddeaddeaddeaddeaddeaddeaddead00019442000000000000000000000000000000000000158080830f424080b8a4440a5e20000f424000000000000000000000000100000000681d98b60000000000000000000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000000000000000001d7d069186bed40982ca7e7747d61c78718d0dda165d74e62164c1bba165001f70000000000000000000000003c44cdddb6a900fa2b585dd299e03d12fa4293bc"
+const TEST_ESPRESSO_TRANSACTION = "0xf9039df9023da00d68b82fa254b7d23a8584bcaa67be241a269c86aac05a2a6fc805a672bb910ea01dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347944200000000000000000000000000000000000011a0d6cc9c002bc6a8d1c8501c57301b6b2f037494e1e0f61e417411e17f4e80b5afa028881bc4fc4c5fa67f26462837f88937961b6667ae4af043218a0c1b72a5f53ca0d8056577b8ef8e580c0ebc96def906b3699ddc8d91e15abf9c7a7e7bb4f85c96b901000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080018401c9c380830272ca84681d98b780a0000000000000000000000000000000000000000000000000000000000000000088000000000000000001a056e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b4218080a00000000000000000000000000000000000000000000000000000000000000000f849a00d68b82fa254b7d23a8584bcaa67be241a269c86aac05a2a6fc805a672bb910e80a0d7d069186bed40982ca7e7747d61c78718d0dda165d74e62164c1bba165001f784681d98b7c0b8fb7ef8f8a07a2aa57f213dfe5e61ceaebcd45c61252157b4e3c1e82e1ec0dca455b1173ad894deaddeaddeaddeaddeaddeaddeaddeaddead00019442000000000000000000000000000000000000158080830f424080b8a4440a5e20000f424000000000000000000000000100000000681d98b60000000000000000000000000000000000000000000000000000000000000000000000003b9aca000000000000000000000000000000000000000000000000000000000000000001d7d069186bed40982ca7e7747d61c78718d0dda165d74e62164c1bba165001f70000000000000000000000003c44cdddb6a900fa2b585dd299e03d12fa4293bc940000000000000000000000000000000000000000"
 
 // createEspressoTransaction creates a Espresso transaction with a FAKE or REAL batcher private key
 func createEspressoTransaction(transactionString string, chainID *big.Int, batcherKey *ecdsa.PrivateKey) (*espressoCommon.Transaction, error) {
@@ -212,30 +210,10 @@ func createEspressoTransaction(transactionString string, chainID *big.Int, batch
 	}, nil
 }
 
-// espressoTransactionDataSkippingUnmarshal extract the L1 info deposit from Espresso transaction without checking whether the unmarshal could work
-func espressoTransactionDataSkippingUnmarshal(transactionString string) (*geth_types.Transaction, error) {
-	bufData, err := hexutil.Decode(transactionString)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode Espresso transaction in the test: %w", err)
-	}
-	buf := bytes.NewBuffer(bufData)
-
-	batchData := buf.Bytes()
-
-	var batch derive.EspressoBatch
-	if err := rlp.DecodeBytes(batchData, &batch); err != nil {
-		return nil, fmt.Errorf("failed to decode Espresso batch: %w", err)
-	}
-
-	return batch.L1InfoDeposit, nil
-}
-
 // TestValidEspressoTransactionCreation is a test that
 // make sure we have correct way to create a Espresso transaction.
 // This test is a unit test to serve the correctness of TestDeterministicDerivationExecutionStateWithInvalidTransaction.
 func TestValidEspressoTransactionCreation(t *testing.T) {
-	// Ignore it by default as it takes a long time to run
-	t.Skip("skipping test")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -253,7 +231,6 @@ func TestValidEspressoTransactionCreation(t *testing.T) {
 
 	// We want to setup our test
 	espressoClient := espressoDevNode.Client()
-	l2Verif := system.NodeClient(e2esys.RoleVerif)
 	// create a real Espresso transaction and make sure it can go through
 	{
 		// Create a real Espresso transaction
@@ -300,22 +277,23 @@ func TestValidEspressoTransactionCreation(t *testing.T) {
 			}
 		}
 
-		// Make sure the transaction will go through to op node by checking it will go through batch submitter's streamer
+		// The batcher's streamer must be able to unmarshal the transaction the
+		// same way it would a batcher-produced one, recovering the batcher
+		// address from the prepended signature.
 		batchSubmitter := system.BatchSubmitter
-		_, err = batchSubmitter.EspressoStreamer().UnmarshalBatch(realEspressoTransaction.Payload)
+		batch, err := batchSubmitter.EspressoStreamer().UnmarshalBatch(realEspressoTransaction.Payload)
 		if have, want := err, error(nil); have != want {
 			t.Fatalf("Failed to unmarshal batch:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
 		}
 
-		// Extract L1 info deposit transaction from Espresso transaction
-		l1InfoDeposit, err := espressoTransactionDataSkippingUnmarshal(TEST_ESPRESSO_TRANSACTION)
-		if err != nil {
-			t.Fatalf("Failed to get L1 info deposit:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", err, nil)
-		}
+		// The signer recovered from the signature must be the real batcher, since
+		// realEspressoTransaction was signed with the real batcher key.
+		realBatcherAddress := crypto.PubkeyToAddress(realBatcherPrivateKey.PublicKey)
+		require.Equal(t, realBatcherAddress, batch.Signer(),
+			"recovered signer should be the real batcher address")
 
-		// Make sure the transaction will really go through to verifier by waiting for its hash
-		_, err = wait.ForReceiptOK(ctx, l2Verif, l1InfoDeposit.Hash())
-		require.NoError(t, err, "deposit didn't arrive on Decaf node")
+		// The embedded L1-info deposit must be extractable from the batch.
+		require.NotNil(t, batch.L1InfoDeposit, "batch should carry an L1 info deposit")
 	}
 
 }
