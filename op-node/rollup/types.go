@@ -38,6 +38,8 @@ var (
 	ErrChainIDsSame                  = errors.New("L1 and L2 chain IDs must be different")
 	ErrL1ChainIDNotPositive          = errors.New("L1 chain ID must be non-zero and positive")
 	ErrL2ChainIDNotPositive          = errors.New("L2 chain ID must be non-zero and positive")
+
+	ErrMissingBatchAuthenticatorAddress = errors.New("missing batch authenticator address when Espresso is enabled")
 )
 
 type Genesis struct {
@@ -166,6 +168,22 @@ type Config struct {
 	// This feature (de)activates by L1 origin timestamp, to keep a consistent L1 block info per L2
 	// epoch.
 	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
+
+	// EspressoTime sets the activation time of the Espresso upgrade.
+	// Pre-fork, the derivation pipeline behaves exactly as upstream Optimism: batches are
+	// accepted based on the L1 transaction sender matching the SystemConfig batcher address.
+	// Post-fork, batches must be authenticated via BatchInfoAuthenticated events emitted by
+	// the BatchAuthenticator contract; sender-based authorization is rejected.
+	// EspressoTime is conceptually an L2-timestamp fork activation time, but the
+	// derivation pipeline gates on it by comparing against the L1 origin time of the
+	// enclosing L1 block (the L2 epoch's L1 origin), mirroring upstream's ecotoneTime
+	// treatment, to keep a consistent batch-authorization decision per L2 epoch.
+	// Active if EspressoTime != nil && the block's L1 origin time >= *EspressoTime.
+	EspressoTime *uint64 `json:"espresso_time,omitempty"`
+
+	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
+	// BatchInfoAuthenticated(bytes32,address) events the derivation pipeline scans post-Espresso.
+	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -365,6 +383,12 @@ func (cfg *Config) Check() error {
 	}
 	if err := checkFork(cfg.HoloceneTime, cfg.IsthmusTime, forks.Holocene, forks.Isthmus); err != nil {
 		return err
+	}
+
+	// When Espresso is enabled, batches must be authenticated via BatchInfoAuthenticated events
+	// emitted by the BatchAuthenticator contract, so a non-zero authenticator address is required.
+	if cfg.EspressoTime != nil && cfg.BatchAuthenticatorAddress == (common.Address{}) {
+		return ErrMissingBatchAuthenticatorAddress
 	}
 
 	return nil
@@ -869,6 +893,10 @@ func (c *Config) forEachFork(callback func(name string, logName string, time *ui
 	callback("Jovian", "jovian_time", c.JovianTime)
 	callback("Karst", "karst_time", c.KarstTime)
 	callback("Interop", "interop_time", c.InteropTime)
+	if c.EspressoTime != nil {
+		// only report if config is set
+		callback("Espresso", "espresso_time", c.EspressoTime)
+	}
 }
 
 func (c *Config) ParseRollupConfig(in io.Reader) error {

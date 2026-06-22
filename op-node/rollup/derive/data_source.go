@@ -48,10 +48,16 @@ type DataSourceFactory struct {
 }
 
 func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1Fetcher, blobsFetcher L1BlobsFetcher, altDAFetcher AltDAInputFetcher) *DataSourceFactory {
+	var caches *BatchAuthCaches
+	if cfg.EspressoTime != nil {
+		caches = NewBatchAuthCaches()
+	}
 	config := DataSourceConfig{
 		l1Signer:          cfg.L1Signer(),
 		batchInboxAddress: cfg.BatchInboxAddress,
 		altDAEnabled:      cfg.AltDAEnabled(),
+		rollupCfg:         cfg,
+		batchAuthCaches:   caches,
 	}
 	return &DataSourceFactory{
 		log:          log,
@@ -64,6 +70,13 @@ func NewDataSourceFactory(log log.Logger, cfg *rollup.Config, fetcher L1Fetcher,
 }
 
 // OpenData returns the appropriate data source for the L1 block `ref`.
+//
+// The Espresso gate is evaluated against the L1 origin time (ref.Time),
+// mirroring the upstream pattern used for ecotoneTime: the data-source layer
+// is per-L1-block, so it gates on L1 time. The fork timestamp itself is
+// conceptually an L2 timestamp but the per-L1-block decision is stable as
+// long as L1 origin time and L2 block time are within MaxSequencerDrift of
+// each other (always true on a healthy chain).
 func (ds *DataSourceFactory) OpenData(ctx context.Context, ref eth.L1BlockRef, batcherAddr common.Address) (DataIter, error) {
 	// Creates a data iterator from blob or calldata source so we can forward it to the altDA source
 	// if enabled as it still requires an L1 data source for fetching input commmitments.
@@ -88,13 +101,22 @@ type DataSourceConfig struct {
 	l1Signer          types.Signer
 	batchInboxAddress common.Address
 	altDAEnabled      bool
+	// rollupCfg provides Espresso-specific configuration (EspressoTime,
+	// BatchAuthenticatorAddress) consulted when post-Espresso event-based
+	// batch authentication is active.
+	rollupCfg *rollup.Config
+	// batchAuthCaches holds the LRU caches for batch authentication lookback
+	// window traversal. Nil when Espresso is not configured.
+	batchAuthCaches *BatchAuthCaches
 }
 
-// isValidBatchTx returns true if:
+// isValidBatchTx checks basic transaction validity for batch submission:
 //  1. the transaction type is any of Legacy, ACL, DynamicFee, Blob, or Deposit (for L3s).
-//  2. the transaction has a To() address that matches the batch inbox address, and
-//  3. the transaction has a valid signature from the batcher address
-func isValidBatchTx(tx *types.Transaction, l1Signer types.Signer, batchInboxAddr, batcherAddr common.Address, logger log.Logger) bool {
+//  2. the transaction has a To() address that matches the batch inbox address
+//
+// It does NOT check authentication (sender or event-based) — that is handled separately
+// by isBatchTxAuthorized.
+func isValidBatchTx(tx *types.Transaction, batchInboxAddr common.Address, logger log.Logger) bool {
 	// For now, we want to disallow the SetCodeTx type or any future types.
 	if tx.Type() > types.BlobTxType && tx.Type() != types.DepositTxType {
 		return false
@@ -104,14 +126,76 @@ func isValidBatchTx(tx *types.Transaction, l1Signer types.Signer, batchInboxAddr
 	if to == nil || *to != batchInboxAddr {
 		return false
 	}
-	seqDataSubmitter, err := l1Signer.Sender(tx) // optimization: only derive sender if To is correct
+
+	return true
+}
+
+// isAuthorizedBatchSender performs upstream-style sender-based authorization: it
+// recovers the L1 sender of the transaction and checks it matches the configured
+// batcher address. This is the pre-Espresso authorization path.
+func isAuthorizedBatchSender(tx *types.Transaction, l1Signer types.Signer, batcherAddr common.Address, logger log.Logger) bool {
+	sender, err := l1Signer.Sender(tx)
 	if err != nil {
 		logger.Warn("tx in inbox with invalid signature", "hash", tx.Hash(), "err", err)
 		return false
 	}
-	// some random L1 user might have sent a transaction to our batch inbox, ignore them
-	if seqDataSubmitter != batcherAddr {
-		logger.Warn("tx in inbox with unauthorized submitter", "addr", seqDataSubmitter, "hash", tx.Hash(), "err", err)
+	if sender != batcherAddr {
+		logger.Warn("tx in inbox with unauthorized submitter", "addr", sender, "hash", tx.Hash())
+		return false
+	}
+	return true
+}
+
+// isBatchTxAuthorized determines whether a batch transaction is authorized for inclusion.
+//
+// The fork gate is evaluated against the L1 origin time of the enclosing L1
+// block (passed as l1OriginTime), mirroring the data-source layer's ecotoneTime
+// treatment.
+//
+// Pre-Espresso (l1OriginTime < *EspressoTime, or unset):
+//
+//	upstream behavior — the L1 sender of the transaction must match the configured
+//	batcher address. The authenticatedHashes map is unused.
+//
+// Post-Espresso:
+//
+//	the batch's commitment hash must appear in authenticatedHashes (i.e. a
+//	BatchInfoAuthenticated event was emitted for this commitment within the
+//	derivation pipeline's lookback window) AND the L1 sender of the batch
+//	transaction must equal the caller that emitted that event. This binds each
+//	batch to the address that authenticated it, so a batch authenticated by one
+//	batcher cannot be submitted by another. Sender-based-only authorization is
+//	rejected.
+func isBatchTxAuthorized(
+	tx *types.Transaction,
+	dsCfg DataSourceConfig,
+	batcherAddr common.Address,
+	batchHash common.Hash,
+	authenticatedHashes map[common.Hash]common.Address,
+	l1OriginTime uint64,
+	logger log.Logger,
+) bool {
+	if !dsCfg.rollupCfg.IsEspresso(l1OriginTime) {
+		// Pre-fork: upstream sender-based authorization.
+		return isAuthorizedBatchSender(tx, dsCfg.l1Signer, batcherAddr, logger)
+	}
+	// Post-fork: the commitment must have been authenticated within the lookback window.
+	authCaller, ok := authenticatedHashes[batchHash]
+	if !ok {
+		logger.Warn("batch not authenticated",
+			"txHash", tx.Hash(), "batchHash", batchHash)
+		return false
+	}
+	// The batch tx must be submitted by the same address that authenticated it.
+	sender, err := dsCfg.l1Signer.Sender(tx)
+	if err != nil {
+		logger.Warn("authenticated batch tx with invalid signature",
+			"txHash", tx.Hash(), "batchHash", batchHash, "err", err)
+		return false
+	}
+	if sender != authCaller {
+		logger.Warn("authenticated batch submitted by a different sender than the authenticating caller",
+			"txHash", tx.Hash(), "batchHash", batchHash, "sender", sender, "authCaller", authCaller)
 		return false
 	}
 	return true
