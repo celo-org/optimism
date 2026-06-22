@@ -2,6 +2,7 @@ package environment
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"fmt"
 	"math/big"
 	"testing"
@@ -115,7 +116,11 @@ func RunSimpleL2BurnWithTimeout(ctx context.Context, t *testing.T, system *e2esy
 	initialBurnAddressBalance, err := l2Seq.BalanceAt(ctx, burnAddress, nil)
 	require.NoError(t, err, "failed to get initial balance for burn address %s", burnAddress)
 
-	_ = helpers.SendL2TxWithID(
+	// Use the ctx-scoped sender (not helpers.SendL2TxWithID, which hardcodes its
+	// own 30s timeout) so the caller's timeout governs the verifier-receipt wait;
+	// after a batcher switch the verifier can take longer than 30s to derive.
+	sendL2TxAndVerify(
+		ctx,
 		t,
 		system.Cfg.L2ChainIDBig(),
 		l2Seq,
@@ -184,4 +189,47 @@ func RunSimpleMultiTransactions(ctx context.Context, t *testing.T, system *e2esy
 		}
 	}
 	return receipts, nil
+}
+
+// sendL2TxAndVerify is an Espresso-local variant of helpers.SendL2TxWithID that
+// honours the supplied ctx for the receipt waits instead of imposing its own
+// fixed 30s deadline. The Espresso batcher-switch tests need a longer window
+// because the verifier can lag well past 30s while it re-derives after a switch.
+// Behaviour is otherwise identical: it signs and sends the tx, waits for an OK
+// receipt on l2Client, asserts the expected status, and verifies the same
+// receipt on every TxOpts.VerifyClients client.
+func sendL2TxAndVerify(ctx context.Context, t *testing.T, chainID *big.Int, l2Client *ethclient.Client, privKey *ecdsa.PrivateKey, applyTxOpts helpers.TxOptsFn) *types.Receipt {
+	opts := &helpers.TxOpts{
+		Value:          common.Big0,
+		GasTipCap:      big.NewInt(10),
+		GasFeeCap:      big.NewInt(200),
+		Gas:            21_000,
+		ExpectedStatus: types.ReceiptStatusSuccessful,
+	}
+	applyTxOpts(opts)
+
+	tx := types.MustSignNewTx(privKey, types.LatestSignerForChainID(chainID), &types.DynamicFeeTx{
+		ChainID:   chainID,
+		Nonce:     opts.Nonce,
+		To:        opts.ToAddr,
+		Value:     opts.Value,
+		GasTipCap: opts.GasTipCap,
+		GasFeeCap: opts.GasFeeCap,
+		Gas:       opts.Gas,
+		Data:      opts.Data,
+	})
+
+	require.NoError(t, l2Client.SendTransaction(ctx, tx), "Sending L2 tx")
+
+	receipt, err := wait.ForReceiptOK(ctx, l2Client, tx.Hash())
+	require.NoError(t, err, "Waiting for L2 tx")
+	require.Equal(t, opts.ExpectedStatus, receipt.Status, "TX should have expected status")
+
+	for i, client := range opts.VerifyClients {
+		t.Logf("Waiting for tx %v on verification client %d", tx.Hash(), i)
+		receiptVerif, err := wait.ForReceiptOK(ctx, client, tx.Hash())
+		require.NoErrorf(t, err, "Waiting for L2 tx on verification client %d", i)
+		require.Equalf(t, receipt, receiptVerif, "Receipts should be the same on sequencer and verification client %d", i)
+	}
+	return receipt
 }
