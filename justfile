@@ -263,7 +263,7 @@ go-tests-short: op-program-client op-program-host cannon build-contracts cannon-
 [script('bash')]
 _go-tests-ci-internal go_test_flags="": sync-superchain
   set -euo pipefail
-  (cd cannon && just cannon elf)
+  (cd cannon && just diff-hello-elf)
   echo "Setting up test directories..."
   mkdir -p ./tmp/test-results ./tmp/testlogs
   echo "Running Go tests with gotestsum..."

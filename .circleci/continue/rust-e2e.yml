@@ -16,7 +16,7 @@ parameters:
     default: us-docker.pkg.dev/oplabs-tools-artifacts/images/ci-base-clang@sha256:852cb2dcd64eb5c039abf857a2217f341351eb7e4ef1a989ba9eefb86f158105
   c-go-cache-version:
     type: string
-    default: "v0.0"
+    default: "v0.1"
   # Workflow activation flags (set by the decision tree in config.yml)
   c-run_rust_e2e_ci:
     type: boolean
