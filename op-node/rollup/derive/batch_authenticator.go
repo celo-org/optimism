@@ -2,10 +2,12 @@ package derive
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -156,7 +158,14 @@ func CollectAuthenticatedBatches(
 		} else {
 			// Cache miss: fetch receipts, extract events, cache the result
 			_, receipts, err := fetcher.FetchReceipts(ctx, currentBlock.Hash)
-			if err != nil {
+			if errors.Is(err, ethereum.NotFound) {
+				// A block in the lookback window is no longer available, e.g. an L1
+				// reorg orphaned it. Treat this like the data sources treat a missing
+				// ref block (calldata_source.go / blob_data_source.go): signal a reset so
+				// the pipeline re-derives from a canonical origin, rather than retrying
+				// the same step forever as a temporary error.
+				return nil, NewResetError(fmt.Errorf("batch auth: receipts for block %d not found: %w", currentBlock.Number, err))
+			} else if err != nil {
 				return nil, NewTemporaryError(fmt.Errorf("batch auth: failed to fetch receipts for block %d: %w", currentBlock.Number, err))
 			}
 			events := collectAuthEventsFromReceipts(receipts, authenticatorAddr)
@@ -177,7 +186,11 @@ func CollectAuthenticatedBatches(
 			refCacheHits++
 		} else {
 			parentRef, err := fetcher.L1BlockRefByHash(ctx, parentHash)
-			if err != nil {
+			if errors.Is(err, ethereum.NotFound) {
+				// See the FetchReceipts NotFound case above: a missing ancestor means the
+				// lookback window crossed a reorg, so reset rather than retry forever.
+				return nil, NewResetError(fmt.Errorf("batch auth: L1 block ref %s not found: %w", parentHash.String(), err))
+			} else if err != nil {
 				return nil, NewTemporaryError(fmt.Errorf("batch auth: failed to fetch L1 block ref %s: %w", parentHash.String(), err))
 			}
 			refCache.Add(parentHash, parentRef)
