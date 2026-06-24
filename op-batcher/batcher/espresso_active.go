@@ -20,8 +20,8 @@ func (l *BatchSubmitter) hasBatchAuthenticator() bool {
 // posting to the BatchInbox.
 //
 // This decision must align with the verifier's per-L1-block fork gate
-// (DataSourceConfig.isEspressoEnforcement, which evaluates the hardfork
-// activation predicate against the *containing* L1 block's timestamp). Since
+// (rollupCfg.IsEspresso(l1OriginTime) in data_source.go, which evaluates the
+// hardfork activation predicate against the *containing* L1 block's timestamp). Since
 // the tx is not yet mined at decision time, its eventual containing block
 // has a strictly greater timestamp than the L1 tip the batcher observes:
 //
