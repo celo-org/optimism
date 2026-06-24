@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -212,4 +213,39 @@ func TestFallbackAuth_WindowBoundaryAccepted(t *testing.T) {
 	require.NoError(t, got.Err)
 	require.Equal(t, receiptWithBlock(boundary).BlockNumber, got.Receipt.BlockNumber)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+}
+
+// TestComputeCommitment_Parity locks the batcher's batch-commitment computation to
+// the verifier's. The batcher must hash exactly what op-node derivation hashes, or
+// post-fork batches fail the commitment match and are silently dropped. It checks
+// both paths against derive.ComputeCalldataBatchHash / derive.ComputeBlobBatchHash;
+// for blobs it uses the real versioned hashes the tx will carry (via MakeSidecar,
+// the same hashes the verifier reads from tx.BlobHashes()).
+func TestComputeCommitment_Parity(t *testing.T) {
+	t.Run("calldata", func(t *testing.T) {
+		for _, data := range [][]byte{[]byte("batch calldata payload"), {}, nil} {
+			got, err := computeCommitment(&txmgr.TxCandidate{TxData: data})
+			require.NoError(t, err)
+			require.Equal(t, derive.ComputeCalldataBatchHash(data), common.Hash(got))
+		}
+	})
+
+	t.Run("blobs", func(t *testing.T) {
+		for _, n := range []int{1, 3} {
+			blobs := make([]*eth.Blob, n)
+			for i := range blobs {
+				var blob eth.Blob
+				// Distinct first byte per blob so the versioned hashes differ and the
+				// concatenation order is actually exercised.
+				require.NoError(t, blob.FromData(eth.Data{byte(i), 0xab, 0xcd}))
+				blobs[i] = &blob
+			}
+			_, blobHashes, err := txmgr.MakeSidecar(blobs, false)
+			require.NoError(t, err)
+
+			got, err := computeCommitment(&txmgr.TxCandidate{Blobs: blobs})
+			require.NoError(t, err)
+			require.Equal(t, derive.ComputeBlobBatchHash(blobHashes), common.Hash(got))
+		}
+	})
 }

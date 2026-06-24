@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -14,24 +14,25 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
-// computeCommitment computes the batch commitment hash from a transaction candidate.
-// For calldata transactions, it returns keccak256(calldata).
-// For blob transactions, it returns keccak256(concat(blobVersionedHashes)).
+// computeCommitment computes the batch commitment hash from a transaction
+// candidate. It delegates to the same functions the verifier uses so the two
+// provably agree on the bytes that get authenticated:
+//   - calldata transactions: keccak256(calldata).
+//   - blob transactions: keccak256(concat(blobVersionedHashes)).
 func computeCommitment(candidate *txmgr.TxCandidate) ([32]byte, error) {
 	if len(candidate.Blobs) == 0 {
-		return crypto.Keccak256Hash(candidate.TxData), nil
+		return derive.ComputeCalldataBatchHash(candidate.TxData), nil
 	}
 
-	concatenatedBlobHashes := make([]byte, 0)
-	for _, blob := range candidate.Blobs {
+	blobHashes := make([]common.Hash, len(candidate.Blobs))
+	for i, blob := range candidate.Blobs {
 		blobCommitment, err := blob.ComputeKZGCommitment()
 		if err != nil {
 			return [32]byte{}, fmt.Errorf("failed to compute KZG commitment for blob: %w", err)
 		}
-		blobHash := eth.KZGToVersionedHash(blobCommitment)
-		concatenatedBlobHashes = append(concatenatedBlobHashes, blobHash.Bytes()...)
+		blobHashes[i] = eth.KZGToVersionedHash(blobCommitment)
 	}
-	return crypto.Keccak256Hash(concatenatedBlobHashes), nil
+	return derive.ComputeBlobBatchHash(blobHashes), nil
 }
 
 // sendTxWithFallbackAuth authenticates a batch transaction via the BatchAuthenticator contract
