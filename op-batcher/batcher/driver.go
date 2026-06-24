@@ -51,6 +51,18 @@ type txRef struct {
 	size     int
 }
 
+// newTxRef builds the txRef that identifies a batch submission across the txmgr
+// queue and receipt handling.
+func newTxRef(txdata txData, isCancel bool) txRef {
+	return txRef{
+		id:       txdata.ID(),
+		isCancel: isCancel,
+		isBlob:   txdata.daType == DaTypeBlob,
+		daType:   txdata.daType,
+		size:     txdata.Len(),
+	}
+}
+
 func (r txRef) String() string {
 	return r.string(func(id txID) string { return id.String() })
 }
@@ -1057,7 +1069,7 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		return
 	}
 
-	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}, *candidate, receiptsCh)
+	queue.Send(newTxRef(txdata, isCancel), *candidate, receiptsCh)
 }
 
 func (l *BatchSubmitter) blobTxCandidate(data txData) (*txmgr.TxCandidate, error) {
