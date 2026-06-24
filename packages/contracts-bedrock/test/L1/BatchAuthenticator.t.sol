@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import { Test } from "test/setup/Test.sol";
+import { Test } from "forge-std/Test.sol";
 import { console2 as console } from "forge-std/console2.sol";
 import { Vm } from "forge-std/Vm.sol";
 
@@ -97,9 +97,9 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
         teeVerifier = new EspressoTEEVerifierMock(IEspressoNitroTEEVerifier(address(nitroVerifier)));
         implementation = new BatchAuthenticator();
 
-        // Deploy the proxy admin via DeployUtils.getCode to avoid duplicate ProxyAdmin artifacts.
+        // Deploy the proxy admin via vm.getCode to avoid duplicate ProxyAdmin artifacts.
         {
-            bytes memory _code = DeployUtils.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json");
+            bytes memory _code = vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json");
             bytes memory _args = abi.encode(proxyAdminOwner);
             bytes memory _initCode = abi.encodePacked(_code, _args);
             address _addr;
@@ -874,7 +874,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
     ///         that break Proxy artifact disambiguation in tests.
     function _newProxy(address _admin) internal returns (IProxy) {
         bytes memory initCode =
-            abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(_admin));
+            abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(_admin));
         address payable proxyAddr;
         assembly {
             proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
@@ -921,7 +921,7 @@ contract BatchAuthenticator_Fork_Test is Test {
 
     function setUp() public {
         // Skip unless fork tests are explicitly enabled.
-        if (!Config.l1ForkTest()) {
+        if (!Config.forkTest()) {
             vm.skip(true);
             return;
         }
@@ -935,9 +935,9 @@ contract BatchAuthenticator_Fork_Test is Test {
         teeVerifier = new EspressoTEEVerifierMock(IEspressoNitroTEEVerifier(address(nitroVerifier)));
         implementation = new BatchAuthenticator();
 
-        // Deploy ProxyAdmin via DeployUtils.getCode to avoid duplicate ProxyAdmin artifacts.
+        // Deploy ProxyAdmin via vm.getCode to avoid duplicate ProxyAdmin artifacts.
         {
-            bytes memory _code = DeployUtils.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json");
+            bytes memory _code = vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json");
             bytes memory _args = abi.encode(proxyAdminOwner);
             bytes memory _initCode = abi.encodePacked(_code, _args);
             address _addr;
@@ -1093,7 +1093,7 @@ contract BatchAuthenticator_Fork_Test is Test {
     /// @notice Deploy a Proxy without importing Proxy.sol to avoid duplicate compilation artifacts.
     function _newProxy(address _admin) internal returns (IProxy) {
         bytes memory initCode =
-            abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(_admin));
+            abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(_admin));
         address payable proxyAddr;
         assembly {
             proxyAddr := create(0, add(initCode, 0x20), mload(initCode))

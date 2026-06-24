@@ -60,7 +60,7 @@ contract DeployBatchAuthenticator is Script {
         IProxy proxy;
         {
             bytes memory initCode =
-                abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
+                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             address payable proxyAddr;
             assembly {
                 proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
