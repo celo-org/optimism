@@ -35,7 +35,7 @@ func (l *BatchSubmitter) dispatchAuthenticatedSendTx(txdata txData, isCancel boo
 	fallbackAuthRequired, err := l.isFallbackAuthRequired(l.killCtx)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()},
+			ID:  newTxRef(txdata, isCancel),
 			Err: fmt.Errorf("failed to evaluate fallback-auth gate: %w", err),
 		}
 		return true

@@ -42,7 +42,7 @@ func computeCommitment(candidate *txmgr.TxCandidate) ([32]byte, error) {
 // The contract's fallback path checks msg.sender against systemConfig.batcherHash(), so no
 // separate signature is needed — the L1 transaction is already signed by the TxManager's key.
 func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
-	transactionReference := txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}
+	transactionReference := newTxRef(txdata, isCancel)
 	l.Log.Debug("Sending fallback-authenticated L1 transaction", "txRef", transactionReference)
 
 	commitment, err := computeCommitment(candidate)
