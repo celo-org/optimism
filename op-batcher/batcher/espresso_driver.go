@@ -1,22 +1,19 @@
 package batcher
 
 import (
-	"context"
-	"errors"
 	"fmt"
 
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
-// waitForAuthGroup blocks until all in-flight fallback-auth submissions have
-// completed. Called from publishingLoop's tail; blocks until killCtx is
-// cancelled if any auth retries are still in flight.
+// waitForAuthGroup blocks until all in-flight fallback-auth watcher goroutines
+// have finished. publishingLoop calls it before closing receiptsCh: each watcher
+// is a sender on receiptsCh, so the receipts loop must still be draining
+// receiptsCh at this point or a watcher's final send would block forever. Each
+// watcher always terminates because the txmgr Queue emits exactly one receipt per
+// Send, even on context cancellation.
 func (l *BatchSubmitter) waitForAuthGroup() {
-	if err := l.authGroup.Wait(); err != nil {
-		if !errors.Is(err, context.Canceled) {
-			l.Log.Error("error waiting for fallback-auth transactions to complete", "err", err)
-		}
-	}
+	l.authGroup.Wait()
 }
 
 // dispatchAuthenticatedSendTx routes sendTx through the fallback-batcher
