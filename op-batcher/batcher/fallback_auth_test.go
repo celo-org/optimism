@@ -80,7 +80,7 @@ func TestFallbackAuth_OrderingAndSuccess(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	require.NoError(t, l.authGroup.Wait())
+	l.authGroup.Wait()
 
 	require.Len(t, queue.sends, 2)
 	// First send must target the BatchAuthenticator (the auth tx), giving it the
@@ -110,7 +110,7 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	require.NoError(t, l.authGroup.Wait())
+	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
@@ -131,7 +131,7 @@ func TestFallbackAuth_BatchFailureRetried(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	require.NoError(t, l.authGroup.Wait())
+	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
@@ -155,7 +155,7 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	require.NoError(t, l.authGroup.Wait())
+	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
@@ -180,7 +180,7 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	require.NoError(t, l.authGroup.Wait())
+	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
@@ -207,7 +207,7 @@ func TestFallbackAuth_WindowBoundaryAccepted(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	require.NoError(t, l.authGroup.Wait())
+	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.NoError(t, got.Err)

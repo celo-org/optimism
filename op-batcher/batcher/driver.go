@@ -127,11 +127,12 @@ type BatchSubmitter struct {
 
 	// authGroup tracks the fallback batcher's receipt-watcher goroutines (one
 	// per auth+batch pair) so the publishing loop can drain them via
-	// waitForAuthGroup before closing receiptsCh. It is intentionally unbounded:
-	// pending-tx throttling is enforced by the txmgr Queue (queue.Send blocks at
-	// MaxPendingTransactions), and the live watcher count is derived from the
-	// queue's in-flight tx count, so it inherits the same bound.
-	authGroup errgroup.Group
+	// waitForAuthGroup before closing receiptsCh. New watchers are back-pressured
+	// (not hard-bounded) by the txmgr Queue: queue.Send blocks at
+	// MaxPendingTransactions, so watchers are created no faster than txs drain,
+	// though a slow receipts loop can briefly leave more than that parked on their
+	// final receiptsCh send.
+	authGroup sync.WaitGroup
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup

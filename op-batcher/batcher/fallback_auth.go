@@ -97,10 +97,11 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	queue.Send(transactionReference, verifyCandidate, authReceiptCh)
 	queue.Send(transactionReference, *candidate, batchReceiptCh)
 
-	l.authGroup.Go(func() error {
+	l.authGroup.Add(1)
+	go func() {
+		defer l.authGroup.Done()
 		l.watchFallbackAuthReceipts(transactionReference, authReceiptCh, batchReceiptCh, receiptsCh)
-		return nil
-	})
+	}()
 }
 
 // watchFallbackAuthReceipts collects the auth and batch receipts for a fallback-auth pair,
