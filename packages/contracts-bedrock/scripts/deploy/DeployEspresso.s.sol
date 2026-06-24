@@ -136,7 +136,7 @@ contract DeployEspresso is Script {
         IProxy proxy;
         {
             bytes memory initCode =
-                abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
+                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             address payable proxyAddr;
             vm.broadcast(msg.sender);
             assembly {
@@ -239,7 +239,7 @@ contract DeployEspresso is Script {
         address payable teeProxyAddr;
         {
             bytes memory initCode =
-                abi.encodePacked(DeployUtils.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
+                abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(msg.sender));
             vm.broadcast(msg.sender);
             assembly {
                 teeProxyAddr := create(0, add(initCode, 0x20), mload(initCode))
@@ -254,7 +254,7 @@ contract DeployEspresso is Script {
         address payable teeImplAddr;
         {
             bytes memory teeImplCode =
-                DeployUtils.getCode("lib/espresso-tee-contracts/out/EspressoTEEVerifier.sol/EspressoTEEVerifier.json");
+                vm.getCode("lib/espresso-tee-contracts/out/EspressoTEEVerifier.sol/EspressoTEEVerifier.json");
             vm.broadcast(msg.sender);
             assembly {
                 teeImplAddr := create(0, add(teeImplCode, 0x20), mload(teeImplCode))
@@ -272,7 +272,7 @@ contract DeployEspresso is Script {
         address nitroVerifierAddr;
         {
             bytes memory nitroImplCode = abi.encodePacked(
-                DeployUtils.getCode(
+                vm.getCode(
                     "lib/espresso-tee-contracts/out/EspressoNitroTEEVerifier.sol/EspressoNitroTEEVerifier.json"
                 ),
                 abi.encode(teeProxyAddr, _nitroEnclaveVerifier)
