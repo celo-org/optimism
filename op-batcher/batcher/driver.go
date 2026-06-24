@@ -12,7 +12,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -74,7 +73,6 @@ func (r txRef) string(txIDStringer func(txID) string) string {
 type L1Client interface {
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
-	bind.ContractBackend
 }
 
 type L2Client interface {
