@@ -21,6 +21,83 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
+// mockAuthEvents sets up L1 mock expectations for CollectAuthenticatedBatches to find auth events
+// for the given batch hashes at the given ref's block number. Auth events for batch hashes in
+// `authenticated` are placed in the ref block's receipts; all other blocks in the lookback
+// window have empty receipts.
+//
+// CollectAuthenticatedBatches traverses backward from ref via parent hashes, so this helper
+// builds a chain of L1BlockRef values with proper parent-hash linkage, sets up FetchReceipts
+// for each block, and L1BlockRefByHash for each parent.
+//
+// The auth events are emitted with `caller` as the indexed caller, which the
+// pipeline matches against the batch transaction's L1 sender. Tests pass the
+// expected batcher address here.
+//
+// Returns the updated ref with its ParentHash properly set to the chain. Callers must use
+// the returned ref when calling functions that invoke CollectAuthenticatedBatches.
+func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1BlockRef, authenticatorAddr, caller common.Address, authenticated []common.Hash) eth.L1BlockRef {
+	startBlock := ref.Number
+	if startBlock > BatchAuthLookbackWindow {
+		startBlock = ref.Number - BatchAuthLookbackWindow
+	} else {
+		startBlock = 0
+	}
+	windowSize := ref.Number - startBlock + 1
+
+	// Build the auth receipts for the ref block. The commitment is the unindexed
+	// data argument; only the caller is indexed (Topics[1]).
+	var authLogs []*types.Log
+	for _, bh := range authenticated {
+		authLogs = append(authLogs, &types.Log{
+			Address: authenticatorAddr,
+			Topics: []common.Hash{
+				BatchInfoAuthenticatedABIHash,
+				common.BytesToHash(caller.Bytes()),
+			},
+			Data: bh.Bytes(),
+		})
+	}
+	authReceipts := types.Receipts{}
+	if len(authLogs) > 0 {
+		authReceipts = types.Receipts{{Status: types.ReceiptStatusSuccessful, Logs: authLogs}}
+	}
+
+	// Build parent-hash-linked chain from startBlock to ref.Number.
+	// chain[i] corresponds to block number startBlock + i.
+	chain := make([]eth.L1BlockRef, windowSize)
+	for i := uint64(0); i < windowSize; i++ {
+		blockNum := startBlock + i
+		if blockNum == ref.Number {
+			chain[i] = ref
+		} else {
+			chain[i] = eth.L1BlockRef{Number: blockNum, Hash: testutils.RandomHash(rng)}
+		}
+		if i > 0 {
+			chain[i].ParentHash = chain[i-1].Hash
+		}
+	}
+
+	// Update the ref at the end of the chain with the correct ParentHash
+	updatedRef := chain[windowSize-1]
+
+	// Set up expectations for backward traversal: ref -> ref-1 -> ... -> startBlock
+	for i := int(windowSize) - 1; i >= 0; i-- {
+		blockRef := chain[i]
+		if blockRef.Number == ref.Number {
+			l1F.ExpectFetchReceipts(blockRef.Hash, nil, authReceipts, nil)
+		} else {
+			l1F.ExpectFetchReceipts(blockRef.Hash, nil, types.Receipts{}, nil)
+		}
+		// L1BlockRefByHash is called for every parent except when we've reached the end of the window
+		if i > 0 {
+			l1F.ExpectL1BlockRefByHash(chain[i-1].Hash, chain[i-1], nil)
+		}
+	}
+
+	return updatedRef
+}
+
 // TestDataAndHashesFromTxsEventAuth tests event-based batch authentication for both
 // calldata and blob transactions in the blob data source path.
 //
