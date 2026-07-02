@@ -40,6 +40,7 @@ var (
 	ErrL2ChainIDNotPositive          = errors.New("L2 chain ID must be non-zero and positive")
 
 	ErrMissingBatchAuthenticatorAddress = errors.New("missing batch authenticator address when Espresso is enabled")
+	ErrEspressoBeforeEcotone            = errors.New("espresso_time must be greater than or equal to ecotone_time; Espresso batch authentication only runs on the post-ecotone blob data source")
 )
 
 type Genesis struct {
@@ -385,10 +386,21 @@ func (cfg *Config) Check() error {
 		return err
 	}
 
-	// When Espresso is enabled, batches must be authenticated via BatchInfoAuthenticated events
-	// emitted by the BatchAuthenticator contract, so a non-zero authenticator address is required.
-	if cfg.EspressoTime != nil && cfg.BatchAuthenticatorAddress == (common.Address{}) {
-		return ErrMissingBatchAuthenticatorAddress
+	if cfg.EspressoTime != nil {
+		// When Espresso is enabled, batches must be authenticated via BatchInfoAuthenticated
+		// events emitted by the BatchAuthenticator contract, so a non-zero authenticator
+		// address is required.
+		if cfg.BatchAuthenticatorAddress == (common.Address{}) {
+			return ErrMissingBatchAuthenticatorAddress
+		}
+		// Espresso event-based batch authentication only runs on the post-ecotone blob data
+		// source. If espresso_time were scheduled before ecotone_time (or ecotone were never
+		// scheduled), blocks in the [espresso_time, ecotone_time) window would route to the
+		// pre-ecotone calldata source and silently fall back to sender-based authorization.
+		// Every real Celo chain sets ecotone_time = 0, so this only guards a misconfiguration.
+		if cfg.EcotoneTime == nil || *cfg.EspressoTime < *cfg.EcotoneTime {
+			return ErrEspressoBeforeEcotone
+		}
 	}
 
 	return nil
