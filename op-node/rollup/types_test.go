@@ -584,7 +584,13 @@ func TestConfig_Check(t *testing.T) {
 		{
 			name: "EspressoEnabledWithBatchAuthenticatorAddress",
 			modifier: func(cfg *Config) {
+				// Espresso requires ecotone (and its predecessor forks) to be active first.
+				zero := uint64(0)
 				espressoTime := uint64(1)
+				cfg.RegolithTime = &zero
+				cfg.CanyonTime = &zero
+				cfg.DeltaTime = &zero
+				cfg.EcotoneTime = &zero
 				cfg.EspressoTime = &espressoTime
 				cfg.BatchAuthenticatorAddress = common.Address{0x01}
 			},
@@ -661,6 +667,40 @@ func TestConfig_Check(t *testing.T) {
 			assert.Equal(t, err, test.expectedErr)
 		})
 	}
+}
+
+// TestConfig_Check_EspressoBeforeEcotone verifies that Check rejects an Espresso activation
+// scheduled before ecotone. Espresso must activate at or after ecotone, because Espresso
+// event-based batch authentication only runs on the post-ecotone blob data source.
+func TestConfig_Check_EspressoBeforeEcotone(t *testing.T) {
+	auth := common.Address{0x12}
+	// withTimes builds a valid config with the given espresso and ecotone activation times.
+	// When ecotone is set, the predecessor forks (regolith..delta) are co-scheduled with it so
+	// the generic fork-ordering checks pass and the espresso/ecotone rule is isolated.
+	withTimes := func(espresso uint64, ecotone *uint64) *Config {
+		cfg := randConfig()
+		cfg.EspressoTime = u64ptr(espresso)
+		cfg.BatchAuthenticatorAddress = auth
+		if ecotone != nil {
+			cfg.RegolithTime = ecotone
+			cfg.CanyonTime = ecotone
+			cfg.DeltaTime = ecotone
+			cfg.EcotoneTime = ecotone
+		}
+		return cfg
+	}
+
+	// espresso == ecotone: valid (the first espresso-active block is already post-ecotone).
+	require.NoError(t, withTimes(100, u64ptr(100)).Check())
+	// espresso > ecotone: valid.
+	require.NoError(t, withTimes(100, u64ptr(50)).Check())
+	// the real Celo case: ecotone at genesis, espresso scheduled later.
+	require.NoError(t, withTimes(1_000_000, u64ptr(0)).Check())
+
+	// espresso < ecotone: invalid — the [espresso, ecotone) window would bypass auth.
+	require.ErrorIs(t, withTimes(50, u64ptr(100)).Check(), ErrEspressoBeforeEcotone)
+	// espresso set but ecotone never scheduled: invalid (every espresso block bypasses auth).
+	require.ErrorIs(t, withTimes(50, nil).Check(), ErrEspressoBeforeEcotone)
 }
 
 func TestTimestampForBlock(t *testing.T) {
