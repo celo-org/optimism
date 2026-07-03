@@ -80,7 +80,6 @@ func TestFallbackAuth_OrderingAndSuccess(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	l.authGroup.Wait()
 
 	require.Len(t, queue.sends, 2)
 	// First send must target the BatchAuthenticator (the auth tx), giving it the
@@ -103,18 +102,19 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 
 	queue := &fakeTxSender{
 		responses: []txmgr.TxReceipt[txRef]{
-			{Err: errSendFailed},             // auth fails
-			{Receipt: receiptWithBlock(101)}, // batch lands anyway
+			{Err: errSendFailed}, // auth fails. No batch response, it must never be sent
 		},
 	}
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+	// The batch tx must not be sent after an auth failure: it would be crafted at the
+	// next nonce while the failed auth tx resets the txmgr nonce, leaving a nonce gap.
+	require.Len(t, queue.sends, 1)
 }
 
 func TestFallbackAuth_BatchFailureRetried(t *testing.T) {
@@ -131,7 +131,6 @@ func TestFallbackAuth_BatchFailureRetried(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
@@ -148,18 +147,19 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 
 	queue := &fakeTxSender{
 		responses: []txmgr.TxReceipt[txRef]{
-			{Receipt: revertedReceiptWithBlock(100)}, // auth mined but reverted
-			{Receipt: receiptWithBlock(101)},         // batch lands
+			{Receipt: revertedReceiptWithBlock(100)}, // auth mined but reverted. Batch must never be sent
 		},
 	}
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+	// A reverted auth tx emits no BatchInfoAuthenticated event, so the batch data would be
+	// unverifiable so the batch tx must not be submitted at all.
+	require.Len(t, queue.sends, 1)
 }
 
 // TestFallbackAuth_WindowViolationRetried verifies that a batch tx landing
@@ -180,7 +180,6 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
@@ -207,7 +206,6 @@ func TestFallbackAuth_WindowBoundaryAccepted(t *testing.T) {
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
 
 	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
-	l.authGroup.Wait()
 
 	got := <-receiptsCh
 	require.NoError(t, got.Err)
