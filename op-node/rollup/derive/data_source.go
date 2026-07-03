@@ -110,13 +110,26 @@ type DataSourceConfig struct {
 	batchAuthCaches *BatchAuthCaches
 }
 
-// isValidBatchTx checks basic transaction validity for batch submission:
+// isValidBatchTx returns true if:
+//  1. the transaction type is any of Legacy, ACL, DynamicFee, Blob, or Deposit (for L3s).
+//  2. the transaction has a To() address that matches the batch inbox address, and
+//  3. the transaction has a valid signature from the batcher address
+//
+// This is the pre-Espresso (upstream) sender-based validity check used by the calldata data
+// source. The blob data source instead composes isBatchTxToInbox with isBatchTxAuthorized so it
+// can apply event-based authorization post-Espresso, where the submitter need not be the
+// configured batcher address.
+func isValidBatchTx(tx *types.Transaction, l1Signer types.Signer, batchInboxAddr, batcherAddr common.Address, logger log.Logger) bool {
+	return isBatchTxToInbox(tx, batchInboxAddr) && isAuthorizedBatchSender(tx, l1Signer, batcherAddr, logger)
+}
+
+// isBatchTxToInbox checks basic transaction validity for batch submission:
 //  1. the transaction type is any of Legacy, ACL, DynamicFee, Blob, or Deposit (for L3s).
 //  2. the transaction has a To() address that matches the batch inbox address
 //
 // It does NOT check authentication (sender or event-based) — that is handled separately
-// by isBatchTxAuthorized.
-func isValidBatchTx(tx *types.Transaction, batchInboxAddr common.Address, logger log.Logger) bool {
+// by isAuthorizedBatchSender / isBatchTxAuthorized.
+func isBatchTxToInbox(tx *types.Transaction, batchInboxAddr common.Address) bool {
 	// For now, we want to disallow the SetCodeTx type or any future types.
 	if tx.Type() > types.BlobTxType && tx.Type() != types.DepositTxType {
 		return false
