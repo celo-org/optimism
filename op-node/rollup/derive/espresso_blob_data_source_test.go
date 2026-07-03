@@ -278,6 +278,82 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		require.Equal(t, 0, len(blobHashes))
 		l1F.AssertExpectations(t)
 	})
+
+	t.Run("mixed block: only the event-authenticated tx accepted", func(t *testing.T) {
+		l1F := &testutils.MockL1Source{}
+		newInboxTx := func(key *ecdsa.PrivateKey) *types.Transaction {
+			tx, err := types.SignNewTx(key, signer, &types.LegacyTx{
+				Nonce:    rng.Uint64(),
+				GasPrice: new(big.Int).SetUint64(rng.Uint64()),
+				Gas:      2_000_000,
+				To:       &batchInboxAddr,
+				Value:    big.NewInt(10),
+				Data:     testutils.RandomData(rng, 200),
+			})
+			require.NoError(t, err)
+			return tx
+		}
+		// tx1: batcher-signed, commitment authenticated — accepted.
+		// tx2: batcher-signed, commitment NOT authenticated — rejected even though its
+		// sender authenticated tx1's commitment (each tx must be matched against its
+		// own commitment, not just any commitment from an authenticated caller).
+		// tx3: unknown sender, not authenticated — rejected.
+		tx1 := newInboxTx(privateKey)
+		tx2 := newInboxTx(privateKey)
+		tx3 := newInboxTx(altKey)
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr,
+			[]common.Hash{ComputeCalldataBatchHash(tx1.Data())})
+
+		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx1, tx2, tx3}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 1, len(data), "only the event-authenticated tx should pass")
+		require.Equal(t, 0, len(blobHashes))
+		require.NotNil(t, data[0].calldata)
+		require.Equal(t, eth.Data(tx1.Data()), *data[0].calldata)
+		require.NotEqual(t, eth.Data(tx2.Data()), *data[0].calldata)
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("multiple authenticated txs each accepted for their own commitment", func(t *testing.T) {
+		// One calldata batch and one blob batch in the same block, each authenticated
+		// via its own commitment (calldata hash vs blob-hash concatenation). Both must
+		// be accepted and mapped to their own data.
+		l1F := &testutils.MockL1Source{}
+		calldataTx, _ := types.SignNewTx(privateKey, signer, &types.LegacyTx{
+			Nonce:    rng.Uint64(),
+			GasPrice: new(big.Int).SetUint64(rng.Uint64()),
+			Gas:      2_000_000,
+			To:       &batchInboxAddr,
+			Value:    big.NewInt(10),
+			Data:     testutils.RandomData(rng, 200),
+		})
+		blobHash := testutils.RandomHash(rng)
+		blobTx, _ := types.SignNewTx(privateKey, signer, &types.BlobTx{
+			Nonce:      rng.Uint64(),
+			Gas:        2_000_000,
+			To:         batchInboxAddr,
+			BlobHashes: []common.Hash{blobHash},
+		})
+
+		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{
+			ComputeCalldataBatchHash(calldataTx.Data()),
+			ComputeBlobBatchHash([]common.Hash{blobHash}),
+		})
+
+		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx, blobTx}, &config, batcherAddr, l1F, ref, logger)
+		require.NoError(t, err)
+		require.Equal(t, 2, len(data))
+		require.Equal(t, 1, len(blobHashes))
+		require.Equal(t, blobHash, blobHashes[0])
+		require.NotNil(t, data[0].calldata, "first entry must be the calldata batch")
+		require.Equal(t, eth.Data(calldataTx.Data()), *data[0].calldata)
+		require.Nil(t, data[1].calldata, "second entry must be the blob placeholder")
+		require.Nil(t, data[1].blob)
+		l1F.AssertExpectations(t)
+	})
 }
 
 // TestDataAndHashesFromTxsForkBoundary exercises the Espresso fork gate flipping in the
@@ -286,9 +362,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 // This is the path a chain with Ecotone active actually runs: OpenData always selects the
 // blob source, and calldata (type-2) batches flow through its non-blob branch. Pre-Espresso
 // (L1 origin time < EspressoTime) must use upstream sender-based authorization with no event
-// scanning; at and after activation it must switch to event-based authentication. The gate is
-// implemented separately here from the calldata source, so this mirrors
-// TestDataFromEVMTransactionsForkBoundary to pin both copies.
+// scanning; at and after activation it must switch to event-based authentication.
 func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 	rng := rand.New(rand.NewSource(7777))
 	privateKey := testutils.InsecureRandomKey(rng)
