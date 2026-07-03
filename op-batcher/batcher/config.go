@@ -196,6 +196,9 @@ func (c *CLIConfig) Check() error {
 	if !flags.ValidDataAvailabilityType(c.DataAvailabilityType) {
 		return fmt.Errorf("unknown data availability type: %q", c.DataAvailabilityType)
 	}
+	if c.FallbackAuthLeadTime <= 0 {
+		return fmt.Errorf("FallbackAuthLeadTime must be positive: %v", c.FallbackAuthLeadTime)
+	}
 	// Most chains' L1s still have only Cancun active, but we don't want to
 	// overcomplicate this check with a dynamic L1 query, so we just use maxBlobsPerBlock.
 	// We want to check for both, blobs and auto da-type.

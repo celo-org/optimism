@@ -168,7 +168,9 @@ var (
 			"This absorbs worst-case L1 inclusion delay between the batcher's decision " +
 			"(based on L1 tip time) and the verifier's gate (based on the containing " +
 			"L1 block's time). Has no effect outside the boundary window around the " +
-			"EspressoTime hardfork.",
+			"EspressoTime hardfork. Must not be negative, and must exceed the worst-case " +
+			"L1 inclusion delay: with 0 the safety margin is gone, and a batch decided " +
+			"pre-fork that lands in a post-fork block is silently dropped by the verifier.",
 		Value:   5 * time.Minute,
 		EnvVars: prefixEnvVars("ESPRESSO_FALLBACK_AUTH_LEAD_TIME"),
 	}
