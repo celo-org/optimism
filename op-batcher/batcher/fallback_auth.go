@@ -85,9 +85,8 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 		"commitment", hexutil.Encode(commitment[:]),
 		"address", l.RollupConfig.BatchAuthenticatorAddress.String(),
 	)
-	// Submit the auth tx wait for receipt, then send the batch tx, on the publishing-loop goroutine so their
-	// nonces are assigned in submission order. Each Send blocks here when the queue is at its
-	// MaxPendingTransactions limit.
+	// Submit the auth tx and wait for its receipt, then send the batch tx. Each Send
+	// blocks here when the queue is at its MaxPendingTransactions limit.
 	authReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
 	queue.Send(transactionReference, verifyCandidate, authReceiptCh)
 	authResult := <-authReceiptCh
