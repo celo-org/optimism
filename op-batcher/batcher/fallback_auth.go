@@ -144,7 +144,7 @@ func (l *BatchSubmitter) watchFallbackAuthReceipts(transactionReference txRef, a
 
 	distance := new(big.Int).Sub(batchResult.Receipt.BlockNumber, authResult.Receipt.BlockNumber)
 	lookbackWindow := new(big.Int).SetUint64(derive.BatchAuthLookbackWindow)
-	if distance.Sign() < 0 || distance.Cmp(lookbackWindow) >= 0 {
+	if distance.Sign() < 0 || distance.Cmp(lookbackWindow) > 0 {
 		l.Log.Error("authenticateBatchInfo transaction too far from batch inbox transaction", "txRef", transactionReference, "distance", distance)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,

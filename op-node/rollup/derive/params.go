@@ -21,7 +21,7 @@ func frameSize(frame Frame) uint64 {
 // or transaction per block allowed in a span batch.
 const MaxSpanBatchElementCount = 10_000_000
 
-// BatchAuthLookbackWindow is the number of L1 blocks before a batch submission to
+// BatchAuthLookbackWindow is the maximum number of L1 blocks before a batch submission to
 // scan for a BatchInfoAuthenticated event. The authentication transaction must land
 // in this window (or in the same block as the batch submission) for the batch to be
 // considered valid post-Espresso.

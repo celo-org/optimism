@@ -169,7 +169,7 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	txdata := testFallbackTxData(t)
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
-	tooFar := int64(100 + derive.BatchAuthLookbackWindow)
+	tooFar := int64(100 + derive.BatchAuthLookbackWindow + 1)
 	queue := &fakeTxSender{
 		responses: []txmgr.TxReceipt[txRef]{
 			{Receipt: receiptWithBlock(100)},    // auth
@@ -183,5 +183,33 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 
 	got := <-receiptsCh
 	require.Error(t, got.Err)
+	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+}
+
+// TestFallbackAuth_WindowBoundaryAccepted pins the inclusive bound of the lookback
+// window: a batch landing exactly BatchAuthLookbackWindow blocks after the auth tx is
+// still accepted by the verifier (CollectAuthenticatedBatches scans
+// [batchBlock - BatchAuthLookbackWindow, batchBlock]), so the batcher must not
+// re-queue it.
+func TestFallbackAuth_WindowBoundaryAccepted(t *testing.T) {
+	l := newFallbackAuthSubmitter(t)
+	txdata := testFallbackTxData(t)
+	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
+
+	boundary := int64(100 + derive.BatchAuthLookbackWindow)
+	queue := &fakeTxSender{
+		responses: []txmgr.TxReceipt[txRef]{
+			{Receipt: receiptWithBlock(100)},      // auth
+			{Receipt: receiptWithBlock(boundary)}, // batch at the exact edge of the window
+		},
+	}
+	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
+
+	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
+	require.NoError(t, l.authGroup.Wait())
+
+	got := <-receiptsCh
+	require.NoError(t, got.Err)
+	require.Equal(t, receiptWithBlock(boundary).BlockNumber, got.Receipt.BlockNumber)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 }
