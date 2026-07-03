@@ -147,7 +147,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 	var hashes []common.Hash
 	for _, tx := range txs {
 		// skip any non-batcher transactions (wrong type or wrong To address)
-		if !isValidBatchTx(tx, config.batchInboxAddress, logger) {
+		if !isBatchTxToInbox(tx, config.batchInboxAddress) {
 			continue
 		}
 
