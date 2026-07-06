@@ -8,16 +8,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// hasBatchAuthenticator returns true if the rollup config has a non-zero
-// BatchAuthenticatorAddress, indicating that the BatchAuthenticator-based
-// authentication path is in use.
-func (l *BatchSubmitter) hasBatchAuthenticator() bool {
-	return l.RollupConfig.BatchAuthenticatorAddress != (common.Address{})
-}
-
 // isFallbackAuthRequired reports whether the fallback (non-TEE) batcher must
 // route its batch txs through BatchAuthenticator.authenticateBatchInfo before
-// posting to the BatchInbox.
+// posting to the BatchInbox. It returns false if the rollup config has a
+// zero BatchAuthenticatorAddress, indicating that the BatchAuthenticator-based
+// authentication path is not in use.
 //
 // This decision must align with the verifier's per-L1-block fork gate
 // (rollupCfg.IsEspresso(l1OriginTime) in data_source.go, which evaluates the
@@ -39,6 +34,9 @@ func (l *BatchSubmitter) hasBatchAuthenticator() bool {
 // verifier uses sender-based authorization and the auth event is just an
 // unrelated L1 tx that does not affect derivation.
 func (l *BatchSubmitter) isFallbackAuthRequired(ctx context.Context) (bool, error) {
+	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+		return false, nil
+	}
 	tip, err := l.l1Tip(ctx)
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch L1 tip for fallback-auth gate: %w", err)

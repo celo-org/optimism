@@ -20,9 +20,6 @@ func (l *BatchSubmitter) dispatchAuthenticatedSendTx(txdata txData, isCancel boo
 	if isCancel {
 		return false
 	}
-	if !l.hasBatchAuthenticator() {
-		return false
-	}
 	fallbackAuthRequired, err := l.isFallbackAuthRequired(l.killCtx)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
