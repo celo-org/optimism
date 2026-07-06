@@ -413,7 +413,7 @@ func (bs *BatcherService) initTxManager(_ context.Context, cfg *CLIConfig) error
 		return err
 	}
 	bs.TxManager = txManager
-	if err := bs.initChainSigner(); err != nil {
+	if err := bs.initChainSigner(cfg); err != nil {
 		return err
 	}
 	return nil
