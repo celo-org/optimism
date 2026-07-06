@@ -62,7 +62,10 @@ func (bs *BatcherService) EspressoStreamer() espresso.EspressoStreamer[derive.Es
 // ChainSigner interface and stores the embedded ChainSigner on the service.
 // Espresso uses ChainSigner to sign batch authentication payloads sent to the
 // BatchAuthenticator contract; the cast is required by every Espresso path.
-func (bs *BatcherService) initChainSigner() error {
+func (bs *BatcherService) initChainSigner(cfg *CLIConfig) error {
+	if !cfg.Espresso.Enabled {
+		return nil
+	}
 	cast, castOk := bs.TxManager.(opcrypto.ChainSigner)
 	if !castOk {
 		return fmt.Errorf("tx manager does not implement ChainSigner")
