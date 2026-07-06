@@ -908,14 +908,17 @@ func (l *BatchSubmitter) peekNextBatch(ctx context.Context, syncStatus *eth.Sync
 	return batch
 }
 
-// Periodically refreshes the sync status and polls Espresso streamer for new batches
-func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.WaitGroup, publishSignal chan pubInfo) {
+// Periodically refreshes the sync status and polls Espresso streamer for new batches.
+// Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the loops
+// ranging over them (publishingLoop, throttlingLoop) terminate when this loop exits.
+func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.WaitGroup, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
 	l.Log.Info("Starting EspressoBatchLoadingLoop", "polling interval", l.Config.Espresso.PollInterval)
 
 	defer wg.Done()
 	ticker := time.NewTicker(l.Config.Espresso.PollInterval)
 	defer ticker.Stop()
 	defer close(publishSignal)
+	defer close(unsafeBytesUpdated)
 
 	for {
 		select {
@@ -970,6 +973,8 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 
 				l.EspressoStreamer().Next(ctx)
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
+				// We have increased the unsafe data. Signal the throttling loop to
+				l.sendToThrottlingLoop(unsafeBytesUpdated)
 			}
 
 			l.tryPublishSignal(publishSignal, pubInfo{})
