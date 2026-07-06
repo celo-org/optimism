@@ -287,3 +287,70 @@ func TestBatchRoundtrip(t *testing.T) {
 	require.Equal(t, batch.Batch.Timestamp, decodedBatch.Batch.Timestamp, "decoded batch timestamp mismatch")
 	require.Equal(t, batch.Batch.Transactions, decodedBatch.Batch.Transactions, "decoded batch transactions mismatch")
 }
+
+// TestToBlockRejectsMalformedBatch verifies that ToBlock rejects validly-structured but
+// semantically malformed batches.
+func TestToBlockRejectsMalformedBatch(t *testing.T) {
+	validBatch := func(t *testing.T) *derive.EspressoBatch {
+		block := dtest.RandomL2BlockWithChainIdAndTime(
+			rand.New(rand.NewSource(time.Now().Unix())),
+			3,
+			defaultTestRollUpConfig.L2ChainID,
+			time.Now(),
+		)
+		b, err := derive.BlockToEspressoBatch(defaultTestRollUpConfig, block)
+		require.NoError(t, err)
+		return b
+	}
+
+	t.Run("valid batch converts", func(t *testing.T) {
+		b := validBatch(t)
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.NoError(t, err)
+	})
+
+	t.Run("nil L1 info deposit", func(t *testing.T) {
+		b := validBatch(t)
+		b.L1InfoDeposit = nil
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.ErrorContains(t, err, "not an L1 info deposit")
+	})
+
+	t.Run("first tx not a deposit", func(t *testing.T) {
+		b := validBatch(t)
+		// Replace the L1 info deposit with a decoded non-deposit tx from the batch body.
+		var nonDeposit gethTypes.Transaction
+		require.NoError(t, nonDeposit.UnmarshalBinary(b.Batch.Transactions[0]))
+		b.L1InfoDeposit = &nonDeposit
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.ErrorContains(t, err, "not an L1 info deposit")
+	})
+
+	t.Run("malformed L1 info data", func(t *testing.T) {
+		b := validBatch(t)
+		b.L1InfoDeposit = gethTypes.NewTx(&gethTypes.DepositTx{Data: []byte{0xde, 0xad, 0xbe, 0xef}})
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.ErrorContains(t, err, "could not parse the L1 info deposit")
+	})
+
+	t.Run("parent hash mismatch", func(t *testing.T) {
+		b := validBatch(t)
+		b.Batch.ParentHash[0] ^= 0xff
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.ErrorContains(t, err, "parent hash")
+	})
+
+	t.Run("timestamp mismatch", func(t *testing.T) {
+		b := validBatch(t)
+		b.Batch.Timestamp++
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.ErrorContains(t, err, "timestamp")
+	})
+
+	t.Run("epoch mismatch", func(t *testing.T) {
+		b := validBatch(t)
+		b.Batch.EpochNum++
+		_, err := b.ToBlock(defaultTestRollUpConfig)
+		require.ErrorContains(t, err, "epoch")
+	})
+}
