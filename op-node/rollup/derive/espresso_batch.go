@@ -122,6 +122,30 @@ func UnmarshalEspressoTransaction(data []byte) (*EspressoBatch, error) {
 // invalid batches or in case of misconfiguration of the batcher, in which case it should fail
 // for all batches.
 func (b *EspressoBatch) ToBlock(rollupCfg *rollup.Config) (*types.Block, error) {
+	// The produced block must round-trip through BlockToSingularBatch when the channel
+	// manager encodes it, so enforce that function's requirements up front, plus
+	// consistency between the header and the batch body it claims to describe.
+	if b.BatchHeader == nil {
+		return nil, fmt.Errorf("batch has no header")
+	}
+	if b.L1InfoDeposit == nil || !b.L1InfoDeposit.IsDepositTx() {
+		return nil, fmt.Errorf("first transaction is not an L1 info deposit")
+	}
+	l1Info, err := L1BlockInfoFromBytes(rollupCfg, b.BatchHeader.Time, b.L1InfoDeposit.Data())
+	if err != nil {
+		return nil, fmt.Errorf("could not parse the L1 info deposit: %w", err)
+	}
+	if b.Batch.ParentHash != b.BatchHeader.ParentHash {
+		return nil, fmt.Errorf("batch parent hash %s does not match header parent hash %s", b.Batch.ParentHash, b.BatchHeader.ParentHash)
+	}
+	if b.Batch.Timestamp != b.BatchHeader.Time {
+		return nil, fmt.Errorf("batch timestamp %d does not match header timestamp %d", b.Batch.Timestamp, b.BatchHeader.Time)
+	}
+	if uint64(b.Batch.EpochNum) != l1Info.Number || b.Batch.EpochHash != l1Info.BlockHash {
+		return nil, fmt.Errorf("batch epoch %d (%s) does not match L1 info deposit epoch %d (%s)",
+			b.Batch.EpochNum, b.Batch.EpochHash, l1Info.Number, l1Info.BlockHash)
+	}
+
 	// Re-insert the deposit transaction
 	txs := []*types.Transaction{b.L1InfoDeposit}
 	for i, opaqueTx := range b.Batch.Transactions {
