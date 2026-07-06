@@ -225,7 +225,7 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	l.publishSignal = publishSignal
 
 	if l.Config.Espresso.Enabled {
-		if err := l.startEspressoLoops(receiptsCh, publishSignal); err != nil {
+		if err := l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
 			return err
 		}
 	} else {
