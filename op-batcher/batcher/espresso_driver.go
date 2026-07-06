@@ -99,7 +99,7 @@ func (l *BatchSubmitter) setupEspressoStreamer() {
 // submitter, and starts the four Espresso-specific batcher goroutines (in
 // addition to the upstream receiptsLoop and publishingLoop). Replaces the
 // upstream three-goroutine pattern when --espresso.enabled is set.
-func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo) error {
+func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo, unsafeBytesUpdated chan int64) error {
 	if err := l.registerBatcher(l.killCtx); err != nil {
 		return fmt.Errorf("could not register with BatchAuthenticator contract: %w", err)
 	}
@@ -123,8 +123,8 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	l.wg.Add(4)
 	go l.receiptsLoop(l.wg, receiptsCh) // ranges over receiptsCh channel
 	go l.espressoBatchQueueingLoop(l.shutdownCtx, l.wg)
-	go l.espressoBatchLoadingLoop(l.shutdownCtx, l.wg, publishSignal)
-	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal) // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
+	go l.espressoBatchLoadingLoop(l.shutdownCtx, l.wg, publishSignal, unsafeBytesUpdated) // sends on unsafeBytesUpdated (if throttling enabled) and publishSignal. Closes them both when done
+	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)                       // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
 	return nil
 }
 
