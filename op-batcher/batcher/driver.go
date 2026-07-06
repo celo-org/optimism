@@ -224,14 +224,6 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	publishSignal := make(chan pubInfo, 1)
 	l.publishSignal = publishSignal
 
-	// DA throttling loop should always be started except for testing (indicated by ThrottleThreshold == 0)
-	if l.Config.ThrottleParams.LowerThreshold > 0 {
-		l.wg.Add(1)
-		go l.throttlingLoop(l.wg, unsafeBytesUpdated) // ranges over unsafeBytesUpdated channel
-	} else {
-		l.Log.Warn("Throttling loop is DISABLED due to 0 throttle-threshold. This should not be disabled in prod.")
-	}
-
 	if l.Config.Espresso.Enabled {
 		if err := l.startEspressoLoops(receiptsCh, publishSignal); err != nil {
 			return err
@@ -241,6 +233,14 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 		go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
 		go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)               // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
 		go l.blockLoadingLoop(l.shutdownCtx, l.wg, unsafeBytesUpdated, publishSignal) // sends on unsafeBytesUpdated (if throttling enabled), and publishSignal. Closes them both when done
+	}
+
+	// DA throttling loop should always be started except for testing (indicated by ThrottleThreshold == 0)
+	if l.Config.ThrottleParams.LowerThreshold > 0 {
+		l.wg.Add(1)
+		go l.throttlingLoop(l.wg, unsafeBytesUpdated) // ranges over unsafeBytesUpdated channel
+	} else {
+		l.Log.Warn("Throttling loop is DISABLED due to 0 throttle-threshold. This should not be disabled in prod.")
 	}
 
 	l.Log.Info("Batch Submitter started")
