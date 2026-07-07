@@ -909,6 +909,22 @@ func (l *BatchSubmitter) peekNextBatch(ctx context.Context, syncStatus *eth.Sync
 	return batch
 }
 
+// requestClearState asks the batch loading loop to perform `l.clearState`.
+func (l *BatchSubmitter) requestClearState() {
+	l.clearStateRequested.Store(true)
+}
+
+// performClearState runs clearState if it was requested via requestClearState,
+// reporting whether a clear was performed.
+func (l *BatchSubmitter) performClearState(ctx context.Context) bool {
+	if !l.clearStateRequested.CompareAndSwap(true, false) {
+		return false
+	}
+	l.Log.Info("Clearing state as requested by the block queueing loop")
+	l.clearState(ctx)
+	return true
+}
+
 // Periodically refreshes the sync status and polls Espresso streamer for new batches.
 // Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the loops
 // ranging over them (publishingLoop, throttlingLoop) terminate when this loop exits.
@@ -924,6 +940,9 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 	for {
 		select {
 		case <-ticker.C:
+			// Check if block loader requested to clear state
+			l.performClearState(ctx)
+
 			newSyncStatus, err := l.getSyncStatus(ctx)
 			if err != nil {
 				l.degradedLog.Warn(l.Log, "syncStatusErr/espressoBatchLoading", "failed to refresh sync status", "err", err)
@@ -938,6 +957,10 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 			var batch *derive.EspressoBatch
 
 			for {
+				// Check if block loader requested to clear state
+				if l.performClearState(ctx) {
+					break
+				}
 
 				batch = l.peekNextBatch(ctx, newSyncStatus)
 
@@ -975,6 +998,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				l.EspressoStreamer().Next(ctx)
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
 				// We have increased the unsafe data. Signal the throttling loop to
+				// check if it should throttle.
 				l.sendToThrottlingLoop(unsafeBytesUpdated)
 			}
 
@@ -1000,10 +1024,10 @@ type BlockLoader struct {
 	batcher        *BatchSubmitter
 }
 
-func (l *BlockLoader) reset(ctx context.Context) {
+func (l *BlockLoader) reset() {
 	l.prevSyncStatus = nil
 	l.queuedBlocks = nil
-	l.batcher.clearState(ctx)
+	l.batcher.requestClearState()
 }
 
 func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusiveBlockRange) {
@@ -1022,7 +1046,7 @@ func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusive
 
 		if len(l.queuedBlocks) > 0 && block.ParentHash() != l.queuedBlocks[len(l.queuedBlocks)-1].Hash {
 			l.batcher.Log.Warn("Found L2 reorg", "block_number", i)
-			l.reset(ctx)
+			l.reset()
 			break
 		}
 
@@ -1195,7 +1219,7 @@ func (l *BatchSubmitter) espressoBatchQueueingLoop(ctx context.Context, wg *sync
 					l.Log.Debug("Could not enqueue all blocks to Espresso", "enqueued", enqueued, "attempted", blocksToQueue.numBlocks())
 				}
 			} else if action == ActionReset {
-				loader.reset(ctx)
+				loader.reset()
 			}
 
 		case <-ctx.Done():
