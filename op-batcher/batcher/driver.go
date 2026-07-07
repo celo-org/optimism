@@ -8,6 +8,7 @@ import (
 	"math/big"
 	_ "net/http/pprof"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -157,6 +158,9 @@ type BatchSubmitter struct {
 
 	espressoSubmitter *espressoTransactionSubmitter
 	espressoStreamer  espresso.EspressoStreamer[derive.EspressoBatch]
+
+	// clearStateRequested asks the espresso batch loading loop to run clearState
+	clearStateRequested atomic.Bool
 
 	teeVerifierAddress common.Address
 
