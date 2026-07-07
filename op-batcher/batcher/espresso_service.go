@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-batcher/enclave"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 )
 
@@ -126,7 +127,7 @@ func (bs *BatcherService) initEspresso(cfg *CLIConfig) error {
 	}
 	if cfg.Espresso.Namespace == 0 {
 		log.Info("Using L2 chain ID as namespace by default")
-		cfg.Espresso.Namespace = bs.RollupConfig.L2ChainID.Uint64()
+		cfg.Espresso.Namespace = bigs.Uint64Strict(bs.RollupConfig.L2ChainID)
 	}
 	if cfg.Espresso.BatchAuthenticatorAddr == (common.Address{}) {
 		cfg.Espresso.BatchAuthenticatorAddr = bs.RollupConfig.BatchAuthenticatorAddress

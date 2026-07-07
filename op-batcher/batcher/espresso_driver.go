@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -75,7 +76,7 @@ func (l *BatchSubmitter) setupEspressoStreamer() {
 		lightClientIface = l.Espresso.LightClient
 	}
 	unbufferedStreamer, err := op.NewEspressoStreamer(
-		l.RollupConfig.L2ChainID.Uint64(),
+		bigs.Uint64Strict(l.RollupConfig.L2ChainID),
 		l1Adapter,
 		l1Adapter,
 		l.Espresso.Client,
@@ -126,6 +127,38 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	go l.espressoBatchLoadingLoop(l.shutdownCtx, l.wg, publishSignal, unsafeBytesUpdated) // sends on unsafeBytesUpdated (if throttling enabled) and publishSignal. Closes them both when done
 	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)                       // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
 	return nil
+}
+
+// shouldSkipPublishForActiveSeq returns true if publishStateToL1 should skip
+// publishing because this batcher is not the on-chain "active" batcher
+// (BatchAuthenticator.activeIsEspresso). The Espresso TEE batcher always
+// honors the flag (it is fundamentally a post-fork actor); the fallback
+// batcher honors it only once fallback auth is required (pre-fork it must run
+// as a vanilla upstream Optimism batcher with no BatchAuthenticator coupling).
+// Fails closed: if either gate cannot be evaluated, publishing is skipped for
+// this tick and retried on the next.
+func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
+	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+		return false
+	}
+	consultActiveFlag := l.Config.Espresso.Enabled
+	if !consultActiveFlag {
+		fallbackAuthRequired, err := l.isFallbackAuthRequired(ctx)
+		if err != nil {
+			l.Log.Warn("Failed to evaluate fallback-auth gate, skipping publish", "err", err)
+			return true
+		}
+		consultActiveFlag = fallbackAuthRequired
+	}
+	if !consultActiveFlag {
+		return false
+	}
+	isActive, err := l.isBatcherActive(ctx)
+	if err != nil {
+		l.Log.Warn("Failed to check if batcher is active, skipping publish", "err", err)
+		return true
+	}
+	return !isActive
 }
 
 // resetEspressoStreamer resets the Espresso streamer when --espresso.enabled

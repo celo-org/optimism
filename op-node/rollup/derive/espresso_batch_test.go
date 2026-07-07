@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	derive "github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	dtest "github.com/ethereum-optimism/optimism/op-node/rollup/derive/test"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/signer"
@@ -267,7 +268,7 @@ func TestBatchRoundtrip(t *testing.T) {
 
 	transaction, err := batch.ToEspressoTransaction(
 		context.Background(),
-		defaultTestRollUpConfig.L2ChainID.Uint64(),
+		bigs.Uint64Strict(defaultTestRollUpConfig.L2ChainID),
 		chainSigner,
 	)
 	require.NoError(t, err, "failed to serialize batch to Espresso transaction")
