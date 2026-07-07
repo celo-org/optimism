@@ -7,6 +7,7 @@ import (
 
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opCrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
@@ -25,7 +26,7 @@ type EspressoBatch struct {
 }
 
 func (b EspressoBatch) Number() uint64 {
-	return b.BatchHeader.Number.Uint64()
+	return bigs.Uint64Strict(b.BatchHeader.Number)
 }
 
 func (b EspressoBatch) L1Origin() eth.BlockID {

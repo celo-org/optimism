@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -815,7 +816,7 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 		return fmt.Errorf("failed to derive batch from block: %w", err)
 	}
 
-	transaction, err := espressoBatch.ToEspressoTransaction(ctx, l.RollupConfig.L2ChainID.Uint64(), l.Espresso.ChainSigner)
+	transaction, err := espressoBatch.ToEspressoTransaction(ctx, bigs.Uint64Strict(l.RollupConfig.L2ChainID), l.Espresso.ChainSigner)
 	if err != nil {
 		l.Log.Warn("Failed to create Espresso transaction from a batch", "err", err)
 		return fmt.Errorf("failed to create Espresso transaction from a batch: %w", err)
@@ -823,7 +824,7 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 
 	commitment := transaction.Commit()
 	hash, _ := tagged_base64.New("TX", commitment[:])
-	l.Log.Info("Created Espresso transaction from batch", "hash", hash, "batchNr", espressoBatch.BatchHeader.Number.Uint64())
+	l.Log.Info("Created Espresso transaction from batch", "hash", hash, "batchNr", bigs.Uint64Strict(espressoBatch.BatchHeader.Number))
 
 	if err := l.espressoSubmitter.SubmitTransaction(transaction); err != nil {
 		return fmt.Errorf("failed to submit job to espresso: %w", err)
@@ -1186,12 +1187,12 @@ func (l *BatchSubmitter) espressoBatchQueueingLoop(ctx context.Context, wg *sync
 
 				// This is a check to help us determine whether we're able to
 				// push through all of the blocks we've attempted to or not.
-				if (numEnqueuedBlocksAfter - numEnqueuedBlocksBefore) < int(blocksToQueue.numBlocks()) {
-					// If we're in this conditional, it means we weren't able
-					// submit all of the blocks to Espresso that we were
-					// attempting to.
+				if enqueued := numEnqueuedBlocksAfter - numEnqueuedBlocksBefore; enqueued < int(blocksToQueue.numBlocks()) {
+					// We weren't able to submit all of the blocks to Espresso
+					// that we were attempting to.
 					//
 					// TODO: We should probably throttle a bit.
+					l.Log.Debug("Could not enqueue all blocks to Espresso", "enqueued", enqueued, "attempted", blocksToQueue.numBlocks())
 				}
 			} else if action == ActionReset {
 				loader.reset(ctx)
