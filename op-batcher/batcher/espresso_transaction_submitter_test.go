@@ -58,7 +58,9 @@ func TestEspressoTransactionSubmitterDeadlock(t *testing.T) {
 
 		submitCtx, submitCancel := context.WithCancel(context.Background())
 		go (func(cancel context.CancelFunc, txn espressoCommon.Transaction) {
-			submitter.SubmitTransaction(&txn)
+			// The error is irrelevant here: the test only observes whether the
+			// call returns (via cancel) to detect a deadlock.
+			_ = submitter.SubmitTransaction(&txn)
 			cancel()
 		})(submitCancel, txn)
 

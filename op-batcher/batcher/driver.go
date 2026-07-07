@@ -858,6 +858,10 @@ func (l *BatchSubmitter) publishStateToL1(ctx context.Context, queue *txmgr.Queu
 			return
 		}
 
+		if l.shouldSkipPublishForActiveSeq(ctx) {
+			return
+		}
+
 		err := l.publishTxToL1(ctx, queue, receiptsCh, daGroup, pi)
 		if err != nil {
 			if err != io.EOF {
