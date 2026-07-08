@@ -160,21 +160,6 @@ var (
 		Value:   false,
 		EnvVars: prefixEnvVars("WAIT_NODE_SYNC"),
 	}
-	FallbackAuthLeadTimeFlag = &cli.DurationFlag{
-		Name: "espresso.fallback-auth-lead-time",
-		Usage: "Lead time for the fallback batcher's Espresso authentication gate. " +
-			"How far ahead of the on-chain EspressoTime the fallback batcher " +
-			"starts routing batch txs through BatchAuthenticator.authenticateBatchInfo. " +
-			"This absorbs worst-case L1 inclusion delay between the batcher's decision " +
-			"(based on L1 tip time) and the verifier's gate (based on the containing " +
-			"L1 block's time). Has no effect outside the boundary window around the " +
-			"EspressoTime hardfork. Must not be negative, and must exceed the worst-case " +
-			"L1 inclusion delay: with 0 the safety margin is gone, and a batch decided " +
-			"pre-fork that lands in a post-fork block is silently dropped by the verifier.",
-		Value:   5 * time.Minute,
-		EnvVars: prefixEnvVars("ESPRESSO_FALLBACK_AUTH_LEAD_TIME"),
-	}
-
 	// Legacy Flags
 	SequencerHDPathFlag = txmgr.SequencerHDPathFlag
 )
@@ -203,7 +188,6 @@ var optionalFlags = []cli.Flag{
 	DataAvailabilityTypeFlag,
 	ActiveSequencerCheckDurationFlag,
 	CompressionAlgoFlag,
-	FallbackAuthLeadTimeFlag,
 }
 
 func init() {

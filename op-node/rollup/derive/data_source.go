@@ -165,12 +165,13 @@ func isAuthorizedBatchSender(tx *types.Transaction, l1Signer types.Signer, batch
 // block (passed as l1OriginTime), mirroring the data-source layer's ecotoneTime
 // treatment.
 //
-// Pre-Espresso (l1OriginTime < *EspressoTime, or unset):
+// Before enforcement (Espresso inactive, or within BatchAuthEnforcementDelay of
+// activation):
 //
 //	upstream behavior — the L1 sender of the transaction must match the configured
 //	batcher address. The authenticatedHashes map is unused.
 //
-// Post-Espresso:
+// Once enforced:
 //
 //	the batch's commitment hash must appear in authenticatedHashes (i.e. a
 //	BatchInfoAuthenticated event was emitted for this commitment within the
@@ -188,8 +189,9 @@ func isBatchTxAuthorized(
 	l1OriginTime uint64,
 	logger log.Logger,
 ) bool {
-	if !dsCfg.rollupCfg.IsEspresso(l1OriginTime) {
-		// Pre-fork: upstream sender-based authorization.
+	if !isEspressoAuthEnforced(dsCfg.rollupCfg, l1OriginTime) {
+		// Pre-enforcement (pre-fork or within the grace period): upstream
+		// sender-based authorization.
 		return isAuthorizedBatchSender(tx, dsCfg.l1Signer, batcherAddr, logger)
 	}
 	// Post-fork: the commitment must have been authenticated within the lookback window.

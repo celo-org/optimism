@@ -31,6 +31,23 @@ const MaxSpanBatchElementCount = 10_000_000
 // L1 congestion or batcher restarts.
 const BatchAuthLookbackWindow uint64 = 100
 
+// BatchAuthEnforcementDelay is the number of seconds after the EspressoTime activation
+// during which derivation still accepts sender-authenticated batches. Event-based batch
+// authentication is only enforced for L1 blocks with origin time >= EspressoTime +
+// BatchAuthEnforcementDelay.
+//
+// This grace period exists so the batcher can switch to authenticated submission at
+// activation time without a configured lead time: a batch decided pre-fork (no auth
+// event sent) that lands in a post-activation L1 block is still accepted under sender
+// authorization, as long as its inclusion delay is below the grace period. The batcher
+// starts authenticating at activation, a full grace period before enforcement.
+//
+// Sized to the duration of one full BatchAuthLookbackWindow at the nominal 12s L1 slot
+// time (~20 minutes) — far above any realistic L1 inclusion delay. Under missed L1
+// slots the delay covers fewer than BatchAuthLookbackWindow blocks, which is fine: the
+// bound that matters is time (inclusion delay), not block count.
+const BatchAuthEnforcementDelaySecs uint64 = BatchAuthLookbackWindow * 12
+
 // DuplicateErr is returned when a newly read frame is already known
 var DuplicateErr = errors.New("duplicate frame")
 

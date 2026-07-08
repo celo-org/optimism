@@ -101,9 +101,10 @@ func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1Block
 // TestDataAndHashesFromTxsEventAuth tests event-based batch authentication for both
 // calldata and blob transactions in the blob data source path.
 //
-// Event-based authentication is only active post-Espresso; the fixture
-// activates the fork at L1 origin time 0 (genesis) so all test refs satisfy
-// ref.Time >= *EspressoTime.
+// Event-based authentication is only enforced once the fork has been active for
+// BatchAuthEnforcementDelay; the fixture activates the fork at L1 origin time 0
+// (genesis) and all test refs use Time = BatchAuthEnforcementDelay — the first
+// enforced timestamp.
 func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 	rng := rand.New(rand.NewSource(9999))
 	privateKey := testutils.InsecureRandomKey(rng)
@@ -141,7 +142,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		}
 		calldataTx, _ := types.SignNewTx(privateKey, signer, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(calldataTx.Data())
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 
@@ -166,7 +167,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		}
 		blobTx, _ := types.SignNewTx(privateKey, signer, blobTxData)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeBlobBatchHash([]common.Hash{blobHash})
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 
@@ -193,7 +194,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		// Signed by an unknown key (not batcherAddr), no auth event — should be rejected
 		calldataTx, _ := types.SignNewTx(altKey, signer, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil) // no auth events
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
@@ -217,7 +218,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		// because all batchers now require event-based authentication
 		calldataTx, _ := types.SignNewTx(privateKey, signer, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil) // no auth events
 
 		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx}, &config, batcherAddr, l1F, ref, logger)
@@ -241,7 +242,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		// emitted by that same alt address — should be accepted.
 		calldataTx, _ := types.SignNewTx(altKey, signer, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(calldataTx.Data())
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, altAddr, []common.Hash{batchHash})
 
@@ -268,7 +269,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		// The submitter must match the auth caller — should be rejected.
 		calldataTx, _ := types.SignNewTx(altKey, signer, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(calldataTx.Data())
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 
@@ -302,7 +303,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		tx2 := newInboxTx(privateKey)
 		tx3 := newInboxTx(altKey)
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr,
 			[]common.Hash{ComputeCalldataBatchHash(tx1.Data())})
 
@@ -337,7 +338,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 			BlobHashes: []common.Hash{blobHash},
 		})
 
-		ref := eth.L1BlockRef{Number: 1, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{
 			ComputeCalldataBatchHash(calldataTx.Data()),
 			ComputeBlobBatchHash([]common.Hash{blobHash}),
@@ -360,9 +361,12 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 // blob data source path (dataAndHashesFromTxs) across a single fixed DataSourceConfig.
 //
 // This is the path a chain with Ecotone active actually runs: OpenData always selects the
-// blob source, and calldata (type-2) batches flow through its non-blob branch. Pre-Espresso
-// (L1 origin time < EspressoTime) must use upstream sender-based authorization with no event
-// scanning; at and after activation it must switch to event-based authentication.
+// blob source, and calldata (type-2) batches flow through its non-blob branch. Sender-based
+// authorization (with no event scanning) must be used both pre-fork AND through the grace
+// window [EspressoTime, EspressoTime+BatchAuthEnforcementDelay); event-based authentication
+// is enforced only from EspressoTime+BatchAuthEnforcementDelay onward. The grace window is
+// what lets the batcher switch at activation with no configured lead time: a batch decided
+// pre-fork that lands post-activation is still accepted under sender auth.
 func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 	rng := rand.New(rand.NewSource(7777))
 	privateKey := testutils.InsecureRandomKey(rng)
@@ -432,29 +436,45 @@ func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 		l1F.AssertExpectations(t)
 	})
 
-	t.Run("activation block: same batcher tx rejected without auth event", func(t *testing.T) {
-		// At the exact activation time (ref.Time == EspressoTime) the event-based path is
-		// active, so a sender-only batcher tx is no longer sufficient.
+	t.Run("grace window: batcher accepted via sender auth, no event scan", func(t *testing.T) {
 		l1F := &testutils.MockL1Source{}
 		txData := testutils.RandomData(rng, 200)
 		tx := newCalldataBatchTx(t, privateKey, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Time: espressoTime, Hash: testutils.RandomHash(rng)}
+		for _, refTime := range []uint64{espressoTime, espressoTime + BatchAuthEnforcementDelaySecs - 1} {
+			ref := eth.L1BlockRef{Number: 1, Time: refTime, Hash: testutils.RandomHash(rng)}
+			data, hashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx}, &config, batcherAddr, l1F, ref, logger)
+			require.NoError(t, err)
+			require.Equal(t, 1, len(data), "grace-window batcher tx should be accepted via sender-based auth")
+			require.Equal(t, 0, len(hashes))
+			require.Equal(t, eth.Data(txData), *data[0].calldata)
+		}
+		l1F.AssertExpectations(t)
+	})
+
+	t.Run("enforcement time: same batcher tx rejected without auth event", func(t *testing.T) {
+		// At ref.Time == EspressoTime+BatchAuthEnforcementDelay the event-based path is
+		// enforced, so a sender-only batcher tx is no longer sufficient.
+		l1F := &testutils.MockL1Source{}
+		txData := testutils.RandomData(rng, 200)
+		tx := newCalldataBatchTx(t, privateKey, txData)
+
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime + BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
 
 		data, hashes, err := dataAndHashesFromTxs(ctx, types.Transactions{tx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
-		require.Equal(t, 0, len(data), "post-fork batcher tx without an auth event must be rejected")
+		require.Equal(t, 0, len(data), "enforced batcher tx without an auth event must be rejected")
 		require.Equal(t, 0, len(hashes))
 		l1F.AssertExpectations(t)
 	})
 
-	t.Run("activation block: same batcher tx accepted with auth event", func(t *testing.T) {
+	t.Run("enforcement time: same batcher tx accepted with auth event", func(t *testing.T) {
 		l1F := &testutils.MockL1Source{}
 		txData := testutils.RandomData(rng, 200)
 		tx := newCalldataBatchTx(t, privateKey, txData)
 
-		ref := eth.L1BlockRef{Number: 1, Time: espressoTime, Hash: testutils.RandomHash(rng)}
+		ref := eth.L1BlockRef{Number: 1, Time: espressoTime + BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
 		batchHash := ComputeCalldataBatchHash(tx.Data())
 		ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, []common.Hash{batchHash})
 

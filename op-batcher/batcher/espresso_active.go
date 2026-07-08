@@ -3,7 +3,6 @@ package batcher
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -14,25 +13,16 @@ import (
 // zero BatchAuthenticatorAddress, indicating that the BatchAuthenticator-based
 // authentication path is not in use.
 //
-// This decision must align with the verifier's per-L1-block fork gate
-// (rollupCfg.IsEspresso(l1OriginTime) in data_source.go, which evaluates the
-// hardfork activation predicate against the *containing* L1 block's timestamp). Since
-// the tx is not yet mined at decision time, its eventual containing block
-// has a strictly greater timestamp than the L1 tip the batcher observes:
-//
-//	l1Tip.Time (batcher's view) < l1OriginTime (block containing the tx)
-//
-// Without compensation, in the window [forkTime − maxL1InclusionDelay, forkTime)
-// the batcher would skip authenticateBatchInfo while the verifier — once the
-// tx lands in a post-fork block — would require the resulting
-// BatchInfoAuthenticated event, silently dropping the batch.
-//
-// To prevent this, we add Config.FallbackAuthLeadTime to the L1 tip's
-// timestamp before evaluating the fork predicate. This makes the batcher
-// start authenticating slightly before the verifier requires it. The reverse
-// asymmetry (authenticated tx lands pre-fork) is harmless: pre-fork the
-// verifier uses sender-based authorization and the auth event is just an
-// unrelated L1 tx that does not affect derivation.
+// The batcher switches at Espresso activation (tip.Time >= EspressoTime), while the
+// verifier only starts enforcing event-based authentication one grace period later
+// (derive.BatchAuthEnforcementDelay).
+// The gap absorbs the delay between the batcher's gate decision (based on L1 tip time)
+// and the batch tx's eventual inclusion (based on containing-block time): a batch
+// decided pre-fork that lands post-activation is still accepted under sender
+// authorization as long as its inclusion delay stays below the grace period (~20 min).
+// The reverse asymmetry (authenticated tx lands before enforcement) is harmless:
+// pre-enforcement the verifier uses sender-based authorization and the auth event is
+// just an unrelated L1 tx that does not affect derivation.
 func (l *BatchSubmitter) isFallbackAuthRequired(ctx context.Context) (bool, error) {
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return false, nil
@@ -41,6 +31,5 @@ func (l *BatchSubmitter) isFallbackAuthRequired(ctx context.Context) (bool, erro
 	if err != nil {
 		return false, fmt.Errorf("failed to fetch L1 tip for fallback-auth gate: %w", err)
 	}
-	leadSec := uint64(l.Config.FallbackAuthLeadTime / time.Second)
-	return l.RollupConfig.IsEspresso(tip.Time + leadSec), nil
+	return l.RollupConfig.IsEspresso(tip.Time), nil
 }

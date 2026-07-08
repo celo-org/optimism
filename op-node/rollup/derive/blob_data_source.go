@@ -119,21 +119,21 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // creates a placeholder blobOrCalldata element for each returned blob hash that must be populated
 // by fillBlobPointers after blob bodies are retrieved.
 //
-// Pre-Espresso (the L1 origin time of `ref` is < *EspressoTime, or unset),
-// this runs upstream Optimism semantics: filter by batch inbox + sender ==
-// batcher.
+// Before Espresso event-auth is enforced (Espresso inactive at the L1 origin time of
+// `ref`, or within BatchAuthEnforcementDelay of activation), this runs upstream
+// Optimism semantics: filter by batch inbox + sender == batcher.
 //
-// Post-Espresso, it collects all authenticated batch hashes from a lookback
+// Once enforced, it collects all authenticated batch hashes from a lookback
 // window once and rejects any batch whose commitment hash is not in the
 // authenticated set. For blob transactions, the batch hash is computed from
 // the concatenated blob versioned hashes.
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
-	// Only collect authenticated batch commitments when the Espresso fork is
-	// active at the L1 origin time of the block we're scanning. Pre-fork, the
-	// upstream sender-based authorization path is used and authenticatedHashes
-	// is unused.
+	// Only collect authenticated batch commitments once event-based authentication is
+	// enforced at the L1 origin time of the block we're scanning (Espresso active plus
+	// the enforcement grace period). Before that, the upstream sender-based
+	// authorization path is used and authenticatedHashes is unused.
 	var authenticatedHashes map[common.Hash]common.Address
-	if config.rollupCfg.IsEspresso(ref.Time) {
+	if isEspressoAuthEnforced(config.rollupCfg, ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
 			ctx, fetcher, ref, config.rollupCfg.BatchAuthenticatorAddress, config.batchAuthCaches, logger,
