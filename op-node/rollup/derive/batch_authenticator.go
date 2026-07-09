@@ -24,7 +24,7 @@ import (
 // The batcher's fallback-auth gate (op-batcher espresso_active.go)
 // switches at plain activation time, a full grace period earlier.
 func isEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
-	return cfg.IsEspresso(l1OriginTime) && l1OriginTime-*cfg.EspressoTime >= BatchAuthEnforcementDelaySecs
+	return cfg.IsEspresso(l1OriginTime) && l1OriginTime >= *cfg.EspressoTime + BatchAuthEnforcementDelaySecs
 }
 
 var (
