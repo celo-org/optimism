@@ -117,6 +117,61 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	require.Len(t, queue.sends, 1)
 }
 
+// TestFallbackAuth_AuthFailureTxRefType verifies that an auth-tx failure is
+// reported under a calldata-typed txRef even when the batch txdata is blob.
+// The auth tx is always calldata; if its ErrAlreadyReserved failure were
+// labeled with the batch's blob type, cancelBlockingTx would send a calldata
+// cancel against a blobpool reservation, which is rejected the same way,
+// looping forever without ever displacing the stuck blob tx.
+func TestFallbackAuth_AuthFailureTxRefType(t *testing.T) {
+	l := newFallbackAuthSubmitter(t)
+	txdata := testFallbackTxData(t)
+	txdata.daType = DaTypeBlob
+	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
+
+	queue := &fakeTxSender{
+		responses: []txmgr.TxReceipt[txRef]{
+			{Err: errSendFailed}, // auth fails. No batch response, it must never be sent
+		},
+	}
+	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
+
+	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
+
+	got := <-receiptsCh
+	require.Error(t, got.Err)
+	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+	require.Len(t, queue.sends, 1)
+	require.False(t, got.ID.isBlob)
+	require.Equal(t, DaTypeCalldata, got.ID.daType)
+}
+
+// TestFallbackAuth_BatchFailureTxRefType verifies the converse: a batch-tx
+// failure keeps the batch txdata's own type on the forwarded receipt.
+func TestFallbackAuth_BatchFailureTxRefType(t *testing.T) {
+	l := newFallbackAuthSubmitter(t)
+	txdata := testFallbackTxData(t)
+	txdata.daType = DaTypeBlob
+	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
+
+	queue := &fakeTxSender{
+		responses: []txmgr.TxReceipt[txRef]{
+			{Receipt: receiptWithBlock(100)}, // auth lands
+			{Err: errSendFailed},             // batch fails
+		},
+	}
+	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
+
+	l.sendTxWithFallbackAuth(txdata, false, candidate, queue, receiptsCh)
+
+	got := <-receiptsCh
+	require.Error(t, got.Err)
+	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+	require.Len(t, queue.sends, 2)
+	require.True(t, got.ID.isBlob)
+	require.Equal(t, DaTypeBlob, got.ID.daType)
+}
+
 func TestFallbackAuth_BatchFailureRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
 	txdata := testFallbackTxData(t)
