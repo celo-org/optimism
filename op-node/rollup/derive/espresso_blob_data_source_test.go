@@ -102,8 +102,8 @@ func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1Block
 // calldata and blob transactions in the blob data source path.
 //
 // Event-based authentication is only enforced once the fork has been active for
-// BatchAuthEnforcementDelay; the fixture activates the fork at L1 origin time 0
-// (genesis) and all test refs use Time = BatchAuthEnforcementDelay — the first
+// BatchAuthEnforcementDelaySecs; the fixture activates the fork at L1 origin time 0
+// (genesis) and all test refs use Time = BatchAuthEnforcementDelaySecs — the first
 // enforced timestamp.
 func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 	rng := rand.New(rand.NewSource(9999))
@@ -361,12 +361,11 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 // blob data source path (dataAndHashesFromTxs) across a single fixed DataSourceConfig.
 //
 // This is the path a chain with Ecotone active actually runs: OpenData always selects the
-// blob source, and calldata (type-2) batches flow through its non-blob branch. Sender-based
-// authorization (with no event scanning) must be used both pre-fork AND through the grace
-// window [EspressoTime, EspressoTime+BatchAuthEnforcementDelay); event-based authentication
-// is enforced only from EspressoTime+BatchAuthEnforcementDelay onward. The grace window is
-// what lets the batcher switch at activation with no configured lead time: a batch decided
-// pre-fork that lands post-activation is still accepted under sender auth.
+// blob source, and calldata (type-2) batches flow through its non-blob branch. It walks the
+// gate across the fork boundary: sender-based authorization (no event scanning) both pre-fork
+// AND through the grace window [EspressoTime, EspressoTime+BatchAuthEnforcementDelaySecs), then
+// event-based authentication from EspressoTime+BatchAuthEnforcementDelaySecs onward. See
+// BatchAuthEnforcementDelaySecs (params.go) for the full grace-period mechanism.
 func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 	rng := rand.New(rand.NewSource(7777))
 	privateKey := testutils.InsecureRandomKey(rng)
@@ -453,7 +452,7 @@ func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 	})
 
 	t.Run("enforcement time: same batcher tx rejected without auth event", func(t *testing.T) {
-		// At ref.Time == EspressoTime+BatchAuthEnforcementDelay the event-based path is
+		// At ref.Time == EspressoTime+BatchAuthEnforcementDelaySecs the event-based path is
 		// enforced, so a sender-only batcher tx is no longer sufficient.
 		l1F := &testutils.MockL1Source{}
 		txData := testutils.RandomData(rng, 200)

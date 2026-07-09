@@ -165,7 +165,7 @@ func isAuthorizedBatchSender(tx *types.Transaction, l1Signer types.Signer, batch
 // block (passed as l1OriginTime), mirroring the data-source layer's ecotoneTime
 // treatment.
 //
-// Before enforcement (Espresso inactive, or within BatchAuthEnforcementDelay of
+// Before enforcement (Espresso inactive, or within BatchAuthEnforcementDelaySecs of
 // activation):
 //
 //	upstream behavior — the L1 sender of the transaction must match the configured
@@ -194,7 +194,8 @@ func isBatchTxAuthorized(
 		// sender-based authorization.
 		return isAuthorizedBatchSender(tx, dsCfg.l1Signer, batcherAddr, logger)
 	}
-	// Post-fork: the commitment must have been authenticated within the lookback window.
+	// Once enforced (fork active and past the grace period): the commitment must have been
+	// authenticated within the lookback window.
 	authCaller, ok := authenticatedHashes[batchHash]
 	if !ok {
 		logger.Warn("batch not authenticated",

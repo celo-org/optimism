@@ -31,16 +31,32 @@ const MaxSpanBatchElementCount = 10_000_000
 // L1 congestion or batcher restarts.
 const BatchAuthLookbackWindow uint64 = 100
 
-// BatchAuthEnforcementDelay is the number of seconds after the EspressoTime activation
+// BatchAuthEnforcementDelaySecs is the number of seconds after the EspressoTime activation
 // during which derivation still accepts sender-authenticated batches. Event-based batch
 // authentication is only enforced for L1 blocks with origin time >= EspressoTime +
-// BatchAuthEnforcementDelay.
+// BatchAuthEnforcementDelaySecs.
 //
-// This grace period exists so the batcher can switch to authenticated submission at
-// activation time without a configured lead time: a batch decided pre-fork (no auth
-// event sent) that lands in a post-activation L1 block is still accepted under sender
-// authorization, as long as its inclusion delay is below the grace period. The batcher
-// starts authenticating at activation, a full grace period before enforcement.
+// This is the canonical description of the grace-period mechanism; isEspressoAuthEnforced
+// (batch_authenticator.go), the op-batcher fallback-auth gate (isFallbackAuthRequired in
+// espresso_active.go), and the fork-boundary tests all defer here.
+//
+// Behavior by L1 origin time t relative to EspressoTime (E):
+//   - before enforcement (t < E+delay, i.e. pre-fork or within the grace window):
+//     upstream sender-based authorization — the batch tx's L1 sender must equal the
+//     configured batcher address. Auth events are not scanned.
+//   - enforced (t >= E+delay): event-based authentication only — the batch's commitment
+//     must have a BatchInfoAuthenticated event within BatchAuthLookbackWindow AND the tx's
+//     L1 sender must equal the caller that emitted it. Sender-only authorization is rejected.
+//
+// The grace period lets the batcher switch to authenticated submission at activation
+// without a configured lead time. The batcher's gate flips at plain activation (L1 tip
+// time >= EspressoTime), a full grace period before the verifier enforces. Because the
+// batcher decides on the L1 tip time while the verifier judges by the batch tx's
+// containing-block time, a batch decided pre-fork can land in a post-activation block;
+// accepting sender auth through the window keeps it valid as long as its inclusion delay
+// stays below the grace period. The reverse asymmetry (an authenticated tx landing before
+// enforcement) is harmless: pre-enforcement the verifier uses sender-based authorization
+// and the auth event is just an unrelated L1 tx that does not affect derivation.
 //
 // Sized to the duration of one full BatchAuthLookbackWindow at the nominal 12s L1 slot
 // time (~20 minutes) — far above any realistic L1 inclusion delay. Under missed L1

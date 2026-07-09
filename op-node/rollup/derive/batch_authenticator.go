@@ -19,10 +19,9 @@ import (
 
 // isEspressoAuthEnforced returns true once event-based batch authentication is enforced
 // at the given L1 origin time: the Espresso fork is active AND at least
-// BatchAuthEnforcementDelay has elapsed since activation. Before that, derivation keeps
-// accepting sender-authenticated batches.
-// The batcher's fallback-auth gate (op-batcher espresso_active.go)
-// switches at plain activation time, a full grace period earlier.
+// BatchAuthEnforcementDelaySecs has elapsed since activation. Before that, derivation
+// keeps accepting sender-authenticated batches. See BatchAuthEnforcementDelaySecs
+// (params.go) for the full grace-period mechanism.
 func isEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
 	return cfg.IsEspresso(l1OriginTime) && l1OriginTime >= *cfg.EspressoTime+BatchAuthEnforcementDelaySecs
 }

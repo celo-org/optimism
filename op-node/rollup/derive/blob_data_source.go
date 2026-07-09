@@ -120,7 +120,7 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // by fillBlobPointers after blob bodies are retrieved.
 //
 // Before Espresso event-auth is enforced (Espresso inactive at the L1 origin time of
-// `ref`, or within BatchAuthEnforcementDelay of activation), this runs upstream
+// `ref`, or within BatchAuthEnforcementDelaySecs of activation), this runs upstream
 // Optimism semantics: filter by batch inbox + sender == batcher.
 //
 // Once enforced, it collects all authenticated batch hashes from a lookback
@@ -159,7 +159,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 			batchHash = ComputeCalldataBatchHash(tx.Data())
 		}
 
-		// Check authorization (sender-based pre-fork; event-based post-fork).
+		// Check authorization (sender-based before enforcement; event-based once enforced).
 		if !isBatchTxAuthorized(tx, *config, batcherAddr, batchHash, authenticatedHashes, ref.Time, logger) {
 			continue
 		}

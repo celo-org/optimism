@@ -13,16 +13,10 @@ import (
 // zero BatchAuthenticatorAddress, indicating that the BatchAuthenticator-based
 // authentication path is not in use.
 //
-// The batcher switches at Espresso activation (tip.Time >= EspressoTime), while the
-// verifier only starts enforcing event-based authentication one grace period later
-// (derive.BatchAuthEnforcementDelay).
-// The gap absorbs the delay between the batcher's gate decision (based on L1 tip time)
-// and the batch tx's eventual inclusion (based on containing-block time): a batch
-// decided pre-fork that lands post-activation is still accepted under sender
-// authorization as long as its inclusion delay stays below the grace period (~20 min).
-// The reverse asymmetry (authenticated tx lands before enforcement) is harmless:
-// pre-enforcement the verifier uses sender-based authorization and the auth event is
-// just an unrelated L1 tx that does not affect derivation.
+// The gate switches at plain Espresso activation (tip.Time >= EspressoTime), a full grace
+// period before the verifier enforces event-based authentication. See
+// derive.BatchAuthEnforcementDelaySecs for the full grace-period mechanism and why the
+// batcher and verifier gates are offset.
 func (l *BatchSubmitter) isFallbackAuthRequired(ctx context.Context) (bool, error) {
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return false, nil
