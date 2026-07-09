@@ -43,6 +43,13 @@ func computeCommitment(candidate *txmgr.TxCandidate) ([32]byte, error) {
 // separate signature is needed — the L1 transaction is already signed by the TxManager's key.
 func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
 	transactionReference := newTxRef(txdata, isCancel)
+	// The auth tx shares the batch txdata's identity (so a failure requeues the right frames)
+	// but is always a calldata tx. Auth failures must carry its real type: an ErrAlreadyReserved
+	// receipt labeled with the batch's blob type would make cancelBlockingTx cancel the wrong
+	// pool, leaving the reserving tx stuck.
+	authReference := transactionReference
+	authReference.isBlob = false
+	authReference.daType = DaTypeCalldata
 	l.Log.Debug("Sending fallback-authenticated L1 transaction", "txRef", transactionReference)
 
 	commitment, err := computeCommitment(candidate)
@@ -88,13 +95,13 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	// Submit the auth tx and wait for its receipt, then send the batch tx. Each Send
 	// blocks here when the queue is at its MaxPendingTransactions limit.
 	authReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
-	queue.Send(transactionReference, verifyCandidate, authReceiptCh)
+	queue.Send(authReference, verifyCandidate, authReceiptCh)
 	authResult := <-authReceiptCh
 
 	if authResult.Err != nil {
 		l.Log.Error("Failed to send fallback authenticateBatchInfo transaction", "txRef", transactionReference, "err", authResult.Err)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
+			ID:  authReference,
 			Err: fmt.Errorf("failed to send fallback authenticateBatchInfo transaction: %w", authResult.Err),
 		}
 		return
@@ -108,7 +115,7 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	if authResult.Receipt.Status != types.ReceiptStatusSuccessful {
 		l.Log.Error("Fallback authenticateBatchInfo transaction reverted", "txRef", transactionReference, "txHash", authResult.Receipt.TxHash)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
+			ID:  authReference,
 			Err: fmt.Errorf("fallback authenticateBatchInfo transaction reverted: %s", authResult.Receipt.TxHash),
 		}
 		return
