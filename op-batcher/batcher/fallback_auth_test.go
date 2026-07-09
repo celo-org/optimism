@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -41,9 +42,17 @@ func (f *fakeTxSender) Send(id txRef, candidate txmgr.TxCandidate, receiptCh cha
 	receiptCh <- resp
 }
 
+type windowExceededSpy struct {
+	metrics.Metricer
+	count int
+}
+
+func (s *windowExceededSpy) RecordFallbackAuthWindowExceeded() { s.count++ }
+
 func newFallbackAuthSubmitter(t *testing.T) *BatchSubmitter {
 	l := &BatchSubmitter{}
 	l.Log = testlog.Logger(t, log.LevelDebug)
+	l.Metr = metrics.NoopMetrics
 	l.RollupConfig = &rollup.Config{
 		BatchAuthenticatorAddress: common.HexToAddress("0x00000000000000000000000000000000000000aa"),
 	}
@@ -222,6 +231,8 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 // channel manager rewinds and resubmits), rather than being confirmed.
 func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
+	metr := &windowExceededSpy{Metricer: metrics.NoopMetrics}
+	l.Metr = metr
 	txdata := testFallbackTxData(t)
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
@@ -239,6 +250,7 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
+	require.Equal(t, 1, metr.count, "window violation should record the fallback_auth_window_exceeded metric")
 }
 
 // TestFallbackAuth_WindowBoundaryAccepted pins the inclusive bound of the lookback
