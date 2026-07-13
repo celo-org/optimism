@@ -406,6 +406,12 @@ type UpgradeScheduleDeployConfig struct {
 	// Set it to 0 to activate at genesis. Nil to disable the PectraBlobSchedule fix.
 	L2GenesisPectraBlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisPectraBlobScheduleTimeOffset,omitempty"`
 
+	// L2GenesisUpgrade18TimeOffset is the number of seconds after genesis block that the
+	// Upgrade 18 (CGT v2) migration activates. Nil to disable Upgrade 18. Activation at genesis
+	// is meaningless: the migration only happens at the boundary between a pre-fork and a
+	// post-fork block.
+	L2GenesisUpgrade18TimeOffset *hexutil.Uint64 `json:"l2GenesisUpgrade18TimeOffset,omitempty"`
+
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
 	// When Prague activates. Relative to L1 genesis.
@@ -554,6 +560,10 @@ func (d *UpgradeScheduleDeployConfig) HoloceneTime(genesisTime uint64) *uint64 {
 
 func (d *UpgradeScheduleDeployConfig) PectraBlobScheduleTime(genesisTime uint64) *uint64 {
 	return offsetToUpgradeTime(d.L2GenesisPectraBlobScheduleTimeOffset, genesisTime)
+}
+
+func (d *UpgradeScheduleDeployConfig) Upgrade18Time(genesisTime uint64) *uint64 {
+	return offsetToUpgradeTime(d.L2GenesisUpgrade18TimeOffset, genesisTime)
 }
 
 func (d *UpgradeScheduleDeployConfig) IsthmusTime(genesisTime uint64) *uint64 {
@@ -1145,6 +1155,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *eth.BlockRef, l2GenesisBlockHa
 		PectraBlobScheduleTime: d.PectraBlobScheduleTime(l1StartTime),
 		IsthmusTime:            d.IsthmusTime(l1StartTime),
 		JovianTime:             d.JovianTime(l1StartTime),
+		Upgrade18Time:          d.Upgrade18Time(l1StartTime),
 		KarstTime:              d.KarstTime(l1StartTime),
 		InteropTime:            d.InteropTime(l1StartTime),
 		AltDAConfig:            altDA,
