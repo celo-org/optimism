@@ -136,6 +136,15 @@ type BatchSubmitter struct {
 	throttleController *throttler.ThrottleController
 
 	publishSignal chan pubInfo
+
+	// authGroup tracks the fallback batcher's receipt-watcher goroutines (one
+	// per auth+batch pair) so the publishing loop can drain them via
+	// waitForAuthGroup before closing receiptsCh. New watchers are back-pressured
+	// (not hard-bounded) by the txmgr Queue: queue.Send blocks at
+	// MaxPendingTransactions, so watchers are created no faster than txs drain,
+	// though a slow receipts loop can briefly leave more than that parked on their
+	// final receiptsCh send.
+	authGroup sync.WaitGroup
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup
@@ -527,6 +536,12 @@ func (l *BatchSubmitter) publishingLoop(ctx context.Context, wg *sync.WaitGroup,
 			l.Log.Error("error waiting for DA requests to complete", "err", err)
 		}
 	}
+
+	// Wait for all in-flight fallback-auth submissions to complete to prevent
+	// new transactions being queued. No-op when the rollup is not configured
+	// with a BatchAuthenticator or when the EspressoTime hardfork has not
+	// activated.
+	l.waitForAuthGroup()
 
 	// We _must_ wait for all senders on receiptsCh to finish before we can close it.
 	if err := txQueue.Wait(); err != nil {

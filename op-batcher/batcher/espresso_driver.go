@@ -6,11 +6,20 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
+// waitForAuthGroup blocks until all in-flight fallback-auth watcher goroutines
+// have finished. publishingLoop calls it before closing receiptsCh: each watcher
+// is a sender on receiptsCh, so the receipts loop must still be draining
+// receiptsCh at this point or a watcher's final send would block forever. Each
+// watcher always terminates because the txmgr Queue emits exactly one receipt per
+// Send, even on context cancellation.
+func (l *BatchSubmitter) waitForAuthGroup() {
+	l.authGroup.Wait()
+}
+
 // dispatchAuthenticatedSendTx routes sendTx through the fallback-batcher
-// post-fork auth path, returning true when the tx has been fully handled
-// (sendTxWithFallbackAuth blocks until the pair is resolved and a receipt has
-// been forwarded). Returns false to mean "fall through to the upstream
-// queue.Send path" — pre-fork operation and any cancel tx.
+// post-fork auth path, returning true when the tx has been handed off to
+// authGroup. Returns false to mean "fall through to the upstream queue.Send
+// path" — pre-fork operation and any cancel tx.
 //
 // The fallback batcher consults isFallbackAuthRequired to gate authentication
 // behind the EspressoTime hardfork: pre-fork the verifier accepts plain
