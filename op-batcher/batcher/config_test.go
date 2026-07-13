@@ -34,7 +34,6 @@ func validBatcherConfig() batcher.CLIConfig {
 		BatchType:              0,
 		DataAvailabilityType:   flags.CalldataType,
 		TxMgrConfig:            txmgr.NewCLIConfig("fake", txmgr.DefaultBatcherFlagValues),
-		FallbackAuthLeadTime:   flags.FallbackAuthLeadTimeFlag.Value,
 		LogConfig:              log.DefaultCLIConfig(),
 		MetricsConfig:          metrics.DefaultCLIConfig(),
 		PprofConfig:            oppprof.DefaultCLIConfig(),
@@ -106,16 +105,6 @@ func TestBatcherConfig(t *testing.T) {
 			name:      "invalid batch submission policy",
 			override:  func(c *batcher.CLIConfig) { c.DataAvailabilityType = "foo" },
 			errString: "unknown data availability type: \"foo\"",
-		},
-		{
-			name:      "negative fallback auth lead time",
-			override:  func(c *batcher.CLIConfig) { c.FallbackAuthLeadTime = -time.Second },
-			errString: "FallbackAuthLeadTime must be positive",
-		},
-		{
-			name:      "zero fallback auth lead time",
-			override:  func(c *batcher.CLIConfig) { c.FallbackAuthLeadTime = 0 },
-			errString: "FallbackAuthLeadTime must be positive",
 		},
 		{
 			name:      "zero TargetNumFrames",
