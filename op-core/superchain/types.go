@@ -61,8 +61,9 @@ type HardforkConfig struct {
 	PectraBlobScheduleTime *uint64 `toml:"pectra_blob_schedule_time,omitempty"`
 
 	// Celo
-	Cel2Time     *uint64 `toml:"cel2_time,omitempty"`
-	EspressoTime *uint64 `toml:"espresso_time,omitempty"`
+	Cel2Time      *uint64 `toml:"cel2_time,omitempty"`
+	EspressoTime  *uint64 `toml:"espresso_time,omitempty"`
+	Upgrade18Time *uint64 `toml:"upgrade18_time,omitempty"`
 }
 
 // CeloConfig models the [celo] table in celo's superchain-registry fork.
