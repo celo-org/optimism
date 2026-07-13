@@ -104,6 +104,11 @@ func TestFallbackAuth_OrderingAndSuccess(t *testing.T) {
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 }
 
+// TestFallbackAuth_AuthFailureRetried verifies that an auth-tx send failure produces an error
+// receipt keyed to the batch txData so the frames are re-queued. The pair is submitted
+// back-to-back (pipelined), so the batch tx is also sent; if its auth never lands the batch is
+// simply dropped by derivation — its commitment has no matching auth event in the lookback
+// window — so the orphaned send is harmless to safety.
 func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
 	txdata := testFallbackTxData(t)
@@ -111,7 +116,8 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 
 	queue := &fakeTxSender{
 		responses: []txmgr.TxReceipt[txRef]{
-			{Err: errSendFailed}, // auth fails. No batch response, it must never be sent
+			{Err: errSendFailed},             // auth fails
+			{Receipt: receiptWithBlock(101)}, // batch send (result discarded on auth failure)
 		},
 	}
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
@@ -121,9 +127,8 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
-	// The batch tx must not be sent after an auth failure: it would be crafted at the
-	// next nonce while the failed auth tx resets the txmgr nonce, leaving a nonce gap.
-	require.Len(t, queue.sends, 1)
+	// Both txs are submitted back-to-back; the auth failure does not gate the batch send.
+	require.Len(t, queue.sends, 2)
 }
 
 // TestFallbackAuth_AuthFailureTxRefType verifies that an auth-tx failure is
@@ -140,7 +145,8 @@ func TestFallbackAuth_AuthFailureTxRefType(t *testing.T) {
 
 	queue := &fakeTxSender{
 		responses: []txmgr.TxReceipt[txRef]{
-			{Err: errSendFailed}, // auth fails. No batch response, it must never be sent
+			{Err: errSendFailed},             // auth fails
+			{Receipt: receiptWithBlock(101)}, // batch send (result discarded on auth failure)
 		},
 	}
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
@@ -150,7 +156,7 @@ func TestFallbackAuth_AuthFailureTxRefType(t *testing.T) {
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
-	require.Len(t, queue.sends, 1)
+	require.Len(t, queue.sends, 2)
 	require.False(t, got.ID.isBlob)
 	require.Equal(t, DaTypeCalldata, got.ID.daType)
 }
@@ -211,7 +217,8 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 
 	queue := &fakeTxSender{
 		responses: []txmgr.TxReceipt[txRef]{
-			{Receipt: revertedReceiptWithBlock(100)}, // auth mined but reverted. Batch must never be sent
+			{Receipt: revertedReceiptWithBlock(100)}, // auth mined but reverted
+			{Receipt: receiptWithBlock(101)},         // batch send (result discarded on auth revert)
 		},
 	}
 	receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
@@ -221,9 +228,10 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
-	// A reverted auth tx emits no BatchInfoAuthenticated event, so the batch data would be
-	// unverifiable so the batch tx must not be submitted at all.
-	require.Len(t, queue.sends, 1)
+	// A reverted auth tx emits no BatchInfoAuthenticated event, so the batch is unverifiable and
+	// an error receipt is forwarded to re-queue the frames. Both txs are still submitted
+	// (pipelined); the orphaned batch is dropped by derivation for lack of a matching auth event.
+	require.Len(t, queue.sends, 2)
 }
 
 // TestFallbackAuth_WindowViolationRetried verifies that a batch tx landing
