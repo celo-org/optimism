@@ -1049,6 +1049,9 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 
 type TxSender[T any] interface {
 	Send(id T, candidate txmgr.TxCandidate, receiptCh chan txmgr.TxReceipt[T])
+	// SendPair submits an ordered pair of transactions holding a single
+	// max-pending slot; see txmgr.Queue.SendPair.
+	SendPair(firstID T, first txmgr.TxCandidate, firstCh chan txmgr.TxReceipt[T], secondID T, second txmgr.TxCandidate, secondCh chan txmgr.TxReceipt[T])
 }
 
 // sendTx uses the txmgr queue to send the given transaction candidate after setting its
