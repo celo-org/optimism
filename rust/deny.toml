@@ -24,6 +24,10 @@ ignore = [
   # hickory-proto O(n^2) name compression; fix in 0.26.1, but libp2p 0.56 pins
   # hickory 0.25. Revisit when libp2p upgrades.
   "RUSTSEC-2026-0119",
+  # proc-macro-error2 is unmaintained; no safe upgrade available. Build-time dep
+  # pulled in transitively via alloy-sol-macro -> alloy-sol-types across the
+  # reth/alloy tree.
+  "RUSTSEC-2026-0173",
 ]
 
 # This section is considered when running `cargo deny check bans`.
