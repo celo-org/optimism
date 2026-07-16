@@ -21,6 +21,7 @@ import (
 	gethTypes "github.com/ethereum/go-ethereum/core/types"
 	gethCrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -106,6 +107,30 @@ func TestUnmarshalEspressoTransactionTooShort(t *testing.T) {
 		_, err := derive.UnmarshalEspressoTransaction(data)
 		require.Error(t, err, "expected error for %d-byte input", len(data))
 	}
+}
+
+// TestUnmarshalEspressoTransactionRejectsOversizedHeaderNumber verifies that a
+// well-signed payload whose header number does not fit in uint64 is rejected at
+// decode time. Posting to a namespace is permissionless and consumers call
+// Number() before the signer is validated, so if such a batch survived
+// unmarshaling it would panic in bigs.Uint64Strict.
+func TestUnmarshalEspressoTransactionRejectsOversizedHeaderNumber(t *testing.T) {
+	rng := rand.New(rand.NewSource(2))
+	block := dtest.RandomL2BlockWithChainIdAndTime(rng, 3, defaultTestRollUpConfig.L2ChainID, time.Now())
+	batch, err := derive.BlockToEspressoBatch(defaultTestRollUpConfig, block)
+	require.NoError(t, err)
+
+	batch.BatchHeader.Number = new(big.Int).Lsh(big.NewInt(1), 64)
+
+	buf := new(bytes.Buffer)
+	require.NoError(t, rlp.Encode(buf, *batch))
+	key, err := gethCrypto.GenerateKey()
+	require.NoError(t, err)
+	sig, err := gethCrypto.Sign(gethCrypto.Keccak256(buf.Bytes()), key)
+	require.NoError(t, err)
+
+	_, err = derive.UnmarshalEspressoTransaction(append(sig, buf.Bytes()...))
+	require.ErrorContains(t, err, "does not fit in uint64")
 }
 
 // TestEspressoBatchConversion tests the conversion of a block to an Espresso
