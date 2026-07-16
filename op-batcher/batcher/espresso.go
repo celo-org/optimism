@@ -944,6 +944,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 			err = l.EspressoStreamer().Update(ctx)
 
 			var batch *derivation.EspressoBatch
+			blocksAdded := 0
 
 			for {
 				// Check if block loader requested to clear state
@@ -986,11 +987,16 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 
 				l.EspressoStreamer().Next(ctx)
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
-				// We have increased the unsafe data. Signal the throttling loop to
-				// check if it should throttle.
-				l.sendToThrottlingLoop(unsafeBytesUpdated)
+
+				// During a large drain, signal periodically so throttling can engage
+				// before the whole backlog is consumed (mirrors loadBlocksIntoState).
+				blocksAdded++
+				if blocksAdded%100 == 0 {
+					l.sendToThrottlingLoop(unsafeBytesUpdated)
+				}
 			}
 
+			l.sendToThrottlingLoop(unsafeBytesUpdated)
 			l.tryPublishSignal(publishSignal, pubInfo{})
 
 			// A failure in the streamer Update can happen after the buffer has been partially filled
