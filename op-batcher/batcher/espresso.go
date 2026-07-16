@@ -636,11 +636,12 @@ func espressoSubmitTransactionWorker(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer wg.Done()
+	// The scheduler sends on ch, so the worker must not close it: a deferred
+	// close here races the scheduler's send on shutdown. Both sides exit on
+	// ctx.Done() instead and the channel is simply garbage collected.
 	ch := make(chan espressoTransactionJobAttempt)
-	defer close(ch)
 
 	for {
-		var ok bool
 		select {
 		case <-ctx.Done():
 			return
@@ -654,11 +655,7 @@ func espressoSubmitTransactionWorker(
 		select {
 		case <-ctx.Done():
 			return
-		case jobAttempt, ok = <-ch:
-			if !ok {
-				// Our channel is closed, and we are done
-				return
-			}
+		case jobAttempt = <-ch:
 		}
 
 		// Submit the transaction to Espresso
@@ -701,11 +698,12 @@ func espressoVerifyTransactionWorker(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer wg.Done()
+	// The scheduler sends on ch, so the worker must not close it: a deferred
+	// close here races the scheduler's send on shutdown. Both sides exit on
+	// ctx.Done() instead and the channel is simply garbage collected.
 	ch := make(chan espressoVerifyReceiptJobAttempt)
-	defer close(ch)
 
 	for {
-		var ok bool
 		select {
 		case <-ctx.Done():
 			return
@@ -719,11 +717,7 @@ func espressoVerifyTransactionWorker(
 		select {
 		case <-ctx.Done():
 			return
-		case jobAttempt, ok = <-ch:
-			if !ok {
-				// Our channel is closed, and we are done
-				return
-			}
+		case jobAttempt = <-ch:
 		}
 
 		// On the first attempt, snapshot the current block height so we
