@@ -14,6 +14,8 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
+	op "github.com/EspressoSystems/espresso-streamers/op"
+	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -23,7 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	"github.com/ethereum-optimism/optimism/espresso"
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher/throttler"
 	config "github.com/ethereum-optimism/optimism/op-batcher/config"
@@ -158,7 +159,7 @@ type BatchSubmitter struct {
 	authGroup sync.WaitGroup
 
 	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  espresso.EspressoStreamer[derive.EspressoBatch]
+	espressoStreamer  op.EspressoStreamer[derivation.EspressoBatch]
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
