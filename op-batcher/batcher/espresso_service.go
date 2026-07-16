@@ -7,14 +7,14 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
+	op "github.com/EspressoSystems/espresso-streamers/op"
+	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hf/nitrite"
 
-	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-batcher/enclave"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 )
@@ -55,7 +55,7 @@ type EspressoBatcherConfig struct {
 }
 
 // EspressoStreamer returns the Espresso batch streamer driven by this batcher.
-func (bs *BatcherService) EspressoStreamer() espresso.EspressoStreamer[derive.EspressoBatch] {
+func (bs *BatcherService) EspressoStreamer() op.EspressoStreamer[derivation.EspressoBatch] {
 	return bs.driver.espressoStreamer
 }
 

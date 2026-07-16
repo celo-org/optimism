@@ -18,6 +18,7 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
+	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -810,7 +811,7 @@ func (s *espressoTransactionSubmitter) Start() {
 // Returns error only if batch conversion fails, otherwise it is infallible, as the goroutine
 // will retry publishing until successful.
 func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.Block) error {
-	espressoBatch, err := derive.BlockToEspressoBatch(l.RollupConfig, block)
+	espressoBatch, err := derivation.BlockToEspressoBatch(l.RollupConfig, block)
 	if err != nil {
 		l.Log.Warn("Failed to derive batch from block", "err", err)
 		return fmt.Errorf("failed to derive batch from block: %w", err)
@@ -865,7 +866,7 @@ func (l *BatchSubmitter) espressoSyncAndRefresh(ctx context.Context, newSyncStat
 // The expected parent is tip when tip is set. When tip is zero (channel manager was
 // just cleared), we fall back to safeL2.Hash if the batch is at exactly safeL2+1 —
 // the one position where we can set tip to the known safe head. Otherwise we accept the batch as-is.
-func (l *BatchSubmitter) peekNextBatch(ctx context.Context, syncStatus *eth.SyncStatus) *derive.EspressoBatch {
+func (l *BatchSubmitter) peekNextBatch(ctx context.Context, syncStatus *eth.SyncStatus) *derivation.EspressoBatch {
 	l.channelMgrMutex.Lock()
 	tip := l.channelMgr.tip
 	l.channelMgrMutex.Unlock()
@@ -954,7 +955,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 
 			err = l.EspressoStreamer().Update(ctx)
 
-			var batch *derive.EspressoBatch
+			var batch *derivation.EspressoBatch
 
 			for {
 				// Check if block loader requested to clear state

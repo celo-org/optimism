@@ -7,7 +7,7 @@ toolchain go1.26.4
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/EspressoSystems/espresso-network/sdks/go v0.3.5-0.20260410134522-1a819609a513
-	github.com/EspressoSystems/espresso-streamers v1.1.0
+	github.com/EspressoSystems/espresso-streamers v1.2.1-0.20260716191442-1884a718fbf7
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/andybalholm/brotli v1.1.0
 	github.com/base/go-bip39 v1.1.0
