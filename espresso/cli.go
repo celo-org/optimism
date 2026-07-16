@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	op "github.com/EspressoSystems/espresso-streamers/op"
+	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -263,11 +263,11 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 	return config
 }
 
-func BatchStreamerFromCLIConfig[B op.Batch](
+func BatchStreamerFromCLIConfig[B espressoStreamers.Batch](
 	cfg CLIConfig,
 	log log.Logger,
 	unmarshalBatch func([]byte) (*B, error),
-) (*op.BatchStreamer[B], error) {
+) (*espressoStreamers.BatchStreamer[B], error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("espresso is not enabled")
 	}
@@ -290,7 +290,7 @@ func BatchStreamerFromCLIConfig[B op.Batch](
 		return nil, fmt.Errorf("failed to create Espresso light client")
 	}
 
-	return op.NewEspressoStreamer(
+	return espressoStreamers.NewEspressoStreamer(
 		cfg.Namespace,
 		NewAdaptL1BlockRefClient(l1Client),
 		NewAdaptL1BlockRefClient(RollupL1Client),

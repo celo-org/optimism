@@ -7,7 +7,7 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-	op "github.com/EspressoSystems/espresso-streamers/op"
+	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -55,7 +55,7 @@ func (a *batcherL1Adapter) CallContract(ctx context.Context, call ethereum.CallM
 }
 
 // EspressoStreamer returns the Espresso batch streamer for use by the service and tests.
-func (l *BatchSubmitter) EspressoStreamer() op.EspressoStreamer[derivation.EspressoBatch] {
+func (l *BatchSubmitter) EspressoStreamer() espressoStreamers.EspressoStreamer[derivation.EspressoBatch] {
 	return l.espressoStreamer
 }
 
@@ -70,11 +70,11 @@ func (l *BatchSubmitter) setupEspressoStreamer() {
 	l1Adapter := &batcherL1Adapter{L1Client: l.L1Client}
 	// Convert typed nil pointer to untyped nil interface to avoid typed-nil interface panic
 	// in confirmEspressoBlockHeight when EspressoLightClient is not configured.
-	var lightClientIface op.LightClientCallerInterface
+	var lightClientIface espressoStreamers.LightClientCallerInterface
 	if l.Espresso.LightClient != nil {
 		lightClientIface = l.Espresso.LightClient
 	}
-	unbufferedStreamer, err := op.NewEspressoStreamer(
+	unbufferedStreamer, err := espressoStreamers.NewEspressoStreamer(
 		bigs.Uint64Strict(l.RollupConfig.L2ChainID),
 		l1Adapter,
 		l1Adapter,
@@ -90,7 +90,7 @@ func (l *BatchSubmitter) setupEspressoStreamer() {
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Espresso streamer: %v", err))
 	}
-	l.espressoStreamer = op.NewBufferedEspressoStreamer(unbufferedStreamer)
+	l.espressoStreamer = espressoStreamers.NewBufferedEspressoStreamer(unbufferedStreamer)
 	l.Log.Info("Streamer started", "streamer", l.espressoStreamer)
 }
 

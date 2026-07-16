@@ -13,7 +13,7 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	op "github.com/EspressoSystems/espresso-streamers/op"
+	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -158,7 +158,7 @@ type BatchSubmitter struct {
 	authGroup sync.WaitGroup
 
 	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  op.EspressoStreamer[derivation.EspressoBatch]
+	espressoStreamer  espressoStreamers.EspressoStreamer[derivation.EspressoBatch]
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
