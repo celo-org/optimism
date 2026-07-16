@@ -116,6 +116,16 @@ func UnmarshalEspressoTransaction(data []byte) (*EspressoBatch, error) {
 	}
 	batch.SignerAddress = signer
 
+	if batch.BatchHeader == nil || batch.BatchHeader.Number == nil {
+		return nil, fmt.Errorf("batch header is missing a block number")
+	}
+	if !batch.BatchHeader.Number.IsUint64() {
+		return nil, fmt.Errorf("batch header number %s does not fit in uint64", batch.BatchHeader.Number)
+	}
+	if batch.L1InfoDeposit == nil {
+		return nil, fmt.Errorf("batch is missing the L1 info deposit transaction")
+	}
+
 	return &batch, nil
 }
 
