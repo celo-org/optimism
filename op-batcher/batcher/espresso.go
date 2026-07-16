@@ -636,9 +636,6 @@ func espressoSubmitTransactionWorker(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer wg.Done()
-	// The scheduler sends on ch, so the worker must not close it: a deferred
-	// close here races the scheduler's send on shutdown. Both sides exit on
-	// ctx.Done() instead and the channel is simply garbage collected.
 	ch := make(chan espressoTransactionJobAttempt)
 
 	for {
@@ -698,9 +695,6 @@ func espressoVerifyTransactionWorker(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer wg.Done()
-	// The scheduler sends on ch, so the worker must not close it: a deferred
-	// close here races the scheduler's send on shutdown. Both sides exit on
-	// ctx.Done() instead and the channel is simply garbage collected.
 	ch := make(chan espressoVerifyReceiptJobAttempt)
 
 	for {
