@@ -153,18 +153,18 @@ func (m *SimpleTxManager) SendPairAsync(
 
 	prepareCtx, cancel := getContext(ctx, m.cfg.TxSendTimeout)
 	tx1, err := m.prepare(prepareCtx, firstCandidate)
+	cancel()
 	if err != nil {
 		m.resetNonce()
-		cancel()
 		respondErr(err, fmt.Errorf("%w: first leg preparation failed: %w", ErrPairLegCancelled, err))
 		return
 	}
 
 	prepareCtx, cancel = getContext(ctx, m.cfg.TxSendTimeout)
 	tx2, err := m.prepare(prepareCtx, secondCandidate)
+	cancel()
 	if err != nil {
 		m.resetNonce()
-		cancel()
 		respondErr(fmt.Errorf("pair aborted before broadcast: second leg preparation failed: %w", err), err)
 		return
 	}
@@ -234,6 +234,9 @@ func (m *SimpleTxManager) craftPairCancelTx(ctx context.Context, target *types.T
 		return nil, fmt.Errorf("failed to get gas price info: %w", err)
 	}
 	bumpedTip, bumpedFee := updateFees(target.GasTipCap(), target.GasFeeCap(), tip, baseFee, false, m.l)
+	if err := m.checkLimits(tip, baseFee, bumpedTip, bumpedFee); err != nil {
+		return nil, fmt.Errorf("fee limits exceeded for pair cancellation tx: %w", err)
+	}
 
 	to := m.cfg.From
 	msg := &types.DynamicFeeTx{
