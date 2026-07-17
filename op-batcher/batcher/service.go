@@ -268,6 +268,11 @@ func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
 	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return nil
 	}
+	// Only blob pairs serialize auth→batch on NumConfirmations
+	// (sendFallbackAuthSerialized); calldata pairs broadcast back-to-back.
+	if cfg.DataAvailabilityType == flags.CalldataType {
+		return nil
+	}
 	// The auth→batch distance (num-confirmations + inclusion delay) must fit within
 	// BatchAuthLookbackWindow, so reserve room for the batch to land or the safe head stalls.
 	const fallbackAuthInclusionReserve = 75 // blocks (~15 min at 12s L1 slots)
