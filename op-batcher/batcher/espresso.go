@@ -1087,16 +1087,14 @@ func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBl
 		return inclusiveBlockRange{}, ActionRetry
 	}
 
-	if l.prevSyncStatus == nil {
-		l.prevSyncStatus = newSyncStatus
-	}
-
-	if newSyncStatus.CurrentL1.Number < l.prevSyncStatus.CurrentL1.Number {
-		// sequencer restarted and hasn't caught up yet
+	if l.prevSyncStatus != nil && newSyncStatus.CurrentL1.Number < l.prevSyncStatus.CurrentL1.Number {
+		// Sequencer restarted and hasn't caught up yet
 		l.batcher.degradedLog.Warn(l.batcher.Log, "sequencerCurrentL1Reversed", "sequencer currentL1 reversed", "new currentL1", newSyncStatus.CurrentL1.Number, "previous currentL1", l.prevSyncStatus.CurrentL1.Number)
 		return inclusiveBlockRange{}, ActionRetry
 	}
 	l.batcher.degradedLog.Clear(l.batcher.Log, "sequencerCurrentL1Reversed", "sequencer currentL1 caught up")
+
+	l.prevSyncStatus = newSyncStatus
 
 	safeL2 := newSyncStatus.SafeL2
 
