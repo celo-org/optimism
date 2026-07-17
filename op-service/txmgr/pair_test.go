@@ -179,6 +179,33 @@ func TestSendPair_FirstLegReverted(t *testing.T) {
 	require.Equal(t, pairBaseNonce+2, r3.Nonce)
 }
 
+// TestSendPair_ParentContextCanceled: a pair canceled via its parent context
+// (shutdown, or a sibling failing the queue's error group) must not broadcast
+// no-ops, but must reset the cached nonce so the next send refills the gap.
+func TestSendPair_ParentContextCanceled(t *testing.T) {
+	h := newPairTestHarness(t, map[byte]pairLegBehavior{
+		1: {}, // broadcast accepted, never mines
+		2: {},
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch1 := make(chan SendResponse, 1)
+	ch2 := make(chan SendResponse, 1)
+	h.mgr.SendPairAsync(ctx, pairCandidate(1), pairCandidate(2), ch1, ch2)
+	cancel()
+
+	r1, r2 := <-ch1, <-ch2
+	require.Error(t, r1.Err)
+	require.Error(t, r2.Err)
+
+	require.Empty(t, h.noopsAt(), "no cancellation no-ops may be broadcast from a canceled parent context")
+
+	h.mgr.nonceLock.RLock()
+	nonce := h.mgr.nonce
+	h.mgr.nonceLock.RUnlock()
+	require.Nil(t, nonce, "nonce must be reset so the next send re-queries the chain and refills the gap")
+}
+
 // TestQueue_SendPair_Pipelines proves a pair holds exactly one maxPending
 // slot, in both directions. At most one: with maxPending=2, two pairs (four
 // txs) are all broadcast before anything confirms — per-tx slot accounting or

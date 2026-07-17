@@ -90,8 +90,12 @@ func (p *pairSend) repair(err1 error, err2 error) {
 
 	m := p.txManager
 	if p.parentCtx.Err() != nil {
-		m.l.Info("pair send context cancelled; leaving in-flight legs to resolve in the pool",
+		// Canceled parent (shutdown, or a sibling send failing the queue's
+		// error group): don't publish no-ops, but reset the nonce so the next
+		// send re-queries the chain and refills any gap the pair leaves.
+		m.l.Info("pair send context cancelled; resetting nonce and leaving in-flight legs to resolve in the pool",
 			"firstNonce", p.leg1.tx.Nonce(), "secondNonce", p.leg2.tx.Nonce())
+		m.resetNonce()
 		return
 	}
 
