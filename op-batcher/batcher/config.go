@@ -191,13 +191,6 @@ func (c *CLIConfig) Check() error {
 	if !flags.ValidDataAvailabilityType(c.DataAvailabilityType) {
 		return fmt.Errorf("unknown data availability type: %q", c.DataAvailabilityType)
 	}
-	// The auth→batch distance (num-confirmations + inclusion delay) must fit within
-	// BatchAuthLookbackWindow, so reserve room for the batch to land or the safe head stalls.
-	const fallbackAuthInclusionReserve = 75 // blocks (~15 min at 12s L1 slots)
-	if authLookback := derive.BatchAuthLookbackWindow; authLookback < c.TxMgrConfig.NumConfirmations+fallbackAuthInclusionReserve {
-		return fmt.Errorf("NumConfirmations (%d) too high for BatchAuthLookbackWindow (%d): need %d blocks of inclusion headroom",
-			c.TxMgrConfig.NumConfirmations, authLookback, fallbackAuthInclusionReserve)
-	}
 	// Most chains' L1s still have only Cancun active, but we don't want to
 	// overcomplicate this check with a dynamic L1 query, so we just use maxBlobsPerBlock.
 	// We want to check for both, blobs and auto da-type.

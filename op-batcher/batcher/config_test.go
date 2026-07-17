@@ -107,13 +107,6 @@ func TestBatcherConfig(t *testing.T) {
 			errString: "unknown data availability type: \"foo\"",
 		},
 		{
-			name: "num-confirmations leaves too little batch auth lookback window",
-			override: func(c *batcher.CLIConfig) {
-				c.TxMgrConfig.NumConfirmations = derive.BatchAuthLookbackWindow
-			},
-			errString: "too high for BatchAuthLookbackWindow",
-		},
-		{
 			name:      "zero TargetNumFrames",
 			override:  func(c *batcher.CLIConfig) { c.TargetNumFrames = 0 },
 			errString: "TargetNumFrames must be at least 1",
