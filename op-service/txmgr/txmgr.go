@@ -100,16 +100,20 @@ type TxManager interface {
 	// successfully. If the first leg fails permanently (send failure, or mined
 	// but reverted), the second leg is cancelled with a fee-bumped no-op at its
 	// exact nonce; cancellation is best-effort, so callers must tolerate an
-	// orphaned second leg still landing on chain. Any leg that fails without
-	// mining gets the same no-op treatment, so a failed pair never resets the
-	// nonce, never leaves a nonce gap behind, and never disturbs concurrently
-	// pending transactions at higher nonces.
+	// orphaned second leg still landing on chain. A leg that fails in flight
+	// (broadcast but unmined) has its nonce consumed by that no-op rather than by
+	// a global nonce reset, so it leaves no gap and does not disturb concurrently
+	// pending transactions at higher nonces. The nonce IS reset — falling back to
+	// the usual "next send re-queries the chain" behavior — in three cases: a leg
+	// fails during preparation (before broadcast), the parent ctx is cancelled
+	// (shutdown, or a sibling send failing the queue's error group), or the no-op
+	// repair itself cannot be crafted or sent.
 	//
 	// Both response channels must be buffered; exactly one response is delivered
 	// on each, and only once both nonces are consumed on chain (repairs
 	// included). Repairs survive cancellation of ctx (bounded by TxSendTimeout
-	// when configured); if ctx is already cancelled no repair is attempted and
-	// in-flight legs are left to resolve in the pool.
+	// when configured); if ctx is already cancelled no no-ops are published — the
+	// nonce is reset and in-flight legs are left to resolve in the pool.
 	//
 	// Blob candidates are not supported: the cancellation no-op cannot replace a
 	// blob transaction.
