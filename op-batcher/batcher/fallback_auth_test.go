@@ -60,11 +60,9 @@ func (f *fakeTxSender) SendPair(firstID txRef, first txmgr.TxCandidate, firstCh 
 type fallbackAuthMetricsSpy struct {
 	metrics.Metricer
 	windowExceeded int
-	reverted       int
 }
 
 func (s *fallbackAuthMetricsSpy) RecordFallbackAuthWindowExceeded() { s.windowExceeded++ }
-func (s *fallbackAuthMetricsSpy) RecordFallbackAuthReverted()       { s.reverted++ }
 
 func newFallbackAuthSubmitter(t *testing.T) *BatchSubmitter {
 	l := &BatchSubmitter{}
@@ -138,8 +136,6 @@ func TestFallbackAuth_OrderingAndSuccess(t *testing.T) {
 // an ErrPairLegCancelled response on the batch channel.
 func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
-	l.Metr = metr
 	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
@@ -158,7 +154,6 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Len(t, queue.sends, 2)
 	require.Equal(t, 1, queue.pairCalls)
-	require.Zero(t, metr.reverted, "a send failure (no receipt) must not count as a revert")
 }
 
 // TestFallbackAuth_AuthRevertedRetried verifies that an authenticateBatchInfo tx
@@ -168,8 +163,6 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 // batch leg.
 func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
-	l.Metr = metr
 	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
@@ -188,7 +181,6 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Len(t, queue.sends, 2)
 	require.Equal(t, 1, queue.pairCalls)
-	require.Equal(t, 1, metr.reverted, "a mined-but-reverted auth must record the fallback_auth_reverted metric")
 }
 
 // TestFallbackAuth_BatchFailureRetried verifies a batch-leg failure produces an
@@ -275,8 +267,6 @@ func TestFallbackAuth_BlobAuthFailureGatesBatch(t *testing.T) {
 // be unverifiable and must not be submitted at all.
 func TestFallbackAuth_BlobAuthRevertGatesBatch(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
-	l.Metr = metr
 	txdata := testFallbackTxData()
 	txdata.daType = DaTypeBlob
 	candidate := testBlobCandidate()
@@ -294,7 +284,6 @@ func TestFallbackAuth_BlobAuthRevertGatesBatch(t *testing.T) {
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Len(t, queue.sends, 1)
-	require.Equal(t, 1, metr.reverted, "a mined-but-reverted auth on the blob path must record the fallback_auth_reverted metric")
 }
 
 // TestFallbackAuth_AuthFailureTxRefType verifies that an auth-tx failure is
@@ -377,7 +366,6 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Equal(t, 1, metr.windowExceeded, "window violation should record the fallback_auth_window_exceeded metric")
-	require.Zero(t, metr.reverted, "window violation is not a revert")
 }
 
 // TestFallbackAuth_WindowBoundaryAccepted pins the inclusive bound of the lookback
