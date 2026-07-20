@@ -60,6 +60,10 @@ func (f *FakeTxMgr) SendAsync(ctx context.Context, candidate txmgr.TxCandidate, 
 	}
 	ch <- sendResponse
 }
+func (f *FakeTxMgr) SendPairAsync(ctx context.Context, first txmgr.TxCandidate, second txmgr.TxCandidate, firstCh chan txmgr.SendResponse, secondCh chan txmgr.SendResponse) {
+	f.SendAsync(ctx, first, firstCh)
+	f.SendAsync(ctx, second, secondCh)
+}
 func (f *FakeTxMgr) ChainID() eth.ChainID {
 	return f.chainId
 }

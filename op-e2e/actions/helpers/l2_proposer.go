@@ -81,6 +81,10 @@ func (f fakeTxMgr) SendAsync(ctx context.Context, candidate txmgr.TxCandidate, c
 	panic("unimplemented")
 }
 
+func (f fakeTxMgr) SendPairAsync(ctx context.Context, first txmgr.TxCandidate, second txmgr.TxCandidate, firstCh chan txmgr.SendResponse, secondCh chan txmgr.SendResponse) {
+	panic("unimplemented")
+}
+
 func (f fakeTxMgr) Close() {
 }
 

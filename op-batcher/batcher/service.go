@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/chaincfg"
 	"github.com/ethereum-optimism/optimism/op-node/params"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -169,6 +171,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.initRollupConfig(ctx); err != nil {
 		return fmt.Errorf("failed to load rollup config: %w", err)
 	}
+	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
+		return err
+	}
 	if err := bs.initTxManager(ctx, cfg); err != nil {
 		return fmt.Errorf("failed to init Tx manager: %w", err)
 	}
@@ -251,6 +256,30 @@ func (bs *BatcherService) initRollupConfig(ctx context.Context) error {
 		return fmt.Errorf("invalid rollup config: %w", err)
 	}
 	bs.RollupConfig.LogDescription(bs.Log, chaincfg.L2ChainIDToNetworkDisplayName)
+	return nil
+}
+
+// checkFallbackAuthConfirmations validates that the configured number of L1
+// confirmations leaves enough headroom inside BatchAuthLookbackWindow for the
+// batch tx to land after its auth tx (see sendTxWithFallbackAuth). The bound
+// only applies when the BatchAuthenticator is configured on the chain, which
+// is only known once the rollup config is loaded
+func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
+	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+		return nil
+	}
+	// Only blob pairs serialize auth→batch on NumConfirmations
+	// (sendFallbackAuthSerialized); calldata pairs broadcast back-to-back.
+	if cfg.DataAvailabilityType == flags.CalldataType {
+		return nil
+	}
+	// The auth→batch distance (num-confirmations + inclusion delay) must fit within
+	// BatchAuthLookbackWindow, so reserve room for the batch to land or the safe head stalls.
+	const fallbackAuthInclusionReserve = 75 // blocks (~15 min at 12s L1 slots)
+	if authLookback := derive.BatchAuthLookbackWindow; authLookback < cfg.TxMgrConfig.NumConfirmations+fallbackAuthInclusionReserve {
+		return fmt.Errorf("NumConfirmations (%d) too high for BatchAuthLookbackWindow (%d): need %d blocks of inclusion headroom",
+			cfg.TxMgrConfig.NumConfirmations, authLookback, fallbackAuthInclusionReserve)
+	}
 	return nil
 }
 
