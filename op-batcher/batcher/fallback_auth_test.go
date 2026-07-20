@@ -57,12 +57,14 @@ func (f *fakeTxSender) SendPair(firstID txRef, first txmgr.TxCandidate, firstCh 
 	f.deliver(secondID, second, secondCh, true)
 }
 
-type windowExceededSpy struct {
+type fallbackAuthMetricsSpy struct {
 	metrics.Metricer
-	count int
+	windowExceeded int
+	reverted       int
 }
 
-func (s *windowExceededSpy) RecordFallbackAuthWindowExceeded() { s.count++ }
+func (s *fallbackAuthMetricsSpy) RecordFallbackAuthWindowExceeded() { s.windowExceeded++ }
+func (s *fallbackAuthMetricsSpy) RecordFallbackAuthReverted()       { s.reverted++ }
 
 func newFallbackAuthSubmitter(t *testing.T) *BatchSubmitter {
 	l := &BatchSubmitter{}
@@ -74,7 +76,7 @@ func newFallbackAuthSubmitter(t *testing.T) *BatchSubmitter {
 	return l
 }
 
-func testFallbackTxData(t *testing.T) txData {
+func testFallbackTxData() txData {
 	return singleFrameTxData(frameData{data: []byte("frame-data")})
 }
 
@@ -99,7 +101,7 @@ func revertedReceiptWithBlock(num int64) *types.Receipt {
 // within the lookback window.
 func TestFallbackAuth_OrderingAndSuccess(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	queue := &fakeTxSender{
@@ -136,7 +138,9 @@ func TestFallbackAuth_OrderingAndSuccess(t *testing.T) {
 // an ErrPairLegCancelled response on the batch channel.
 func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
+	l.Metr = metr
+	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	queue := &fakeTxSender{
@@ -154,6 +158,7 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Len(t, queue.sends, 2)
 	require.Equal(t, 1, queue.pairCalls)
+	require.Zero(t, metr.reverted, "a send failure (no receipt) must not count as a revert")
 }
 
 // TestFallbackAuth_AuthRevertedRetried verifies that an authenticateBatchInfo tx
@@ -163,7 +168,9 @@ func TestFallbackAuth_AuthFailureRetried(t *testing.T) {
 // batch leg.
 func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
+	l.Metr = metr
+	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	queue := &fakeTxSender{
@@ -181,13 +188,14 @@ func TestFallbackAuth_AuthRevertedRetried(t *testing.T) {
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Len(t, queue.sends, 2)
 	require.Equal(t, 1, queue.pairCalls)
+	require.Equal(t, 1, metr.reverted, "a mined-but-reverted auth must record the fallback_auth_reverted metric")
 }
 
 // TestFallbackAuth_BatchFailureRetried verifies a batch-leg failure produces an
 // error receipt keyed to the batch txData.
 func TestFallbackAuth_BatchFailureRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	queue := &fakeTxSender{
@@ -212,7 +220,7 @@ func TestFallbackAuth_BatchFailureRetried(t *testing.T) {
 // reservation cannot hold a calldata auth tx and a blob batch tx at once.
 func TestFallbackAuth_BlobSerialized(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	txdata.daType = DaTypeBlob
 	candidate := testBlobCandidate()
 
@@ -243,7 +251,7 @@ func TestFallbackAuth_BlobSerialized(t *testing.T) {
 // a nonce gap (and an unauthenticated blob batch) behind.
 func TestFallbackAuth_BlobAuthFailureGatesBatch(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	txdata.daType = DaTypeBlob
 	candidate := testBlobCandidate()
 
@@ -267,7 +275,9 @@ func TestFallbackAuth_BlobAuthFailureGatesBatch(t *testing.T) {
 // be unverifiable and must not be submitted at all.
 func TestFallbackAuth_BlobAuthRevertGatesBatch(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
+	l.Metr = metr
+	txdata := testFallbackTxData()
 	txdata.daType = DaTypeBlob
 	candidate := testBlobCandidate()
 
@@ -284,6 +294,7 @@ func TestFallbackAuth_BlobAuthRevertGatesBatch(t *testing.T) {
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
 	require.Len(t, queue.sends, 1)
+	require.Equal(t, 1, metr.reverted, "a mined-but-reverted auth on the blob path must record the fallback_auth_reverted metric")
 }
 
 // TestFallbackAuth_AuthFailureTxRefType verifies that an auth-tx failure is
@@ -294,7 +305,7 @@ func TestFallbackAuth_BlobAuthRevertGatesBatch(t *testing.T) {
 // looping forever without ever displacing the stuck blob tx.
 func TestFallbackAuth_AuthFailureTxRefType(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	txdata.daType = DaTypeBlob
 	candidate := testBlobCandidate()
 
@@ -319,7 +330,7 @@ func TestFallbackAuth_AuthFailureTxRefType(t *testing.T) {
 // failure keeps the batch txdata's own type on the forwarded receipt.
 func TestFallbackAuth_BatchFailureTxRefType(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	txdata.daType = DaTypeBlob
 	candidate := testBlobCandidate()
 
@@ -346,9 +357,9 @@ func TestFallbackAuth_BatchFailureTxRefType(t *testing.T) {
 // channel manager rewinds and resubmits), rather than being confirmed.
 func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	metr := &windowExceededSpy{Metricer: metrics.NoopMetrics}
+	metr := &fallbackAuthMetricsSpy{Metricer: metrics.NoopMetrics}
 	l.Metr = metr
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	tooFar := int64(100 + derive.BatchAuthLookbackWindow + 1)
@@ -365,7 +376,8 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 	got := <-receiptsCh
 	require.Error(t, got.Err)
 	require.Equal(t, txdata.ID().String(), got.ID.id.String())
-	require.Equal(t, 1, metr.count, "window violation should record the fallback_auth_window_exceeded metric")
+	require.Equal(t, 1, metr.windowExceeded, "window violation should record the fallback_auth_window_exceeded metric")
+	require.Zero(t, metr.reverted, "window violation is not a revert")
 }
 
 // TestFallbackAuth_WindowBoundaryAccepted pins the inclusive bound of the lookback
@@ -375,7 +387,7 @@ func TestFallbackAuth_WindowViolationRetried(t *testing.T) {
 // re-queue it.
 func TestFallbackAuth_WindowBoundaryAccepted(t *testing.T) {
 	l := newFallbackAuthSubmitter(t)
-	txdata := testFallbackTxData(t)
+	txdata := testFallbackTxData()
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	boundary := int64(100 + derive.BatchAuthLookbackWindow)

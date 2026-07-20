@@ -123,7 +123,7 @@ func (l *BatchSubmitter) sendFallbackAuthSerialized(transactionReference, authRe
 	authReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
 	queue.Send(authReference, verifyCandidate, authReceiptCh)
 	authResult := <-authReceiptCh
-	if err := fallbackAuthResultError(authResult); err != nil {
+	if err := l.fallbackAuthResultError(authResult); err != nil {
 		l.Log.Error("Fallback authenticateBatchInfo transaction failed", "txRef", transactionReference, "err", err)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  authReference,
@@ -154,11 +154,12 @@ func (l *BatchSubmitter) watchFallbackAuthReceipts(transactionReference, authRef
 // receipt as soon as the tx is mined, regardless of execution status). The batch inbox tx
 // needs no such status check: derivation reads its data by L1 inclusion, not by execution
 // status.
-func fallbackAuthResultError(authResult txmgr.TxReceipt[txRef]) error {
+func (l *BatchSubmitter) fallbackAuthResultError(authResult txmgr.TxReceipt[txRef]) error {
 	if authResult.Err != nil {
 		return fmt.Errorf("failed to send fallback authenticateBatchInfo transaction: %w", authResult.Err)
 	}
 	if authResult.Receipt.Status != types.ReceiptStatusSuccessful {
+		l.Metr.RecordFallbackAuthReverted()
 		return fmt.Errorf("fallback authenticateBatchInfo transaction reverted: %s", authResult.Receipt.TxHash)
 	}
 	return nil
@@ -171,7 +172,7 @@ func fallbackAuthResultError(authResult txmgr.TxReceipt[txRef]) error {
 // failures are reported under authReference (see its construction in sendTxWithFallbackAuth
 // for why the calldata typing matters).
 func (l *BatchSubmitter) resolveFallbackAuthPair(transactionReference, authReference txRef, authResult, batchResult txmgr.TxReceipt[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
-	if err := fallbackAuthResultError(authResult); err != nil {
+	if err := l.fallbackAuthResultError(authResult); err != nil {
 		l.Log.Error("Fallback authenticateBatchInfo transaction failed", "txRef", transactionReference, "err", err)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  authReference,

@@ -70,6 +70,7 @@ type Metricer interface {
 	RecordFailoverToEthDA()
 
 	RecordFallbackAuthWindowExceeded()
+	RecordFallbackAuthReverted()
 
 	Document() []opmetrics.DocumentedMetric
 
@@ -116,6 +117,7 @@ type Metrics struct {
 	batchStoredDataSizeBytesTotal   prometheus.CounterVec
 	altDaFailoverTotal              prometheus.Counter
 	fallbackAuthWindowExceededTotal prometheus.Counter
+	fallbackAuthRevertedTotal       prometheus.Counter
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -262,6 +264,11 @@ func NewMetrics(procName string) *Metrics {
 			Namespace: ns,
 			Name:      "fallback_auth_window_exceeded_total",
 			Help:      "Total number of fallback-auth submissions dropped because the batch tx landed beyond BatchAuthLookbackWindow blocks after its auth tx",
+		}),
+		fallbackAuthRevertedTotal: factory.NewCounter(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "fallback_auth_reverted_total",
+			Help:      "Total number of fallback-auth submissions dropped because the authenticateBatchInfo transaction reverted (e.g. posting while the primary batcher is still active)",
 		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
@@ -493,6 +500,10 @@ func (m *Metrics) RecordFailoverToEthDA() {
 
 func (m *Metrics) RecordFallbackAuthWindowExceeded() {
 	m.fallbackAuthWindowExceededTotal.Inc()
+}
+
+func (m *Metrics) RecordFallbackAuthReverted() {
+	m.fallbackAuthRevertedTotal.Inc()
 }
 
 func (m *Metrics) RecordChannelQueueLength(len int) {
