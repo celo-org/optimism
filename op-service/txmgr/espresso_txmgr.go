@@ -30,10 +30,40 @@ func getContext(ctx context.Context, txTimeout time.Duration) (context.Context, 
 	return context.WithTimeout(ctx, txTimeout)
 }
 
-// sendPair drives the pair to resolution on its own goroutine: it broadcasts both
-// legs concurrently, cancels the second leg if the first fails permanently,
-// repairs any nonce the pair would otherwise leave unmined, and delivers
-// exactly one response per channel once the pair's on-chain state is clean.
+// sendPair drives the pair to resolution on its own goroutine: it broadcasts
+// both legs concurrently, cancels the second leg if the first fails permanently,
+// and delivers exactly one response per channel. A second leg cancelled this way
+// has its error wrapped in ErrPairLegCancelled so callers can tell it did not
+// fail on its own.
+//
+// Before any response is delivered, the pair repairs the nonce of each leg that
+// resolved with an error (repairPair): the nonce is consumed on chain by a
+// fee-bumped no-op, and sendPair blocks until that settles. Why: an errored leg
+// is in an unknown state — possibly never broadcast, possibly in the pool at
+// heavily bumped fees, possibly even mined unseen. Stock recovery (resetNonce,
+// then re-signing the same nonces) recovers by collision with those orphans,
+// which is safe for self-contained txs (a stale winner is at worst a duplicate)
+// but not for pairs: a failure makes the batcher rewind and re-pack, so resent
+// legs carry a different commitment than the orphans they contest. A stale leg
+// winning one nonce while a fresh leg wins the adjacent one mines a torn pair —
+// auth and batch with mismatched commitments, ignored by derivation — and the
+// recovery round has itself half-failed, leaving fresh orphans behind.
+//
+// Repairing before responding keeps the failure self-contained: the error
+// cannot cancel the queue's error group, and so cannot trigger resubmission,
+// until this pair's nonces are already consumed — the resubmission's nonce
+// query starts above everything the pair left behind.
+//
+// Aborted siblings get no such guarantee. A pair cancelled by the group abort
+// (parent context already dead) only resets the nonce — see repairPair's
+// parent-context branch — leaving its legs wherever cancellation caught them:
+// That spoilage is self-limiting: a stale leg can only cause damage by
+// contesting a slot, and a contested slot that fails a round becomes an
+// errored leg of that round's pair — so repair settles the very slots the
+// damage occurred at, and each abort's leftovers are cleaned up by the first
+// round they hurt. It is accepted because settling every aborted sibling
+// eagerly would stall the queue's drain barrier a block per abort, scaling
+// with the pipeline depth.
 func (m *SimpleTxManager) sendPair(parentCtx context.Context, tx1, tx2 *types.Transaction, ch1, ch2 chan SendResponse) {
 	defer func() { m.metr.RecordPendingTx(m.pending.Add(-2)) }()
 	ctx1, cancel1 := getContext(parentCtx, m.cfg.TxSendTimeout)
