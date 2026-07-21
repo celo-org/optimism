@@ -151,29 +151,6 @@ func WithEspressoEnforcementOffset(offset time.Duration) E2eDevnetLauncherOption
 	}
 }
 
-// WithFallbackAuthLeadTime is an E2eDevnetLauncherOption that sets the
-// Espresso CLIConfig.FallbackAuthLeadTime on the batcher CLI config. The
-// fallback batcher inherits this value from the TEE batcher's config struct
-// (it is copied from the TEE batcher's CLIConfig in the e2e setup, before
-// Espresso.Enabled is flipped to false), so a single launcher option suffices
-// to configure both. Useful for tests that exercise the EspressoEnforcement
-// hardfork boundary with a tighter lead time than the production default.
-func WithFallbackAuthLeadTime(leadTime time.Duration) E2eDevnetLauncherOption {
-	return func(c *E2eDevnetLauncherContext) E2eSystemOption {
-		return E2eSystemOption{
-			StartOptions: []e2esys.StartOption{
-				{
-					Key:  "fallbackAuthLeadTime",
-					Role: e2esys.RoleSeq,
-					BatcherMod: func(batchConfig *bss.CLIConfig, sys *e2esys.System) {
-						batchConfig.FallbackAuthLeadTime = leadTime
-					},
-				},
-			},
-		}
-	}
-}
-
 // WithBatcherTargetNumFrames is a E2eDevnetLauncherOption that configures the
 // batcher's `TargetNumFrames` option to the provided value.
 //
