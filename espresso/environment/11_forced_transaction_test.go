@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/config"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 )
@@ -110,7 +111,7 @@ func ForcedTransaction(t *testing.T, withSmallSequencerWindow bool, withEspresso
 	if withSmallSequencerWindow {
 		// Verify that Alice's balance decreases as expected.
 		require.NoError(t, err, "Failed to get new balance")
-		require.LessOrEqualf(t, newBalance.Uint64(), initialBalance.Uint64()-withdrawalAmount.Uint64(), "Balance not decreased")
+		require.LessOrEqualf(t, bigs.Uint64Strict(newBalance), bigs.Uint64Strict(initialBalance)-bigs.Uint64Strict(withdrawalAmount), "Balance not decreased")
 
 	} else {
 		// Verify that Alice's balance is inaccessible.

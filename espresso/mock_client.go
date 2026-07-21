@@ -142,7 +142,7 @@ func transactionHash(tx espressoTypes.Transaction) (*espressoTypes.TaggedBase64,
 func (c *MockEspressoClient) SubmitTransaction(ctx context.Context, tx espressoTypes.Transaction) (*espressoTypes.TaggedBase64, error) {
 	hash, err := transactionHash(tx)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", espressoClient.ErrPermanent, err)
+		return nil, fmt.Errorf("%w: %w", espressoClient.ErrPermanent, err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
