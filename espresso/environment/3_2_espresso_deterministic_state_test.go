@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	geth_types "github.com/ethereum/go-ethereum/core/types"
@@ -205,7 +206,7 @@ func createEspressoTransaction(transactionString string, chainID *big.Int, batch
 
 	// Create and return Espresso Transaction
 	return &espressoCommon.Transaction{
-		Namespace: chainID.Uint64(),
+		Namespace: bigs.Uint64Strict(chainID),
 		Payload:   payload,
 	}, nil
 }
