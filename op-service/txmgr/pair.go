@@ -30,76 +30,68 @@ func getContext(ctx context.Context, txTimeout time.Duration) (context.Context, 
 	return context.WithTimeout(ctx, txTimeout)
 }
 
-// pairSend drives one SendPairAsync submission from broadcast through repair
-// and response delivery.
-type pairSend struct {
-	txManager *SimpleTxManager
-	parentCtx context.Context
-	leg1      leg
-	leg2      leg
-}
-
 // sendPair drives the pair to resolution on its own goroutine: it broadcasts both
 // legs concurrently, cancels the second leg if the first fails permanently,
 // repairs any nonce the pair would otherwise leave unmined, and delivers
 // exactly one response per channel once the pair's on-chain state is clean.
-func (p *pairSend) sendPair() {
-	m := p.txManager
+func (m *SimpleTxManager) sendPair(parentCtx context.Context, tx1, tx2 *types.Transaction, ch1, ch2 chan SendResponse) {
 	defer func() { m.metr.RecordPendingTx(m.pending.Add(-2)) }()
-	defer p.leg1.cancelFunc()
-	defer p.leg2.cancelFunc()
+	ctx1, cancel1 := getContext(parentCtx, m.cfg.TxSendTimeout)
+	ctx2, cancel2 := getContext(parentCtx, m.cfg.TxSendTimeout)
+	defer cancel1()
+	defer cancel2()
 
-	leg2Res := make(chan legResult, 1)
+	res2 := make(chan SendResponse, 1)
 	go func() {
-		leg2Res <- p.leg2.send(m)
+		receipt, err := m.sendTx(ctx2, tx2)
+		res2 <- SendResponse{Receipt: receipt, Nonce: tx2.Nonce(), Err: err}
 	}()
 
-	legResult1 := p.leg1.send(m)
+	receipt1, err1 := m.sendTx(ctx1, tx1)
 
 	// A mined-but-reverted first leg also fails the pair, not just a failed
 	// send: the second leg depends on the first leg's successful execution.
-	leg1Failed := legResult1.err != nil || (legResult1.receipt != nil && legResult1.receipt.Status != types.ReceiptStatusSuccessful)
+	leg1Failed := err1 != nil || (receipt1 != nil && receipt1.Status != types.ReceiptStatusSuccessful)
 	if leg1Failed {
 		m.l.Warn("pair first leg failed; cancelling second leg",
-			"firstNonce", p.leg1.tx.Nonce(), "secondNonce", p.leg2.tx.Nonce(),
-			"err", legResult1.err, "reverted", legResult1.err == nil)
-		p.leg2.cancelFunc()
+			"firstNonce", tx1.Nonce(), "secondNonce", tx2.Nonce(),
+			"err", err1, "reverted", err1 == nil)
+		cancel2()
 	}
 
-	legResult2 := <-leg2Res
+	resp2 := <-res2
 
-	p.repair(legResult1.err, legResult2.err)
+	m.repairPair(parentCtx, tx1, err1, tx2, resp2.Err)
 
 	// A second leg that errored after the first leg failed did not fail on
 	// its own — it was cancelled because the pair failed; report it as such.
-	if leg1Failed && legResult2.err != nil {
-		legResult2.err = fmt.Errorf("%w: %w", ErrPairLegCancelled, legResult2.err)
+	if leg1Failed && resp2.Err != nil {
+		resp2.Err = fmt.Errorf("%w: %w", ErrPairLegCancelled, resp2.Err)
 	}
-	p.leg1.respond(legResult1)
-	p.leg2.respond(legResult2)
+	ch1 <- SendResponse{Receipt: receipt1, Nonce: tx1.Nonce(), Err: err1}
+	ch2 <- resp2
 }
 
-// repair consumes any nonce the pair would otherwise leave unmined: a leg
+// repairPair consumes any nonce the pair would otherwise leave unmined: a leg
 // that resolved with an error never mined, so its nonce gets a cancellation
 // no-op (see cancelPairNonce)
-func (p *pairSend) repair(err1 error, err2 error) {
+func (m *SimpleTxManager) repairPair(parentCtx context.Context, tx1 *types.Transaction, err1 error, tx2 *types.Transaction, err2 error) {
 	// Nothing to repair when both legs mined
 	if err1 == nil && err2 == nil {
 		return
 	}
 
-	m := p.txManager
-	if p.parentCtx.Err() != nil {
+	if parentCtx.Err() != nil {
 		// Canceled parent (shutdown, or a sibling send failing the queue's
 		// error group): don't publish no-ops, but reset the nonce so the next
 		// send re-queries the chain and refills any gap the pair leaves.
 		m.l.Info("pair send context cancelled; resetting nonce and leaving in-flight legs to resolve in the pool",
-			"firstNonce", p.leg1.tx.Nonce(), "secondNonce", p.leg2.tx.Nonce())
+			"firstNonce", tx1.Nonce(), "secondNonce", tx2.Nonce())
 		m.resetNonce()
 		return
 	}
 
-	repairCtx, cancel := getContext(context.WithoutCancel(p.parentCtx), m.cfg.TxSendTimeout)
+	repairCtx, cancel := getContext(context.WithoutCancel(parentCtx), m.cfg.TxSendTimeout)
 	defer cancel()
 
 	var repairs sync.WaitGroup
@@ -107,14 +99,14 @@ func (p *pairSend) repair(err1 error, err2 error) {
 		repairs.Add(1)
 		go func() {
 			defer repairs.Done()
-			m.cancelPairNonce(repairCtx, p.leg1.tx)
+			m.cancelPairNonce(repairCtx, tx1)
 		}()
 	}
 	if err2 != nil {
 		repairs.Add(1)
 		go func() {
 			defer repairs.Done()
-			m.cancelPairNonce(repairCtx, p.leg2.tx)
+			m.cancelPairNonce(repairCtx, tx2)
 		}()
 	}
 	repairs.Wait()
@@ -122,7 +114,7 @@ func (p *pairSend) repair(err1 error, err2 error) {
 
 // SendPairAsync implements TxManager.SendPairAsync — see the interface doc
 // for the pair contract. It crafts both legs synchronously and hands them to
-// pairSend.sendPair; cancellation and nonce repair live in repair and
+// sendPair; cancellation and nonce repair live in repairPair and
 // cancelPairNonce.
 func (m *SimpleTxManager) SendPairAsync(
 	ctx context.Context,
@@ -169,20 +161,9 @@ func (m *SimpleTxManager) SendPairAsync(
 		return
 	}
 
-	leg1 := leg{responseCh: firstRespCh, tx: tx1}
-	leg2 := leg{responseCh: secondRespCh, tx: tx2}
-	leg1.sendContext, leg1.cancelFunc = getContext(ctx, m.cfg.TxSendTimeout)
-	leg2.sendContext, leg2.cancelFunc = getContext(ctx, m.cfg.TxSendTimeout)
-
 	m.metr.RecordPendingTx(m.pending.Add(2))
 
-	p := &pairSend{
-		txManager: m,
-		parentCtx: ctx,
-		leg1:      leg1,
-		leg2:      leg2,
-	}
-	go p.sendPair()
+	go m.sendPair(ctx, tx1, tx2, firstRespCh, secondRespCh)
 }
 
 // cancelPairNonce consumes target's nonce on chain by publishing a fee-bumped
