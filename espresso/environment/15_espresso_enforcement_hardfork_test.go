@@ -19,11 +19,12 @@ import (
 //
 // Pre-fork the fallback batcher posts plain BatchInbox txs (no
 // BatchAuthenticator interaction) and the verifier accepts them via upstream
-// sender-based authorization. Across the boundary the batcher's gate flips
-// (driven by `isFallbackAuthRequired`'s lead-time mechanism) and it starts
-// calling `authenticateBatchInfo`; the verifier post-fork requires the
-// resulting `BatchInfoAuthenticated` events. The lead time prevents a window
-// where the batcher omits authentication while the verifier requires it.
+// sender-based authorization. At EspressoTime the batcher's gate flips
+// (`isFallbackAuthRequired`) and it starts calling `authenticateBatchInfo`;
+// the verifier only *enforces* event-based authentication a grace period later
+// (EspressoTime + derive.BatchAuthEnforcementDelaySecs), accepting either
+// sender-auth or event-auth in between, so there is no window where the
+// batcher omits authentication while the verifier requires it.
 //
 // `activeIsEspresso` is flipped to false before Phase 1 (modeling a chain
 // that experienced a fallback-batcher event before the hardfork) and back to
@@ -32,9 +33,6 @@ import (
 func TestEspressoEnforcementHardfork(t *testing.T) {
 	// 5 minutes covers Espresso devnet startup plus pre-fork test ops.
 	const enforcementOffset = 5 * time.Minute
-	// Smaller than enforcementOffset so the batcher actually exercises the
-	// pre-fork no-auth path, but >> L1BlockTime to absorb inclusion delay.
-	const fallbackAuthLeadTime = 30 * time.Second
 
 	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Minute)
 	defer cancel()
@@ -48,10 +46,9 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	// takes into espressoBatcherConfig reflects them. Small frames + a long
 	// channel duration force multi-frame channels split across L1 blocks, which
 	// makes a batch tx land in an L1 block at/after the fork boundary likely so
-	// the lead-time auth gate is actually exercised.
+	// the post-fork authentication gate is actually exercised.
 	system, espressoDevNode, err := launcher.StartE2eDevnet(ctx, t,
 		env.WithEspressoEnforcementOffset(enforcementOffset),
-		env.WithFallbackAuthLeadTime(fallbackAuthLeadTime),
 		env.WithL1FinalizedDistance(0),
 		env.WithSequencerUseFinalized(true),
 		env.WithBatcherStoppedInitially(),
