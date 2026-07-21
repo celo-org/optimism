@@ -30,10 +30,10 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
+	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	op_crypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	op_signer "github.com/ethereum-optimism/optimism/op-service/signer"
 	ethereum "github.com/ethereum/go-ethereum"
@@ -288,8 +288,8 @@ func submitRandomDataToSequencerNamespace(ctx context.Context, espCli espressoCl
 // constructing a block with a deposit transaction. It uses the latest
 // block from the sequencer to create a new block with a deposit
 // transaction. The block is then converted to an Espresso batch using
-// the derive.BlockToEspressoBatch function.
-func createMaliciousEspressoBatch(ctx context.Context, cli *ethclient.Client, rollupCfg *rollup.Config) (*derive.EspressoBatch, error) {
+// the derivation.BlockToEspressoBatch function.
+func createMaliciousEspressoBatch(ctx context.Context, cli *ethclient.Client, rollupCfg *rollup.Config) (*derivation.EspressoBatch, error) {
 	// / Determine what the latest block in the sequencer is, so we can
 	// hope to create a valid transaction, to get something out of it.
 	latestBlock, err := cli.BlockByNumber(ctx, nil)
@@ -324,7 +324,7 @@ func createMaliciousEspressoBatch(ctx context.Context, cli *ethclient.Client, ro
 	}
 	block := geth_types.NewBlockWithHeader(header).WithBody(body)
 
-	return derive.BlockToEspressoBatch(rollupCfg, block)
+	return derivation.BlockToEspressoBatch(rollupCfg, block)
 }
 
 // SUBMIT_VALID_DATA_WITH_WRONG_SIGNATURE_INTERVAlL is the interval / frequency
