@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/ethereum-optimism/optimism/espresso/bindings"
 )
@@ -13,12 +14,13 @@ import (
 // the BatchAuthenticator contract. Returns true if this batcher instance should
 // be publishing batches, false if it should stay idle.
 //
-// The active batcher is determined by the contract's activeIsEspresso flag:
-//   - If activeIsEspresso is true, the Espresso batcher address is active
-//   - If activeIsEspresso is false, the fallback batcher address is active
-//
-// This method compares the batcher's own role (Config.Espresso.Enabled)
-// against the contract's activeIsEspresso flag.
+// It applies two gates:
+//  1. Mode: the contract's activeIsEspresso flag must match this node's role
+//     (Config.Espresso.Enabled). activeIsEspresso==true means the Espresso batcher
+//     is active; false means the fallback batcher is active.
+//  2. Identity: once the mode matches, the configured sender key (Txmgr.From) must
+//     be the authorized batcher for that mode, otherwise every authenticateBatchInfo
+//     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
 func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	// Check if contract code exists at the address
 	code, err := l.L1Client.CodeAt(ctx, l.RollupConfig.BatchAuthenticatorAddress, nil)
@@ -46,16 +48,59 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 
 	batcherAddr := l.Txmgr.From()
 
-	isActive := (activeIsEspresso && l.Config.Espresso.Enabled) ||
+	modeActive := (activeIsEspresso && l.Config.Espresso.Enabled) ||
 		(!activeIsEspresso && !l.Config.Espresso.Enabled)
-
-	if !isActive {
+	if !modeActive {
 		l.Log.Warn("Batcher is not the active batcher, skipping publish",
 			"batcherAddr", batcherAddr,
 			"activeIsEspresso", activeIsEspresso,
 			"EspressoEnabled", l.Config.Espresso.Enabled,
 		)
+		return false, nil
 	}
 
-	return isActive, nil
+	// Our mode is active; make sure our sender key is the authorized batcher for it,
+	// otherwise every publish reverts (Unauthorized*Batcher) in a loop.
+	var expected common.Address
+	if activeIsEspresso {
+		expected, err = batchAuthenticator.EspressoBatcher(callOpts)
+		if err != nil {
+			return false, fmt.Errorf("failed to read espressoBatcher: %w", err)
+		}
+	} else {
+		expected, err = l.fallbackBatcherAddr(batchAuthenticator, callOpts)
+		if err != nil {
+			return false, err
+		}
+	}
+
+	if batcherAddr != expected {
+		l.Log.Warn("Configured batcher key is not the authorized batcher for the active mode, skipping publish",
+			"batcherAddr", batcherAddr,
+			"expected", expected,
+			"activeIsEspresso", activeIsEspresso,
+		)
+		return false, nil
+	}
+
+	return true, nil
+}
+
+// fallbackBatcherAddr returns the address the BatchAuthenticator's fallback batcher
+func (l *BatchSubmitter) fallbackBatcherAddr(batchAuthenticator *bindings.BatchAuthenticator, opts *bind.CallOpts) (common.Address, error) {
+	systemConfigAddr, err := batchAuthenticator.SystemConfig(opts)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to read systemConfig address: %w", err)
+	}
+	systemConfig, err := bindings.NewSystemConfigCaller(systemConfigAddr, l.L1Client)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to create SystemConfig binding: %w", err)
+	}
+	batcherHash, err := systemConfig.BatcherHash(opts)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to read batcherHash: %w", err)
+	}
+	// batcherHash stores the batcher address in its low 20 bytes,
+	// which is why we use bytes to address
+	return common.BytesToAddress(batcherHash[:]), nil
 }
