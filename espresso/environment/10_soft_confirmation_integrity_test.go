@@ -34,6 +34,7 @@ import (
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	op_crypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	op_signer "github.com/ethereum-optimism/optimism/op-service/signer"
 	ethereum "github.com/ethereum/go-ethereum"
@@ -521,7 +522,7 @@ func TestSequencerFeedConsistencyWithAttackOnEspresso(t *testing.T) {
 
 	l2Seq := system.NodeClient(e2esys.RoleSeq)
 	espCli := espressoDevNode.Client()
-	namespace := system.RollupConfig.L2ChainID.Uint64()
+	namespace := bigs.Uint64Strict(system.RollupConfig.L2ChainID)
 
 	// Attack Espresso Integrity by Submitting Garbage Data to the Same
 	// namespace as the Sequencer's namespace.
