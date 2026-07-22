@@ -268,6 +268,13 @@ func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
 	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return nil
 	}
+	// Fallback auth is gated behind the EspressoTime hardfork
+	// (dispatchAuthenticatedSendTx): with no activation scheduled no
+	// auth→batch pair can be emitted, so the bound does not apply. A future
+	// activation must still be checked — it switches the send path mid-run.
+	if bs.RollupConfig.EspressoTime == nil {
+		return nil
+	}
 	// Only blob pairs serialize auth→batch on NumConfirmations
 	// (sendFallbackAuthSerialized); calldata pairs broadcast back-to-back.
 	if cfg.DataAvailabilityType == flags.CalldataType {
