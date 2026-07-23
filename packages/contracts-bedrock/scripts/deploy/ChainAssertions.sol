@@ -416,7 +416,11 @@ library ChainAssertions {
 
         Blueprint.Preamble memory proxyAdminPreamble =
             Blueprint.parseBlueprintPreamble(address(blueprints.proxyAdmin).code);
-        require(keccak256(proxyAdminPreamble.initcode) == keccak256(vm.getCode("ProxyAdmin")), "CHECK-OPCM-180");
+        require(
+            keccak256(proxyAdminPreamble.initcode)
+                == keccak256(vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json")),
+            "CHECK-OPCM-180"
+        ); // Celo: disambiguate between default and dispute profiles artifact
 
         Blueprint.Preamble memory l1ChugSplashProxyPreamble =
             Blueprint.parseBlueprintPreamble(address(blueprints.l1ChugSplashProxy).code);

@@ -35,7 +35,11 @@ compilation_restrictions = [
   { paths = "src/L1/OPContractsManager.sol", optimizer_runs = 5000 },
   { paths = "src/L1/OPContractsManagerStandardValidator.sol", optimizer_runs = 5000 },
   { paths = "src/L1/OptimismPortal2.sol", optimizer_runs = 5000 },
-  { paths = "src/L1/ProtocolVersions.sol", optimizer_runs = 5000 }
+  { paths = "src/L1/ProtocolVersions.sol", optimizer_runs = 5000 },
+  # Build these vendored libs with solc <=0.8.30. Newer compilers (0.8.31+) warn about
+  # their outdated inline-assembly annotations, and deny_warnings turns that into a build error.
+  { paths = "lib/forge-std/**", version = "<=0.8.30" },
+  { paths = "lib/openzeppelin-contracts-v5/**", version = "<=0.8.30" }
 ]
 
 extra_output = ['devdoc', 'userdoc', 'metadata', 'storageLayout']
@@ -203,6 +207,10 @@ compilation_restrictions = [
   { paths = "src/L1/OPContractsManagerStandardValidator.sol", optimizer_runs = 0 },
   { paths = "src/L1/OptimismPortal2.sol", optimizer_runs = 0 },
   { paths = "src/L1/ProtocolVersions.sol", optimizer_runs = 0 },
+  # Build these vendored libs with solc <=0.8.30. Newer compilers (0.8.31+) warn about
+  # their outdated inline-assembly annotations, and deny_warnings turns that into a build error.
+  { paths = "lib/forge-std/**", version = "<=0.8.30" },
+  { paths = "lib/openzeppelin-contracts-v5/**", version = "<=0.8.30" }
 ]
 
 ################################################################

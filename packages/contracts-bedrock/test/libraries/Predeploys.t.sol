@@ -90,7 +90,9 @@ abstract contract Predeploys_TestInit is CommonTest {
             string memory cname = Predeploys.getName(addr);
             assertNotEq(cname, "", "must have a name");
 
-            bytes memory supposedCode = vm.getDeployedCode(string.concat(cname, ".sol:", cname));
+            // Celo: use CeloSequencerFeeVault in place of SequencerFeeVault.
+            string memory artifactName = addr == Predeploys.SEQUENCER_FEE_WALLET ? "CeloSequencerFeeVault" : cname;
+            bytes memory supposedCode = vm.getDeployedCode(string.concat(artifactName, ".sol:", artifactName));
             assertNotEq(supposedCode.length, 0, "must have supposed code");
 
             if (proxied == false) {

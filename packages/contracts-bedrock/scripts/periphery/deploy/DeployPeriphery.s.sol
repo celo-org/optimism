@@ -86,9 +86,9 @@ contract DeployPeriphery is Script {
     function deployProxyAdmin() public broadcast returns (address addr_) {
         addr_ = _deployCreate2({
             _name: "ProxyAdmin",
-            _creationCode: vm.getCode("ProxyAdmin"),
+            _creationCode: vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json"),
             _constructorParams: abi.encode(msg.sender)
-        });
+        }); // Celo: disambiguate between default and dispute profiles artifact
 
         IProxyAdmin admin = IProxyAdmin(addr_);
         require(admin.owner() == msg.sender, "DeployPeriphery: ProxyAdmin owner mismatch");

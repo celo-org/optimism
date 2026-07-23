@@ -230,7 +230,7 @@ contract DeployImplementations is Script {
         require(checkAddress == address(0), "OPCM-10");
         (blueprints.proxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("src/universal/Proxy.sol:Proxy"), _salt);// Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
         require(checkAddress == address(0), "OPCM-20");
-        (blueprints.proxyAdmin, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("ProxyAdmin"), _salt);
+        (blueprints.proxyAdmin, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json"), _salt);// Celo: disambiguate between default and dispute profiles artifact
         require(checkAddress == address(0), "OPCM-30");
         (blueprints.l1ChugSplashProxy, checkAddress) = DeployUtils.createDeterministicBlueprint(vm.getCode("L1ChugSplashProxy"), _salt);
         require(checkAddress == address(0), "OPCM-40");

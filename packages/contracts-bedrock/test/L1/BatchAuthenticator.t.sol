@@ -874,7 +874,7 @@ contract BatchAuthenticator_Uncategorized_Test is Test {
     ///         that break Proxy artifact disambiguation in tests.
     function _newProxy(address _admin) internal returns (IProxy) {
         bytes memory initCode =
-            abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(_admin));
+            abi.encodePacked(vm.getCode("forge-artifacts/Proxy.sol/Proxy.json"), abi.encode(_admin));
         address payable proxyAddr;
         assembly {
             proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
@@ -1093,7 +1093,7 @@ contract BatchAuthenticator_Fork_Test is Test {
     /// @notice Deploy a Proxy without importing Proxy.sol to avoid duplicate compilation artifacts.
     function _newProxy(address _admin) internal returns (IProxy) {
         bytes memory initCode =
-            abi.encodePacked(vm.getCode("src/universal/Proxy.sol:Proxy"), abi.encode(_admin));
+            abi.encodePacked(vm.getCode("forge-artifacts/Proxy.sol/Proxy.json"), abi.encode(_admin));
         address payable proxyAddr;
         assembly {
             proxyAddr := create(0, add(initCode, 0x20), mload(initCode))
