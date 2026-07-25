@@ -386,6 +386,12 @@ func (cfg *Config) Check() error {
 		return err
 	}
 
+	// Espresso parameters are consensus-critical and, for the known Celo chains, baked into the
+	// fault-proof program (celo-kona). Reject a config that diverges from the canonical values,
+	// so op-node and the proof program cannot silently derive different chains.
+	if err := cfg.checkCeloEspressoParams(); err != nil {
+		return err
+	}
 	if cfg.EspressoTime != nil {
 		// When Espresso is enabled, batches must be authenticated via BatchInfoAuthenticated
 		// events emitted by the BatchAuthenticator contract, so a non-zero authenticator
