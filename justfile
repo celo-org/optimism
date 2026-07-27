@@ -183,7 +183,10 @@ reproducible-prestate:
   pid1=$!
   (cd rust && just build-kona-reproducible-prestate) &
   pid2=$!
-  wait "$pid1" "$pid2"
+  # wait with multiple PIDs only propagates the last PID's exit status; wait
+  # separately so an op-program build failure can't be masked by a kona success.
+  wait "$pid1"
+  wait "$pid2"
   (cd op-program && just output-prestate-hash)
   (cd rust && just output-kona-prestate-hash)
 
