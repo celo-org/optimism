@@ -91,6 +91,34 @@ type TxManager interface {
 	// the order of nonce increments.
 	SendAsync(ctx context.Context, candidate TxCandidate, ch chan SendResponse)
 
+	// SendPairAsync submits two transactions as an ordered pair: both are crafted
+	// synchronously with nonces assigned in argument order (so the first leg
+	// precedes the second on chain), then broadcast back-to-back without waiting
+	// for the first to confirm, so pairs pipeline like individual SendAsync calls.
+	//
+	// Use a pair when the second transaction is only valid if the first executes
+	// successfully. If the first leg fails permanently (send failure, or mined
+	// but reverted), the second leg is cancelled with a fee-bumped no-op at its
+	// exact nonce; cancellation is best-effort, so callers must tolerate an
+	// orphaned second leg still landing on chain. A leg that fails in flight
+	// (broadcast but unmined) has its nonce consumed by that no-op rather than by
+	// a global nonce reset, so it leaves no gap and does not disturb concurrently
+	// pending transactions at higher nonces. The nonce IS reset — falling back to
+	// the usual "next send re-queries the chain" behavior — in three cases: a leg
+	// fails during preparation (before broadcast), the parent ctx is cancelled
+	// (shutdown, or a sibling send failing the queue's error group), or the no-op
+	// repair itself cannot be crafted or sent.
+	//
+	// Both response channels must be buffered; exactly one response is delivered
+	// on each, and only once both nonces are consumed on chain (repairs
+	// included). Repairs survive cancellation of ctx (bounded by TxSendTimeout
+	// when configured); if ctx is already cancelled no no-ops are published — the
+	// nonce is reset and in-flight legs are left to resolve in the pool.
+	//
+	// Blob candidates are not supported: the cancellation no-op cannot replace a
+	// blob transaction.
+	SendPairAsync(ctx context.Context, first TxCandidate, second TxCandidate, firstCh chan SendResponse, secondCh chan SendResponse)
+
 	// ChainID returns the chain this tx-manager is connected to
 	ChainID() eth.ChainID
 

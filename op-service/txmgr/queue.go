@@ -2,6 +2,7 @@ package txmgr
 
 import (
 	"context"
+	"errors"
 	"math"
 	"sync"
 
@@ -81,6 +82,25 @@ func (q *Queue[T]) Send(id T, candidate TxCandidate, receiptCh chan TxReceipt[T]
 	}
 	group.Go(handleResponse)                        // This blocks until the number of handlers is below the limit
 	q.txMgr.SendAsync(ctx, candidate, responseChan) // Nonce management handled synchronously, i.e. before this returns
+}
+
+// SendPair sends an ordered pair of transactions — see TxManager.SendPairAsync
+// for the pair contract — while holding a single maxPending slot for the whole
+// pair, so pairs pipeline at the same depth as individual txs sent via Send.
+//
+// Exactly one receipt is forwarded on each receipt channel. Like Send, this
+// blocks while the queue is at its maxPending limit, and a pair failure
+// cancels the queue's shared error group.
+func (q *Queue[T]) SendPair(firstID T, first TxCandidate, firstCh chan TxReceipt[T], secondID T, second TxCandidate, secondCh chan TxReceipt[T]) {
+	group, ctx := q.groupContext()
+	r1 := make(chan SendResponse, 1)
+	r2 := make(chan SendResponse, 1)
+	group.Go(func() error { // one slot for the whole pair
+		err1 := handleResponse(ctx, r1, firstCh, firstID)
+		err2 := handleResponse(ctx, r2, secondCh, secondID)
+		return errors.Join(err1, err2)
+	})
+	q.txMgr.SendPairAsync(ctx, first, second, r1, r2) // nonces for both legs assigned synchronously, in order
 }
 
 // TrySend sends the next tx, but only if the number of pending txs is below the

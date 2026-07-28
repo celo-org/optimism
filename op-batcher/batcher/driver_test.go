@@ -158,6 +158,11 @@ func (q *MockTxQueue) Send(ref txRef, candidate txmgr.TxCandidate, receiptCh cha
 	q.m.Store(ref.id.String(), candidate)
 }
 
+func (q *MockTxQueue) SendPair(firstRef txRef, first txmgr.TxCandidate, firstCh chan txmgr.TxReceipt[txRef], secondRef txRef, second txmgr.TxCandidate, secondCh chan txmgr.TxReceipt[txRef]) {
+	q.m.Store(firstRef.id.String(), first)
+	q.m.Store(secondRef.id.String(), second)
+}
+
 func (q *MockTxQueue) Load(id string) txmgr.TxCandidate {
 	c, _ := q.m.Load(id)
 	return c.(txmgr.TxCandidate)
@@ -480,8 +485,7 @@ func TestBatchSubmitter_CriticalError(t *testing.T) {
 // ======= ALTDA TESTS =======
 
 // fakeL1Client is just a dummy struct. All fault injection is done via the fakeTxMgr (which doesn't interact with this fakeL1Client).
-type fakeL1Client struct {
-}
+type fakeL1Client struct{}
 
 func (f *fakeL1Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
 	if number == nil {

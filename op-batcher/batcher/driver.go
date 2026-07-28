@@ -51,6 +51,18 @@ type txRef struct {
 	size     int
 }
 
+// newTxRef builds the txRef that identifies a batch submission across the txmgr
+// queue and receipt handling.
+func newTxRef(txdata txData, isCancel bool) txRef {
+	return txRef{
+		id:       txdata.ID(),
+		isCancel: isCancel,
+		isBlob:   txdata.daType == DaTypeBlob,
+		daType:   txdata.daType,
+		size:     txdata.Len(),
+	}
+}
+
 func (r txRef) String() string {
 	return r.string(func(id txID) string { return id.String() })
 }
@@ -124,6 +136,15 @@ type BatchSubmitter struct {
 	throttleController *throttler.ThrottleController
 
 	publishSignal chan pubInfo
+
+	// authGroup tracks the fallback batcher's receipt-watcher goroutines (one
+	// per auth+batch pair) so the publishing loop can drain them via
+	// waitForAuthGroup before closing receiptsCh. New watchers are back-pressured
+	// (not hard-bounded) by the txmgr Queue: queue.Send blocks at
+	// MaxPendingTransactions, so watchers are created no faster than txs drain,
+	// though a slow receipts loop can briefly leave more than that parked on their
+	// final receiptsCh send.
+	authGroup sync.WaitGroup
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup
@@ -515,6 +536,12 @@ func (l *BatchSubmitter) publishingLoop(ctx context.Context, wg *sync.WaitGroup,
 			l.Log.Error("error waiting for DA requests to complete", "err", err)
 		}
 	}
+
+	// Wait for all in-flight fallback-auth submissions to complete to prevent
+	// new transactions being queued. No-op when the rollup is not configured
+	// with a BatchAuthenticator or when the EspressoTime hardfork has not
+	// activated.
+	l.waitForAuthGroup()
 
 	// We _must_ wait for all senders on receiptsCh to finish before we can close it.
 	if err := txQueue.Wait(); err != nil {
@@ -1022,6 +1049,9 @@ func (l *BatchSubmitter) sendTransaction(txdata txData, queue *txmgr.Queue[txRef
 
 type TxSender[T any] interface {
 	Send(id T, candidate txmgr.TxCandidate, receiptCh chan txmgr.TxReceipt[T])
+	// SendPair submits an ordered pair of transactions holding a single
+	// max-pending slot; see txmgr.Queue.SendPair.
+	SendPair(firstID T, first txmgr.TxCandidate, firstCh chan txmgr.TxReceipt[T], secondID T, second txmgr.TxCandidate, secondCh chan txmgr.TxReceipt[T])
 }
 
 // sendTx uses the txmgr queue to send the given transaction candidate after setting its
@@ -1035,7 +1065,14 @@ func (l *BatchSubmitter) sendTx(txdata txData, isCancel bool, candidate *txmgr.T
 		candidate.GasLimit = floorDataGas
 	}
 
-	queue.Send(txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}, *candidate, receiptsCh)
+	// Route through the fallback-auth path when a BatchAuthenticator is
+	// configured and the EspressoTime hardfork is active. Falls through to
+	// the upstream queue.Send path otherwise.
+	if l.dispatchAuthenticatedSendTx(txdata, isCancel, candidate, queue, receiptsCh) {
+		return
+	}
+
+	queue.Send(newTxRef(txdata, isCancel), *candidate, receiptsCh)
 }
 
 func (l *BatchSubmitter) blobTxCandidate(data txData) (*txmgr.TxCandidate, error) {
