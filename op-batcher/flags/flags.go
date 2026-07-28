@@ -160,7 +160,6 @@ var (
 		Value:   false,
 		EnvVars: prefixEnvVars("WAIT_NODE_SYNC"),
 	}
-
 	// Legacy Flags
 	SequencerHDPathFlag = txmgr.SequencerHDPathFlag
 )

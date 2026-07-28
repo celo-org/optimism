@@ -141,6 +141,10 @@ func (s *stubTxMgr) SendAsync(ctx context.Context, candidate txmgr.TxCandidate, 
 	}()
 }
 
+func (s *stubTxMgr) SendPairAsync(ctx context.Context, first txmgr.TxCandidate, second txmgr.TxCandidate, firstCh chan txmgr.SendResponse, secondCh chan txmgr.SendResponse) {
+	panic("unimplemented")
+}
+
 func (s *stubTxMgr) recordTx(candidate txmgr.TxCandidate) chan *types.Receipt {
 	s.m.Lock()
 	defer s.m.Unlock()

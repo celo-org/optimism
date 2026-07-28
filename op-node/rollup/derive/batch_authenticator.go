@@ -13,9 +13,19 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 
 	optypes "github.com/ethereum-optimism/optimism/op-core/types"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/log"
 )
+
+// isEspressoAuthEnforced returns true once event-based batch authentication is enforced
+// at the given L1 origin time: the Espresso fork is active AND at least
+// BatchAuthEnforcementDelaySecs has elapsed since activation. Before that, derivation
+// keeps accepting sender-authenticated batches. See BatchAuthEnforcementDelaySecs
+// (params.go) for the full grace-period mechanism.
+func isEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
+	return cfg.IsEspresso(l1OriginTime) && l1OriginTime >= *cfg.EspressoTime+BatchAuthEnforcementDelaySecs
+}
 
 var (
 	// BatchInfoAuthenticatedABI is the event signature for
