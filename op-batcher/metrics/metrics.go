@@ -69,6 +69,8 @@ type Metricer interface {
 	RecordBatchDataSizeBytes(daType string, size int)
 	RecordFailoverToEthDA()
 
+	RecordFallbackAuthWindowExceeded()
+
 	Document() []opmetrics.DocumentedMetric
 
 	PendingDABytes() float64
@@ -110,9 +112,10 @@ type Metrics struct {
 	channelOutputBytesTotal prometheus.Counter
 	channelQueueLength      prometheus.Gauge
 
-	batchSentDATypeTotal          prometheus.CounterVec
-	batchStoredDataSizeBytesTotal prometheus.CounterVec
-	altDaFailoverTotal            prometheus.Counter
+	batchSentDATypeTotal            prometheus.CounterVec
+	batchStoredDataSizeBytesTotal   prometheus.CounterVec
+	altDaFailoverTotal              prometheus.Counter
+	fallbackAuthWindowExceededTotal prometheus.Counter
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -254,6 +257,11 @@ func NewMetrics(procName string) *Metrics {
 			Namespace: ns,
 			Name:      "alt_da_failover_total",
 			Help:      "Total number of batches that could not be stored in AltDA and were sent to L1 instead",
+		}),
+		fallbackAuthWindowExceededTotal: factory.NewCounter(prometheus.CounterOpts{
+			Namespace: ns,
+			Name:      "fallback_auth_window_exceeded_total",
+			Help:      "Total number of fallback-auth submissions dropped because the batch tx landed beyond BatchAuthLookbackWindow blocks after its auth tx",
 		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
@@ -481,6 +489,10 @@ func (m *Metrics) RecordBatchDataSizeBytes(daType string, size int) {
 
 func (m *Metrics) RecordFailoverToEthDA() {
 	m.altDaFailoverTotal.Inc()
+}
+
+func (m *Metrics) RecordFallbackAuthWindowExceeded() {
+	m.fallbackAuthWindowExceededTotal.Inc()
 }
 
 func (m *Metrics) RecordChannelQueueLength(len int) {
