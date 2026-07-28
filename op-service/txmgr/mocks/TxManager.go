@@ -168,6 +168,11 @@ func (_m *TxManager) SendAsync(ctx context.Context, candidate txmgr.TxCandidate,
 	_m.Called(ctx, candidate, ch)
 }
 
+// SendPairAsync provides a mock function with given fields: ctx, first, second, firstCh, secondCh
+func (_m *TxManager) SendPairAsync(ctx context.Context, first txmgr.TxCandidate, second txmgr.TxCandidate, firstCh chan txmgr.SendResponse, secondCh chan txmgr.SendResponse) {
+	_m.Called(ctx, first, second, firstCh, secondCh)
+}
+
 // SuggestGasPriceCaps provides a mock function with given fields: ctx
 func (_m *TxManager) SuggestGasPriceCaps(ctx context.Context) (*big.Int, *big.Int, *big.Int, *big.Int, error) {
 	ret := _m.Called(ctx)

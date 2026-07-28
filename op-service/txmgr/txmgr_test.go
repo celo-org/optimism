@@ -217,6 +217,7 @@ type minedTxInfo struct {
 	gasFeeCap   *big.Int
 	blobFeeCap  *big.Int
 	blockNumber uint64
+	status      uint64
 }
 
 // mockBackend implements ReceiptSource that tracks mined transactions
@@ -251,6 +252,12 @@ func (b *mockBackend) setTxSender(s sendTransactionFunc) {
 // TransactionReceipt with a matching txHash will result in a non-nil receipt.
 // If a nil txHash is supplied this has the effect of mining an empty block.
 func (b *mockBackend) mine(txHash *common.Hash, gasFeeCap, blobFeeCap *big.Int) {
+	b.mineWithStatus(txHash, gasFeeCap, blobFeeCap, types.ReceiptStatusSuccessful)
+}
+
+// mineWithStatus is mine with an explicit receipt execution status, to
+// simulate mined-but-reverted transactions.
+func (b *mockBackend) mineWithStatus(txHash *common.Hash, gasFeeCap, blobFeeCap *big.Int, status uint64) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
@@ -260,6 +267,7 @@ func (b *mockBackend) mine(txHash *common.Hash, gasFeeCap, blobFeeCap *big.Int) 
 			gasFeeCap:   gasFeeCap,
 			blobFeeCap:  blobFeeCap,
 			blockNumber: b.blockHeight,
+			status:      status,
 		}
 	}
 }
@@ -349,6 +357,7 @@ func (b *mockBackend) TransactionReceipt(ctx context.Context, txHash common.Hash
 		GasUsed:           bigs.Uint64Strict(txInfo.gasFeeCap),
 		CumulativeGasUsed: blobFeeCap,
 		BlockNumber:       big.NewInt(int64(txInfo.blockNumber)),
+		Status:            txInfo.status,
 	}, nil
 }
 
