@@ -266,7 +266,8 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 func BatchStreamerFromCLIConfig[B espressoStreamers.Batch](
 	cfg CLIConfig,
 	log log.Logger,
-	unmarshalBatch func([]byte) (*B, error),
+	unmarshalBatch func(data []byte, l1Finalized uint64) (*B, error),
+	syncStatusProvider espressoStreamers.SyncStatusProvider,
 ) (*espressoStreamers.BatchStreamer[B], error) {
 	if !cfg.Enabled {
 		return nil, fmt.Errorf("espresso is not enabled")
@@ -296,6 +297,7 @@ func BatchStreamerFromCLIConfig[B espressoStreamers.Batch](
 		NewAdaptL1BlockRefClient(RollupL1Client),
 		espressoClient,
 		espressoLightClient,
+		syncStatusProvider,
 		log,
 		unmarshalBatch,
 		cfg.CaffeinationHeightEspresso,
