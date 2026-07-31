@@ -183,7 +183,10 @@ reproducible-prestate:
   pid1=$!
   (cd rust && just build-kona-reproducible-prestate) &
   pid2=$!
-  wait "$pid1" "$pid2"
+  # wait with multiple PIDs only propagates the last PID's exit status; wait
+  # separately so an op-program build failure can't be masked by a kona success.
+  wait "$pid1"
+  wait "$pid2"
   (cd op-program && just output-prestate-hash)
   (cd rust && just output-kona-prestate-hash)
 
@@ -263,7 +266,7 @@ go-tests-short: op-program-client op-program-host cannon build-contracts cannon-
 [script('bash')]
 _go-tests-ci-internal go_test_flags="": sync-superchain
   set -euo pipefail
-  (cd cannon && just cannon elf)
+  (cd cannon && just diff-hello-elf)
   echo "Setting up test directories..."
   mkdir -p ./tmp/test-results ./tmp/testlogs
   echo "Running Go tests with gotestsum..."
