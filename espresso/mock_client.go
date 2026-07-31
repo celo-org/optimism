@@ -10,6 +10,7 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoTaggedBase64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
+	espressoTypesV0_3 "github.com/EspressoSystems/espresso-network/sdks/go/types/v0/v0_3"
 )
 
 // MockEspressoClient is an in-memory implementation of the Espresso SDK's
@@ -215,8 +216,27 @@ func (c *MockEspressoClient) FetchRawHeaderByHeight(ctx context.Context, height 
 	return nil, fmt.Errorf("%w: FetchRawHeaderByHeight not supported by mock", espressoClient.ErrPermanent)
 }
 
+// FetchHeadersByRange returns one header per sealed block in [from, until).
 func (c *MockEspressoClient) FetchHeadersByRange(ctx context.Context, from uint64, until uint64) ([]espressoTypes.HeaderImpl, error) {
-	return nil, fmt.Errorf("%w: FetchHeadersByRange not supported by mock", espressoClient.ErrPermanent)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if until <= from {
+		return nil, nil
+	}
+	height := uint64(len(c.blocks))
+	if until > height {
+		until = height
+	}
+	res := make([]espressoTypes.HeaderImpl, 0, until-from)
+	for h := from; h < until; h++ {
+		res = append(res, espressoTypes.HeaderImpl{
+			Header: &espressoTypesV0_3.Header{
+				Height:      h,
+				L1Finalized: &espressoTypes.L1BlockInfo{Number: 0},
+			},
+		})
+	}
+	return res, nil
 }
 
 func (c *MockEspressoClient) FetchTransactionsInBlock(ctx context.Context, blockHeight uint64, namespace uint64) (espressoClient.TransactionsInBlock, error) {
