@@ -1,4 +1,4 @@
-ARG GO_VERSION=1.24.10-alpine3.21
+ARG GO_VERSION=1.26.4-alpine3.22
 ARG VM_TARGET=current
 ARG VM_COMPAT_TASK=analyze-op-program-client
 FROM golang:${GO_VERSION} AS builder
