@@ -282,7 +282,9 @@ func TestValidEspressoTransactionCreation(t *testing.T) {
 		// same way it would a batcher-produced one, recovering the batcher
 		// address from the prepended signature.
 		batchSubmitter := system.BatchSubmitter
-		batch, err := batchSubmitter.EspressoStreamer().UnmarshalBatch(realEspressoTransaction.Payload)
+		// The l1Finalized anchor is attached after decoding and only feeds batcher
+		// authorization, which this test does not exercise, so 0 is fine here.
+		batch, err := batchSubmitter.EspressoStreamer().UnmarshalBatch(realEspressoTransaction.Payload, 0)
 		if have, want := err, error(nil); have != want {
 			t.Fatalf("Failed to unmarshal batch:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", have, want)
 		}
