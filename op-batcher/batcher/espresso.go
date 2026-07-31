@@ -823,7 +823,11 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 }
 
 func (l *BatchSubmitter) espressoSyncAndRefresh(ctx context.Context, newSyncStatus *eth.SyncStatus) {
-	err := l.EspressoStreamer().Refresh(ctx, newSyncStatus.FinalizedL1, newSyncStatus.SafeL2.Number, newSyncStatus.FinalizedL2.L1Origin)
+	// Hand the streamer the status we just polled: Refresh reads its positions from the
+	// provider, and taking them from one status keeps them related to each other.
+	l.espressoSyncStatus.status = newSyncStatus
+
+	err := l.EspressoStreamer().Refresh(ctx)
 	if err != nil {
 		l.degradedLog.Warn(l.Log, "espressoStreamerRefreshErr", "Failed to refresh Espresso streamer", "err", err)
 	} else {

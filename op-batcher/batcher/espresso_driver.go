@@ -2,6 +2,7 @@ package batcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -59,6 +61,23 @@ func (l *BatchSubmitter) EspressoStreamer() espressoStreamers.EspressoStreamer[d
 	return l.espressoStreamer
 }
 
+// cachedSyncStatus is the streamer's SyncStatusProvider, serving the status the batch
+// loading loop polled on its current tick rather than a second call to op-node.
+//
+// Unsynchronised on purpose: the streamer holds no locks of its own, so every call into it
+// already has to come from espressoBatchLoadingLoop, and so does every write here.
+type cachedSyncStatus struct {
+	status *eth.SyncStatus
+}
+
+// FetchSyncStatus implements espressoStreamers.SyncStatusProvider.
+func (c *cachedSyncStatus) FetchSyncStatus(context.Context) (*eth.SyncStatus, error) {
+	if c.status == nil {
+		return nil, errors.New("no sync status polled yet")
+	}
+	return c.status, nil
+}
+
 // setupEspressoStreamer constructs the Espresso streamer (and its buffered
 // wrapper) for a freshly-built BatchSubmitter. Called from NewBatchSubmitter
 // only when --espresso.enabled is set; no-op otherwise. Panics on streamer
@@ -74,12 +93,14 @@ func (l *BatchSubmitter) setupEspressoStreamer() {
 	if l.Espresso.LightClient != nil {
 		lightClientIface = l.Espresso.LightClient
 	}
+	l.espressoSyncStatus = &cachedSyncStatus{}
 	unbufferedStreamer, err := espressoStreamers.NewEspressoStreamer(
 		bigs.Uint64Strict(l.RollupConfig.L2ChainID),
 		l1Adapter,
 		l1Adapter,
 		l.Espresso.Client,
 		lightClientIface,
+		l.espressoSyncStatus,
 		l.Log,
 		derivation.CreateEspressoBatchUnmarshaler(),
 		l.Config.Espresso.CaffeinationHeightEspresso,
@@ -90,7 +111,7 @@ func (l *BatchSubmitter) setupEspressoStreamer() {
 	if err != nil {
 		panic(fmt.Sprintf("failed to create Espresso streamer: %v", err))
 	}
-	l.espressoStreamer = espressoStreamers.NewBufferedEspressoStreamer(unbufferedStreamer)
+	l.espressoStreamer = espressoStreamers.NewBufferedEspressoStreamer(unbufferedStreamer, l.espressoSyncStatus)
 	l.Log.Info("Streamer started", "streamer", l.espressoStreamer)
 }
 

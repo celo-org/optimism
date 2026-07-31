@@ -159,6 +159,9 @@ type BatchSubmitter struct {
 
 	espressoSubmitter *espressoTransactionSubmitter
 	espressoStreamer  espressoStreamers.EspressoStreamer[derivation.EspressoBatch]
+	// espressoSyncStatus feeds the streamer the sync status this batcher has already
+	// polled, so Refresh does not poll op-node again.
+	espressoSyncStatus *cachedSyncStatus
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
