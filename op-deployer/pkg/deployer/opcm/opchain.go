@@ -43,6 +43,9 @@ type DeployOPChainInput struct {
 
 	OperatorFeeScalar   uint32
 	OperatorFeeConstant uint64
+
+	// Celo: opt in to deploying a CeloTokenL1 proxy as the chain's gas paying token.
+	UseCeloGasToken bool
 }
 
 type DeployOPChainOutput struct {
@@ -62,6 +65,8 @@ type DeployOPChainOutput struct {
 	PermissionedDisputeGame            common.Address
 	DelayedWETHPermissionedGameProxy   common.Address
 	DelayedWETHPermissionlessGameProxy common.Address
+	CeloTokenProxy                     common.Address
+	CeloSuperchainConfigProxy          common.Address
 }
 
 type DeployOPChainScript script.DeployScriptWithOutput[DeployOPChainInput, DeployOPChainOutput]

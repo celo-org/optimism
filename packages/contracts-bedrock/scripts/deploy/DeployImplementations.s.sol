@@ -8,6 +8,7 @@ import { Chains } from "scripts/libraries/Chains.sol";
 import { Types } from "scripts/libraries/Types.sol";
 
 // Interfaces
+import { ICeloTokenL1 } from "interfaces/L1/ICeloTokenL1.sol";
 import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
@@ -91,6 +92,7 @@ contract DeployImplementations is Script {
         IProtocolVersions protocolVersionsImpl;
         IFaultDisputeGameV2 faultDisputeGameV2Impl;
         IPermissionedDisputeGameV2 permissionedDisputeGameV2Impl;
+        ICeloTokenL1 celoTokenL1Impl;
     }
 
     bytes32 internal _salt = DeployUtils.DEFAULT_SALT;
@@ -127,6 +129,7 @@ contract DeployImplementations is Script {
             deployFaultDisputeGameV2Impl(_input, output_);
             deployPermissionedDisputeGameV2Impl(_input, output_);
         }
+        deployCeloTokenL1Impl(output_);
 
         // Deploy the OP Contracts Manager with the new implementations set.
         deployOPContractsManager(_input, output_);
@@ -162,7 +165,9 @@ contract DeployImplementations is Script {
             delayedWETHImpl: address(_output.delayedWETHImpl),
             mipsImpl: address(_output.mipsSingleton),
             faultDisputeGameV2Impl: address(_output.faultDisputeGameV2Impl),
-            permissionedDisputeGameV2Impl: address(_output.permissionedDisputeGameV2Impl)
+            permissionedDisputeGameV2Impl: address(_output.permissionedDisputeGameV2Impl),
+            celoSuperchainConfigImpl: address(_output.celoSuperchainConfigImpl),
+            celoTokenL1Impl: address(_output.celoTokenL1Impl)
         });
 
         deployOPCMBPImplsContainer(_input, _output, _blueprints, implementations);
@@ -247,6 +252,18 @@ contract DeployImplementations is Script {
     }
 
     // --- Core Contracts ---
+
+    function deployCeloTokenL1Impl(Output memory _output) private {
+        ICeloTokenL1 impl = ICeloTokenL1(
+            DeployUtils.createDeterministic({
+                _name: "CeloTokenL1",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloTokenL1.__constructor__, ())),
+                _salt: _salt
+            })
+        );
+        vm.label(address(impl), "CeloTokenL1Impl");
+        _output.celoTokenL1Impl = impl;
+    }
 
     function deployCeloSuperchainConfigImpl(Output memory _output) private {
         ICeloSuperchainConfig impl = ICeloSuperchainConfig(
@@ -737,7 +754,8 @@ contract DeployImplementations is Script {
             address(_output.optimismMintableERC20FactoryImpl),
             address(_output.disputeGameFactoryImpl),
             address(_output.anchorStateRegistryImpl),
-            address(_output.ethLockboxImpl)
+            address(_output.ethLockboxImpl),
+            address(_output.celoTokenL1Impl)
         );
 
         // Only include V2 contracts in validation if they were deployed

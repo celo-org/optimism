@@ -22,6 +22,7 @@ import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 import { GameType, Duration, Hash, Claim } from "src/dispute/lib/LibUDT.sol";
 import { Proposal, GameTypes } from "src/dispute/lib/Types.sol";
 import { DevFeatures } from "src/libraries/DevFeatures.sol";
+import { Constants } from "src/libraries/Constants.sol";
 
 // Interfaces
 import { IAnchorStateRegistry } from "interfaces/dispute/IAnchorStateRegistry.sol";
@@ -43,6 +44,8 @@ import {
     IOPContractsManagerStandardValidator
 } from "interfaces/L1/IOPContractsManager.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
+import { ICeloTokenL1 } from "interfaces/L1/ICeloTokenL1.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { IBigStepper } from "interfaces/dispute/IBigStepper.sol";
 import { ISuperFaultDisputeGame } from "interfaces/dispute/ISuperFaultDisputeGame.sol";
 import { ISuperPermissionedDisputeGame } from "interfaces/dispute/ISuperPermissionedDisputeGame.sol";
@@ -373,7 +376,8 @@ contract OPContractsManager_TestInit is CommonTest {
                 disputeSplitDepth: 30,
                 disputeClockExtension: Duration.wrap(10800),
                 disputeMaxClockDuration: Duration.wrap(302400),
-                superchainConfigOverride: address(0)
+                superchainConfigOverride: address(0),
+                useCeloGasToken: true
             })
         );
     }
@@ -1911,7 +1915,8 @@ contract OPContractsManager_Deploy_Test is DeployOPChain_TestBase {
             disputeSplitDepth: _doi.disputeSplitDepth,
             disputeClockExtension: _doi.disputeClockExtension,
             disputeMaxClockDuration: _doi.disputeMaxClockDuration,
-            superchainConfigOverride: address(0)
+            superchainConfigOverride: address(0),
+            useCeloGasToken: _doi.useCeloGasToken
         });
     }
 
@@ -2024,6 +2029,61 @@ contract OPContractsManager_Deploy_Test is DeployOPChain_TestBase {
         // For permissioned game, check proposer and challenger
         assertEq(pdg.proposer(), opcmInput.roles.proposer, "Proposer should match");
         assertEq(pdg.challenger(), opcmInput.roles.challenger, "Challenger should match");
+    }
+
+    /// @notice Tests that deploy mints the full CELO supply into the OptimismPortal escrow.
+    function test_deploy_celoTokenMintsToPortal_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        input.useCeloGasToken = true;
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        ICeloTokenL1 celoToken = ICeloTokenL1(address(output.celoTokenProxy));
+        assertEq(celoToken.totalSupply(), 1e27, "total supply should be 1e27");
+        assertEq(
+            celoToken.balanceOf(address(output.optimismPortalProxy)), 1e27, "full supply should sit in portal escrow"
+        );
+    }
+
+    /// @notice Tests that deploy wires the CELO token as the SystemConfig gas paying token.
+    function test_deploy_celoTokenIsGasPayingToken_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        input.useCeloGasToken = true;
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        (address token, uint8 decimals) = output.systemConfigProxy.gasPayingToken();
+        assertEq(token, address(output.celoTokenProxy), "gas paying token should be CELO");
+        assertEq(decimals, 18, "gas paying token decimals should be 18");
+
+        assertEq(output.systemConfigProxy.gasPayingTokenName(), "Celo", "gas paying token name should be Celo");
+        assertEq(output.systemConfigProxy.gasPayingTokenSymbol(), "CELO", "gas paying token symbol should be CELO");
+    }
+
+    /// @notice Tests that with useCeloGasToken disabled, the chain keeps ETH as its gas paying token
+    ///         and no CeloTokenL1 proxy is deployed.
+    function test_deploy_celoGasTokenDisabled_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        input.useCeloGasToken = false;
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        (address token,) = output.systemConfigProxy.gasPayingToken();
+        assertEq(token, Constants.ETHER, "gas paying token should be ETHER");
+        assertEq(address(output.celoTokenProxy), address(0), "celoTokenProxy should be unset");
+    }
+
+    /// @notice Tests that deploy wraps the SuperchainConfig in a CeloSuperchainConfig and points
+    ///         SystemConfig at it.
+    function test_deploy_celoSuperchainConfigWrapsSuperchainConfig_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        ICeloSuperchainConfig csc = ICeloSuperchainConfig(address(output.celoSuperchainConfigProxy));
+        assertNotEq(address(csc), address(0), "CeloSuperchainConfig should be deployed");
+        assertEq(csc.superchainConfig(), address(opcm.superchainConfig()), "CSC should wrap the SuperchainConfig");
+        assertEq(
+            address(output.systemConfigProxy.superchainConfig()),
+            address(csc),
+            "SystemConfig should point at the CeloSuperchainConfig"
+        );
     }
 }
 

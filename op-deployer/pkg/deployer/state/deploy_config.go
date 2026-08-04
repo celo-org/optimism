@@ -94,6 +94,10 @@ func CombineDeployConfig(intent *Intent, chainIntent *ChainIntent, state *State,
 				FinalSystemOwner: chainIntent.Roles.L1ProxyAdminOwner,
 			},
 			DAFootprintGasScalar: chainIntent.DAFootprintGasScalar,
+			GasTokenDeployConfig: genesis.GasTokenDeployConfig{
+				UseCustomGasToken:     chainState.CeloTokenProxy != (common.Address{}),
+				CustomGasTokenAddress: chainState.CeloTokenProxy,
+			},
 		},
 		FaultProofDeployConfig: genesis.FaultProofDeployConfig{
 			UseFaultProofs:                  true,

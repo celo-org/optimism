@@ -24,6 +24,8 @@ import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 import { IOPContractsManagerStandardValidator } from "interfaces/L1/IOPContractsManagerStandardValidator.sol";
+import { ICeloTokenL1 } from "interfaces/L1/ICeloTokenL1.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 
 interface IOPContractsManagerContractsContainer {
     error OPContractsManagerContractsContainer_DevFeatureInProd();
@@ -159,6 +161,8 @@ interface IOPContractsManager {
         Duration disputeMaxClockDuration;
         // Celo: allows to override superchain config
         address superchainConfigOverride;
+        // Celo: opt in to deploying a CeloTokenL1 proxy as the chain's gas paying token
+        bool useCeloGasToken;
     }
 
     /// @notice The full set of outputs from deploying a new OP Stack chain.
@@ -179,6 +183,8 @@ interface IOPContractsManager {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        ICeloTokenL1 celoTokenProxy;
+        ICeloSuperchainConfig celoSuperchainConfigProxy;
     }
 
     /// @notice Addresses of ERC-5202 Blueprint contracts. There are used for deploying full size
@@ -220,6 +226,8 @@ interface IOPContractsManager {
         address mipsImpl;
         address faultDisputeGameV2Impl;
         address permissionedDisputeGameV2Impl;
+        address celoSuperchainConfigImpl;
+        address celoTokenL1Impl;
     }
 
     /// @notice The input required to identify a chain for upgrading.

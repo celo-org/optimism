@@ -50,5 +50,7 @@ library Types {
         // Fee params
         uint32 operatorFeeScalar;
         uint64 operatorFeeConstant;
+        // Celo: opt in to deploying a CeloTokenL1 proxy as the chain's gas paying token
+        bool useCeloGasToken;
     }
 }

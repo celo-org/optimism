@@ -39,6 +39,8 @@ import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
+import { ICeloTokenL1 } from "interfaces/L1/ICeloTokenL1.sol";
+import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 
 contract OPContractsManagerContractsContainer {
     /// @notice Addresses of the Blueprint contracts.
@@ -1097,6 +1099,15 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         output.anchorStateRegistryProxy = IAnchorStateRegistry(
             deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "AnchorStateRegistry")
         );
+        if (_input.useCeloGasToken) {
+            output.celoTokenProxy =
+                ICeloTokenL1(deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloTokenL1"));
+        }
+        if (_input.superchainConfigOverride == address(0)) {
+            output.celoSuperchainConfigProxy = ICeloSuperchainConfig(
+                deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloSuperchainConfig")
+            );
+        }
 
         // Deploy legacy proxied contracts.
         output.l1StandardBridgeProxy = IL1StandardBridge(
@@ -1163,20 +1174,45 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             output.opChainProxyAdmin, address(output.l1ERC721BridgeProxy), implementation.l1ERC721BridgeImpl, data
         );
 
-        // Initialize the SystemConfig before the ETHLockbox, required because the ETHLockbox will
-        // try to get the SuperchainConfig from the SystemConfig inside of its initializer. Also
-        // need to initialize before OptimismPortal because OptimismPortal does some sanity checks
-        // based on the ETHLockbox feature flag.
-        data = encodeSystemConfigInitializer(_input, output, _superchainConfig);
-        upgradeToAndCall(
-            output.opChainProxyAdmin, address(output.systemConfigProxy), implementation.systemConfigImpl, data
-        );
+        // Mints the CELO supply into the portal escrow; needs only the portal address.
+        if (_input.useCeloGasToken) {
+            data = encodeCeloTokenL1Initializer(output);
+            upgradeToAndCall(
+                output.opChainProxyAdmin, address(output.celoTokenProxy), implementation.celoTokenL1Impl, data
+            );
+        }
 
-        // If the interop feature was requested, enable the ETHLockbox feature in the SystemConfig
-        // contract. Only other way to get the ETHLockbox feature as of u16a is to have already had
-        // the ETHLockbox in U16 and then upgrade to U16a.
-        if (isDevFeatureEnabled(DevFeatures.OPTIMISM_PORTAL_INTEROP)) {
-            output.systemConfigProxy.setFeature(Features.ETH_LOCKBOX, true);
+        if (_input.superchainConfigOverride == address(0)) {
+            data = encodeCeloSuperchainConfigInitializer(_superchainConfig);
+            upgradeToAndCall(
+                output.opChainProxyAdmin,
+                address(output.celoSuperchainConfigProxy),
+                implementation.celoSuperchainConfigImpl,
+                data
+            );
+        }
+
+        // Deferred: SystemConfig.initialize calls portal.setGasPayingToken, which needs an
+        // initialized portal. Safe because an uninitialized SystemConfig reports ETH_LOCKBOX=false.
+        bytes memory systemConfigData = encodeSystemConfigInitializer(_input, output, _superchainConfig);
+        bool deferSystemConfig = _input.useCeloGasToken && !isDevFeatureEnabled(DevFeatures.OPTIMISM_PORTAL_INTEROP);
+        if (deferSystemConfig) {
+            output.opChainProxyAdmin.upgrade(
+                payable(address(output.systemConfigProxy)), implementation.systemConfigImpl
+            );
+        } else {
+            upgradeToAndCall(
+                output.opChainProxyAdmin,
+                address(output.systemConfigProxy),
+                implementation.systemConfigImpl,
+                systemConfigData
+            );
+            // If the interop feature was requested, enable the ETHLockbox feature in the SystemConfig
+            // contract. Only other way to get the ETHLockbox feature as of u16a is to have already had
+            // the ETHLockbox in U16 and then upgrade to U16a.
+            if (isDevFeatureEnabled(DevFeatures.OPTIMISM_PORTAL_INTEROP)) {
+                output.systemConfigProxy.setFeature(Features.ETH_LOCKBOX, true);
+            }
         }
 
         // Initialize the OptimismPortal.
@@ -1192,6 +1228,16 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             data = encodeOptimismPortalInitializer(output);
             upgradeToAndCall(
                 output.opChainProxyAdmin, address(output.optimismPortalProxy), implementation.optimismPortalImpl, data
+            );
+        }
+
+        // Portal is up: initialize SystemConfig before the ETHLockbox, which reads from it.
+        if (deferSystemConfig) {
+            upgradeToAndCall(
+                output.opChainProxyAdmin,
+                address(output.systemConfigProxy),
+                implementation.systemConfigImpl,
+                systemConfigData
             );
         }
 
@@ -1273,7 +1319,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
     /// @notice Returns default, standard config arguments for the SystemConfig initializer.
     /// This is used by subclasses to reduce code duplication.
     function defaultSystemConfigParams(
-        OPContractsManager.DeployInput memory, /* _input */
+        OPContractsManager.DeployInput memory _input,
         OPContractsManager.DeployOutput memory _output
     )
         internal
@@ -1289,7 +1335,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             l1StandardBridge: address(_output.l1StandardBridgeProxy),
             optimismPortal: address(_output.optimismPortalProxy),
             optimismMintableERC20Factory: address(_output.optimismMintableERC20FactoryProxy),
-            gasPayingToken: Constants.ETHER
+            gasPayingToken: _input.useCeloGasToken ? address(_output.celoTokenProxy) : Constants.ETHER
         });
 
         assertValidContractAddress(opChainAddrs_.l1CrossDomainMessenger);
@@ -1340,6 +1386,29 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
     {
         return
             abi.encodeCall(IL1ERC721Bridge.initialize, (_output.l1CrossDomainMessengerProxy, _output.systemConfigProxy));
+    }
+
+    /// @notice Helper method for encoding the CeloTokenL1 initializer data.
+    function encodeCeloTokenL1Initializer(OPContractsManager.DeployOutput memory _output)
+        internal
+        view
+        virtual
+        returns (bytes memory)
+    {
+        return abi.encodeCall(ICeloTokenL1.initialize, (address(_output.optimismPortalProxy)));
+    }
+
+    /// @notice Helper method for encoding the CeloSuperchainConfig initializer data.
+    function encodeCeloSuperchainConfigInitializer(ISuperchainConfig _superchainConfig)
+        internal
+        view
+        virtual
+        returns (bytes memory)
+    {
+        return abi.encodeCall(
+            ICeloSuperchainConfig.initialize,
+            (_superchainConfig.guardian(), _superchainConfig.paused(), address(_superchainConfig))
+        );
     }
 
     /// @notice Helper method for encoding the OptimismPortal initializer data.
@@ -1394,7 +1463,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
 
         // Celo: External superchain config override
         ISuperchainConfig superchainConfig_ = _input.superchainConfigOverride == address(0)
-            ? _superchainConfig
+            ? ISuperchainConfig(address(_output.celoSuperchainConfigProxy))
             : ISuperchainConfig(_input.superchainConfigOverride);
 
         return abi.encodeCall(
@@ -1820,6 +1889,8 @@ contract OPContractsManager is ISemver {
         Duration disputeMaxClockDuration;
         // Celo: allows to override superchain config
         address superchainConfigOverride;
+        // Celo: opt in to deploying a CeloTokenL1 proxy as the chain's gas paying token
+        bool useCeloGasToken;
     }
 
     /// @notice The full set of outputs from deploying a new OP Stack chain.
@@ -1840,6 +1911,8 @@ contract OPContractsManager is ISemver {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        ICeloTokenL1 celoTokenProxy;
+        ICeloSuperchainConfig celoSuperchainConfigProxy;
     }
 
     /// @notice Addresses of ERC-5202 Blueprint contracts. There are used for deploying full size
@@ -1881,6 +1954,8 @@ contract OPContractsManager is ISemver {
         address mipsImpl;
         address faultDisputeGameV2Impl;
         address permissionedDisputeGameV2Impl;
+        address celoSuperchainConfigImpl;
+        address celoTokenL1Impl;
     }
 
     /// @notice The input required to identify a chain for upgrading, along with new prestate hashes

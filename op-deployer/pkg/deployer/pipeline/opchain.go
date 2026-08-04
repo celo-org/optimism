@@ -118,6 +118,7 @@ func makeDCI(intent *state.Intent, thisIntent *state.ChainIntent, chainID common
 		AllowCustomDisputeParameters: proofParams.DangerouslyAllowCustomDisputeParameters,
 		OperatorFeeScalar:            thisIntent.OperatorFeeScalar,
 		OperatorFeeConstant:          thisIntent.OperatorFeeConstant,
+		UseCeloGasToken:              true,
 	}, nil
 }
 
@@ -138,6 +139,8 @@ func makeChainState(chainID common.Hash, dco opcm.DeployOPChainOutput) *state.Ch
 	opChainContracts.PermissionedDisputeGameImpl = dco.PermissionedDisputeGame
 	opChainContracts.DelayedWethPermissionedGameProxy = dco.DelayedWETHPermissionedGameProxy
 	opChainContracts.DelayedWethPermissionlessGameProxy = dco.DelayedWETHPermissionlessGameProxy
+	opChainContracts.CeloTokenProxy = dco.CeloTokenProxy
+	opChainContracts.CeloSuperchainConfigProxy = dco.CeloSuperchainConfigProxy
 
 	return &state.ChainState{
 		ID:               chainID,

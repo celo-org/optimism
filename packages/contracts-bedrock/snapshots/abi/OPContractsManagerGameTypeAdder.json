@@ -331,6 +331,16 @@
             "internalType": "address",
             "name": "permissionedDisputeGameV2Impl",
             "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "celoSuperchainConfigImpl",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "celoTokenL1Impl",
+            "type": "address"
           }
         ],
         "internalType": "struct OPContractsManager.Implementations",
