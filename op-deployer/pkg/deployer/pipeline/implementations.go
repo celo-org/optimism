@@ -83,6 +83,8 @@ func DeployImplementations(env *Env, intent *state.Intent, st *state.State) erro
 		OptimismMintableErc20FactoryImpl: dio.OptimismMintableERC20FactoryImpl,
 		DisputeGameFactoryImpl:           dio.DisputeGameFactoryImpl,
 		AnchorStateRegistryImpl:          dio.AnchorStateRegistryImpl,
+		CeloSuperchainConfigImpl:         dio.CeloSuperchainConfigImpl,
+		OpcmContractsContainerImpl:       dio.OpcmContractsContainer,
 	}
 
 	return nil

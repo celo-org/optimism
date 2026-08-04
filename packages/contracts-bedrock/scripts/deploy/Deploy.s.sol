@@ -615,7 +615,8 @@ contract Deploy is Deployer {
             disputeMaxClockDuration: di.disputeMaxClockDuration,
             allowCustomDisputeParameters: false,
             operatorFeeScalar: 0,
-            operatorFeeConstant: 0
+            operatorFeeConstant: 0,
+            useCeloGasToken: di.useCeloGasToken
         });
         ChainAssertions.checkSystemConfigProxies({ _contracts: _proxies(), _doi: doi });
         vm.stopBroadcast();
@@ -647,7 +648,9 @@ contract Deploy is Deployer {
             disputeSplitDepth: cfg.faultGameSplitDepth(),
             disputeClockExtension: Duration.wrap(uint64(cfg.faultGameClockExtension())),
             disputeMaxClockDuration: Duration.wrap(uint64(cfg.faultGameMaxClockDuration())),
-            superchainConfigOverride: artifacts.getAddress("CeloSuperchainConfigProxy")
+            superchainConfigOverride: artifacts.getAddress("CeloSuperchainConfigProxy"),
+            // Legacy path installs the gas token via its own re-init, not through OPCM.
+            useCeloGasToken: false
         });
     }
 

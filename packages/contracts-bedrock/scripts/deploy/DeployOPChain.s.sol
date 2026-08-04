@@ -20,12 +20,15 @@ import { IFaultDisputeGame } from "interfaces/dispute/IFaultDisputeGame.sol";
 import { IPermissionedDisputeGame } from "interfaces/dispute/IPermissionedDisputeGame.sol";
 import { IOptimismPortal2 as IOptimismPortal } from "interfaces/L1/IOptimismPortal2.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IL1CrossDomainMessenger } from "interfaces/L1/IL1CrossDomainMessenger.sol";
 import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 import { IOPContractsManager } from "../../interfaces/L1/IOPContractsManager.sol";
+import { ICeloTokenL1 } from "../../interfaces/L1/ICeloTokenL1.sol";
+import { ICeloSuperchainConfig } from "../../interfaces/L1/ICeloSuperchainConfig.sol";
 
 contract DeployOPChain is Script {
     struct Output {
@@ -44,6 +47,8 @@ contract DeployOPChain is Script {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        ICeloTokenL1 celoTokenProxy;
+        ICeloSuperchainConfig celoSuperchainConfigProxy;
     }
 
     function runWithBytes(bytes memory _input) public returns (bytes memory) {
@@ -79,8 +84,8 @@ contract DeployOPChain is Script {
             disputeSplitDepth: _input.disputeSplitDepth,
             disputeClockExtension: _input.disputeClockExtension,
             disputeMaxClockDuration: _input.disputeMaxClockDuration,
-            // op-deployer entrypoint deploys upstream OP chains only; Celo deploys through Deploy.s.sol::runCelo
-            superchainConfigOverride: address(0)
+            superchainConfigOverride: address(0),
+            useCeloGasToken: _input.useCeloGasToken
         });
 
         vm.broadcast(msg.sender);
@@ -118,7 +123,9 @@ contract DeployOPChain is Script {
             faultDisputeGame: deployOutput.faultDisputeGame,
             permissionedDisputeGame: deployOutput.permissionedDisputeGame,
             delayedWETHPermissionedGameProxy: deployOutput.delayedWETHPermissionedGameProxy,
-            delayedWETHPermissionlessGameProxy: deployOutput.delayedWETHPermissionlessGameProxy
+            delayedWETHPermissionlessGameProxy: deployOutput.delayedWETHPermissionlessGameProxy,
+            celoTokenProxy: deployOutput.celoTokenProxy,
+            celoSuperchainConfigProxy: deployOutput.celoSuperchainConfigProxy
         });
 
         checkOutput(_input, output_);
@@ -222,9 +229,11 @@ contract DeployOPChain is Script {
 
         ChainAssertions.checkAnchorStateRegistryProxy(_o.anchorStateRegistryProxy, true);
         ChainAssertions.checkL1CrossDomainMessenger(_o.l1CrossDomainMessengerProxy, vm, true);
+        // Celo: the portal reads superchainConfig from SystemConfig, which points at the
+        // CeloSuperchainConfig unless an external one was supplied.
         ChainAssertions.checkOptimismPortal2({
             _contracts: proxies,
-            _superchainConfig: IOPContractsManager(_i.opcm).superchainConfig(),
+            _superchainConfig: ISuperchainConfig(address(_o.celoSuperchainConfigProxy)),
             _opChainProxyAdminOwner: _i.opChainProxyAdminOwner,
             _isProxy: true
         });

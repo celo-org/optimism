@@ -123,7 +123,8 @@ contract DeployOPChain_TestBase is Test, FeatureFlags {
             disputeMaxClockDuration: disputeMaxClockDuration,
             allowCustomDisputeParameters: false,
             operatorFeeScalar: 0,
-            operatorFeeConstant: 0
+            operatorFeeConstant: 0,
+            useCeloGasToken: false
         });
     }
 }

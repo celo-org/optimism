@@ -342,6 +342,11 @@
             "internalType": "address",
             "name": "superchainConfigOverride",
             "type": "address"
+          },
+          {
+            "internalType": "bool",
+            "name": "useCeloGasToken",
+            "type": "bool"
           }
         ],
         "internalType": "struct OPContractsManager.DeployInput",
@@ -426,6 +431,16 @@
           {
             "internalType": "contract IDelayedWETH",
             "name": "delayedWETHPermissionlessGameProxy",
+            "type": "address"
+          },
+          {
+            "internalType": "contract ICeloTokenL1",
+            "name": "celoTokenProxy",
+            "type": "address"
+          },
+          {
+            "internalType": "contract ICeloSuperchainConfig",
+            "name": "celoSuperchainConfigProxy",
             "type": "address"
           }
         ],
@@ -534,6 +549,16 @@
           {
             "internalType": "address",
             "name": "permissionedDisputeGameV2Impl",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "celoSuperchainConfigImpl",
+            "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "celoTokenL1Impl",
             "type": "address"
           }
         ],

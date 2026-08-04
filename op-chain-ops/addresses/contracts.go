@@ -47,6 +47,7 @@ type ImplementationsContracts struct {
 	OptimismMintableErc20FactoryImpl common.Address
 	DisputeGameFactoryImpl           common.Address
 	AnchorStateRegistryImpl          common.Address
+	CeloSuperchainConfigImpl         common.Address
 }
 
 // OpChainContracts struct contains all the contracts for a specific L2 OpChain
@@ -72,6 +73,8 @@ type OpChainCoreContracts struct {
 	L1StandardBridgeProxy             common.Address
 	L1CrossDomainMessengerProxy       common.Address
 	EthLockboxProxy                   common.Address
+	CeloTokenProxy                    common.Address
+	CeloSuperchainConfigProxy         common.Address
 }
 
 type OpChainFaultProofsContracts struct {

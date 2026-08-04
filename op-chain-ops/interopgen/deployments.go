@@ -30,10 +30,12 @@ type Implementations struct {
 	OptimismMintableERC20FactoryImpl common.Address `json:"OptimismMintableERC20FactoryImpl"`
 	DisputeGameFactoryImpl           common.Address `json:"DisputeGameFactoryImpl"`
 	AnchorStateRegistryImpl          common.Address `json:"AnchorStateRegistryImpl"`
+	CeloSuperchainConfigImpl         common.Address `json:"CeloSuperchainConfigImpl"`
 	SuperchainConfigImpl             common.Address `json:"SuperchainConfigImpl"`
 	ProtocolVersionsImpl             common.Address `json:"ProtocolVersionsImpl"`
 	FaultDisputeGameV2Impl           common.Address `json:"FaultDisputeGameV2Impl"`
 	PermissionedDisputeGameV2Impl    common.Address `json:"PermissionedDisputeGameV2Impl"`
+	CeloTokenL1Impl                  common.Address `json:"CeloTokenL1Impl"`
 }
 
 type SuperchainDeployment struct {

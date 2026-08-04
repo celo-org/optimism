@@ -176,6 +176,8 @@ contract DeployImplementations_Test is Test {
         assertNotEq(address(output.opcmContractsContainer), address(0), "900");
         assertNotEq(address(output.opcmDeployer), address(0), "1000");
         assertNotEq(address(output.opcmGameTypeAdder), address(0), "1100");
+        assertNotEq(address(output.celoSuperchainConfigImpl), address(0), "1200");
+        assertNotEq(address(output.celoTokenL1Impl), address(0), "1300");
 
         // Check V2 contracts based on feature flag
         bool v2Enabled = DevFeatures.isDevFeatureEnabled(_devFeatureBitmap, DevFeatures.DEPLOY_V2_DISPUTE_GAMES);
