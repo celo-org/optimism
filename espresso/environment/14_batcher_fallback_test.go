@@ -357,6 +357,39 @@ func (t *TxManagerIntercept) SendAsync(ctx context.Context, candidate txmgr.TxCa
 	t.TxManager.SendAsync(ctx, candidate, ch)
 }
 
+// SendPairAsync implements txmgr.TxManager.
+//
+// The Espresso batcher submits every frame tx as an auth+batch pair through
+// Queue.SendPair, which dispatches via SendPairAsync rather than Send/SendAsync,
+// so the intercept must cover it too or frame submissions bypass the simulated
+// failure entirely. The frame data rides in the second (batch inbox) candidate;
+// the first (authenticateBatchInfo) leg carries no frames.
+func (t *TxManagerIntercept) SendPairAsync(ctx context.Context, first txmgr.TxCandidate, second txmgr.TxCandidate, firstCh chan txmgr.SendResponse, secondCh chan txmgr.SendResponse) {
+	frames, err := decodeFrameInformation(second)
+	if err != nil {
+		// Second leg is not a batch frame transaction — pass through
+		t.TxManager.SendPairAsync(ctx, first, second, firstCh, secondCh)
+		return
+	}
+
+	if t.shouldFail {
+		t.failureCount++
+		t.markFramesAsUnsuccessful(frames)
+		time.Sleep(50 * time.Millisecond) // Simulate some delay
+		// Exactly one response per channel, per the SendPairAsync contract.
+		firstCh <- txmgr.SendResponse{Err: ErrSimulatedTxSubmissionFailure}
+		secondCh <- txmgr.SendResponse{Err: ErrSimulatedTxSubmissionFailure}
+		return
+	}
+
+	if t.triggerAfterOne {
+		t.shouldFail = true
+	}
+
+	t.markFramesAsSuccessful(frames)
+	t.TxManager.SendPairAsync(ctx, first, second, firstCh, secondCh)
+}
+
 type partialFrameData struct {
 	channelID          derive.ChannelID
 	successfulFrames   []derive.Frame
@@ -553,8 +586,14 @@ func TestFallbackMechanismIntegrationTestChannelNotClosed(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Stop the "TEE" batcher
-	err = system.BatchSubmitter.TestDriver().StopBatchSubmitting(ctx)
+	// Stop the "TEE" batcher. A graceful stop drains pending state first, but
+	// this batcher can never drain: the intercept fails every frame submission,
+	// so the channel manager rewinds and retries forever. StopBatchSubmitting
+	// force-kills once the passed context is done, so bound it tightly instead
+	// of handing it the whole test budget.
+	stopCtx, stopCancel := context.WithTimeout(ctx, 15*time.Second)
+	err = system.BatchSubmitter.TestDriver().StopBatchSubmitting(stopCtx)
+	stopCancel()
 	require.NoError(t, err)
 
 	// Switch active batcher
