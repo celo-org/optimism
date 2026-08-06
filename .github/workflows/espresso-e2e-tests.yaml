@@ -27,9 +27,16 @@ jobs:
       matrix:
         include:
           # In-memory groups (contracts only).
+          #
+          # The core group additionally matches the not-yet-ported stubs so
+          # they are visible as SKIP in CI output: the attestation tests
+          # (espresso/environment/5_batch_authentication_test.go) and the
+          # devnet test tier (espresso/devnet-tests, see its package doc).
+          # Stubs whose names already match another group's filter
+          # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
           - group: core
             needs_prestate: false
-            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher"
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal"
           - group: integrity
             needs_prestate: false
             tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
@@ -77,4 +84,4 @@ jobs:
           gotestsum --format github-actions -- \
             -timeout 45m -p 1 -count 1 \
             -run '${{ matrix.tests }}' \
-            ./espresso/environment/...
+            ./espresso/environment/... ./espresso/devnet-tests/...
