@@ -8,7 +8,6 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
-	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -55,7 +54,7 @@ type EspressoBatcherConfig struct {
 }
 
 // EspressoStreamer returns the Espresso batch streamer driven by this batcher.
-func (bs *BatcherService) EspressoStreamer() espressoStreamers.EspressoStreamer[derivation.EspressoBatch] {
+func (bs *BatcherService) EspressoStreamer() *espressoStreamers.Streamer {
 	return bs.driver.espressoStreamer
 }
 
