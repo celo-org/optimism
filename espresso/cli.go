@@ -6,16 +6,10 @@ import (
 	"strings"
 	"time"
 
-	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/urfave/cli/v2"
-
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
-	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 )
 
 // espressoFlags returns the flag names for espresso
@@ -261,48 +255,4 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 	}
 
 	return config
-}
-
-func BatchStreamerFromCLIConfig[B espressoStreamers.Batch](
-	cfg CLIConfig,
-	log log.Logger,
-	unmarshalBatch func(data []byte, l1Finalized uint64) (*B, error),
-	syncStatusProvider espressoStreamers.SyncStatusProvider,
-) (*espressoStreamers.BatchStreamer[B], error) {
-	if !cfg.Enabled {
-		return nil, fmt.Errorf("espresso is not enabled")
-	}
-
-	l1Client, err := ethclient.Dial(cfg.L1URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial L1 RPC at %s: %w", cfg.L1URL, err)
-	}
-
-	RollupL1Client, err := ethclient.Dial(cfg.RollupL1URL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial Rollup L1 RPC at %s: %w", cfg.RollupL1URL, err)
-	}
-
-	urlZero := cfg.QueryServiceURLs[0]
-	espressoClient := espressoClient.NewClient(urlZero)
-
-	espressoLightClient, err := espressoLightClient.NewLightclientCaller(cfg.LightClientAddr, l1Client)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Espresso light client")
-	}
-
-	return espressoStreamers.NewEspressoStreamer(
-		cfg.Namespace,
-		NewAdaptL1BlockRefClient(l1Client),
-		NewAdaptL1BlockRefClient(RollupL1Client),
-		espressoClient,
-		espressoLightClient,
-		syncStatusProvider,
-		log,
-		unmarshalBatch,
-		cfg.CaffeinationHeightEspresso,
-		cfg.CaffeinationHeightL2,
-		cfg.BatchAuthenticatorAddr,
-		false,
-	)
 }

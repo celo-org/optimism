@@ -5,7 +5,7 @@ go 1.26.4
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/EspressoSystems/espresso-network/sdks/go v0.3.5-0.20260410134522-1a819609a513
-	github.com/EspressoSystems/espresso-streamers v1.3.1-0.20260731122451-83eab3d058ed
+	github.com/EspressoSystems/espresso-streamers v1.3.1-0.20260731024110-22c396aa0934
 	github.com/Masterminds/semver/v3 v3.3.1
 	github.com/andybalholm/brotli v1.1.0
 	github.com/base/go-bip39 v1.1.0
