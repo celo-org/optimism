@@ -12,8 +12,11 @@ contract CeloTokenL1 is ERC20Upgradeable {
         _disableInitializers();
     }
 
-    function initialize(address portalProxyAddress) external initializer {
+    /// @param escrowRecipient Address that receives the full CELO supply and escrows it. A fresh CGT v2
+    ///                        chain passes the CeloGasBridgeL1 proxy, whereas the legacy v1 deployment
+    ///                        passed the OptimismPortal.
+    function initialize(address escrowRecipient) external initializer {
         __ERC20_init(NAME, SYMBOL);
-        _mint(portalProxyAddress, TOTAL_MARKET_CAP);
+        _mint(escrowRecipient, TOTAL_MARKET_CAP);
     }
 }

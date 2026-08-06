@@ -24,22 +24,12 @@ library DeployUtils {
 
     bytes32 internal constant DEFAULT_SALT = keccak256("op-stack-contract-impls-salt-v0");
 
-    /// @notice Pins artifact names that are ambiguous between the default and dispute compiler
-    ///         profiles to their default-profile artifact. Bare "ProxyAdmin" otherwise resolves
-    ///         non-deterministically once ProxyAdmin.dispute.json exists.
-    function _resolveArtifact(string memory _name) private pure returns (string memory) {
-        if (keccak256(bytes(_name)) == keccak256(bytes("ProxyAdmin"))) {
-            return "forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json";
-        }
-        return _name;
-    }
-
     /// @notice Deploys a contract with the given name and arguments via CREATE.
     /// @param _name Name of the contract to deploy.
     /// @param _args ABI-encoded constructor arguments.
     /// @return addr_ Address of the deployed contract.
     function create1(string memory _name, bytes memory _args) internal returns (address payable addr_) {
-        bytes memory bytecode = abi.encodePacked(vm.getCode(_resolveArtifact(_name)), _args);
+        bytes memory bytecode = abi.encodePacked(vm.getCode(_name), _args);
         assembly {
             addr_ := create(0, add(bytecode, 0x20), mload(bytecode))
         }
@@ -89,7 +79,7 @@ library DeployUtils {
     /// @param _salt Salt for the CREATE2 operation.
     /// @return addr_ Address of the deployed contract.
     function create2(string memory _name, bytes memory _args, bytes32 _salt) internal returns (address payable) {
-        bytes memory initCode = abi.encodePacked(vm.getCode(_resolveArtifact(_name)), _args);
+        bytes memory initCode = abi.encodePacked(vm.getCode(_name), _args);
         address preComputedAddress = vm.computeCreate2Address(_salt, keccak256(initCode));
         require(preComputedAddress.code.length == 0, "DeployUtils: contract already deployed");
         return create2asm(initCode, _salt);
@@ -160,7 +150,7 @@ library DeployUtils {
         internal
         returns (address payable addr_)
     {
-        bytes memory initCode = abi.encodePacked(vm.getCode(_resolveArtifact(_name)), _args);
+        bytes memory initCode = abi.encodePacked(vm.getCode(_name), _args);
         address preComputedAddress = vm.computeCreate2Address(_salt, keccak256(initCode));
         if (preComputedAddress.code.length > 0) {
             addr_ = payable(preComputedAddress);

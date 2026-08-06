@@ -24,6 +24,8 @@ import { IL1ERC721Bridge } from "interfaces/L1/IL1ERC721Bridge.sol";
 import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
+import { ICeloTokenL1 } from "interfaces/celo/ICeloTokenL1.sol";
+import { ICeloGasBridgeL1 } from "interfaces/celo/ICeloGasBridgeL1.sol";
 import { IOPContractsManager } from "../../interfaces/L1/IOPContractsManager.sol";
 
 contract DeployOPChain is Script {
@@ -43,6 +45,8 @@ contract DeployOPChain is Script {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        ICeloTokenL1 celoTokenL1Proxy;
+        ICeloGasBridgeL1 celoGasBridgeL1Proxy;
     }
 
     function runWithBytes(bytes memory _input) public returns (bytes memory) {
@@ -116,7 +120,9 @@ contract DeployOPChain is Script {
             faultDisputeGame: deployOutput.faultDisputeGame,
             permissionedDisputeGame: deployOutput.permissionedDisputeGame,
             delayedWETHPermissionedGameProxy: deployOutput.delayedWETHPermissionedGameProxy,
-            delayedWETHPermissionlessGameProxy: deployOutput.delayedWETHPermissionlessGameProxy
+            delayedWETHPermissionlessGameProxy: deployOutput.delayedWETHPermissionlessGameProxy,
+            celoTokenL1Proxy: deployOutput.celoTokenL1Proxy,
+            celoGasBridgeL1Proxy: deployOutput.celoGasBridgeL1Proxy
         });
 
         checkOutput(_input, output_);
@@ -169,6 +175,14 @@ contract DeployOPChain is Script {
         );
 
         DeployUtils.assertValidContractAddresses(Solarray.extend(addrs1, addrs2));
+
+        // CGT v2 proxies are only deployed when the custom gas token feature is requested.
+        if (_i.useCustomGasToken) {
+            DeployUtils.assertValidContractAddresses(
+                Solarray.addresses(address(_o.celoTokenL1Proxy), address(_o.celoGasBridgeL1Proxy))
+            );
+        }
+
         _assertValidDeploy(_i, _o);
     }
 

@@ -30,6 +30,7 @@ import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IStandardBridge } from "interfaces/universal/IStandardBridge.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { IProxyAdminOwnedBase } from "interfaces/L1/IProxyAdminOwnedBase.sol";
 
 /// @title CeloGasBridgeL1_TestInit
 /// @notice Reusable test initialization for `CeloGasBridgeL1` tests.
@@ -195,6 +196,99 @@ contract CeloGasBridgeL1_SeedEscrow_TestFail is CeloGasBridgeL1_TestInit {
         vm.prank(optimismPortal);
         vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_EscrowAlreadySeeded.selector);
         bridge.seedEscrow(2);
+    }
+}
+
+/// @title CeloGasBridgeL1_SeedEscrowGenesis_Test
+/// @notice Tests the `seedEscrowGenesis` function of the `CeloGasBridgeL1` contract.
+contract CeloGasBridgeL1_SeedEscrowGenesis_Test is CeloGasBridgeL1_TestInit {
+    function test_seedEscrowGenesis_succeeds() external {
+        uint256 amount = 1_000;
+        celoTokenL1.mint(address(bridge), amount);
+
+        vm.expectEmit(address(bridge));
+        emit EscrowSeeded(address(proxyAdminContract), amount);
+
+        vm.prank(address(proxyAdminContract));
+        bridge.seedEscrowGenesis();
+
+        assertTrue(bridge.escrowSeeded());
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), celoTokenL1.balanceOf(address(bridge)));
+    }
+
+    function test_seedEscrowGenesis_asProxyAdminOwner_succeeds() external {
+        uint256 amount = 2_500;
+        celoTokenL1.mint(address(bridge), amount);
+
+        vm.expectEmit(address(bridge));
+        emit EscrowSeeded(proxyAdminOwnerAddr, amount);
+
+        vm.prank(proxyAdminOwnerAddr);
+        bridge.seedEscrowGenesis();
+
+        assertTrue(bridge.escrowSeeded());
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
+    }
+
+    function test_seedEscrowGenesis_thenDeposit_succeeds() external {
+        // A deposit reverts before genesis seeding; genesis-seed activates the bridge so deposits work.
+        vm.prank(alice, alice);
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotActivated.selector);
+        bridge.deposit(bob, 1, 1, hex"");
+
+        vm.prank(address(proxyAdminContract));
+        bridge.seedEscrowGenesis();
+
+        uint256 amount = 100;
+        celoTokenL1.mint(alice, amount);
+        vm.prank(alice, alice);
+        celoTokenL1.approve(address(bridge), amount);
+
+        vm.prank(alice, alice);
+        bridge.deposit(bob, amount, 250_000, hex"1234");
+
+        assertEq(celoTokenL1.balanceOf(alice), 0);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
+        assertEq(messenger.lastTarget(), otherBridge);
+    }
+}
+
+/// @title CeloGasBridgeL1_SeedEscrowGenesis_TestFail
+/// @notice Tests revert cases for the `seedEscrowGenesis` function of the `CeloGasBridgeL1` contract.
+contract CeloGasBridgeL1_SeedEscrowGenesis_TestFail is CeloGasBridgeL1_TestInit {
+    function test_seedEscrowGenesis_unauthorized_reverts() external {
+        vm.prank(alice);
+        vm.expectRevert(IProxyAdminOwnedBase.ProxyAdminOwnedBase_NotProxyAdminOrProxyAdminOwner.selector);
+        bridge.seedEscrowGenesis();
+    }
+
+    function test_seedEscrowGenesis_alreadySeeded_reverts() external {
+        vm.prank(address(proxyAdminContract));
+        bridge.seedEscrowGenesis();
+
+        vm.prank(address(proxyAdminContract));
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_EscrowAlreadySeeded.selector);
+        bridge.seedEscrowGenesis();
+    }
+
+    function test_seedEscrowGenesis_afterSeedEscrow_reverts() external {
+        // Mutual exclusion: once the migration path seeds escrow, genesis seeding is blocked.
+        _seedEscrow(bridge, 1);
+
+        vm.prank(address(proxyAdminContract));
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_EscrowAlreadySeeded.selector);
+        bridge.seedEscrowGenesis();
+    }
+
+    function test_seedEscrow_afterSeedEscrowGenesis_reverts() external {
+        // Mutual exclusion: once genesis-seeded, the migration seedEscrow path is blocked.
+        vm.prank(address(proxyAdminContract));
+        bridge.seedEscrowGenesis();
+
+        vm.prank(optimismPortal);
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_EscrowAlreadySeeded.selector);
+        bridge.seedEscrow(1);
     }
 }
 

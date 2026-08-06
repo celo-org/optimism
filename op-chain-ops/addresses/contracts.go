@@ -49,6 +49,8 @@ type ImplementationsContracts struct {
 	AnchorStateRegistryImpl          common.Address
 	FaultDisputeGameV2Impl           common.Address
 	PermissionedDisputeGameV2Impl    common.Address
+	CeloTokenL1Impl                  common.Address
+	CeloGasBridgeL1Impl              common.Address
 }
 
 // OpChainContracts struct contains all the contracts for a specific L2 OpChain
@@ -60,6 +62,7 @@ type OpChainContracts struct {
 	OpChainCoreContracts
 	OpChainFaultProofsContracts
 	OpChainAltDAContracts
+	OpChainCeloContracts
 	OpChainLegacyContracts
 }
 
@@ -89,6 +92,12 @@ type OpChainFaultProofsContracts struct {
 type OpChainAltDAContracts struct {
 	AltDAChallengeProxy common.Address
 	AltDAChallengeImpl  common.Address
+}
+
+// OpChainCeloContracts holds the Celo CGT v2 L1 contracts for a chain.
+type OpChainCeloContracts struct {
+	CeloTokenL1Proxy     common.Address `json:"celoTokenL1Proxy"`
+	CeloGasBridgeL1Proxy common.Address `json:"celoGasBridgeL1Proxy"`
 }
 
 type OpChainLegacyContracts struct {

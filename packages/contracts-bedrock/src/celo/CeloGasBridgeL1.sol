@@ -128,6 +128,20 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         emit EscrowSeeded(portal, _amount);
     }
 
+    /// @notice One-shot escrow seeding for a new chain deployed at genesis on v6.
+    ///         Called by the ProxyAdmin through OPCM. Chains migrating from v5 use `seedEscrow`.
+    function seedEscrowGenesis() external {
+        _assertOnlyProxyAdminOrProxyAdminOwner();
+        if (escrowSeeded) revert CeloGasBridgeL1_EscrowAlreadySeeded();
+
+        uint256 amount = celoTokenL1.balanceOf(address(this));
+
+        escrowSeeded = true;
+        deposits[address(celoTokenL1)][address(0)] = amount;
+
+        emit EscrowSeeded(msg.sender, amount);
+    }
+
     /// @notice Pause state is delegated to SystemConfig.
     function paused() public view override returns (bool) {
         return systemConfig.paused();

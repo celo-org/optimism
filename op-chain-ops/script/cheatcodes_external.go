@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -36,6 +37,15 @@ func (c *CheatCodesPrecompile) ProjectRoot() string {
 }
 
 func (c *CheatCodesPrecompile) getArtifact(input string) (*foundry.Artifact, error) {
+	// Foundry also accepts a direct artifact path, e.g.
+	// "forge-artifacts/ProxyAdmin.sol/ProxyAdmin.json", used to pin one specific
+	// compiler-profile artifact. Parse the source dir and contract name out of it.
+	if strings.HasSuffix(input, ".json") {
+		return c.h.af.ReadArtifact(
+			path.Base(path.Dir(input)),
+			strings.TrimSuffix(path.Base(input), ".json"),
+		)
+	}
 	// fetching by relative file path, or using a contract version, is not supported
 	parts := strings.SplitN(input, ":", 2)
 	name := parts[0] + ".sol"

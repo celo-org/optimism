@@ -39,6 +39,8 @@ import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { IOPContractsManagerStandardValidator } from "interfaces/L1/IOPContractsManagerStandardValidator.sol";
+import { ICeloTokenL1 } from "interfaces/celo/ICeloTokenL1.sol";
+import { ICeloGasBridgeL1 } from "interfaces/celo/ICeloGasBridgeL1.sol";
 import { DeployUtils } from "scripts/libraries/DeployUtils.sol";
 import { Solarray } from "scripts/libraries/Solarray.sol";
 import { ChainAssertions } from "scripts/deploy/ChainAssertions.sol";
@@ -93,6 +95,8 @@ contract DeployImplementations is Script {
         IPermissionedDisputeGameV2 permissionedDisputeGameV2Impl;
         ISuperFaultDisputeGame superFaultDisputeGameImpl;
         ISuperPermissionedDisputeGame superPermissionedDisputeGameImpl;
+        ICeloTokenL1 celoTokenL1Impl;
+        ICeloGasBridgeL1 celoGasBridgeL1Impl;
     }
 
     bytes32 internal _salt = DeployUtils.DEFAULT_SALT;
@@ -126,6 +130,8 @@ contract DeployImplementations is Script {
         deployAnchorStateRegistryImpl(_input, output_);
         deployFaultDisputeGameV2Impl(_input, output_);
         deployPermissionedDisputeGameV2Impl(_input, output_);
+        deployCeloTokenL1Impl(output_);
+        deployCeloGasBridgeL1Impl(output_);
         if (DevFeatures.isDevFeatureEnabled(_input.devFeatureBitmap, DevFeatures.OPTIMISM_PORTAL_INTEROP)) {
             deploySuperFaultDisputeGameImpl(_input, output_);
             deploySuperPermissionedDisputeGameImpl(_input, output_);
@@ -167,7 +173,9 @@ contract DeployImplementations is Script {
             faultDisputeGameV2Impl: address(_output.faultDisputeGameV2Impl),
             permissionedDisputeGameV2Impl: address(_output.permissionedDisputeGameV2Impl),
             superFaultDisputeGameImpl: address(_output.superFaultDisputeGameImpl),
-            superPermissionedDisputeGameImpl: address(_output.superPermissionedDisputeGameImpl)
+            superPermissionedDisputeGameImpl: address(_output.superPermissionedDisputeGameImpl),
+            celoTokenL1Impl: address(_output.celoTokenL1Impl),
+            celoGasBridgeL1Impl: address(_output.celoGasBridgeL1Impl)
         });
 
         deployOPCMBPImplsContainer(_input, _output, _blueprints, implementations);
@@ -317,6 +325,32 @@ contract DeployImplementations is Script {
         );
         vm.label(address(impl), "L1StandardBridgeImpl");
         _output.l1StandardBridgeImpl = impl;
+    }
+
+    function deployCeloTokenL1Impl(Output memory _output) private {
+        ICeloTokenL1 impl = ICeloTokenL1(
+            DeployUtils.createDeterministic({
+                _name: "CeloTokenL1",
+                _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloTokenL1.__constructor__, ())),
+                _salt: _salt
+            })
+        );
+        vm.label(address(impl), "CeloTokenL1Impl");
+        _output.celoTokenL1Impl = impl;
+    }
+
+    function deployCeloGasBridgeL1Impl(Output memory _output) private {
+        ICeloGasBridgeL1 impl = ICeloGasBridgeL1(
+            payable(
+                DeployUtils.createDeterministic({
+                    _name: "CeloGasBridgeL1",
+                    _args: DeployUtils.encodeConstructor(abi.encodeCall(ICeloGasBridgeL1.__constructor__, ())),
+                    _salt: _salt
+                })
+            )
+        );
+        vm.label(address(impl), "CeloGasBridgeL1Impl");
+        _output.celoGasBridgeL1Impl = impl;
     }
 
     function deployOptimismMintableERC20FactoryImpl(Output memory _output) private {
@@ -769,6 +803,10 @@ contract DeployImplementations is Script {
             );
             addrs2 = Solarray.extend(addrs2, superGameAddrs);
         }
+
+        address[] memory celoAddrs =
+            Solarray.addresses(address(_output.celoTokenL1Impl), address(_output.celoGasBridgeL1Impl));
+        addrs2 = Solarray.extend(addrs2, celoAddrs);
 
         DeployUtils.assertValidContractAddresses(Solarray.extend(addrs1, addrs2));
 

@@ -147,6 +147,8 @@ func makeChainState(chainID common.Hash, impls opcm.ReadImplementationAddressesO
 	opChainContracts.PermissionedDisputeGameImpl = dco.PermissionedDisputeGame
 	opChainContracts.DelayedWethPermissionedGameProxy = dco.DelayedWETHPermissionedGameProxy
 	opChainContracts.DelayedWethPermissionlessGameProxy = dco.DelayedWETHPermissionlessGameProxy
+	opChainContracts.CeloTokenL1Proxy = dco.CeloTokenL1Proxy
+	opChainContracts.CeloGasBridgeL1Proxy = dco.CeloGasBridgeL1Proxy
 
 	if (impls.PermissionedDisputeGameV2 != common.Address{}) {
 		opChainContracts.PermissionedDisputeGameImpl = impls.PermissionedDisputeGameV2

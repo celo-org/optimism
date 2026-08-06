@@ -64,6 +64,8 @@ type DeployOPChainOutput struct {
 	PermissionedDisputeGame            common.Address
 	DelayedWETHPermissionedGameProxy   common.Address
 	DelayedWETHPermissionlessGameProxy common.Address
+	CeloTokenL1Proxy                   common.Address
+	CeloGasBridgeL1Proxy               common.Address
 }
 
 type DeployOPChainScript script.DeployScriptWithOutput[DeployOPChainInput, DeployOPChainOutput]
