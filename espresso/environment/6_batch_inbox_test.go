@@ -50,8 +50,6 @@ func TestE2eDevnetWithoutAuthenticatingBatches(t *testing.T) {
 	}
 
 	batchDriver := system.BatchSubmitter.TestDriver()
-	// Set mock batcher authenticator address
-	batchDriver.RollupConfig.BatchAuthenticatorAddress = common.Address{}
 
 	// Substitute batcher's transaction manager with one that always sends transactions, even
 	// if they won't succeed. Otherwise batcher wouldn't submit transactions that would revert to
@@ -72,6 +70,16 @@ func TestE2eDevnetWithoutAuthenticatingBatches(t *testing.T) {
 	// Start the batcher
 	err = batchDriver.StartBatchSubmitting()
 	require.NoError(t, err, "Couldn't start batcher")
+
+	// Zero out the BatchAuthenticator address only now: StartBatchSubmitting
+	// constructs the Espresso streamer, which requires the real contract to
+	// validate the batches it reads back from Espresso. Zeroing the address
+	// after startup makes the publish path send its authenticateBatchInfo call
+	// to the zero-address EOA instead — the tx succeeds but emits no
+	// BatchInfoAuthenticated event, so the batch txs land on the BatchInbox
+	// unauthenticated, which is the scenario under test.
+	batchDriver.RollupConfig.BatchAuthenticatorAddress = common.Address{}
+
 	l1Client := system.NodeClient(e2esys.RoleL1)
 
 	// Wait for batcher to submit a transaction to BatchInbox
