@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
@@ -74,7 +75,7 @@ func TestBatcherWaitForFinality(t *testing.T) {
 			// origin > finalized here.
 			finalizedL1Header, err := l1Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
 			require.NoError(t, err)
-			require.LessOrEqual(t, statusAfterWait.SafeL2.L1Origin.Number, finalizedL1Header.Number.Uint64(), "L1 origin not finalized before submission")
+			require.LessOrEqual(t, statusAfterWait.SafeL2.L1Origin.Number, bigs.Uint64Strict(finalizedL1Header.Number), "L1 origin not finalized before submission")
 
 			// Exit the test if there are 10 new safe blocks on the L1.
 			if statusAfterWait.SafeL1.Number >= initialSafeL1Number+10 {
