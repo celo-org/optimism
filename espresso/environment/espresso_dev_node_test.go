@@ -78,3 +78,16 @@ func TestE2eDevnetWithoutEspressoSimpleTransaction(t *testing.T) {
 	// Submit a Transaction on the L2 Sequencer node, to a Burn Address
 	env.RunSimpleL2Burn(ctx, t, system)
 }
+
+// TestEspressoDockerDevNodeSmokeTest smoke-tests the dockerized
+// espresso-dev-node launcher: it boots the real dev-node container and checks
+// basic liveness. This fork's launcher is backed by the in-memory mock
+// Espresso client instead, so there is no docker dev node to smoke-test.
+//
+// TODO: port TestEspressoDockerDevNodeSmokeTest from
+// optimism-espresso-integration espresso/environment/espresso_dev_node_test.go
+// if a dockerized espresso-dev-node launcher is reintroduced (e.g. alongside
+// the espresso/devnet-tests compose tier).
+func TestEspressoDockerDevNodeSmokeTest(t *testing.T) {
+	t.Skip("not ported: the dockerized espresso-dev-node was replaced by the in-memory mock client")
+}

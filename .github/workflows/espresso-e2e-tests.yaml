@@ -36,7 +36,7 @@ jobs:
           # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
           - group: core
             needs_prestate: false
-            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal"
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestEspressoDockerDevNodeSmokeTest|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
           - group: integrity
             needs_prestate: false
             tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
@@ -84,4 +84,4 @@ jobs:
           gotestsum --format github-actions -- \
             -timeout 45m -p 1 -count 1 \
             -run '${{ matrix.tests }}' \
-            ./espresso/environment/... ./espresso/devnet-tests/...
+            ./espresso/environment/... ./espresso/devnet-tests/... ./espresso/enclave-tests/...
