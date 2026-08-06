@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -43,6 +44,7 @@ func TestBatcherWaitForFinality(t *testing.T) {
 	defer env.Stop(t, espressoDevNode)
 
 	rollupClient := system.RollupClient(e2esys.RoleVerif)
+	l1Client := system.NodeClient(e2esys.RoleL1)
 
 	initialStatus, err := rollupClient.SyncStatus(context.Background())
 	require.NoError(t, err)
@@ -62,7 +64,17 @@ func TestBatcherWaitForFinality(t *testing.T) {
 			// block to the L1.
 			statusAfterWait, err := rollupClient.SyncStatus(context.Background())
 			require.NoError(t, err)
-			require.LessOrEqual(t, statusAfterWait.SafeL2.L1Origin.Number, statusAfterWait.FinalizedL1.Number, "L1 origin not finalized before submission")
+			// Compare against the L1 chain's own finalized tag, not the
+			// verifier's FinalizedL1: the batcher gates submission on the
+			// sequencer node's finality view, and the verifier's finality
+			// poller can briefly lag it, which would trip this assertion
+			// without any batcher misbehavior. Querying L1 after the sync
+			// status keeps the check sound: finality only advances, so a
+			// batch submitted before its origin finalized would still show
+			// origin > finalized here.
+			finalizedL1Header, err := l1Client.HeaderByNumber(ctx, big.NewInt(rpc.FinalizedBlockNumber.Int64()))
+			require.NoError(t, err)
+			require.LessOrEqual(t, statusAfterWait.SafeL2.L1Origin.Number, finalizedL1Header.Number.Uint64(), "L1 origin not finalized before submission")
 
 			// Exit the test if there are 10 new safe blocks on the L1.
 			if statusAfterWait.SafeL1.Number >= initialSafeL1Number+10 {
