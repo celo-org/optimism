@@ -24,6 +24,8 @@ import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 import { IOPContractsManagerStandardValidator } from "interfaces/L1/IOPContractsManagerStandardValidator.sol";
+import { ICeloTokenL1 } from "interfaces/celo/ICeloTokenL1.sol";
+import { ICeloGasBridgeL1 } from "interfaces/celo/ICeloGasBridgeL1.sol";
 
 interface IOPContractsManagerContractsContainer {
     error OPContractsManagerContractsContainer_DevFeatureInProd();
@@ -179,6 +181,9 @@ interface IOPContractsManager {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        // CGT v2 contracts below. Only deployed when useCustomGasToken is set.
+        ICeloTokenL1 celoTokenL1Proxy;
+        ICeloGasBridgeL1 celoGasBridgeL1Proxy;
     }
 
     /// @notice Addresses of ERC-5202 Blueprint contracts. There are used for deploying full size
@@ -214,6 +219,8 @@ interface IOPContractsManager {
         address permissionedDisputeGameV2Impl;
         address superFaultDisputeGameImpl;
         address superPermissionedDisputeGameImpl;
+        address celoTokenL1Impl;
+        address celoGasBridgeL1Impl;
     }
 
     /// @notice The input required to identify a chain for upgrading.

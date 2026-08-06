@@ -60,7 +60,7 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
     address internal constant EXTERNAL_SUPERCHAIN_CONFIG = 0x95703e0982140D16f8ebA6d158FccEde42f04a4C;
     address internal constant SYSTEM_CONFIG_OWNER = 0x9Eb44Da23433b5cAA1c87e35594D15FcEb08D34d;
 
-    uint256 internal constant DEFAULT_FORK_BLOCK = 22_800_000;
+    uint256 internal constant DEFAULT_FORK_BLOCK = 25_680_000;
     uint256 internal constant PER_TX_GAS_CAP = 16_000_000; // EIP-7825 (Fusaka) per-tx gas cap.
     bytes32 internal constant EIP1967_IMPL_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     uint32 internal constant DEPOSIT_GAS_LIMIT = 250_000;

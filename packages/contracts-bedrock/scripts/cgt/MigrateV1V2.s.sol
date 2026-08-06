@@ -20,6 +20,7 @@ import { IOPContractsManager } from "interfaces/L1/IOPContractsManager.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { ISemver } from "interfaces/universal/ISemver.sol";
+import { SemverComp } from "src/libraries/SemverComp.sol";
 
 /// @title MigrateV1V2Input
 /// @notice Inputs for the `MigrateV1V2` migration script.
@@ -244,9 +245,10 @@ contract MigrateV1V2 is Script {
         require(_input.storageSetter().code.length > 0, "MigrateV1V2: storageSetter has no code");
         address externalSc = _input.externalSuperchainConfig();
         require(externalSc.code.length > 0, "MigrateV1V2: externalSuperchainConfig has no code");
+        // Upstream patches this contract in place, so accept any version at or above the baseline.
         require(
-            keccak256(bytes(ISemver(externalSc).version())) == keccak256("2.4.0"),
-            "MigrateV1V2: externalSuperchainConfig version != 2.4.0"
+            SemverComp.gte(ISemver(externalSc).version(), "2.4.0"),
+            "MigrateV1V2: externalSuperchainConfig version < 2.4.0"
         );
         console.log("OK  StorageSetter + external SuperchainConfig deployed");
 

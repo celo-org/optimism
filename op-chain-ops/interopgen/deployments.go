@@ -36,6 +36,8 @@ type Implementations struct {
 	PermissionedDisputeGameV2Impl    common.Address `json:"PermissionedDisputeGameV2Impl"`
 	SuperFaultDisputeGameImpl        common.Address `json:"SuperFaultDisputeGameImpl"`
 	SuperPermissionedDisputeGameImpl common.Address `json:"SuperPermissionedDisputeGameImpl"`
+	CeloTokenL1Impl                  common.Address `json:"CeloTokenL1Impl"`
+	CeloGasBridgeL1Impl              common.Address `json:"CeloGasBridgeL1Impl"`
 }
 
 type SuperchainDeployment struct {

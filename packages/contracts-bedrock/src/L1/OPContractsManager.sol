@@ -39,6 +39,12 @@ import { IL1StandardBridge } from "interfaces/L1/IL1StandardBridge.sol";
 import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMintableERC20Factory.sol";
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 import { ISystemConfig } from "../../interfaces/L1/ISystemConfig.sol";
+import { ICeloTokenL1 } from "interfaces/celo/ICeloTokenL1.sol";
+import { ICeloGasBridgeL1 } from "interfaces/celo/ICeloGasBridgeL1.sol";
+import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
+import { IStandardBridge } from "interfaces/universal/IStandardBridge.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 
 contract OPContractsManagerContractsContainer {
     /// @notice Addresses of the Blueprint contracts.
@@ -1229,6 +1235,29 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         // contract.
         if (_input.useCustomGasToken) {
             output.systemConfigProxy.setFeature(Features.CUSTOM_GAS_TOKEN, true);
+
+            // Deploy the CGT v2 CELO token and gas bridge proxies under the chain's ProxyAdmin.
+            output.celoGasBridgeL1Proxy = ICeloGasBridgeL1(
+                payable(deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloGasBridgeL1"))
+            );
+            output.celoTokenL1Proxy =
+                ICeloTokenL1(deployProxy(_input.l2ChainId, output.opChainProxyAdmin, _input.saltMixer, "CeloTokenL1"));
+
+            // Initialize the bridge first, then mint the full CELO supply straight into it by passing
+            // the bridge proxy as the token's escrow recipient.
+            data = encodeCeloGasBridgeL1Initializer(output);
+            upgradeToAndCall(
+                output.opChainProxyAdmin, address(output.celoGasBridgeL1Proxy), implementation.celoGasBridgeL1Impl, data
+            );
+
+            data = encodeCeloTokenL1Initializer(output);
+            upgradeToAndCall(
+                output.opChainProxyAdmin, address(output.celoTokenL1Proxy), implementation.celoTokenL1Impl, data
+            );
+
+            // Seed the escrow from the bridge's freshly minted balance. This contract is still the
+            // ProxyAdmin owner here, satisfying the bridge's proxy-admin-owner gate.
+            output.celoGasBridgeL1Proxy.seedEscrowGenesis();
         }
 
         // If the interop feature was requested, enable the ETHLockbox feature in the SystemConfig
@@ -1505,6 +1534,32 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         return abi.encodeCall(
             IL1StandardBridge.initialize, (_output.l1CrossDomainMessengerProxy, _output.systemConfigProxy)
         );
+    }
+
+    function encodeCeloGasBridgeL1Initializer(OPContractsManager.DeployOutput memory _output)
+        internal
+        view
+        virtual
+        returns (bytes memory)
+    {
+        return abi.encodeCall(
+            ICeloGasBridgeL1.initialize,
+            (
+                ICrossDomainMessenger(address(_output.l1CrossDomainMessengerProxy)),
+                _output.systemConfigProxy,
+                IStandardBridge(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2)),
+                IERC20(address(_output.celoTokenL1Proxy))
+            )
+        );
+    }
+
+    function encodeCeloTokenL1Initializer(OPContractsManager.DeployOutput memory _output)
+        internal
+        view
+        virtual
+        returns (bytes memory)
+    {
+        return abi.encodeCall(ICeloTokenL1.initialize, (address(_output.celoGasBridgeL1Proxy)));
     }
 
     function encodeDisputeGameFactoryInitializer() internal view virtual returns (bytes memory) {
@@ -1903,6 +1958,9 @@ contract OPContractsManager is ISemver {
         IPermissionedDisputeGame permissionedDisputeGame;
         IDelayedWETH delayedWETHPermissionedGameProxy;
         IDelayedWETH delayedWETHPermissionlessGameProxy;
+        // CGT v2 contracts below. Only deployed when useCustomGasToken is set.
+        ICeloTokenL1 celoTokenL1Proxy;
+        ICeloGasBridgeL1 celoGasBridgeL1Proxy;
     }
 
     /// @notice Addresses of ERC-5202 Blueprint contracts. There are used for deploying full size
@@ -1938,6 +1996,8 @@ contract OPContractsManager is ISemver {
         address permissionedDisputeGameV2Impl;
         address superFaultDisputeGameImpl;
         address superPermissionedDisputeGameImpl;
+        address celoTokenL1Impl;
+        address celoGasBridgeL1Impl;
     }
 
     /// @notice The input required to identify a chain for upgrading, along with new prestate hashes

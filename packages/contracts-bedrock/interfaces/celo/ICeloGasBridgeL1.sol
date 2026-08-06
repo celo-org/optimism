@@ -27,6 +27,7 @@ interface ICeloGasBridgeL1 is IStandardBridge, IProxyAdminOwnedBase, IReinitiali
     function systemConfig() external view returns (ISystemConfig);
     function escrowSeeded() external view returns (bool);
     function seedEscrow(uint256 _amount) external;
+    function seedEscrowGenesis() external;
 
     function initialize(
         ICrossDomainMessenger _messenger,
