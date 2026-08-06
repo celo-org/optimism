@@ -292,7 +292,7 @@ func TestValidEspressoTransactionCreation(t *testing.T) {
 		// The signer recovered from the signature must be the real batcher, since
 		// realEspressoTransaction was signed with the real batcher key.
 		realBatcherAddress := crypto.PubkeyToAddress(realBatcherPrivateKey.PublicKey)
-		require.Equal(t, realBatcherAddress, batch.Signer(),
+		require.Equal(t, realBatcherAddress, batch.SignerAddress,
 			"recovered signer should be the real batcher address")
 
 		// The embedded L1-info deposit must be extractable from the batch.

@@ -8,8 +8,10 @@ import (
 	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher"
+	opbindings "github.com/ethereum-optimism/optimism/op-e2e/bindings"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
 )
@@ -22,14 +24,20 @@ import (
 // sender-based authorization. At EspressoTime the batcher's gate flips
 // (`isFallbackAuthRequired`) and it starts calling `authenticateBatchInfo`;
 // the verifier only *enforces* event-based authentication a grace period later
-// (EspressoTime + derive.BatchAuthEnforcementDelaySecs), accepting either
-// sender-auth or event-auth in between, so there is no window where the
+// (EspressoTime + derive.BatchAuthEnforcementDelaySecs). Until then it keeps
+// running the upstream sender-based check only — auth events are not scanned
+// (see derive.BatchAuthEnforcementDelaySecs) — so there is no window where the
 // batcher omits authentication while the verifier requires it.
 //
 // `activeIsEspresso` is flipped to false before Phase 1 (modeling a chain
 // that experienced a fallback-batcher event before the hardfork) and back to
 // true before Phase 3 so the subsequently-started TEE batcher is the
-// on-chain active batcher.
+// on-chain active batcher. Because Phase 3 happens inside the grace window,
+// handing the chain to the TEE batcher (which submits from its own dedicated
+// key) also requires rotating the SystemConfig batcher hash to that key's
+// address: sender-based auth admits it during the window, and once event-based
+// auth is enforced the same address keeps passing because the batch tx sender
+// equals the authenticating caller.
 func TestEspressoEnforcementHardfork(t *testing.T) {
 	// 5 minutes covers Espresso devnet startup plus pre-fork test ops.
 	const enforcementOffset = 5 * time.Minute
@@ -158,6 +166,19 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	activeIsEspresso, err = batchAuthenticator.ActiveIsEspresso(nil)
 	require.NoError(t, err)
 	require.True(t, activeIsEspresso, "second SetActiveIsEspresso(true) should set activeIsEspresso=true")
+
+	// The verifier authorizes batches by L1 sender alone until enforcement
+	// kicks in at forkTime + derive.BatchAuthEnforcementDelaySecs, so the TEE
+	// batcher's dedicated key must become the SystemConfig batcher for its
+	// batches to be accepted during the grace window (see the test header).
+	teeBatcherAddr := system.BatchSubmitter.TxManager.From()
+	sysCfgContract, err := opbindings.NewSystemConfig(system.RollupConfig.L1SystemConfigAddress, l1Client)
+	require.NoError(t, err)
+	rotateTx, err := sysCfgContract.SetBatcherHash(deployerTransactor, eth.AddressAsLeftPaddedHash(teeBatcherAddr))
+	require.NoError(t, err)
+	_, err = wait.ForReceiptOK(ctx, l1Client, rotateTx.Hash())
+	require.NoError(t, err)
+	t.Logf("rotated SystemConfig batcher hash to TEE batcher %s in L1 tx %s", teeBatcherAddr, rotateTx.Hash())
 
 	// Stream from the live head, not from genesis.
 	l2Height, err := waitForRollupToMovePastL1Block(ctx, verifRollup, status.CurrentL1.Number)
