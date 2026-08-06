@@ -14,7 +14,6 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
-	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -158,10 +157,7 @@ type BatchSubmitter struct {
 	authGroup sync.WaitGroup
 
 	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  espressoStreamers.EspressoStreamer[derivation.EspressoBatch]
-	// espressoSyncStatus feeds the streamer the sync status this batcher has already
-	// polled, so Refresh does not poll op-node again.
-	espressoSyncStatus *cachedSyncStatus
+	espressoStreamer  *espressoStreamers.Streamer
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
@@ -190,8 +186,6 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	if err != nil {
 		panic(err)
 	}
-
-	batcher.setupEspressoStreamer()
 
 	return batcher
 }
@@ -233,6 +227,11 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	l.publishSignal = publishSignal
 
 	if l.Config.Espresso.Enabled {
+		// Constructed here rather than in NewBatchSubmitter: it performs an L2 lookup, so
+		// it has to run after waitForL2Genesis and needs a context to do it with.
+		if err := l.setupEspressoStreamer(l.shutdownCtx); err != nil {
+			return fmt.Errorf("could not set up the Espresso streamer: %w", err)
+		}
 		if err := l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
 			return err
 		}
@@ -317,6 +316,10 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.cancelShutdownCtx()
 	l.wg.Wait()
 	l.cancelKillCtx()
+
+	if l.espressoStreamer != nil {
+		l.espressoStreamer.Stop()
+	}
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil
@@ -895,7 +898,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 			l.channelMgrMutex.Lock()
 			defer l.channelMgrMutex.Unlock()
 			l.channelMgr.Clear(l1SafeOrigin)
-			l.resetEspressoStreamer()
+			l.resetEspressoStreamer(ctx)
 			return true
 		}
 	}
