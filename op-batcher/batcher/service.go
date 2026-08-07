@@ -171,6 +171,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.initRollupConfig(ctx); err != nil {
 		return fmt.Errorf("failed to load rollup config: %w", err)
 	}
+	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
+		return err
+	}
 	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
 		return err
 	}
@@ -256,6 +259,24 @@ func (bs *BatcherService) initRollupConfig(ctx context.Context) error {
 		return fmt.Errorf("invalid rollup config: %w", err)
 	}
 	bs.RollupConfig.LogDescription(bs.Log, chaincfg.L2ChainIDToNetworkDisplayName)
+	return nil
+}
+
+// checkEspressoDataAvailability enforces the calldata-only DA restriction of the
+// Espresso integration (DEC-op-026): from Espresso activation the derivation
+// pipeline drops blob batch transactions because the Celo fault-proof host cannot
+// retrieve blob contents. A blob- or auto-configured batcher would have every blob
+// batch silently ignored by verifiers once the fork activates, stalling the safe
+// head, so refuse to start instead.
+func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
+	if bs.RollupConfig.EspressoTime == nil {
+		return nil
+	}
+	if cfg.DataAvailabilityType != flags.CalldataType {
+		return fmt.Errorf("data availability type %q is not supported on chains with Espresso scheduled: "+
+			"batch data must be posted as calldata only (blob DA is dropped by post-Espresso derivation)",
+			cfg.DataAvailabilityType)
+	}
 	return nil
 }
 

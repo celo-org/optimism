@@ -125,8 +125,15 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 //
 // Once enforced, it collects all authenticated batch hashes from a lookback
 // window once and rejects any batch whose commitment hash is not in the
-// authenticated set. For blob transactions, the batch hash is computed from
-// the concatenated blob versioned hashes.
+// authenticated set.
+//
+// From Espresso activation onward (including the enforcement grace window), batch
+// data is calldata-only: blob-carrying inbox transactions are dropped entirely,
+// authenticated or not. The Celo fault-proof host (celo-kona) does not implement
+// the L1Blob preimage hint, so a blob batch accepted here would stall fault-proof
+// execution at its L1 block; dropping blob transactions at the fork boundary
+// guarantees post-Espresso derivation never depends on blob preimages
+// (spec decision DEC-op-026/n-026).
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
 	// Only collect authenticated batch commitments once event-based authentication is
 	// enforced at the L1 origin time of the block we're scanning (Espresso active plus
@@ -148,6 +155,15 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 	for _, tx := range txs {
 		// skip any non-batcher transactions (wrong type or wrong To address)
 		if !isBatchTxToInbox(tx, config.batchInboxAddress) {
+			continue
+		}
+
+		// Post-Espresso, blob DA is unsupported (calldata-only, DEC-op-026): drop blob
+		// batch transactions before any authorization check so derivation never
+		// requires blob preimages the Celo fault-proof host cannot supply.
+		if tx.Type() == types.BlobTxType && config.rollupCfg.IsEspresso(ref.Time) {
+			logger.Warn("ignoring blob batch tx: blob DA is unsupported post-Espresso",
+				"txHash", tx.Hash())
 			continue
 		}
 
