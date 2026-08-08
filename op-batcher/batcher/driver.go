@@ -230,9 +230,11 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 		// Constructed here rather than in NewBatchSubmitter: it performs an L2 lookup, so
 		// it has to run after waitForL2Genesis and needs a context to do it with.
 		if err := l.setupEspressoStreamer(l.shutdownCtx); err != nil {
+			l.rollbackFailedStart()
 			return fmt.Errorf("could not set up the Espresso streamer: %w", err)
 		}
 		if err := l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
+			l.rollbackFailedStart()
 			return err
 		}
 	} else {
