@@ -172,16 +172,18 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 		return fmt.Errorf("could not register with BatchAuthenticator contract: %w", err)
 	}
 
-	// The streamer drives itself from its own poll loops, so it is started here rather
-	// than being pumped by espressoBatchLoadingLoop. Bound to shutdownCtx so it stops
-	// fetching before the publish path winds down.
-	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
-		return fmt.Errorf("could not start the Espresso streamer: %w", err)
-	}
-
 	// Resolve the TEE verifier address from the BatchAuthenticator contract.
 	if err := l.resolveTEEVerifierAddress(); err != nil {
 		return fmt.Errorf("could not resolve TEE verifier address: %w", err)
+	}
+
+	// The streamer drives itself from its own poll loops, so it is started here rather
+	// than being pumped by espressoBatchLoadingLoop. Bound to shutdownCtx so it stops
+	// fetching before the publish path winds down. Must stay the last setup step that
+	// can fail: a failed StartBatchSubmitting returns without cancelling shutdownCtx,
+	// so an error after this point would leave the streamer's poll loops running.
+	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
+		return fmt.Errorf("could not start the Espresso streamer: %w", err)
 	}
 
 	l.espressoSubmitter = NewEspressoTransactionSubmitter(
