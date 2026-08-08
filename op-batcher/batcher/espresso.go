@@ -828,7 +828,13 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus) {
 	l.channelMgrMutex.Lock()
 	defer l.channelMgrMutex.Unlock()
-	syncActions, outOfSync := computeSyncActions(*newSyncStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
+	// Floor the local-safe head at the caffeination point before reconciling. Our
+	// blocks start at caffeination+1, so comparing them against a pre-caffeination
+	// safe head would read as "next safe block below oldest block in state" and
+	// clear-loop for the whole activation window.
+	flooredStatus := *newSyncStatus
+	flooredStatus.LocalSafeL2 = l.espressoAnchorBase(newSyncStatus.LocalSafeL2)
+	syncActions, outOfSync := computeSyncActions(flooredStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
 	if outOfSync {
 		l.degradedLog.Warn(l.Log, "sequencerOutOfSync", "Sequencer is out of sync, retrying next tick.")
 		return
@@ -837,9 +843,10 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 	l.prevCurrentL1 = newSyncStatus.CurrentL1
 	if syncActions.clearState != nil {
 		l.channelMgr.Clear(*syncActions.clearState)
-		// LocalSafeL2, matching the base computeSyncActions derived clearState from:
-		// the channel manager and the streamer must not be reset onto different heads.
-		l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+		// The floored local-safe head, matching the base computeSyncActions derived
+		// clearState from: the channel manager and the streamer must not be reset
+		// onto different heads.
+		l.espressoStreamer.SetBatchPosition(flooredStatus.LocalSafeL2)
 	} else {
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
@@ -1039,7 +1046,9 @@ func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBl
 	// LocalSafeL2 rather than SafeL2 (cross-safe), for the same reason as
 	// computeSyncActions: cross-safe can lag local-safe, and blocks at or below
 	// local-safe are already derived from L1 so they must not be re-enqueued.
-	safeL2 := newSyncStatus.LocalSafeL2
+	// Floored at the caffeination point: pre-caffeination blocks are batched by
+	// the fallback batcher and must never be enqueued to Espresso.
+	safeL2 := l.batcher.espressoAnchorBase(newSyncStatus.LocalSafeL2)
 
 	// State empty, just enqueue all unsafe blocks
 	if len(l.queuedBlocks) == 0 {
