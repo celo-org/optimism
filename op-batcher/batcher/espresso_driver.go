@@ -81,13 +81,25 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 // setupEspressoStreamer constructs the Espresso streamer for a BatchSubmitter that
 // is starting up; no-op when --espresso.enabled is false.
 //
-// Called from StartBatchSubmitting rather than NewBatchSubmitter: the streamer
-// resolves its anchor batch's hash from the L2 client while constructing, so it
-// needs a context and an L2 node that has reached genesis. It also returns an error
-// rather than panicking, which construction inside NewBatchSubmitter could not do.
+// Called from StartBatchSubmitting rather than NewBatchSubmitter: it waits for the
+// rollup node to report a local-safe L2 head, so it needs a context and an L2 node
+// that has reached genesis. It also returns an error rather than panicking, which
+// construction inside NewBatchSubmitter could not do.
+//
+// The streamer is constructed anchored at the local-safe head, not at the configured
+// --espresso.origin-height-l2: the anchor always ends up at the safe head anyway, and
+// NewStreamer resolves its anchor block's hash from the L2 client, which fails on
+// endpoints that no longer serve the (ever aging) configured height and would wedge
+// restarts. --espresso.origin-height-espresso keeps its role: it decides where the
+// streamer starts polling HotShot.
 func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	if !l.Config.Espresso.Enabled {
 		return nil
+	}
+
+	safeL2, err := l.waitForLocalSafeHead(ctx)
+	if err != nil {
+		return err
 	}
 
 	ethClient, err := l.EndpointProvider.EthClient(ctx)
@@ -115,15 +127,18 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 		l.Config.Espresso.PollInterval,
 		l.Log,
 		l.Config.Espresso.CaffeinationHeightEspresso,
-		l.Config.Espresso.CaffeinationHeightL2,
+		safeL2.Number,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to create Espresso streamer: %w", err)
 	}
 	l.espressoStreamer = streamer
 
-	// Re-anchor to the safe L2 head.
-	return l.anchorEspressoStreamerAtSafeHead(ctx)
+	// Re-anchor on the exact ref from the sync status: NewStreamer resolved a hash for
+	// the same height, but the rollup node's view is the authoritative one.
+	streamer.SetBatchPosition(safeL2)
+	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "localSafeL2", safeL2)
+	return nil
 }
 
 const (
@@ -131,14 +146,13 @@ const (
 	espressoAnchorRetryInterval = 1 * time.Second
 )
 
-// anchorEspressoStreamerAtSafeHead repositions a freshly-constructed streamer from
-// its configured origin onto the current local-safe L2 head, waiting for the sync
-// status to report one.
+// waitForLocalSafeHead polls the sync status until it reports a local-safe L2 head to
+// anchor the streamer on, giving up after espressoAnchorTimeout.
 //
 // LocalSafeL2 rather than SafeL2 (cross-safe): every streamer anchor must share the
 // base computeSyncActions and safeL1Origin derive clearing/pruning from, and cross-safe
 // can lag local-safe (see the note in computeSyncActions).
-func (l *BatchSubmitter) anchorEspressoStreamerAtSafeHead(ctx context.Context) error {
+func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, espressoAnchorTimeout)
 	defer cancel()
 
@@ -153,15 +167,13 @@ func (l *BatchSubmitter) anchorEspressoStreamerAtSafeHead(ctx context.Context) e
 		case syncStatus.LocalSafeL2 == (eth.L2BlockRef{}):
 			l.Log.Warn("Sync status has no local-safe L2 head yet, retrying")
 		default:
-			l.espressoStreamer.SetBatchPosition(syncStatus.LocalSafeL2)
-			l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "localSafeL2", syncStatus.LocalSafeL2)
-			return nil
+			return syncStatus.LocalSafeL2, nil
 		}
 
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
-			return fmt.Errorf("could not anchor the Espresso streamer at the safe L2 head within %s: %w", espressoAnchorTimeout, ctx.Err())
+			return eth.L2BlockRef{}, fmt.Errorf("no local-safe L2 head to anchor the Espresso streamer within %s: %w", espressoAnchorTimeout, ctx.Err())
 		}
 	}
 }
