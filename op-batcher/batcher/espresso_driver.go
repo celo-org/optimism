@@ -79,6 +79,16 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 	return block.Hash(), nil
 }
 
+// networkTimeoutCtx bounds a single external call with the configured network
+// timeout. Every raw RPC read on the Espresso startup path must go through it:
+// StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
+// mutex before it can cancel anything, so an unbounded call on a stalled endpoint
+// would wedge the batcher beyond even a graceful shutdown. Calls with their own
+// timeout regime (the attestation service client, Txmgr.Send) are exempt.
+func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
+}
+
 // setupEspressoStreamer constructs the Espresso streamer for a BatchSubmitter that
 // is starting up; no-op when --espresso.enabled is false.
 //
@@ -127,8 +137,12 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 		lightClientIface = l.Espresso.LightClient
 	}
 
+	// NewStreamer performs one L2 lookup (its anchor block's hash), so it gets the
+	// same per-call bound as every other startup RPC.
+	streamerCtx, cancel := l.networkTimeoutCtx(ctx)
+	defer cancel()
 	streamer, err := espressoStreamers.NewStreamer(
-		ctx,
+		streamerCtx,
 		l.Espresso.Client,
 		&batcherL1Adapter{L1Client: l.L1Client},
 		&batcherL2Adapter{EthClient: ethClient},
@@ -253,7 +267,7 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	}
 
 	// Resolve the TEE verifier address from the BatchAuthenticator contract.
-	if err := l.resolveTEEVerifierAddress(); err != nil {
+	if err := l.resolveTEEVerifierAddress(l.killCtx); err != nil {
 		return fmt.Errorf("could not resolve TEE verifier address: %w", err)
 	}
 
