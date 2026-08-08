@@ -301,21 +301,26 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 	return !isActive
 }
 
-// resetEspressoStreamer re-anchors the Espresso streamer to the local-safe L2 head
-// when --espresso.enabled is set; no-op otherwise. Called from clearState alongside the
-// upstream channel-manager reset so the streamer's view of "next batch" matches the
-// freshly-cleared channel state (which is likewise derived from LocalSafeL2).
+// espressoReanchorTarget fetches the local-safe L2 head the Espresso streamer
+// must be re-anchored to when clearState resets the channel manager. clearState
+// calls it BEFORE clearing anything so the clear and the re-anchor are atomic:
+// clearing first and fetching after would, on a transient fetch failure, leave
+// an emptied channel manager with the streamer still at its old cursor, and the
+// blocks in between would only be recovered once computeSyncActions notices the
+// gap - or not at all while the streamer has nothing to serve.
 //
-// The nil check covers the startup path: clearState runs before the streamer is
-// constructed, so the first call of a start cycle finds nothing to re-anchor.
-func (l *BatchSubmitter) resetEspressoStreamer(ctx context.Context) {
+// Reports ok=false when the sync status cannot be fetched: the caller must
+// retry the whole clear rather than perform it partially. Reports a nil target
+// (and ok=true) when there is nothing to re-anchor: --espresso.enabled unset,
+// or the startup path, where clearState runs before the streamer is constructed.
+func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *eth.L2BlockRef, ok bool) {
 	if !l.Config.Espresso.Enabled || l.espressoStreamer == nil {
-		return
+		return nil, true
 	}
 	syncStatus, err := l.getSyncStatus(ctx)
 	if err != nil {
-		l.Log.Warn("Failed to fetch sync status to re-anchor the Espresso streamer, keeping the current position", "err", err)
-		return
+		l.Log.Warn("Failed to fetch sync status to re-anchor the Espresso streamer, will retry the clear", "err", err)
+		return nil, false
 	}
-	l.espressoStreamer.SetBatchPosition(syncStatus.LocalSafeL2)
+	return &syncStatus.LocalSafeL2, true
 }
