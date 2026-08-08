@@ -132,8 +132,12 @@ const (
 )
 
 // anchorEspressoStreamerAtSafeHead repositions a freshly-constructed streamer from
-// its configured origin onto the current safe L2 head, waiting for the sync status
-// to report one.
+// its configured origin onto the current local-safe L2 head, waiting for the sync
+// status to report one.
+//
+// LocalSafeL2 rather than SafeL2 (cross-safe): every streamer anchor must share the
+// base computeSyncActions and safeL1Origin derive clearing/pruning from, and cross-safe
+// can lag local-safe (see the note in computeSyncActions).
 func (l *BatchSubmitter) anchorEspressoStreamerAtSafeHead(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, espressoAnchorTimeout)
 	defer cancel()
@@ -146,11 +150,11 @@ func (l *BatchSubmitter) anchorEspressoStreamerAtSafeHead(ctx context.Context) e
 		switch {
 		case err != nil:
 			l.Log.Warn("Failed to fetch sync status to anchor the Espresso streamer, retrying", "err", err)
-		case syncStatus.SafeL2 == (eth.L2BlockRef{}):
-			l.Log.Warn("Sync status has no safe L2 head yet, retrying")
+		case syncStatus.LocalSafeL2 == (eth.L2BlockRef{}):
+			l.Log.Warn("Sync status has no local-safe L2 head yet, retrying")
 		default:
-			l.espressoStreamer.SetBatchPosition(syncStatus.SafeL2)
-			l.Log.Info("Anchored the Espresso streamer at the safe L2 head", "safeL2", syncStatus.SafeL2)
+			l.espressoStreamer.SetBatchPosition(syncStatus.LocalSafeL2)
+			l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "localSafeL2", syncStatus.LocalSafeL2)
 			return nil
 		}
 
@@ -237,10 +241,10 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 	return !isActive
 }
 
-// resetEspressoStreamer re-anchors the Espresso streamer to the safe L2 head when
-// --espresso.enabled is set; no-op otherwise. Called from clearState alongside the
+// resetEspressoStreamer re-anchors the Espresso streamer to the local-safe L2 head
+// when --espresso.enabled is set; no-op otherwise. Called from clearState alongside the
 // upstream channel-manager reset so the streamer's view of "next batch" matches the
-// freshly-cleared channel state.
+// freshly-cleared channel state (which is likewise derived from LocalSafeL2).
 //
 // The nil check covers the startup path: clearState runs before the streamer is
 // constructed, so the first call of a start cycle finds nothing to re-anchor.
@@ -253,5 +257,5 @@ func (l *BatchSubmitter) resetEspressoStreamer(ctx context.Context) {
 		l.Log.Warn("Failed to fetch sync status to re-anchor the Espresso streamer, keeping the current position", "err", err)
 		return
 	}
-	l.espressoStreamer.SetBatchPosition(syncStatus.SafeL2)
+	l.espressoStreamer.SetBatchPosition(syncStatus.LocalSafeL2)
 }
