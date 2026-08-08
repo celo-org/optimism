@@ -824,15 +824,16 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 }
 
 // espressoSyncChannelManager reconciles the channel manager with the latest sync
-// status. The streamer no longer needs pumping here: it refreshes L1 finality and
-// fetches HotShot blocks from its own poll loops.
-func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus) {
+// status, reporting whether the sequencer is out of sync (malformed status or
+// reversed CurrentL1). The streamer no longer needs pumping here: it refreshes L1
+// finality and fetches HotShot blocks from its own poll loops.
+func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus) (outOfSync bool) {
 	l.channelMgrMutex.Lock()
 	defer l.channelMgrMutex.Unlock()
 	syncActions, outOfSync := computeSyncActions(*newSyncStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
 	if outOfSync {
 		l.degradedLog.Warn(l.Log, "sequencerOutOfSync", "Sequencer is out of sync, retrying next tick.")
-		return
+		return true
 	}
 	l.degradedLog.Clear(l.Log, "sequencerOutOfSync", "Sequencer back in sync")
 	l.prevCurrentL1 = newSyncStatus.CurrentL1
@@ -846,6 +847,7 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
 	}
+	return false
 }
 
 // requestClearState asks the batch loading loop to perform `l.clearState`.
@@ -890,7 +892,14 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 			}
 			l.degradedLog.Clear(l.Log, "syncStatusErr/espressoBatchLoading", "sync status fetch recovered")
 
-			l.espressoSyncChannelManager(newSyncStatus)
+			// An out-of-sync status (zeroed fields or reversed CurrentL1) cannot
+			// be trusted as the drain floor: with LocalSafeL2 zeroed, the
+			// stale-batch re-anchor check below never fires and already-derived
+			// blocks would be republished. Skip the tick, mirroring how the base
+			// driver skips loading when computeSyncActions reports out-of-sync.
+			if l.espressoSyncChannelManager(newSyncStatus) {
+				continue
+			}
 
 			blocksAdded := 0
 
