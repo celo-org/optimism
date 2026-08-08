@@ -911,6 +911,21 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
+				// A batch at or below the (floored) local-safe head is already derived
+				// from L1, and adding it would make the publish path resubmit it. The
+				// cursor falls behind the safe head when previously submitted channels
+				// finish deriving while the streamer backfills (e.g. after a restart),
+				// and an empty channel manager gives computeSyncActions nothing to
+				// reconcile. Jump past the whole stale range in one re-anchor: the sync
+				// status ref is canonical, unlike a stale candidate's own hash, which
+				// advancing batch-by-batch would promote to the streamer's tip.
+				if base := l.espressoAnchorBase(newSyncStatus.LocalSafeL2); batch.Number() <= base.Number {
+					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
+						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2, "anchor", base)
+					l.espressoStreamer.SetBatchPosition(base)
+					break
+				}
+
 				// This should happen ONLY if the batch is malformed. ToBlock has to guarantee no
 				// transient errors. Advancing past it would promote a block the channel manager
 				// never received to the streamer's tip, stalling every later batch, so re-anchor
