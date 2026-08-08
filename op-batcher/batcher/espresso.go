@@ -19,6 +19,7 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -1193,7 +1194,7 @@ func (l *BatchSubmitter) fetchBlock(ctx context.Context, blockNumber uint64) (*t
 
 // resolveTEEVerifierAddress queries the BatchAuthenticator contract to get the
 // EspressoTEEVerifier address.
-func (l *BatchSubmitter) resolveTEEVerifierAddress() error {
+func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) error {
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		// If batcher authenticator address is nil, we will keep teeVerifierAddress to nil as well
 		return nil
@@ -1202,7 +1203,9 @@ func (l *BatchSubmitter) resolveTEEVerifierAddress() error {
 	if err != nil {
 		return fmt.Errorf("failed to create BatchAuthenticator caller: %w", err)
 	}
-	addr, err := auth.EspressoTEEVerifier(nil)
+	callCtx, cancel := l.networkTimeoutCtx(ctx)
+	defer cancel()
+	addr, err := auth.EspressoTEEVerifier(&bind.CallOpts{Context: callCtx})
 	if err != nil {
 		return fmt.Errorf("failed to query EspressoTEEVerifier address: %w", err)
 	}
@@ -1223,7 +1226,9 @@ func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
 	}
 
 	l.Log.Info("Batch authenticator address", "value", l.RollupConfig.BatchAuthenticatorAddress)
-	code, err := l.L1Client.CodeAt(ctx, l.RollupConfig.BatchAuthenticatorAddress, nil)
+	codeCtx, cancel := l.networkTimeoutCtx(ctx)
+	code, err := l.L1Client.CodeAt(codeCtx, l.RollupConfig.BatchAuthenticatorAddress, nil)
+	cancel()
 	if err != nil {
 		return fmt.Errorf("failed to check code at contract address: %w", err)
 	}
