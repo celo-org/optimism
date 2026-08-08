@@ -837,7 +837,9 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 	l.prevCurrentL1 = newSyncStatus.CurrentL1
 	if syncActions.clearState != nil {
 		l.channelMgr.Clear(*syncActions.clearState)
-		l.espressoStreamer.SetBatchPosition(newSyncStatus.SafeL2)
+		// LocalSafeL2, matching the base computeSyncActions derived clearState from:
+		// the channel manager and the streamer must not be reset onto different heads.
+		l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 	} else {
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
@@ -1034,7 +1036,10 @@ func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBl
 
 	l.prevSyncStatus = newSyncStatus
 
-	safeL2 := newSyncStatus.SafeL2
+	// LocalSafeL2 rather than SafeL2 (cross-safe), for the same reason as
+	// computeSyncActions: cross-safe can lag local-safe, and blocks at or below
+	// local-safe are already derived from L1 so they must not be re-enqueued.
+	safeL2 := newSyncStatus.LocalSafeL2
 
 	// State empty, just enqueue all unsafe blocks
 	if len(l.queuedBlocks) == 0 {
