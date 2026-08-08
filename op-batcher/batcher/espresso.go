@@ -1039,10 +1039,21 @@ const (
 // If reorg is detected, empty range and ActionReset is returned.
 // If there isn't enough information or no blocks to load yet, empty range and ActionRetry is returned.
 func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBlockRange, EnqueueBlockAction) {
-	if newSyncStatus.HeadL1 == (eth.L1BlockRef{}) {
-		// empty sync status
+	// Mirror computeSyncActions' zero-field guard: op-node has transiently
+	// reported statuses with individual fields zeroed while the rest are
+	// populated (see sync_actions_test.go). Treating a zero LocalSafeL2 as the
+	// queue floor would enqueue the entire pre-caffeination history, so retry
+	// until the status is fully populated.
+	if isZero(newSyncStatus.LocalSafeL2) ||
+		isZero(newSyncStatus.UnsafeL2) ||
+		isZero(newSyncStatus.HeadL1) ||
+		isZero(newSyncStatus.CurrentL1) {
+		l.batcher.degradedLog.Warn(l.batcher.Log, "emptySyncStatusField", "empty BlockRef in sync status",
+			"localSafeL2", newSyncStatus.LocalSafeL2, "unsafeL2", newSyncStatus.UnsafeL2,
+			"headL1", newSyncStatus.HeadL1, "currentL1", newSyncStatus.CurrentL1)
 		return inclusiveBlockRange{}, ActionRetry
 	}
+	l.batcher.degradedLog.Clear(l.batcher.Log, "emptySyncStatusField", "sync status fully populated")
 
 	if l.prevSyncStatus != nil && newSyncStatus.CurrentL1.Number < l.prevSyncStatus.CurrentL1.Number {
 		// Sequencer restarted and hasn't caught up yet
@@ -1056,7 +1067,8 @@ func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBl
 	// LocalSafeL2 rather than SafeL2 (cross-safe), for the same reason as
 	// computeSyncActions: cross-safe can lag local-safe, and blocks at or below
 	// local-safe are already derived from L1 so they must not be re-enqueued.
-	// Always at or past the caffeination point (startup gates on that), so
+	// A populated LocalSafeL2 is always at or past the caffeination point
+	// (startup gates on that; the guard above rejects zeroed statuses), so
 	// pre-caffeination blocks - the fallback batcher's - are never enqueued.
 	safeL2 := newSyncStatus.LocalSafeL2
 
