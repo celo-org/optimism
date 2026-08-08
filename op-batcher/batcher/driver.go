@@ -159,6 +159,14 @@ type BatchSubmitter struct {
 	espressoSubmitter *espressoTransactionSubmitter
 	espressoStreamer  *espressoStreamers.Streamer
 
+	// espressoAnchorFloor is the L2 block at --espresso.origin-height-l2, resolved
+	// during setup when the local-safe head is still below it. It floors every
+	// streamer anchor and sync comparison so the Espresso pipeline never treats
+	// pre-caffeination blocks (the fallback batcher's territory) as its own.
+	// Zero when the safe head was already past the caffeination point at setup.
+	// Written once in setupEspressoStreamer before the loops start.
+	espressoAnchorFloor eth.L2BlockRef
+
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
 
