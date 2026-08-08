@@ -895,14 +895,22 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		if err != nil {
 			l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
 			return false
-		} else {
-			l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
-			l.channelMgrMutex.Lock()
-			defer l.channelMgrMutex.Unlock()
-			l.channelMgr.Clear(l1SafeOrigin)
-			l.resetEspressoStreamer(ctx)
-			return true
 		}
+		// Fetch the streamer re-anchor target before mutating anything so the
+		// channel-manager clear and the streamer re-anchor happen together or
+		// not at all; see espressoReanchorTarget for the partial-clear hazard.
+		reanchorTarget, ok := l.espressoReanchorTarget(ctx)
+		if !ok {
+			return false
+		}
+		l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
+		l.channelMgrMutex.Lock()
+		defer l.channelMgrMutex.Unlock()
+		l.channelMgr.Clear(l1SafeOrigin)
+		if reanchorTarget != nil {
+			l.espressoStreamer.SetBatchPosition(*reanchorTarget)
+		}
+		return true
 	}
 
 	// Attempt to set the L1 safe origin and clear the state, if fetching fails -- fall through to an infinite retry
