@@ -166,6 +166,22 @@ func (l *BatchSubmitter) anchorEspressoStreamerAtSafeHead(ctx context.Context) e
 	}
 }
 
+// rollbackFailedStart undoes the startup state set at the top of StartBatchSubmitting
+// (running flag, shutdown/kill contexts) so a failed start does not wedge later
+// attempts behind "batcher is already running". Cancelling shutdownCtx also winds down
+// the streamer's poll loops if they were started, and Stop waits for them; a streamer
+// that was constructed but never started makes Stop a no-op. Only the Espresso setup
+// error paths roll back: the upstream error paths (waitForL2Genesis, waitNodeSync)
+// deliberately keep upstream's behavior. Caller must hold l.mutex.
+func (l *BatchSubmitter) rollbackFailedStart() {
+	l.cancelShutdownCtx()
+	l.cancelKillCtx()
+	if l.espressoStreamer != nil {
+		l.espressoStreamer.Stop()
+	}
+	l.running = false
+}
+
 // startEspressoLoops registers the batcher with the BatchAuthenticator
 // contract, resolves the TEE verifier address, spawns the Espresso transaction
 // submitter, and starts the four Espresso-specific batcher goroutines (in
@@ -183,9 +199,9 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 
 	// The streamer drives itself from its own poll loops, so it is started here rather
 	// than being pumped by espressoBatchLoadingLoop. Bound to shutdownCtx so it stops
-	// fetching before the publish path winds down. Must stay the last setup step that
-	// can fail: a failed StartBatchSubmitting returns without cancelling shutdownCtx,
-	// so an error after this point would leave the streamer's poll loops running.
+	// fetching before the publish path winds down. Kept as the last setup step that
+	// can fail, so a setup error never has running poll loops to unwind
+	// (rollbackFailedStart would stop them anyway).
 	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
 		return fmt.Errorf("could not start the Espresso streamer: %w", err)
 	}
