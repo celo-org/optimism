@@ -3,6 +3,8 @@ package batcher
 import (
 	"testing"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -58,4 +60,48 @@ func TestNextBlockRangeZeroStatusFields(t *testing.T) {
 				"a zeroed status must not become the comparison baseline for later ticks")
 		})
 	}
+}
+
+// espressoSyncChannelManager must report an out-of-sync status so that
+// espressoBatchLoadingLoop skips draining against an untrustworthy local-safe
+// floor: with LocalSafeL2 zeroed, the stale-batch re-anchor check in the drain
+// loop never fires and already-derived blocks would be republished.
+func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
+	newTestSubmitter := func(t *testing.T) *BatchSubmitter {
+		lgr := testlog.Logger(t, log.LevelDebug)
+		return &BatchSubmitter{
+			DriverSetup: DriverSetup{Log: lgr},
+			channelMgr:  NewChannelManager(lgr, metrics.NoopMetrics, ChannelConfig{}, &rollup.Config{}),
+			degradedLog: oplog.NewRepeatStateLogger(),
+		}
+	}
+
+	populated := eth.SyncStatus{
+		HeadL1:      eth.L1BlockRef{Number: 5, Hash: common.Hash{0x01}},
+		CurrentL1:   eth.L1BlockRef{Number: 2, Hash: common.Hash{0x02}},
+		LocalSafeL2: eth.L2BlockRef{Number: 104, Hash: common.Hash{0x03}},
+		SafeL2:      eth.L2BlockRef{Number: 103, Hash: common.Hash{0x04}},
+		UnsafeL2:    eth.L2BlockRef{Number: 109, Hash: common.Hash{0x05}},
+	}
+
+	t.Run("fully populated status is in sync", func(t *testing.T) {
+		l := newTestSubmitter(t)
+		require.False(t, l.espressoSyncChannelManager(&populated))
+		require.Equal(t, populated.CurrentL1, l.prevCurrentL1)
+	})
+
+	t.Run("zeroed LocalSafeL2 is out of sync", func(t *testing.T) {
+		l := newTestSubmitter(t)
+		status := populated
+		status.LocalSafeL2 = eth.L2BlockRef{}
+		require.True(t, l.espressoSyncChannelManager(&status))
+		require.Zero(t, l.prevCurrentL1,
+			"an out-of-sync status must not advance the CurrentL1 baseline")
+	})
+
+	t.Run("reversed CurrentL1 is out of sync", func(t *testing.T) {
+		l := newTestSubmitter(t)
+		l.prevCurrentL1 = eth.L1BlockRef{Number: 3, Hash: common.Hash{0x06}}
+		require.True(t, l.espressoSyncChannelManager(&populated))
+	})
 }
