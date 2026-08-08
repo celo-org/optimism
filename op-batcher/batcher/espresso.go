@@ -829,13 +829,7 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus) {
 	l.channelMgrMutex.Lock()
 	defer l.channelMgrMutex.Unlock()
-	// Floor the local-safe head at the caffeination point before reconciling. Our
-	// blocks start at caffeination+1, so comparing them against a pre-caffeination
-	// safe head would read as "next safe block below oldest block in state" and
-	// clear-loop for the whole activation window.
-	flooredStatus := *newSyncStatus
-	flooredStatus.LocalSafeL2 = l.espressoAnchorBase(newSyncStatus.LocalSafeL2)
-	syncActions, outOfSync := computeSyncActions(flooredStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
+	syncActions, outOfSync := computeSyncActions(*newSyncStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
 	if outOfSync {
 		l.degradedLog.Warn(l.Log, "sequencerOutOfSync", "Sequencer is out of sync, retrying next tick.")
 		return
@@ -844,10 +838,10 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 	l.prevCurrentL1 = newSyncStatus.CurrentL1
 	if syncActions.clearState != nil {
 		l.channelMgr.Clear(*syncActions.clearState)
-		// The floored local-safe head, matching the base computeSyncActions derived
-		// clearState from: the channel manager and the streamer must not be reset
-		// onto different heads.
-		l.espressoStreamer.SetBatchPosition(flooredStatus.LocalSafeL2)
+		// LocalSafeL2, matching the base computeSyncActions derived clearState from:
+		// the channel manager and the streamer must not be reset onto different heads.
+		// Always at or past the caffeination point: startup gates on that.
+		l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 	} else {
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
@@ -911,18 +905,18 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				// A batch at or below the (floored) local-safe head is already derived
-				// from L1, and adding it would make the publish path resubmit it. The
-				// cursor falls behind the safe head when previously submitted channels
-				// finish deriving while the streamer backfills (e.g. after a restart),
-				// and an empty channel manager gives computeSyncActions nothing to
-				// reconcile. Jump past the whole stale range in one re-anchor: the sync
-				// status ref is canonical, unlike a stale candidate's own hash, which
-				// advancing batch-by-batch would promote to the streamer's tip.
-				if base := l.espressoAnchorBase(newSyncStatus.LocalSafeL2); batch.Number() <= base.Number {
+				// A batch at or below the local-safe head is already derived from L1,
+				// and adding it would make the publish path resubmit it. The cursor
+				// falls behind the safe head when previously submitted channels finish
+				// deriving while the streamer backfills (e.g. after a restart), and an
+				// empty channel manager gives computeSyncActions nothing to reconcile.
+				// Jump past the whole stale range in one re-anchor: the sync status ref
+				// is canonical, unlike a stale candidate's own hash, which advancing
+				// batch-by-batch would promote to the streamer's tip.
+				if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
 					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
-						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2, "anchor", base)
-					l.espressoStreamer.SetBatchPosition(base)
+						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
+					l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 					break
 				}
 
@@ -1062,9 +1056,9 @@ func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBl
 	// LocalSafeL2 rather than SafeL2 (cross-safe), for the same reason as
 	// computeSyncActions: cross-safe can lag local-safe, and blocks at or below
 	// local-safe are already derived from L1 so they must not be re-enqueued.
-	// Floored at the caffeination point: pre-caffeination blocks are batched by
-	// the fallback batcher and must never be enqueued to Espresso.
-	safeL2 := l.batcher.espressoAnchorBase(newSyncStatus.LocalSafeL2)
+	// Always at or past the caffeination point (startup gates on that), so
+	// pre-caffeination blocks - the fallback batcher's - are never enqueued.
+	safeL2 := newSyncStatus.LocalSafeL2
 
 	// State empty, just enqueue all unsafe blocks
 	if len(l.queuedBlocks) == 0 {

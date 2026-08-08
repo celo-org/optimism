@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
@@ -97,32 +96,25 @@ func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context
 // that has reached genesis. It also returns an error rather than panicking, which
 // construction inside NewBatchSubmitter could not do.
 //
-// The streamer is anchored at max(local-safe head, --espresso.origin-height-l2):
-// the safe head normally, floored at the caffeination point so the streamer never
-// starts inside pre-Espresso history (those blocks are the fallback batcher's to
-// submit). Once the safe head is past the caffeination point, the configured height
-// is not looked up at all: NewStreamer resolves its anchor block's hash from the L2
-// client, which fails on endpoints that no longer serve the (ever aging) configured
-// height and would wedge restarts. --espresso.origin-height-espresso keeps its role:
-// it decides where the streamer starts polling HotShot.
+// The streamer is anchored at the local-safe head, which waitForLocalSafeHead
+// guarantees is at or past --espresso.origin-height-l2, so the streamer never starts
+// inside pre-Espresso history (those blocks are the fallback batcher's to submit).
+// Gating startup on the caffeination point being local-safe - rather than anchoring
+// on the configured height directly - means the anchor hash always comes from the
+// derived chain: an unsafe caffeination block could reorg after being cached and
+// permanently wedge fork selection. The configured height is never looked up either:
+// NewStreamer resolves its anchor block's hash from the L2 client, which fails on
+// endpoints that no longer serve the (ever aging) configured height and would wedge
+// restarts. --espresso.origin-height-espresso keeps its role: it decides where the
+// streamer starts polling HotShot.
 func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	if !l.Config.Espresso.Enabled {
 		return nil
 	}
 
-	safeL2, err := l.waitForLocalSafeHead(ctx)
+	anchor, err := l.waitForLocalSafeHead(ctx)
 	if err != nil {
 		return err
-	}
-
-	anchor := safeL2
-	if safeL2.Number < l.Config.Espresso.CaffeinationHeightL2 {
-		floor, err := l.resolveCaffeinationFloor(ctx)
-		if err != nil {
-			return err
-		}
-		l.espressoAnchorFloor = floor
-		anchor = floor
 	}
 
 	ethClient, err := l.EndpointProvider.EthClient(ctx)
@@ -162,45 +154,10 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	l.espressoStreamer = streamer
 
 	// Re-anchor on the exact ref we resolved: NewStreamer resolved a hash for the
-	// same height, but the sync status / fetched block is the authoritative view.
+	// same height, but the sync status is the authoritative view.
 	streamer.SetBatchPosition(anchor)
-	l.Log.Info("Anchored the Espresso streamer", "anchor", anchor, "localSafeL2", safeL2)
+	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "anchor", anchor)
 	return nil
-}
-
-// resolveCaffeinationFloor fetches the L2 block at --espresso.origin-height-l2 and
-// turns it into a full L2BlockRef (including its L1 origin, which the channel manager
-// needs when clearing against the floor). Only called while the local-safe head is
-// below the caffeination point, so the block is recent or pending: an error here
-// usually means the chain has not reached the configured height yet.
-func (l *BatchSubmitter) resolveCaffeinationFloor(ctx context.Context) (eth.L2BlockRef, error) {
-	height := l.Config.Espresso.CaffeinationHeightL2
-	block, err := l.fetchBlock(ctx, height)
-	if err != nil {
-		return eth.L2BlockRef{}, fmt.Errorf("fetching the caffeination L2 block %d (has the chain produced it yet?): %w", height, err)
-	}
-	ref, err := derive.L2BlockToBlockRef(l.RollupConfig, block)
-	if err != nil {
-		return eth.L2BlockRef{}, fmt.Errorf("deriving the block ref of the caffeination L2 block %d: %w", height, err)
-	}
-	return ref, nil
-}
-
-// espressoAnchorBase floors a local-safe head at the caffeination point: blocks at or
-// below --espresso.origin-height-l2 belong to the fallback batcher, so the streamer
-// must never be anchored into them and sync comparisons must not use a base inside
-// them. An empty ref is passed through so callers keep their "ignore empty" handling.
-func (l *BatchSubmitter) espressoAnchorBase(localSafe eth.L2BlockRef) eth.L2BlockRef {
-	if localSafe == (eth.L2BlockRef{}) || localSafe.Number >= l.Config.Espresso.CaffeinationHeightL2 {
-		return localSafe
-	}
-	if l.espressoAnchorFloor == (eth.L2BlockRef{}) {
-		// Only reachable if the safe head fell below the caffeination point after setup
-		// saw it above (a reorg deeper than the activation). Match pre-floor behavior.
-		l.Log.Error("Local-safe head below the caffeination point but no floor is cached, using the safe head", "localSafe", localSafe)
-		return localSafe
-	}
-	return l.espressoAnchorFloor
 }
 
 const (
@@ -208,12 +165,19 @@ const (
 	espressoAnchorRetryInterval = 1 * time.Second
 )
 
-// waitForLocalSafeHead polls the sync status until it reports a local-safe L2 head to
-// anchor the streamer on, giving up after espressoAnchorTimeout.
+// waitForLocalSafeHead polls the sync status until it reports a local-safe L2 head at
+// or past the caffeination point to anchor the streamer on, giving up after
+// espressoAnchorTimeout.
 //
 // LocalSafeL2 rather than SafeL2 (cross-safe): every streamer anchor must share the
 // base computeSyncActions and safeL1Origin derive clearing/pruning from, and cross-safe
 // can lag local-safe (see the note in computeSyncActions).
+//
+// Requiring the caffeination point to be local-safe is what enforces the anchor floor:
+// the Espresso batcher refuses to run - with a clean, retryable startup failure - until
+// the fallback batcher's pre-activation channels have derived. Blocks at or below
+// --espresso.origin-height-l2 are thereby never this batcher's to track, and the
+// anchor hash always comes from the derived chain rather than a reorgable unsafe block.
 func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, espressoAnchorTimeout)
 	defer cancel()
@@ -221,6 +185,7 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 	ticker := time.NewTicker(espressoAnchorRetryInterval)
 	defer ticker.Stop()
 
+	caffeinationL2 := l.Config.Espresso.CaffeinationHeightL2
 	for {
 		syncStatus, err := l.getSyncStatus(ctx)
 		switch {
@@ -228,6 +193,9 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 			l.Log.Warn("Failed to fetch sync status to anchor the Espresso streamer, retrying", "err", err)
 		case syncStatus.LocalSafeL2 == (eth.L2BlockRef{}):
 			l.Log.Warn("Sync status has no local-safe L2 head yet, retrying")
+		case syncStatus.LocalSafeL2.Number < caffeinationL2:
+			l.Log.Warn("Local-safe L2 head has not reached the caffeination point yet, retrying",
+				"localSafeL2", syncStatus.LocalSafeL2.Number, "caffeinationL2", caffeinationL2)
 		default:
 			return syncStatus.LocalSafeL2, nil
 		}
@@ -235,7 +203,9 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 		select {
 		case <-ticker.C:
 		case <-ctx.Done():
-			return eth.L2BlockRef{}, fmt.Errorf("no local-safe L2 head to anchor the Espresso streamer within %s: %w", espressoAnchorTimeout, ctx.Err())
+			return eth.L2BlockRef{}, fmt.Errorf(
+				"no local-safe L2 head at or past the caffeination point (%d) to anchor the Espresso streamer within %s (safe to retry once activation has been derived from L1): %w",
+				caffeinationL2, espressoAnchorTimeout, ctx.Err())
 		}
 	}
 }
@@ -347,5 +317,5 @@ func (l *BatchSubmitter) resetEspressoStreamer(ctx context.Context) {
 		l.Log.Warn("Failed to fetch sync status to re-anchor the Espresso streamer, keeping the current position", "err", err)
 		return
 	}
-	l.espressoStreamer.SetBatchPosition(l.espressoAnchorBase(syncStatus.LocalSafeL2))
+	l.espressoStreamer.SetBatchPosition(syncStatus.LocalSafeL2)
 }
