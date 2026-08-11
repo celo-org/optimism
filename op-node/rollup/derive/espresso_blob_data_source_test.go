@@ -3,6 +3,7 @@ package derive
 import (
 	"context"
 	"crypto/ecdsa"
+	"io"
 	"math/big"
 	"math/rand"
 	"testing"
@@ -100,7 +101,7 @@ func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1Block
 
 // TestDataAndHashesFromTxsEventAuth tests event-based batch authentication in the blob
 // data source path, and that blob-carrying inbox transactions are dropped post-fork
-// regardless of authentication (calldata-only DA, DEC-op-026).
+// regardless of authentication (calldata-only DA).
 //
 // Event-based authentication is only enforced once the fork has been active for
 // BatchAuthEnforcementDelaySecs; the fixture activates the fork at L1 origin time 0
@@ -158,7 +159,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 
 	t.Run("authenticated blob tx rejected: blob DA unsupported post-fork", func(t *testing.T) {
 		// Even a fully event-authenticated blob batch must be dropped post-fork:
-		// batch data is calldata-only (DEC-op-026) because the Celo fault-proof
+		// batch data is calldata-only because the Celo fault-proof
 		// host cannot supply blob preimages.
 		l1F := &testutils.MockL1Source{}
 		blobHash := testutils.RandomHash(rng)
@@ -322,7 +323,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		// One calldata batch and one blob batch in the same block, each authenticated
 		// via its own commitment (calldata hash vs blob-hash concatenation). Post-fork
 		// only the calldata batch may pass; the blob batch is dropped despite its
-		// valid authentication (calldata-only DA, DEC-op-026).
+		// valid authentication (calldata-only DA).
 		l1F := &testutils.MockL1Source{}
 		calldataTx, _ := types.SignNewTx(privateKey, signer, &types.LegacyTx{
 			Nonce:    rng.Uint64(),
@@ -517,7 +518,7 @@ func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 	t.Run("post-fork: blob batcher tx dropped from activation onward", func(t *testing.T) {
 		// From the moment the fork activates — including the grace window, where
 		// calldata batches still pass on sender auth — blob batches are dropped
-		// (calldata-only DA, DEC-op-026). The empty mock also asserts no receipt
+		// (calldata-only DA). The empty mock also asserts no receipt
 		// scanning happens pre-enforcement.
 		l1F := &testutils.MockL1Source{}
 		tx := newBlobBatchTx(t, testutils.RandomHash(rng))
@@ -531,4 +532,60 @@ func TestDataAndHashesFromTxsForkBoundary(t *testing.T) {
 		}
 		l1F.AssertExpectations(t)
 	})
+}
+
+// TestOpenDataDropsBlobsPostEspresso drives the whole data-source path — NewDataSourceFactory,
+// OpenData, Next — rather than calling dataAndHashesFromTxs directly, and asserts that a blob
+// inbox tx costs no blob fetch once Espresso is active. The blobs fetcher has no expectations
+// set, so any GetBlobsByHash call is unexpected and fails the test; that is what pins the
+// no-blobs-to-fetch short-circuit in BlobDataSource.open.
+//
+// The ref sits past the enforcement delay with a non-zero espresso_time, so the auth event
+// scan runs and the drop is exercised on the enforced path rather than the grace window.
+func TestOpenDataDropsBlobsPostEspresso(t *testing.T) {
+	rng := rand.New(rand.NewSource(5555))
+	privateKey := testutils.InsecureRandomKey(rng)
+	batcherAddr := crypto.PubkeyToAddress(*privateKey.Public().(*ecdsa.PublicKey))
+	batchInboxAddr := testutils.RandomAddress(rng)
+	authenticatorAddr := testutils.RandomAddress(rng)
+	logger := testlog.Logger(t, log.LvlInfo)
+
+	chainId := new(big.Int).SetUint64(rng.Uint64())
+	signer := types.NewPragueSigner(chainId)
+
+	// Ecotone at genesis so OpenData selects the blob source at all; Espresso at 1000.
+	ecotoneTime := uint64(0)
+	espressoTime := uint64(1000)
+	cfg := &rollup.Config{
+		L1ChainID:                 chainId,
+		BatchInboxAddress:         batchInboxAddr,
+		EcotoneTime:               &ecotoneTime,
+		EspressoTime:              &espressoTime,
+		BatchAuthenticatorAddress: authenticatorAddr,
+	}
+
+	blobTx, err := types.SignNewTx(privateKey, signer, &types.BlobTx{
+		Nonce:      rng.Uint64(),
+		Gas:        2_000_000,
+		To:         batchInboxAddr,
+		BlobHashes: []common.Hash{testutils.RandomHash(rng)},
+	})
+	require.NoError(t, err)
+
+	l1F := &testutils.MockL1Source{}
+	blobsFetcher := &testutils.MockBlobsFetcher{}
+
+	ref := eth.L1BlockRef{Number: 1, Time: espressoTime + BatchAuthEnforcementDelaySecs, Hash: testutils.RandomHash(rng)}
+	ref = mockAuthEvents(l1F, rng, ref, authenticatorAddr, batcherAddr, nil)
+	l1F.ExpectInfoAndTxsByHash(ref.Hash, testutils.RandomBlockInfo(rng), types.Transactions{blobTx}, nil)
+
+	ctx := context.Background()
+	src, err := NewDataSourceFactory(logger, cfg, l1F, blobsFetcher, nil).OpenData(ctx, ref, batcherAddr)
+	require.NoError(t, err)
+
+	_, err = src.Next(ctx)
+	require.ErrorIs(t, err, io.EOF, "the blob batch must be dropped, leaving no data to return")
+
+	l1F.AssertExpectations(t)
+	blobsFetcher.AssertExpectations(t)
 }

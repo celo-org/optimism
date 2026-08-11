@@ -13,10 +13,15 @@ import (
 )
 
 // TestCheckEspressoDataAvailability: chains with Espresso scheduled are
-// calldata-only (DEC-op-026) — post-Espresso derivation drops blob batches, so a
+// calldata-only — post-Espresso derivation drops blob batches, so a
 // blob/auto DA configuration must be rejected at startup.
 func TestCheckEspressoDataAvailability(t *testing.T) {
 	espressoTime := uint64(0)
+	// Far enough out that the fork cannot have activated. The check keys on EspressoTime
+	// being set rather than on activation, deliberately: derivation only drops blobs from
+	// activation, so this is the only thing keeping blobs out of the pre-fork blocks a
+	// post-Espresso proof walks back through.
+	futureEspressoTime := uint64(1) << 40
 
 	tests := []struct {
 		name         string
@@ -29,6 +34,9 @@ func TestCheckEspressoDataAvailability(t *testing.T) {
 		{"espresso scheduled: calldata allowed", &espressoTime, flags.CalldataType, false},
 		{"espresso scheduled: blobs rejected", &espressoTime, flags.BlobsType, true},
 		{"espresso scheduled: auto rejected", &espressoTime, flags.AutoType, true},
+		{"espresso scheduled but not active: calldata allowed", &futureEspressoTime, flags.CalldataType, false},
+		{"espresso scheduled but not active: blobs rejected", &futureEspressoTime, flags.BlobsType, true},
+		{"espresso scheduled but not active: auto rejected", &futureEspressoTime, flags.AutoType, true},
 	}
 
 	for _, test := range tests {
