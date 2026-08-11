@@ -43,6 +43,7 @@ use reth_revm::{
 };
 use reth_storage_api::{StateProvider, StateProviderFactory, errors::ProviderError};
 use reth_transaction_pool::{BestTransactionsAttributes, PoolTransaction, TransactionPool};
+use reth_trie_parallel::state_root_task::StateRootHandle;
 use revm::context::{Block, BlockEnv};
 use std::{marker::PhantomData, sync::Arc};
 use tracing::{debug, trace, warn};
@@ -248,7 +249,8 @@ where
         Txs:
             PayloadTransactions<Transaction: PoolTransaction<Consensus = N::SignedTx> + OpPooledTx>,
     {
-        let BuildArguments { mut cached_reads, config, cancel, best_payload, .. } = args;
+        let BuildArguments { mut cached_reads, config, cancel, best_payload, trie_handle, .. } =
+            args;
 
         let ctx = OpPayloadBuilderCtx {
             evm_config: self.evm_config.clone(),
@@ -259,7 +261,7 @@ where
             best_payload,
         };
 
-        let builder = OpBuilder::new(best);
+        let builder = OpBuilder::new(best).with_trie_handle(trie_handle);
 
         let state_provider = self.client.state_by_block_hash(ctx.parent().hash())?;
         let state = StateProviderDatabase::new(&state_provider);
@@ -415,12 +417,24 @@ pub struct OpBuilder<'a, Txs> {
     /// Yields the best transaction to include if transactions from the mempool are allowed.
     #[debug(skip)]
     best: Box<dyn FnOnce(BestTransactionsAttributes) -> Txs + 'a>,
+    /// Handle to the engine's sparse trie pipeline, if it shares one for this payload.
+    trie_handle: Option<StateRootHandle>,
 }
 
 impl<'a, Txs> OpBuilder<'a, Txs> {
     /// Creates a new [`OpBuilder`].
     pub fn new(best: impl FnOnce(BestTransactionsAttributes) -> Txs + Send + Sync + 'a) -> Self {
-        Self { best: Box::new(best) }
+        Self { best: Box::new(best), trie_handle: None }
+    }
+
+    /// Shares the engine's sparse trie pipeline with this build.
+    ///
+    /// When set, per-transaction state diffs stream to the trie task during execution and the
+    /// final root is taken from it, instead of the blocking trie walk in
+    /// [`BlockBuilder::finish`].
+    pub fn with_trie_handle(mut self, trie_handle: Option<StateRootHandle>) -> Self {
+        self.trie_handle = trie_handle;
+        self
     }
 }
 
@@ -444,7 +458,7 @@ impl<Txs> OpBuilder<'_, Txs> {
             PayloadTransactions<Transaction: PoolTransaction<Consensus = N::SignedTx> + OpPooledTx>,
         Attrs: OpAttributes<Transaction = N::SignedTx>,
     {
-        let Self { best } = self;
+        let Self { best, trie_handle } = self;
         debug!(target: "payload_builder", id=%ctx.payload_id(), parent_header = ?ctx.parent().hash(), parent_number = ctx.parent().number(), "building new payload");
 
         let mut db = State::builder().with_database(db).with_bundle_update().build();
@@ -455,6 +469,12 @@ impl<Txs> OpBuilder<'_, Txs> {
         db.load_cache_account(L1_BLOCK_CONTRACT).map_err(BlockExecutionError::other)?;
 
         let mut builder = ctx.block_builder(&mut db)?;
+
+        // If we have a sparse trie handle, wire a state hook that streams per-tx state diffs
+        // to the background trie pipeline for incremental state root computation.
+        if let Some(ref handle) = trie_handle {
+            builder.executor_mut().set_state_hook(Some(Box::new(handle.state_hook())));
+        }
 
         // 1. apply pre-execution changes
         builder.apply_pre_execution_changes().map_err(|err| {
@@ -500,7 +520,30 @@ impl<Txs> OpBuilder<'_, Txs> {
             trie_updates,
             block,
             block_access_list: _,
-        } = builder.finish(state_provider, None)?;
+        } = if let Some(mut handle) = trie_handle {
+            // Drop the state hook, which drops the StateHookSender and triggers
+            // FinishedStateUpdates via its Drop impl, signaling the trie task to finalize.
+            builder.executor_mut().set_state_hook(None);
+
+            // The sparse trie has been computing incrementally alongside tx execution.
+            // This waits for the final root hash — most work is already done.
+            // Fall back to sync state root if the trie pipeline fails.
+            match handle.state_root() {
+                Ok(outcome) => {
+                    debug!(target: "payload_builder", id=%ctx.payload_id(), state_root=?outcome.state_root, "received state root from sparse trie");
+                    builder.finish(
+                        state_provider,
+                        Some((outcome.state_root, Arc::unwrap_or_clone(outcome.trie_updates))),
+                    )?
+                }
+                Err(err) => {
+                    warn!(target: "payload_builder", id=%ctx.payload_id(), %err, "sparse trie failed, falling back to sync state root");
+                    builder.finish(state_provider, None)?
+                }
+            }
+        } else {
+            builder.finish(state_provider, None)?
+        };
 
         OpPayloadBuilderMetrics::default().record_sdm_refund_gas(sdm_refund_gas);
 
