@@ -171,7 +171,12 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 			continue
 		}
 
-		// Compute batch hash depending on tx type
+		// Compute batch hash depending on tx type. The blob arm computes a value nothing
+		// reads: a blob tx only gets past the drop above pre-Espresso, and pre-Espresso
+		// isBatchTxAuthorized takes the sender-based path, which ignores batchHash. Keep it
+		// anyway. Folding it into the calldata arm would hash a blob tx over its
+		// usually-empty calldata, so if the drop above were ever narrowed, every blob batch
+		// would fail authentication for a reason the logs would not explain.
 		var batchHash common.Hash
 		if tx.Type() == types.BlobTxType {
 			batchHash = ComputeBlobBatchHash(tx.BlobHashes())
@@ -191,6 +196,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 			continue
 		}
 		// handle blob batcher transactions by extracting their blob hashes, ignoring any calldata.
+		// Pre-Espresso only, for the reason given at the batch hash above.
 		if len(tx.Data()) > 0 {
 			log.Warn("blob tx has calldata, which will be ignored", "txhash", tx.Hash())
 		}
