@@ -119,19 +119,32 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // creates a placeholder blobOrCalldata element for each returned blob hash that must be populated
 // by fillBlobPointers after blob bodies are retrieved.
 //
-// Before Espresso event-auth is enforced (Espresso inactive at the L1 origin time of
-// `ref`, or within BatchAuthEnforcementDelaySecs of activation), this runs upstream
-// Optimism semantics: filter by batch inbox + sender == batcher.
+// Every transaction is filtered by the batch inbox address first. Two further rules then
+// apply, both keyed on the L1 origin time of `ref`.
 //
-// Once enforced, it collects all authenticated batch hashes from a lookback
-// window once and rejects any batch whose commitment hash is not in the
-// authenticated set. For blob transactions, the batch hash is computed from
-// the concatenated blob versioned hashes.
+// From Espresso activation onward (including the enforcement grace window), batch
+// data is calldata-only: blob-carrying inbox transactions are dropped entirely,
+// authenticated or not. The Celo fault-proof host (celo-kona) does not implement
+// the L1Blob preimage hint, so a blob batch accepted here would stall fault-proof
+// execution at its L1 block.
+//
+// That only covers L1 blocks at or after espresso_time. A proof also walks back
+// channel_timeout blocks into pre-fork territory; those are kept blob-free by the
+// batcher (checkEspressoDataAvailability), not by consensus.
+//
+// The transactions that survive that rule are authorized by upstream Optimism semantics
+// (sender == batcher) until Espresso event-auth is enforced, which happens once Espresso
+// has been active for BatchAuthEnforcementDelaySecs. Once enforced, it collects all
+// authenticated batch hashes from a lookback window once and rejects any batch whose
+// commitment hash is not in the authenticated set.
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
+	// Espresso activation and event-auth enforcement are both properties of the L1 origin
+	// time of the block we're scanning, so they hold for every transaction in it.
+	espressoActive := config.rollupCfg.IsEspresso(ref.Time)
+
 	// Only collect authenticated batch commitments once event-based authentication is
-	// enforced at the L1 origin time of the block we're scanning (Espresso active plus
-	// the enforcement grace period). Before that, the upstream sender-based
-	// authorization path is used and authenticatedHashes is unused.
+	// enforced (Espresso active plus the enforcement grace period). Before that, the
+	// upstream sender-based authorization path is used and authenticatedHashes is unused.
 	var authenticatedHashes map[common.Hash]common.Address
 	if isEspressoAuthEnforced(config.rollupCfg, ref.Time) {
 		var err error
@@ -151,7 +164,21 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 			continue
 		}
 
-		// Compute batch hash depending on tx type
+		// Post-Espresso, blob DA is unsupported (calldata-only): drop blob
+		// batch transactions before any authorization check so derivation never
+		// requires blob preimages the Celo fault-proof host cannot supply.
+		if tx.Type() == types.BlobTxType && espressoActive {
+			logger.Warn("ignoring blob batch tx: blob DA is unsupported post-Espresso",
+				"txHash", tx.Hash())
+			continue
+		}
+
+		// Compute batch hash depending on tx type. The blob arm computes a value nothing
+		// reads: a blob tx only gets past the drop above pre-Espresso, and pre-Espresso
+		// isBatchTxAuthorized takes the sender-based path, which ignores batchHash. Keep it
+		// anyway. Folding it into the calldata arm would hash a blob tx over its
+		// usually-empty calldata, so if the drop above were ever narrowed, every blob batch
+		// would fail authentication for a reason the logs would not explain.
 		var batchHash common.Hash
 		if tx.Type() == types.BlobTxType {
 			batchHash = ComputeBlobBatchHash(tx.BlobHashes())
@@ -171,6 +198,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 			continue
 		}
 		// handle blob batcher transactions by extracting their blob hashes, ignoring any calldata.
+		// Pre-Espresso only, for the reason given at the batch hash above.
 		if len(tx.Data()) > 0 {
 			log.Warn("blob tx has calldata, which will be ignored", "txhash", tx.Hash())
 		}
