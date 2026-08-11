@@ -79,7 +79,9 @@ func testFallbackTxData() txData {
 }
 
 // testBlobCandidate returns a tx candidate carrying one (zero) blob, which
-// routes sendTxWithFallbackAuth onto the serialized blob path.
+// routes sendTxWithFallbackAuth onto the serialized blob path. That path is
+// unreachable in production while calldata-only DA is enforced; its tests are kept
+// so it stays covered if the restriction is lifted.
 func testBlobCandidate() *txmgr.TxCandidate {
 	return &txmgr.TxCandidate{Blobs: []*eth.Blob{{}}}
 }
@@ -410,6 +412,8 @@ func TestComputeCommitment_Parity(t *testing.T) {
 		}
 	})
 
+	// Same caveat as testBlobCandidate: no live path computes a blob commitment while
+	// calldata-only DA is enforced.
 	t.Run("blobs", func(t *testing.T) {
 		for _, n := range []int{1, 3} {
 			blobs := make([]*eth.Blob, n)

@@ -50,6 +50,10 @@ func TestCheckEspressoDataAvailability(t *testing.T) {
 // TestCheckFallbackAuthConfirmations: the NumConfirmations headroom bound only
 // applies when a blob/auto DA batcher can actually emit auth→batch pairs — a
 // BatchAuthenticator is configured AND the EspressoTime fork is scheduled.
+//
+// Cases pairing a set espressoTime with a non-calldata DA type describe batchers
+// checkEspressoDataAvailability refuses to start. They only occur if the calldata-only
+// restriction is lifted, and are kept so the bound stays covered if it is.
 func TestCheckFallbackAuthConfirmations(t *testing.T) {
 	espressoTime := uint64(0)
 	authAddr := common.Address{0x01}
