@@ -171,6 +171,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.initRollupConfig(ctx); err != nil {
 		return fmt.Errorf("failed to load rollup config: %w", err)
 	}
+	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
+		return err
+	}
 	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
 		return err
 	}
@@ -259,19 +262,49 @@ func (bs *BatcherService) initRollupConfig(ctx context.Context) error {
 	return nil
 }
 
+// checkEspressoDataAvailability enforces the calldata-only DA restriction of the
+// Espresso integration: from Espresso activation the derivation
+// pipeline drops blob batch transactions because the Celo fault-proof host cannot
+// retrieve blob contents. A blob- or auto-configured batcher would have every blob
+// batch silently ignored by verifiers once the fork activates: the safe head stalls
+// for one sequence window, then verifiers force empty batches and reorg away the
+// unsafe chain, discarding the transactions in it. Refuse to start instead.
+//
+// Deliberately broader than derivation's gate, which drops blobs only once Espresso
+// is active: a proof walks back channel_timeout L1 blocks into pre-fork territory, and
+// this check is the only thing keeping blob batches out of that window. Do not narrow
+// it to IsEspresso.
+func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
+	if bs.RollupConfig.EspressoTime == nil {
+		return nil
+	}
+	if cfg.DataAvailabilityType != flags.CalldataType {
+		return fmt.Errorf("data availability type %q is not supported on chains with Espresso scheduled: "+
+			"batch data must be posted as calldata only (blob DA is dropped by post-Espresso derivation)",
+			cfg.DataAvailabilityType)
+	}
+	return nil
+}
+
 // checkFallbackAuthConfirmations validates that the configured number of L1
 // confirmations leaves enough headroom inside BatchAuthLookbackWindow for the
 // batch tx to land after its auth tx (see sendTxWithFallbackAuth). The bound
 // only applies when the BatchAuthenticator is configured on the chain, which
-// is only known once the rollup config is loaded
+// is only known once the rollup config is loaded.
+//
+// While calldata-only DA is enforced this cannot return an error: it runs after
+// checkEspressoDataAvailability, which rejects the one configuration the bound
+// applies to, a scheduled EspressoTime with a non-calldata DA type. It is kept as a
+// second line of defence and applies again if the restriction is ever lifted.
 func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
 	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return nil
 	}
 	// Fallback auth is gated behind the EspressoTime hardfork
 	// (dispatchAuthenticatedSendTx): with no activation scheduled no
-	// auth→batch pair can be emitted, so the bound does not apply. A future
-	// activation must still be checked — it switches the send path mid-run.
+	// auth→batch pair can be emitted, so the bound does not apply. A scheduled
+	// activation counts the same as an active one, since it switches the send
+	// path mid-run.
 	if bs.RollupConfig.EspressoTime == nil {
 		return nil
 	}
