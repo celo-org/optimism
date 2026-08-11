@@ -119,13 +119,8 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // creates a placeholder blobOrCalldata element for each returned blob hash that must be populated
 // by fillBlobPointers after blob bodies are retrieved.
 //
-// Before Espresso event-auth is enforced (Espresso inactive at the L1 origin time of
-// `ref`, or within BatchAuthEnforcementDelaySecs of activation), this runs upstream
-// Optimism semantics: filter by batch inbox + sender == batcher.
-//
-// Once enforced, it collects all authenticated batch hashes from a lookback
-// window once and rejects any batch whose commitment hash is not in the
-// authenticated set.
+// Every transaction is filtered by the batch inbox address first. Two further rules then
+// apply, both keyed on the L1 origin time of `ref`.
 //
 // From Espresso activation onward (including the enforcement grace window), batch
 // data is calldata-only: blob-carrying inbox transactions are dropped entirely,
@@ -134,6 +129,12 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // execution at its L1 block; dropping blob transactions at the fork boundary
 // guarantees post-Espresso derivation never depends on blob preimages
 // (spec decision DEC-op-026/n-026).
+//
+// The transactions that survive that rule are authorized by upstream Optimism semantics
+// (sender == batcher) until Espresso event-auth is enforced, which happens once Espresso
+// has been active for BatchAuthEnforcementDelaySecs. Once enforced, it collects all
+// authenticated batch hashes from a lookback window once and rejects any batch whose
+// commitment hash is not in the authenticated set.
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
 	// Espresso activation and event-auth enforcement are both properties of the L1 origin
 	// time of the block we're scanning, so they hold for every transaction in it.
@@ -161,7 +162,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 			continue
 		}
 
-		// Post-Espresso, blob DA is unsupported (calldata-only, DEC-op-026): drop blob
+		// Post-Espresso, blob DA is unsupported (calldata-only): drop blob
 		// batch transactions before any authorization check so derivation never
 		// requires blob preimages the Celo fault-proof host cannot supply.
 		if tx.Type() == types.BlobTxType && espressoActive {
