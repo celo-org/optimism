@@ -67,14 +67,18 @@ func NewBatchAuthCaches() *BatchAuthCaches {
 	return &BatchAuthCaches{AuthCache: authCache, RefCache: refCache}
 }
 
-// ComputeCalldataBatchHash computes keccak256(calldata), matching the BatchAuthenticator
-// contract's calldata batch validation path.
+// ComputeCalldataBatchHash computes keccak256(calldata), the commitment a calldata batch
+// is authenticated under. BatchAuthenticator.authenticateBatchInfo takes the commitment as
+// an opaque bytes32 and never inspects how it was derived, so this encoding is agreed
+// off-chain between the batcher and derivation.
 func ComputeCalldataBatchHash(data []byte) common.Hash {
 	return crypto.Keccak256Hash(data)
 }
 
-// ComputeBlobBatchHash computes keccak256(concat(blobHashes)), matching the BatchAuthenticator
-// contract's blob batch validation path.
+// ComputeBlobBatchHash computes keccak256(concat(blobHashes)), the same commitment for a
+// blob batch, agreed off-chain as above. No live path consumes it while calldata-only DA
+// is enforced: derivation drops blob batches before hashing them, and the batcher cannot
+// start with blob DA once espresso_time is set.
 func ComputeBlobBatchHash(blobHashes []common.Hash) common.Hash {
 	concatenated := make([]byte, 32*len(blobHashes))
 	for i, h := range blobHashes {
