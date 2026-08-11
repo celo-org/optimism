@@ -121,6 +121,8 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 // sendFallbackAuthSerialized submits an auth+batch pair serially: the auth tx is sent
 // and confirmed first, then the batch tx. It runs on the publishing-loop goroutine and
 // blocks it for the pair's full confirmation cycle, so consecutive pairs never overlap.
+// Its only caller is the blob branch of sendTxWithFallbackAuth, so it cannot run while
+// calldata-only DA is enforced.
 func (l *BatchSubmitter) sendFallbackAuthSerialized(transactionReference, authReference txRef, verifyCandidate txmgr.TxCandidate, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
 	authReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
 	queue.Send(authReference, verifyCandidate, authReceiptCh)
