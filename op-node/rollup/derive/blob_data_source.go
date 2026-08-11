@@ -126,9 +126,11 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // data is calldata-only: blob-carrying inbox transactions are dropped entirely,
 // authenticated or not. The Celo fault-proof host (celo-kona) does not implement
 // the L1Blob preimage hint, so a blob batch accepted here would stall fault-proof
-// execution at its L1 block; dropping blob transactions at the fork boundary
-// guarantees post-Espresso derivation never depends on blob preimages
-// (spec decision DEC-op-026/n-026).
+// execution at its L1 block.
+//
+// That only covers L1 blocks at or after espresso_time. A proof also walks back
+// channel_timeout blocks into pre-fork territory; those are kept blob-free by the
+// batcher (checkEspressoDataAvailability), not by consensus.
 //
 // The transactions that survive that rule are authorized by upstream Optimism semantics
 // (sender == batcher) until Espresso event-auth is enforced, which happens once Espresso

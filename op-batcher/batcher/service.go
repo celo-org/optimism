@@ -268,6 +268,11 @@ func (bs *BatcherService) initRollupConfig(ctx context.Context) error {
 // retrieve blob contents. A blob- or auto-configured batcher would have every blob
 // batch silently ignored by verifiers once the fork activates, stalling the safe
 // head, so refuse to start instead.
+//
+// Deliberately broader than derivation's gate, which drops blobs only once Espresso
+// is active: a proof walks back channel_timeout L1 blocks into pre-fork territory, and
+// this check is the only thing keeping blob batches out of that window. Do not narrow
+// it to IsEspresso.
 func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 	if bs.RollupConfig.EspressoTime == nil {
 		return nil
