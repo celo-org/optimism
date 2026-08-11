@@ -324,6 +324,11 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 		// via its own commitment (calldata hash vs blob-hash concatenation). Post-fork
 		// only the calldata batch may pass; the blob batch is dropped despite its
 		// valid authentication (calldata-only DA).
+		//
+		// The blob tx goes first, ahead of the calldata batch. That ordering is what makes
+		// the drop's per-transaction scope observable: a whole-block short-circuit (break
+		// where the gate has continue) would swallow the calldata batch behind it. With the
+		// calldata batch first, this test passes either way.
 		l1F := &testutils.MockL1Source{}
 		calldataTx, _ := types.SignNewTx(privateKey, signer, &types.LegacyTx{
 			Nonce:    rng.Uint64(),
@@ -347,7 +352,7 @@ func TestDataAndHashesFromTxsEventAuth(t *testing.T) {
 			ComputeBlobBatchHash([]common.Hash{blobHash}),
 		})
 
-		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{calldataTx, blobTx}, &config, batcherAddr, l1F, ref, logger)
+		data, blobHashes, err := dataAndHashesFromTxs(ctx, types.Transactions{blobTx, calldataTx}, &config, batcherAddr, l1F, ref, logger)
 		require.NoError(t, err)
 		require.Equal(t, 1, len(data), "only the calldata batch may pass post-fork")
 		require.Equal(t, 0, len(blobHashes))
