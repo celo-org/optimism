@@ -284,15 +284,21 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 // confirmations leaves enough headroom inside BatchAuthLookbackWindow for the
 // batch tx to land after its auth tx (see sendTxWithFallbackAuth). The bound
 // only applies when the BatchAuthenticator is configured on the chain, which
-// is only known once the rollup config is loaded
+// is only known once the rollup config is loaded.
+//
+// While calldata-only DA is enforced this cannot return an error: it runs after
+// checkEspressoDataAvailability, which rejects the one configuration the bound
+// applies to, a scheduled EspressoTime with a non-calldata DA type. It is kept as a
+// second line of defence and applies again if the restriction is ever lifted.
 func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
 	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return nil
 	}
 	// Fallback auth is gated behind the EspressoTime hardfork
 	// (dispatchAuthenticatedSendTx): with no activation scheduled no
-	// auth→batch pair can be emitted, so the bound does not apply. A future
-	// activation must still be checked — it switches the send path mid-run.
+	// auth→batch pair can be emitted, so the bound does not apply. A scheduled
+	// activation counts the same as an active one, since it switches the send
+	// path mid-run.
 	if bs.RollupConfig.EspressoTime == nil {
 		return nil
 	}

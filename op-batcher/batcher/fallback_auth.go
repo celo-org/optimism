@@ -94,7 +94,9 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	)
 
 	if len(candidate.Blobs) > 0 {
-		// SendPair doesn't support blobs.
+		// SendPair doesn't support blobs. Unreachable while calldata-only DA is
+		// enforced: checkEspressoDataAvailability refuses to start a blob- or
+		// auto-configured batcher on a chain with EspressoTime set.
 		l.sendFallbackAuthSerialized(transactionReference, authReference, verifyCandidate, candidate, queue, receiptsCh)
 		return
 	}
