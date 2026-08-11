@@ -263,11 +263,12 @@ func (bs *BatcherService) initRollupConfig(ctx context.Context) error {
 }
 
 // checkEspressoDataAvailability enforces the calldata-only DA restriction of the
-// Espresso integration (DEC-op-026): from Espresso activation the derivation
+// Espresso integration: from Espresso activation the derivation
 // pipeline drops blob batch transactions because the Celo fault-proof host cannot
 // retrieve blob contents. A blob- or auto-configured batcher would have every blob
-// batch silently ignored by verifiers once the fork activates, stalling the safe
-// head, so refuse to start instead.
+// batch silently ignored by verifiers once the fork activates: the safe head stalls
+// for one sequence window, then verifiers force empty batches and reorg away the
+// unsafe chain, discarding the transactions in it. Refuse to start instead.
 //
 // Deliberately broader than derivation's gate, which drops blobs only once Espresso
 // is active: a proof walks back channel_timeout L1 blocks into pre-fork territory, and
