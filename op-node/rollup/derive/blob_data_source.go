@@ -135,10 +135,13 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // guarantees post-Espresso derivation never depends on blob preimages
 // (spec decision DEC-op-026/n-026).
 func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
+	// Espresso activation and event-auth enforcement are both properties of the L1 origin
+	// time of the block we're scanning, so they hold for every transaction in it.
+	espressoActive := config.rollupCfg.IsEspresso(ref.Time)
+
 	// Only collect authenticated batch commitments once event-based authentication is
-	// enforced at the L1 origin time of the block we're scanning (Espresso active plus
-	// the enforcement grace period). Before that, the upstream sender-based
-	// authorization path is used and authenticatedHashes is unused.
+	// enforced (Espresso active plus the enforcement grace period). Before that, the
+	// upstream sender-based authorization path is used and authenticatedHashes is unused.
 	var authenticatedHashes map[common.Hash]common.Address
 	if isEspressoAuthEnforced(config.rollupCfg, ref.Time) {
 		var err error
@@ -161,7 +164,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 		// Post-Espresso, blob DA is unsupported (calldata-only, DEC-op-026): drop blob
 		// batch transactions before any authorization check so derivation never
 		// requires blob preimages the Celo fault-proof host cannot supply.
-		if tx.Type() == types.BlobTxType && config.rollupCfg.IsEspresso(ref.Time) {
+		if tx.Type() == types.BlobTxType && espressoActive {
 			logger.Warn("ignoring blob batch tx: blob DA is unsupported post-Espresso",
 				"txHash", tx.Hash())
 			continue
