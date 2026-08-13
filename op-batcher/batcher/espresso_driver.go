@@ -163,6 +163,14 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 const (
 	espressoAnchorTimeout       = 1 * time.Minute
 	espressoAnchorRetryInterval = 1 * time.Second
+	// espressoRegistrationTimeout bounds the registerSigner send (and the
+	// attestation-service call feeding it). The send runs while
+	// StartBatchSubmitting holds l.mutex, and StopBatchSubmitting needs that
+	// mutex before it can cancel killCtx — so an unbounded receipt wait
+	// (txmgr.send-timeout defaults to 0) would deadlock graceful shutdown.
+	// Sized for L1 inclusion plus fee bumps; on expiry the start fails
+	// cleanly via rollbackFailedStart.
+	espressoRegistrationTimeout = 10 * time.Minute
 )
 
 // waitForLocalSafeHead polls the sync status until it reports a local-safe L2 head at
@@ -232,7 +240,9 @@ func (l *BatchSubmitter) rollbackFailedStart() {
 // addition to the upstream receiptsLoop and publishingLoop). Replaces the
 // upstream three-goroutine pattern when --espresso.enabled is set.
 func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo, unsafeBytesUpdated chan int64) error {
-	if err := l.registerBatcher(l.killCtx); err != nil {
+	regCtx, cancelReg := context.WithTimeout(l.killCtx, espressoRegistrationTimeout)
+	defer cancelReg()
+	if err := l.registerBatcher(regCtx); err != nil {
 		return fmt.Errorf("could not register with BatchAuthenticator contract: %w", err)
 	}
 
