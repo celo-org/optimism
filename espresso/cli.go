@@ -203,6 +203,9 @@ func (c CLIConfig) Check() error {
 		if !c.allowEmptyAttestationService && c.EspressoAttestationService == "" {
 			return fmt.Errorf("attestation service URL is required when Espresso is enabled")
 		}
+		if c.PollInterval <= 0 {
+			return fmt.Errorf("poll interval must be > 0")
+		}
 		if c.VerifyReceiptMaxBlocks == 0 {
 			return fmt.Errorf("verify-receipt-max-blocks must be > 0")
 		}
