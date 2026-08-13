@@ -8,7 +8,6 @@ import (
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hf/nitrite"
@@ -128,10 +127,6 @@ func (bs *BatcherService) initEspresso(cfg *CLIConfig) error {
 		log.Info("Using L2 chain ID as namespace by default")
 		cfg.Espresso.Namespace = bigs.Uint64Strict(bs.RollupConfig.L2ChainID)
 	}
-	if cfg.Espresso.BatchAuthenticatorAddr == (common.Address{}) {
-		cfg.Espresso.BatchAuthenticatorAddr = bs.RollupConfig.BatchAuthenticatorAddress
-	}
-
 	if err := cfg.Espresso.Check(); err != nil {
 		return fmt.Errorf("invalid Espresso config: %w", err)
 	}
