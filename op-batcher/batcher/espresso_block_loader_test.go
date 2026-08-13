@@ -151,6 +151,16 @@ func TestEspressoReanchorTarget(t *testing.T) {
 		require.Nil(t, target)
 	})
 
+	t.Run("zeroed LocalSafeL2 blocks the clear", func(t *testing.T) {
+		l, ep := newReanchorSubmitter(t, true, &espressoStreamers.Streamer{})
+		ep.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
+			HeadL1: eth.L1BlockRef{Number: 5, Hash: common.Hash{0x01}},
+		}, nil)
+		target, ok := l.espressoReanchorTarget(t.Context())
+		require.False(t, ok)
+		require.Nil(t, target)
+	})
+
 	t.Run("populated status yields the local-safe target", func(t *testing.T) {
 		l, ep := newReanchorSubmitter(t, true, &espressoStreamers.Streamer{})
 		localSafe := eth.L2BlockRef{Number: 104, Hash: common.Hash{0x03}}
