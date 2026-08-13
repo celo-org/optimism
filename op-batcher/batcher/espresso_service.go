@@ -34,9 +34,12 @@ type EspressoBatcherConfig struct {
 	CaffeinationHeightEspresso uint64
 	// CaffeinationHeightL2 is the L2 batch position at which the Espresso
 	// streamer should start emitting batches. Operational parameter for
-	// restarting batchers mid-chain (e.g. after a fallback batcher event).
-	// When zero, the driver falls back to
-	// RollupConfig.EspressoOriginBatchPos().
+	// starting batchers mid-chain (e.g. handing off from the fallback
+	// batcher): waitForLocalSafeHead refuses to anchor the streamer until
+	// the local-safe head reaches this height. When zero there is no floor:
+	// the streamer anchors at the current local-safe head, which is correct
+	// for steady-state restarts but provides no handoff protection, so
+	// handoff starts must set --espresso.origin-height-l2 explicitly.
 	CaffeinationHeightL2 uint64
 
 	// Receipt verification tuning for the Espresso transaction submitter.
