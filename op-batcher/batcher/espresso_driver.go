@@ -319,10 +319,11 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 // blocks in between would only be recovered once computeSyncActions notices the
 // gap - or not at all while the streamer has nothing to serve.
 //
-// Reports ok=false when the sync status cannot be fetched: the caller must
-// retry the whole clear rather than perform it partially. Reports a nil target
-// (and ok=true) when there is nothing to re-anchor: --espresso.enabled unset,
-// or the startup path, where clearState runs before the streamer is constructed.
+// Reports ok=false when the sync status cannot be fetched or reports a zeroed
+// LocalSafeL2: the caller must retry the whole clear rather than perform it
+// partially. Reports a nil target (and ok=true) when there is nothing to
+// re-anchor: --espresso.enabled unset, or the startup path, where clearState
+// runs before the streamer is constructed.
 func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *eth.L2BlockRef, ok bool) {
 	if !l.Config.Espresso.Enabled || l.espressoStreamer == nil {
 		return nil, true
@@ -330,6 +331,14 @@ func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *et
 	syncStatus, err := l.getSyncStatus(ctx)
 	if err != nil {
 		l.Log.Warn("Failed to fetch sync status to re-anchor the Espresso streamer, will retry the clear", "err", err)
+		return nil, false
+	}
+	// Mirror the zero-field guards in computeSyncActions and nextBlockRange:
+	// op-node has transiently reported statuses with individual fields zeroed
+	// while the rest are populated. A zero LocalSafeL2 would re-anchor the
+	// streamer at genesis and re-serve derived history.
+	if isZero(syncStatus.LocalSafeL2) {
+		l.Log.Warn("Sync status reports a zeroed LocalSafeL2, cannot re-anchor the Espresso streamer, will retry the clear")
 		return nil, false
 	}
 	return &syncStatus.LocalSafeL2, true
