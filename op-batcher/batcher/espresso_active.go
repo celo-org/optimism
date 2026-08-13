@@ -23,7 +23,9 @@ import (
 //     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
 func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	// Check if contract code exists at the address
-	code, err := l.L1Client.CodeAt(ctx, l.RollupConfig.BatchAuthenticatorAddress, nil)
+	codeCtx, codeCancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
+	defer codeCancel()
+	code, err := l.L1Client.CodeAt(codeCtx, l.RollupConfig.BatchAuthenticatorAddress, nil)
 	if err != nil {
 		return false, fmt.Errorf("failed to check code at BatchAuthenticator address: %w", err)
 	}
