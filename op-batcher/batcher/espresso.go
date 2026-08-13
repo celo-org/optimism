@@ -725,7 +725,13 @@ func espressoVerifyTransactionWorker(
 			// We have already attempted this job, so we will wait a bit
 			// NOTE: this prevents this worker from being able to process
 			// other jobs while we wait for this delay.
-			time.Sleep(retryDelay)
+			retryTimer := time.NewTimer(retryDelay)
+			select {
+			case <-ctx.Done():
+				retryTimer.Stop()
+				return
+			case <-retryTimer.C:
+			}
 		}
 
 		_, err := cli.FetchTransactionByHash(ctx, jobAttempt.job.hash)
