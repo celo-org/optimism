@@ -186,6 +186,12 @@ const (
 // the fallback batcher's pre-activation channels have derived. Blocks at or below
 // --espresso.origin-height-l2 are thereby never this batcher's to track, and the
 // anchor hash always comes from the derived chain rather than a reorgable unsafe block.
+//
+// With --espresso.origin-height-l2 unset (zero) there is no floor: the gate only waits
+// for a populated local-safe head. That is fine for steady-state restarts (the anchor
+// is the derived tip), but a handoff from the fallback batcher must set the flag
+// explicitly - nothing derives a handoff height from the rollup config, since
+// espresso_time is a timestamp and its L2 block height is not statically known.
 func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, espressoAnchorTimeout)
 	defer cancel()

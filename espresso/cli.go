@@ -98,8 +98,9 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 		&cli.Uint64Flag{
 			Name: CaffeinationHeightL2,
 			Usage: "L2 batch position at which the Espresso streamer starts emitting batches. " +
-				"Operational parameter for restarting batchers mid-chain. " +
-				"When zero, the streamer falls back to its internal default. " +
+				"Operational parameter for restarting batchers mid-chain; set it explicitly when " +
+				"taking over from the fallback batcher. " +
+				"When zero, no floor is enforced and the streamer anchors at the current local-safe head. " +
 				"Independent of the EspressoTime hardfork, which gates derivation semantics.",
 			Value:    0,
 			EnvVars:  espressoEnvs(envPrefix, "ORIGIN_HEIGHT_L2"),
