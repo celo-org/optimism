@@ -14,7 +14,6 @@ import (
 	"github.com/hf/nitrite"
 
 	"github.com/ethereum-optimism/optimism/op-batcher/enclave"
-	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 )
@@ -116,10 +115,6 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	if cfg.Espresso.L1URL == "" {
 		log.Warn("Espresso L1 URL not provided, using batcher's L1EthRpc")
 		cfg.Espresso.L1URL = cfg.L1EthRpc
-	}
-	if cfg.Espresso.Namespace == 0 {
-		log.Info("Using L2 chain ID as namespace by default")
-		cfg.Espresso.Namespace = bigs.Uint64Strict(bs.RollupConfig.L2ChainID)
 	}
 	if err := cfg.Espresso.Check(); err != nil {
 		return fmt.Errorf("invalid Espresso config: %w", err)
