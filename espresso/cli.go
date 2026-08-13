@@ -44,7 +44,6 @@ var (
 	CaffeinationHeightEspresso         = espressoFlags("origin-height-espresso")
 	CaffeinationHeightL2               = espressoFlags("origin-height-l2")
 	NamespaceFlagName                  = espressoFlags("namespace")
-	RollupL1UrlFlagName                = espressoFlags("rollup-l1-url")
 	AttestationServiceFlagName         = espressoFlags("espresso-attestation-service")
 	VerifyReceiptMaxBlocksFlagName     = espressoFlags("verify-receipt-max-blocks")
 	VerifyReceiptSafetyTimeoutFlagName = espressoFlags("verify-receipt-safety-timeout")
@@ -81,7 +80,7 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:     L1UrlFlagName,
-			Usage:    "L1 RPC URL Espresso contracts are deployed on",
+			Usage:    "L1 RPC URL the Espresso light client is deployed on; defaults to the batcher's L1 RPC when unset",
 			EnvVars:  espressoEnvs(envPrefix, "L1_URL"),
 			Category: category,
 		},
@@ -111,12 +110,6 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			Name:     NamespaceFlagName,
 			Usage:    "Namespace of Espresso transactions",
 			EnvVars:  espressoEnvs(envPrefix, "NAMESPACE"),
-			Category: category,
-		},
-		&cli.StringFlag{
-			Name:     RollupL1UrlFlagName,
-			Usage:    "RPC URL of L1 backing the Rollup we're streaming for",
-			EnvVars:  espressoEnvs(envPrefix, "ROLLUP_L1_URL"),
 			Category: category,
 		},
 		&cli.StringFlag{
@@ -158,7 +151,6 @@ type CLIConfig struct {
 	QueryServiceURLs           []string
 	LightClientAddr            common.Address
 	L1URL                      string
-	RollupL1URL                string
 	TestingBatcherPrivateKey   *ecdsa.PrivateKey
 	Namespace                  uint64
 	CaffeinationHeightEspresso uint64
@@ -194,9 +186,6 @@ func (c CLIConfig) Check() error {
 		if c.L1URL == "" {
 			return fmt.Errorf("L1 URL is required when Espresso is enabled")
 		}
-		if c.RollupL1URL == "" {
-			return fmt.Errorf("rollup L1 URL is required when Espresso is enabled")
-		}
 		if c.Namespace == 0 {
 			return fmt.Errorf("namespace is required when Espresso is enabled")
 		}
@@ -224,7 +213,6 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 		Enabled:                    c.Bool(EnabledFlagName),
 		PollInterval:               c.Duration(PollIntervalFlagName),
 		L1URL:                      c.String(L1UrlFlagName),
-		RollupL1URL:                c.String(RollupL1UrlFlagName),
 		Namespace:                  c.Uint64(NamespaceFlagName),
 		CaffeinationHeightEspresso: c.Uint64(CaffeinationHeightEspresso),
 		CaffeinationHeightL2:       c.Uint64(CaffeinationHeightL2),

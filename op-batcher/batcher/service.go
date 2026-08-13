@@ -96,6 +96,9 @@ type BatcherService struct {
 	// EspressoLightClient are nil when --espresso.enabled=false.
 	EspressoClient      *espressoClient.MultipleNodesClient
 	EspressoLightClient *espressoLightClient.LightclientCaller
+	// EspressoL1Client backs the light-client reads; non-nil only when
+	// --espresso.l1-url points at a different RPC than --l1-eth-rpc.
+	EspressoL1Client *ethclient.Client
 	opcrypto.ChainSigner
 	Attestation []byte
 }
@@ -210,7 +213,7 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.initPProf(cfg); err != nil {
 		return fmt.Errorf("failed to init profiling: %w", err)
 	}
-	if err := bs.initEspresso(cfg); err != nil {
+	if err := bs.initEspresso(ctx, cfg); err != nil {
 		return fmt.Errorf("failed to init Espresso: %w", err)
 	}
 	bs.initDriver(opts...)
@@ -612,6 +615,9 @@ func (bs *BatcherService) Stop(ctx context.Context) error {
 
 	if bs.L1Client != nil {
 		bs.L1Client.Close()
+	}
+	if bs.EspressoL1Client != nil {
+		bs.EspressoL1Client.Close()
 	}
 	if bs.EndpointProvider != nil {
 		bs.EndpointProvider.Close()

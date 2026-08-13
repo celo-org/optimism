@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"fmt"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-batcher/enclave"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
+	"github.com/ethereum-optimism/optimism/op-service/dial"
 )
 
 // EspressoBatcherConfig groups all Espresso-specific configuration the
@@ -106,17 +108,9 @@ func (bs *BatcherService) initKeyPair() error {
 // BatcherConfig). When enabled, it wires up the Espresso query-service
 // client, light client, ephemeral key pair, and Nitro Enclave attestation
 // (if running in TEE).
-func (bs *BatcherService) initEspresso(cfg *CLIConfig) error {
+func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) error {
 	if !cfg.Espresso.Enabled {
 		return nil
-	}
-
-	if cfg.Espresso.RollupL1URL == "" {
-		cfg.Espresso.RollupL1URL = cfg.L1EthRpc
-	}
-
-	if cfg.Espresso.RollupL1URL != cfg.L1EthRpc {
-		log.Warn("Espresso Rollup L1 URL differs from batcher's L1EthRpc")
 	}
 
 	if cfg.Espresso.L1URL == "" {
@@ -146,7 +140,19 @@ func (bs *BatcherService) initEspresso(cfg *CLIConfig) error {
 	}
 	bs.EspressoClient = client
 
-	lightClient, err := espressoLightClient.NewLightclientCaller(cfg.Espresso.LightClientAddr, bs.L1Client)
+	// Light-client reads go through the batcher's L1 client unless
+	// --espresso.l1-url points at a different RPC endpoint, in which case a
+	// dedicated client is dialed for them (and closed in Stop).
+	lightClientBackend := bs.L1Client
+	if cfg.Espresso.L1URL != cfg.L1EthRpc {
+		espressoL1, err := dial.DialEthClientWithTimeout(ctx, dial.DefaultDialTimeout, bs.Log, cfg.Espresso.L1URL)
+		if err != nil {
+			return fmt.Errorf("failed to dial Espresso L1 RPC: %w", err)
+		}
+		bs.EspressoL1Client = espressoL1
+		lightClientBackend = espressoL1
+	}
+	lightClient, err := espressoLightClient.NewLightclientCaller(cfg.Espresso.LightClientAddr, lightClientBackend)
 	if err != nil {
 		return fmt.Errorf("failed to create Espresso light client: %w", err)
 	}
