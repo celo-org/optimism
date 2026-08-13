@@ -46,7 +46,6 @@ var (
 	NamespaceFlagName                  = espressoFlags("namespace")
 	RollupL1UrlFlagName                = espressoFlags("rollup-l1-url")
 	AttestationServiceFlagName         = espressoFlags("espresso-attestation-service")
-	BatchAuthenticatorAddrFlagName     = espressoFlags("batch-authenticator-addr")
 	VerifyReceiptMaxBlocksFlagName     = espressoFlags("verify-receipt-max-blocks")
 	VerifyReceiptSafetyTimeoutFlagName = espressoFlags("verify-receipt-safety-timeout")
 	VerifyReceiptRetryDelayFlagName    = espressoFlags("verify-receipt-retry-delay")
@@ -126,12 +125,6 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			EnvVars:  espressoEnvs(envPrefix, "ESPRESSO_ATTESTATION_SERVICE"),
 			Category: category,
 		},
-		&cli.StringFlag{
-			Name:     BatchAuthenticatorAddrFlagName,
-			Usage:    "Address of the Batch Authenticator contract",
-			EnvVars:  espressoEnvs(envPrefix, "BATCH_AUTHENTICATOR_ADDR"),
-			Category: category,
-		},
 		&cli.Uint64Flag{
 			Name:     VerifyReceiptMaxBlocksFlagName,
 			Usage:    "Number of HotShot blocks to wait for a submitted transaction to become queryable before re-submitting",
@@ -164,7 +157,6 @@ type CLIConfig struct {
 	PollInterval               time.Duration
 	QueryServiceURLs           []string
 	LightClientAddr            common.Address
-	BatchAuthenticatorAddr     common.Address
 	L1URL                      string
 	RollupL1URL                string
 	TestingBatcherPrivateKey   *ecdsa.PrivateKey
@@ -243,9 +235,6 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 
 	addrStr := c.String(LightClientAddrFlagName)
 	config.LightClientAddr = common.HexToAddress(addrStr)
-
-	batchAuthenticatorAddrStr := c.String(BatchAuthenticatorAddrFlagName)
-	config.BatchAuthenticatorAddr = common.HexToAddress(batchAuthenticatorAddrStr)
 
 	pkStr := c.String(TestingBatcherPrivateKeyFlagName)
 	pkStr = strings.TrimPrefix(pkStr, "0x")
