@@ -17,12 +17,16 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
-// isEspressoAuthEnforced returns true once event-based batch authentication is enforced
+// IsEspressoAuthEnforced returns true once event-based batch authentication is enforced
 // at the given L1 origin time: the Espresso fork is active AND at least
 // BatchAuthEnforcementDelaySecs has elapsed since activation. Before that, derivation
 // keeps accepting sender-authenticated batches. See BatchAuthEnforcementDelaySecs
 // (params.go) for the full grace-period mechanism.
-func isEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
+//
+// Exported because the op-batcher publish gate (shouldSkipPublishForActiveSeq) keys
+// batch-submission ownership on the exact predicate the verifier enforces with: the
+// fallback batcher owns publishing before enforcement, the TEE batcher after.
+func IsEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
 	return cfg.IsEspresso(l1OriginTime) && l1OriginTime >= *cfg.EspressoTime+BatchAuthEnforcementDelaySecs
 }
 

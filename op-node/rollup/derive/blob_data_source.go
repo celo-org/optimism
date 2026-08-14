@@ -146,7 +146,7 @@ func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *D
 	// enforced (Espresso active plus the enforcement grace period). Before that, the
 	// upstream sender-based authorization path is used and authenticatedHashes is unused.
 	var authenticatedHashes map[common.Hash]common.Address
-	if isEspressoAuthEnforced(config.rollupCfg, ref.Time) {
+	if IsEspressoAuthEnforced(config.rollupCfg, ref.Time) {
 		var err error
 		authenticatedHashes, err = CollectAuthenticatedBatches(
 			ctx, fetcher, ref, config.rollupCfg.BatchAuthenticatorAddress, config.batchAuthCaches, logger,
