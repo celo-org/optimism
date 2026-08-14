@@ -401,11 +401,15 @@ const (
 	PublishGateModeInactive    PublishGateState = "mode_inactive"    // activeIsEspresso names the other batcher
 	PublishGateKeyUnauthorized PublishGateState = "key_unauthorized" // our key is not the authorized batcher for the active mode
 	PublishGateError           PublishGateState = "error"            // the gate could not be evaluated
+	// PublishGateAwaitingEnforcement: event-based batch auth is not enforced at
+	// the L1 tip yet, so the Espresso batcher leaves publishing to the fallback.
+	PublishGateAwaitingEnforcement PublishGateState = "awaiting_enforcement"
 )
 
 // PublishGateStates lists every state so RecordPublishGateState can zero the others.
 var PublishGateStates = []PublishGateState{
 	PublishGateActive, PublishGateModeInactive, PublishGateKeyUnauthorized, PublishGateError,
+	PublishGateAwaitingEnforcement,
 }
 
 func (m *Metrics) RecordLatestL1Block(l1ref eth.L1BlockRef) {

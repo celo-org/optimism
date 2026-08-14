@@ -189,7 +189,7 @@ func isBatchTxAuthorized(
 	l1OriginTime uint64,
 	logger log.Logger,
 ) bool {
-	if !isEspressoAuthEnforced(dsCfg.rollupCfg, l1OriginTime) {
+	if !IsEspressoAuthEnforced(dsCfg.rollupCfg, l1OriginTime) {
 		// Pre-enforcement (pre-fork or within the grace period): upstream
 		// sender-based authorization.
 		return isAuthorizedBatchSender(tx, dsCfg.l1Signer, batcherAddr, logger)
