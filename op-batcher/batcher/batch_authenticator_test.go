@@ -261,8 +261,7 @@ func TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched(t *testing.T) {
 const (
 	warnModeInactive    = "Batcher is not the active batcher"
 	warnKeyUnauthorized = "Configured batcher key is not the authorized batcher"
-	warnTipErr          = "Failed to fetch the L1 tip for the publish gate"
-	warnNotEnforced     = "Event-based batch auth is not enforced at the L1 tip yet"
+	warnTipErr          = "Failed to evaluate the batch-auth enforcement boundary"
 	warnActiveCheckErr  = "Failed to check if batcher is active"
 )
 
@@ -449,7 +448,7 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 		{name: "fallback batcher once enforced, fallback active", tipTime: enforcementTime, from: fallbackAddr, wantState: metrics.PublishGateActive},
 		{name: "fallback batcher once enforced, espresso active", tipTime: enforcementTime, activeIsEspresso: true, from: fallbackAddr, wantState: metrics.PublishGateModeInactive, wantWarn: warnModeInactive},
 		// Pre-enforcement the Espresso batcher stands down without consulting the flag.
-		{name: "espresso batcher in the grace window stands down", espressoEnabled: true, tipTime: espressoTime, activeIsEspresso: true, from: espressoAddr, wantState: metrics.PublishGateAwaitingEnforcement, wantWarn: warnNotEnforced},
+		{name: "espresso batcher in the grace window stands down", espressoEnabled: true, tipTime: espressoTime, activeIsEspresso: true, from: espressoAddr, wantState: metrics.PublishGateAwaitingEnforcement},
 		{name: "espresso batcher, tip fetch fails", espressoEnabled: true, tipErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantState: metrics.PublishGateError, wantWarn: warnTipErr},
 		{name: "espresso batcher once enforced, espresso active", espressoEnabled: true, tipTime: enforcementTime, activeIsEspresso: true, from: espressoAddr, wantState: metrics.PublishGateActive},
 		{name: "espresso batcher once enforced, fallback active", espressoEnabled: true, tipTime: enforcementTime, from: espressoAddr, wantState: metrics.PublishGateModeInactive, wantWarn: warnModeInactive},
