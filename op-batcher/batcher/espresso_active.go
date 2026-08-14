@@ -14,6 +14,11 @@ import (
 // the BatchAuthenticator contract. Returns true if this batcher instance should
 // be publishing batches, false if it should stay idle.
 //
+// Only meaningful once event-based batch auth is enforced: the caller
+// (shouldSkipPublishForActiveSeq) must gate on derive.IsEspressoAuthEnforced
+// first, since pre-enforcement the contract may be undeployed and its
+// activeIsEspresso default of true does not confer ownership.
+//
 // It applies two gates:
 //  1. Mode: the contract's activeIsEspresso flag must match this node's role
 //     (Config.Espresso.Enabled). activeIsEspresso==true means the Espresso batcher

@@ -23,9 +23,8 @@ import (
 // keeps accepting sender-authenticated batches. See BatchAuthEnforcementDelaySecs
 // (params.go) for the full grace-period mechanism.
 //
-// Exported because the op-batcher publish gate (shouldSkipPublishForActiveSeq) keys
-// batch-submission ownership on the exact predicate the verifier enforces with: the
-// fallback batcher owns publishing before enforcement, the TEE batcher after.
+// Exported for the op-batcher publish gate (shouldSkipPublishForActiveSeq), which
+// keys batch-submission ownership on this exact predicate.
 func IsEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
 	return cfg.IsEspresso(l1OriginTime) && l1OriginTime >= *cfg.EspressoTime+BatchAuthEnforcementDelaySecs
 }
