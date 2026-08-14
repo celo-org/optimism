@@ -82,8 +82,10 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 // timeout. Every raw RPC read on the Espresso startup path must go through it:
 // StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
 // mutex before it can cancel anything, so an unbounded call on a stalled endpoint
-// would wedge the batcher beyond even a graceful shutdown. Calls with their own
-// timeout regime (the attestation service client, Txmgr.Send) are exempt.
+// would wedge the batcher beyond even a graceful shutdown. The batch-loading
+// loop's streamer reads (Peek) take the same bound, and the Espresso SDK calls
+// get it via boundedEspressoClient. Calls with their own timeout regime (the
+// attestation service client, Txmgr.Send) are exempt.
 func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }
@@ -236,6 +238,9 @@ func (l *BatchSubmitter) rollbackFailedStart() {
 	l.cancelKillCtx()
 	if l.espressoStreamer != nil {
 		l.espressoStreamer.Stop()
+		// Same as StopBatchSubmitting: a leftover streamer would put the next
+		// start's clearState behind the re-anchor gate with no deadline.
+		l.espressoStreamer = nil
 	}
 	l.running = false
 }
@@ -269,7 +274,9 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	l.espressoSubmitter = NewEspressoTransactionSubmitter(
 		WithContext(l.shutdownCtx),
 		WithWaitGroup(l.wg),
-		WithEspressoClient(l.Espresso.Client),
+		// The SDK client has no client-side timeout, so it is wrapped with the
+		// per-call network-timeout bound; see boundedEspressoClient.
+		WithEspressoClient(newBoundedEspressoClient(l.Espresso.Client, l.Config.NetworkTimeout)),
 		WithVerifyReceiptMaxBlocks(l.Config.Espresso.VerifyReceiptMaxBlocks),
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),
@@ -329,7 +336,11 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 // LocalSafeL2: the caller must retry the whole clear rather than perform it
 // partially. Reports a nil target (and ok=true) when there is nothing to
 // re-anchor: --espresso.enabled unset, or the startup path, where clearState
-// runs before the streamer is constructed.
+// runs before the streamer is constructed. Every start takes that path — first
+// starts trivially, restarts because StopBatchSubmitting and rollbackFailedStart
+// nil the previous run's streamer. That nil-ing is what keeps this gate off the
+// start path: it retries without a deadline, which is only safe from the
+// loading loop, whose context a stop can cancel without needing l.mutex.
 func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *eth.L2BlockRef, ok bool) {
 	if !l.Config.Espresso.Enabled || l.espressoStreamer == nil {
 		return nil, true

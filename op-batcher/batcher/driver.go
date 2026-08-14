@@ -321,6 +321,14 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 
 	if l.espressoStreamer != nil {
 		l.espressoStreamer.Stop()
+		// Drop the stopped streamer. The next StartBatchSubmitting runs clearState
+		// before constructing a fresh one, and a leftover streamer would activate
+		// the espressoReanchorTarget gate: against a resyncing op-node that gate
+		// retries every 5s with no deadline while the start holds l.mutex — which
+		// the stop that could cancel it also needs. Nil means "nothing to
+		// re-anchor", which is true: setupEspressoStreamer anchors the fresh
+		// streamer itself.
+		l.espressoStreamer = nil
 	}
 
 	l.Log.Info("Batch Submitter stopped")
