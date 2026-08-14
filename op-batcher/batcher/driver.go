@@ -162,6 +162,11 @@ type BatchSubmitter struct {
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
 
+	// batchAuthEnforced memoizes the first time derive.IsEspressoAuthEnforced was
+	// observed true at the L1 tip; enforcement is monotone in time, so once set the
+	// publish gate skips the per-tick tip fetch (see isBatchAuthEnforcedAtTip).
+	batchAuthEnforced atomic.Bool
+
 	teeVerifierAddress common.Address
 
 	// degradedLog throttles repeated warnings from tick-driven loops so the

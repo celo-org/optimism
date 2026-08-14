@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -9,12 +10,14 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	gethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -33,18 +36,23 @@ func (e *errTipL1Client) HeaderByNumber(ctx context.Context, number *big.Int) (*
 	return nil, errors.New("l1 tip unavailable")
 }
 
-func sel4(sig string) (s [4]byte) {
-	copy(s[:], gethcrypto.Keccak256([]byte(sig)))
-	return
+var (
+	batchAuthTestABI = mustParseABI(bindings.BatchAuthenticatorMetaData)
+	sysCfgTestABI    = mustParseABI(bindings.SystemConfigMetaData)
+)
+
+func mustParseABI(md *bind.MetaData) *abi.ABI {
+	parsed, err := md.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	return parsed
 }
 
 // fakeBatchAuthBackend extends mockFixedTimeL1Client with a CodeAt and
 // CallContract that serve the read-only BatchAuthenticator/SystemConfig calls
-// isBatcherActive makes, dispatching on (contract address, 4-byte selector).
-// Pre-enforcement test cases deliberately use the bare mockFixedTimeL1Client
-// instead: its embedded ContractBackend is nil, so any contract consult
-// panics the test — the publish decision inside the grace window must not
-// depend on contract state.
+// isBatcherActive makes, dispatching on (contract address, method ID) resolved
+// from the same abigen bindings the production code calls through.
 type fakeBatchAuthBackend struct {
 	mockFixedTimeL1Client
 	authAddr         common.Address
@@ -63,33 +71,39 @@ func (f *fakeBatchAuthBackend) CallContract(ctx context.Context, call ethereum.C
 	if f.callErr != nil {
 		return nil, f.callErr
 	}
-	var sel [4]byte
-	copy(sel[:], call.Data)
-	switch {
-	case *call.To == f.authAddr && sel == sel4("activeIsEspresso()"):
-		var out common.Hash
-		if f.activeIsEspresso {
-			out[31] = 1
-		}
-		return out[:], nil
-	case *call.To == f.authAddr && sel == sel4("espressoBatcher()"):
-		return common.BytesToHash(f.espressoBatcher.Bytes()).Bytes(), nil
-	case *call.To == f.authAddr && sel == sel4("systemConfig()"):
-		return common.BytesToHash(f.sysCfgAddr.Bytes()).Bytes(), nil
-	case *call.To == f.sysCfgAddr && sel == sel4("batcherHash()"):
-		return common.BytesToHash(f.fallbackBatcher.Bytes()).Bytes(), nil
+	responses := []struct {
+		to     common.Address
+		abi    *abi.ABI
+		method string
+		value  any
+	}{
+		{f.authAddr, batchAuthTestABI, "activeIsEspresso", f.activeIsEspresso},
+		{f.authAddr, batchAuthTestABI, "espressoBatcher", f.espressoBatcher},
+		{f.authAddr, batchAuthTestABI, "systemConfig", f.sysCfgAddr},
+		{f.sysCfgAddr, sysCfgTestABI, "batcherHash", [32]byte(common.BytesToHash(f.fallbackBatcher.Bytes()))},
 	}
-	return nil, fmt.Errorf("unexpected contract call to %s with selector %x", call.To, sel)
+	for _, r := range responses {
+		if *call.To == r.to && bytes.Equal(call.Data, r.abi.Methods[r.method].ID) {
+			return r.abi.Methods[r.method].Outputs.Pack(r.value)
+		}
+	}
+	return nil, fmt.Errorf("unexpected contract call to %s with data %x", call.To, call.Data)
+}
+
+// contractState is the post-enforcement BatchAuthenticator view a test case
+// runs against; a nil *contractState means the case must not consult the
+// contract at all.
+type contractState struct {
+	activeIsEspresso bool
+	callErr          error
 }
 
 // TestShouldSkipPublish_EnforcementBoundary locks batch-submission ownership to
-// the verifier's event-auth enforcement boundary (issue #492): the fallback
-// batcher owns publishing before enforcement — including the whole grace window,
-// regardless of activeIsEspresso — and the TEE batcher owns it after, subject to
-// the activeIsEspresso flag and the sender-identity check. A divergence here
-// either burns L1 fees on batches every verifier drops (TEE publishing
-// in-window) or stalls the safe head with no publisher at all (fallback standing
-// down in-window).
+// the verifier's event-auth enforcement boundary for both batcher roles (issue
+// #492); see shouldSkipPublishForActiveSeq for the ownership rationale. Every
+// case runs once per role, so the pre-enforcement invariant — the fallback
+// always publishes, the TEE batcher never does — reads directly off the two
+// want columns.
 func TestShouldSkipPublish_EnforcementBoundary(t *testing.T) {
 	const espressoTime uint64 = 1_000_000
 	enforcementTime := espressoTime + derive.BatchAuthEnforcementDelaySecs
@@ -100,223 +114,160 @@ func TestShouldSkipPublish_EnforcementBoundary(t *testing.T) {
 	fallbackKey := common.HexToAddress("0x00000000000000000000000000000000000000c2")
 	wrongKey := common.HexToAddress("0x00000000000000000000000000000000000000c9")
 
-	// contractBackend builds the post-enforcement L1 client, parameterized on
-	// the tip time and the contract's flag/error state.
-	contractBackend := func(tipTime uint64, activeIsEspresso bool, callErr error) *fakeBatchAuthBackend {
-		return &fakeBatchAuthBackend{
-			mockFixedTimeL1Client: mockFixedTimeL1Client{time: tipTime},
-			authAddr:              authAddr,
-			sysCfgAddr:            sysCfgAddr,
-			activeIsEspresso:      activeIsEspresso,
-			espressoBatcher:       teeKey,
-			fallbackBatcher:       fallbackKey,
-			callErr:               callErr,
-		}
-	}
-
 	tests := []struct {
 		name            string
-		espressoEnabled bool
-		authAddr        common.Address
-		espressoTime    *uint64
-		l1Client        L1Client
-		from            common.Address
-		wantSkip        bool
+		noAuthenticator bool // leave BatchAuthenticatorAddress zero
+		unscheduled     bool // leave EspressoTime nil
+		tipTime         uint64
+		tipErr          bool
+		// contract is nil for pre-enforcement cases: they run against the bare
+		// mockFixedTimeL1Client, whose embedded ContractBackend is nil, so any
+		// contract consult panics the test — in-window publish decisions must
+		// not depend on contract state (the #492 regression consulted
+		// activeIsEspresso in-window).
+		contract *contractState
+		// teeFrom/fallbackFrom override the role's authorized key (teeKey /
+		// fallbackKey) to exercise the identity checks.
+		teeFrom          common.Address
+		fallbackFrom     common.Address
+		wantSkipTee      bool
+		wantSkipFallback bool
 	}{
-		// No authenticator configured: gate disabled for both roles.
 		{
-			name:            "fallback without authenticator never skips",
-			espressoEnabled: false,
-			authAddr:        common.Address{},
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: enforcementTime},
-			wantSkip:        false,
+			name:             "no authenticator configured",
+			noAuthenticator:  true,
+			tipTime:          enforcementTime,
+			wantSkipTee:      false,
+			wantSkipFallback: false,
 		},
 		{
-			name:            "tee without authenticator never skips",
-			espressoEnabled: true,
-			authAddr:        common.Address{},
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: enforcementTime},
-			wantSkip:        false,
-		},
-		// Pre-enforcement: the bare mockFixedTimeL1Client panics on any
-		// contract consult, so these cases also prove the contract is not read.
-		{
-			name:            "fallback publishes when espresso is unscheduled",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    nil,
-			l1Client:        &mockFixedTimeL1Client{time: enforcementTime},
-			wantSkip:        false,
+			name:             "espresso unscheduled",
+			unscheduled:      true,
+			tipTime:          enforcementTime,
+			wantSkipTee:      true,
+			wantSkipFallback: false,
 		},
 		{
-			name:            "tee skips when espresso is unscheduled",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    nil,
-			l1Client:        &mockFixedTimeL1Client{time: enforcementTime},
-			wantSkip:        true,
+			name:             "pre-fork",
+			tipTime:          espressoTime - 1,
+			wantSkipTee:      true,
+			wantSkipFallback: false,
 		},
 		{
-			name:            "fallback publishes pre-fork",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: espressoTime - 1},
-			wantSkip:        false,
+			// The #492 regression: inside the grace window the fallback keeps
+			// publishing despite activeIsEspresso defaulting true, and the TEE
+			// batcher stands down instead of burning fees on dropped batches.
+			name:             "at fork time, grace window opens",
+			tipTime:          espressoTime,
+			wantSkipTee:      true,
+			wantSkipFallback: false,
 		},
 		{
-			name:            "tee skips pre-fork",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: espressoTime - 1},
-			wantSkip:        true,
-		},
-		// The #492 regression: inside the grace window the fallback must keep
-		// publishing without consulting activeIsEspresso, and the TEE batcher
-		// must stand down instead of burning fees on batches derivation drops.
-		{
-			name:            "fallback publishes at fork time despite activeIsEspresso",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: espressoTime},
-			wantSkip:        false,
+			name:             "one second before enforcement",
+			tipTime:          enforcementTime - 1,
+			wantSkipTee:      true,
+			wantSkipFallback: false,
 		},
 		{
-			name:            "tee skips at fork time",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: espressoTime},
-			wantSkip:        true,
+			name:             "at enforcement, espresso flagged active",
+			tipTime:          enforcementTime,
+			contract:         &contractState{activeIsEspresso: true},
+			wantSkipTee:      false,
+			wantSkipFallback: true,
 		},
 		{
-			name:            "fallback publishes one second before enforcement",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: enforcementTime - 1},
-			wantSkip:        false,
+			name:             "at enforcement, fallback flagged active",
+			tipTime:          enforcementTime,
+			contract:         &contractState{activeIsEspresso: false},
+			wantSkipTee:      true,
+			wantSkipFallback: false,
 		},
 		{
-			name:            "tee skips one second before enforcement",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &mockFixedTimeL1Client{time: enforcementTime - 1},
-			wantSkip:        true,
-		},
-		// Post-enforcement: activeIsEspresso plus the identity check decide.
-		{
-			name:            "tee publishes exactly at enforcement when active and authorized",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime, true, nil),
-			from:            teeKey,
-			wantSkip:        false,
+			name:             "at enforcement, espresso active but tee key unauthorized",
+			tipTime:          enforcementTime,
+			contract:         &contractState{activeIsEspresso: true},
+			teeFrom:          wrongKey,
+			wantSkipTee:      true,
+			wantSkipFallback: true, // flag-skipped, identity not reached
 		},
 		{
-			name:            "fallback honors activeIsEspresso once enforced",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime, true, nil),
-			from:            fallbackKey,
-			wantSkip:        true,
+			name:             "at enforcement, fallback active but fallback key unauthorized",
+			tipTime:          enforcementTime,
+			contract:         &contractState{activeIsEspresso: false},
+			fallbackFrom:     wrongKey,
+			wantSkipTee:      true, // flag-skipped, identity not reached
+			wantSkipFallback: true,
 		},
 		{
-			name:            "tee skips once enforced when fallback is active",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime+1, false, nil),
-			from:            teeKey,
-			wantSkip:        true,
+			name:             "at enforcement, contract unavailable fails closed",
+			tipTime:          enforcementTime,
+			contract:         &contractState{activeIsEspresso: true, callErr: errors.New("contract unavailable")},
+			wantSkipTee:      true,
+			wantSkipFallback: true,
 		},
 		{
-			name:            "fallback publishes once enforced when flagged active and authorized",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime+1, false, nil),
-			from:            fallbackKey,
-			wantSkip:        false,
+			name:             "tip fetch failure fails closed",
+			tipErr:           true,
+			wantSkipTee:      true,
+			wantSkipFallback: true,
 		},
-		{
-			name:            "tee skips once enforced when its key is not the espresso batcher",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime, true, nil),
-			from:            wrongKey,
-			wantSkip:        true,
-		},
-		{
-			name:            "fallback skips once enforced when its key is not the systemconfig batcher",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime, false, nil),
-			from:            wrongKey,
-			wantSkip:        true,
-		},
-		// Fail closed on unavailable gate inputs.
-		{
-			name:            "tee fails closed on contract errors once enforced",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime, true, errors.New("contract unavailable")),
-			from:            teeKey,
-			wantSkip:        true,
-		},
-		{
-			name:            "fallback fails closed on contract errors once enforced",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        contractBackend(enforcementTime, false, errors.New("contract unavailable")),
-			from:            fallbackKey,
-			wantSkip:        true,
-		},
-		{
-			name:            "fallback fails closed on tip fetch errors",
-			espressoEnabled: false,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &errTipL1Client{},
-			wantSkip:        true,
-		},
-		{
-			name:            "tee fails closed on tip fetch errors",
-			espressoEnabled: true,
-			authAddr:        authAddr,
-			espressoTime:    u64(espressoTime),
-			l1Client:        &errTipL1Client{},
-			wantSkip:        true,
-		},
+	}
+
+	roles := []struct {
+		name     string
+		espresso bool
+	}{
+		{name: "fallback", espresso: false},
+		{name: "tee", espresso: true},
 	}
 
 	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			logger := testlog.Logger(t, log.LevelDebug)
-			l := &BatchSubmitter{}
-			l.Log = logger
-			l.Metr = metrics.NoopMetrics
-			l.RollupConfig = &rollup.Config{
-				BatchAuthenticatorAddress: test.authAddr,
-				EspressoTime:              test.espressoTime,
-			}
-			l.Config.NetworkTimeout = time.Second
-			l.Config.Espresso.Enabled = test.espressoEnabled
-			l.L1Client = test.l1Client
-			l.Txmgr = testutils.NewFakeTxMgr(logger, test.from, eth.ChainIDFromUInt64(0))
+		for _, role := range roles {
+			t.Run(test.name+"/"+role.name, func(t *testing.T) {
+				var l1Client L1Client
+				switch {
+				case test.tipErr:
+					l1Client = &errTipL1Client{}
+				case test.contract == nil:
+					l1Client = &mockFixedTimeL1Client{time: test.tipTime}
+				default:
+					l1Client = &fakeBatchAuthBackend{
+						mockFixedTimeL1Client: mockFixedTimeL1Client{time: test.tipTime},
+						authAddr:              authAddr,
+						sysCfgAddr:            sysCfgAddr,
+						activeIsEspresso:      test.contract.activeIsEspresso,
+						espressoBatcher:       teeKey,
+						fallbackBatcher:       fallbackKey,
+						callErr:               test.contract.callErr,
+					}
+				}
 
-			require.Equal(t, test.wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
-		})
+				from, override, wantSkip := fallbackKey, test.fallbackFrom, test.wantSkipFallback
+				if role.espresso {
+					from, override, wantSkip = teeKey, test.teeFrom, test.wantSkipTee
+				}
+				if override != (common.Address{}) {
+					from = override
+				}
+
+				logger := testlog.Logger(t, log.LevelDebug)
+				l := &BatchSubmitter{}
+				l.Log = logger
+				l.Metr = metrics.NoopMetrics
+				l.RollupConfig = &rollup.Config{}
+				if !test.noAuthenticator {
+					l.RollupConfig.BatchAuthenticatorAddress = authAddr
+				}
+				if !test.unscheduled {
+					l.RollupConfig.EspressoTime = u64(espressoTime)
+				}
+				l.Config.NetworkTimeout = time.Second
+				l.Config.Espresso.Enabled = role.espresso
+				l.L1Client = l1Client
+				l.Txmgr = testutils.NewFakeTxMgr(logger, from, eth.ChainIDFromUInt64(0))
+
+				require.Equal(t, wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+			})
+		}
 	}
 }
