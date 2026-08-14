@@ -28,34 +28,18 @@ func (blockingEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint6
 	return 0, ctx.Err()
 }
 
-// TestBoundedEspressoClientAppliesDeadline pins that every method of the
-// wrapper the submit/verify workers call through carries a per-call deadline:
-// a hung endpoint must yield a prompt DeadlineExceeded instead of consuming a
-// worker forever.
+// TestBoundedEspressoClientAppliesDeadline pins that every wrapped method
+// carries a per-call deadline even when the caller's context has none (as the
+// workers' long-lived loop contexts do not).
 func TestBoundedEspressoClientAppliesDeadline(t *testing.T) {
 	c := newBoundedEspressoClient(blockingEspressoClient{}, 10*time.Millisecond)
 
-	calls := map[string]func(context.Context) error{
-		"SubmitTransaction": func(ctx context.Context) error {
-			_, err := c.SubmitTransaction(ctx, espressoCommon.Transaction{})
-			return err
-		},
-		"FetchTransactionByHash": func(ctx context.Context) error {
-			_, err := c.FetchTransactionByHash(ctx, nil)
-			return err
-		},
-		"FetchLatestBlockHeight": func(ctx context.Context) error {
-			_, err := c.FetchLatestBlockHeight(ctx)
-			return err
-		},
-	}
+	_, err := c.SubmitTransaction(context.Background(), espressoCommon.Transaction{})
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 
-	for name, call := range calls {
-		t.Run(name, func(t *testing.T) {
-			// The parent context has no deadline, like the workers' loop
-			// contexts; only the wrapper can unblock the call.
-			err := call(context.Background())
-			require.ErrorIs(t, err, context.DeadlineExceeded)
-		})
-	}
+	_, err = c.FetchTransactionByHash(context.Background(), nil)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
+
+	_, err = c.FetchLatestBlockHeight(context.Background())
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 }

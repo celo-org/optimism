@@ -28,11 +28,8 @@ func startedSubmitter(t *testing.T) *BatchSubmitter {
 	return l
 }
 
-// TestStopBatchSubmittingDropsStreamer pins that a stop/start cycle cannot put
-// the next start's clearState behind the streamer re-anchor gate: that gate
-// retries with no deadline while StartBatchSubmitting holds l.mutex — the very
-// mutex the stop that could cancel it would need — so the stopped run's
-// streamer must not survive into the next start.
+// TestStopBatchSubmittingDropsStreamer pins that a stopped run's streamer does
+// not survive into the next start; see teardownEspressoStreamer for why.
 func TestStopBatchSubmittingDropsStreamer(t *testing.T) {
 	l := startedSubmitter(t)
 	require.NoError(t, l.StopBatchSubmitting(context.Background()))
@@ -40,9 +37,8 @@ func TestStopBatchSubmittingDropsStreamer(t *testing.T) {
 	require.False(t, l.running)
 }
 
-// TestRollbackFailedStartDropsStreamer pins the same invariant for the failed
-// start path: a start that constructed a streamer and then failed must not
-// leave it behind for the next attempt's clearState to re-anchor against.
+// TestRollbackFailedStartDropsStreamer pins the same invariant for a start
+// that constructed a streamer and then failed.
 func TestRollbackFailedStartDropsStreamer(t *testing.T) {
 	l := startedSubmitter(t)
 	l.rollbackFailedStart()
