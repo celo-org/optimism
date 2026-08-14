@@ -156,7 +156,12 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	// Re-anchor on the exact ref we resolved: NewStreamer resolved a hash for the
 	// same height, but the sync status is the authoritative view.
 	streamer.SetBatchPosition(anchor)
-	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "anchor", anchor)
+	// hotshotScanStart is logged because the streamer scans HotShot forward from
+	// it on every start: a stale value on a long-lived chain means a long, silent
+	// backfill before any batch is posted, and this line is the operator's first
+	// clue of where that scan began.
+	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head",
+		"anchor", anchor, "hotshotScanStart", l.Config.Espresso.CaffeinationHeightEspresso)
 	return nil
 }
 

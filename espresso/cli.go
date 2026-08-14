@@ -90,8 +90,13 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			Category: category,
 		},
 		&cli.Uint64Flag{
-			Name:     CaffeinationHeightEspresso,
-			Usage:    "Espresso transactions below this height will not be considered",
+			Name: CaffeinationHeightEspresso,
+			Usage: "HotShot block height the Espresso streamer starts scanning for batches from " +
+				"(the Espresso-side caffeination point). Every start - including restarts - scans " +
+				"forward from this height in bounded fetches, so on a long-lived chain a stale " +
+				"value makes restarts replay HotShot history before any batch is posted. " +
+				"Zero scans from HotShot genesis. Required when Espresso is enabled; pass 0 " +
+				"explicitly if scanning from genesis is intended.",
 			EnvVars:  espressoEnvs(envPrefix, "ORIGIN_HEIGHT_ESPRESSO"),
 			Category: category,
 		},
@@ -147,8 +152,13 @@ type CLIConfig struct {
 	L1URL                      string
 	TestingBatcherPrivateKey   *ecdsa.PrivateKey
 	CaffeinationHeightEspresso uint64
-	CaffeinationHeightL2       uint64
-	EspressoAttestationService string
+	// CaffeinationHeightEspressoSet records whether origin-height-espresso was
+	// provided explicitly (flag or env var). The flag's zero value means "scan
+	// HotShot from genesis", which is almost never intended on a live chain, so
+	// Check rejects an Enabled config that merely inherited the default.
+	CaffeinationHeightEspressoSet bool
+	CaffeinationHeightL2          uint64
+	EspressoAttestationService    string
 
 	// Batch submission receipt verification tuning
 	VerifyReceiptMaxBlocks     uint64
@@ -185,6 +195,11 @@ func (c CLIConfig) Check() error {
 		if c.PollInterval <= 0 {
 			return fmt.Errorf("poll interval must be > 0")
 		}
+		if !c.CaffeinationHeightEspressoSet {
+			return fmt.Errorf("origin-height-espresso is required when Espresso is enabled: " +
+				"it is the HotShot height batch scanning starts from, and the implicit zero " +
+				"default would silently scan from HotShot genesis (pass 0 explicitly if that is intended)")
+		}
 		if c.VerifyReceiptMaxBlocks == 0 {
 			return fmt.Errorf("verify-receipt-max-blocks must be > 0")
 		}
@@ -200,15 +215,16 @@ func (c CLIConfig) Check() error {
 
 func ReadCLIConfig(c *cli.Context) CLIConfig {
 	config := CLIConfig{
-		Enabled:                    c.Bool(EnabledFlagName),
-		PollInterval:               c.Duration(PollIntervalFlagName),
-		L1URL:                      c.String(L1UrlFlagName),
-		CaffeinationHeightEspresso: c.Uint64(CaffeinationHeightEspresso),
-		CaffeinationHeightL2:       c.Uint64(CaffeinationHeightL2),
-		EspressoAttestationService: c.String(AttestationServiceFlagName),
-		VerifyReceiptMaxBlocks:     c.Uint64(VerifyReceiptMaxBlocksFlagName),
-		VerifyReceiptSafetyTimeout: c.Duration(VerifyReceiptSafetyTimeoutFlagName),
-		VerifyReceiptRetryDelay:    c.Duration(VerifyReceiptRetryDelayFlagName),
+		Enabled:                       c.Bool(EnabledFlagName),
+		PollInterval:                  c.Duration(PollIntervalFlagName),
+		L1URL:                         c.String(L1UrlFlagName),
+		CaffeinationHeightEspresso:    c.Uint64(CaffeinationHeightEspresso),
+		CaffeinationHeightEspressoSet: c.IsSet(CaffeinationHeightEspresso),
+		CaffeinationHeightL2:          c.Uint64(CaffeinationHeightL2),
+		EspressoAttestationService:    c.String(AttestationServiceFlagName),
+		VerifyReceiptMaxBlocks:        c.Uint64(VerifyReceiptMaxBlocksFlagName),
+		VerifyReceiptSafetyTimeout:    c.Duration(VerifyReceiptSafetyTimeoutFlagName),
+		VerifyReceiptRetryDelay:       c.Duration(VerifyReceiptRetryDelayFlagName),
 	}
 
 	config.QueryServiceURLs = c.StringSlice(QueryServiceUrlsFlagName)

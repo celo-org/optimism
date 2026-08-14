@@ -28,9 +28,15 @@ import (
 // by initKeyPair (TEE) or copied from CLIConfig.Espresso.TestingBatcherPrivateKey
 // (devnet/test).
 type EspressoBatcherConfig struct {
-	Enabled                    bool
-	PollInterval               time.Duration
-	AttestationService         string
+	Enabled            bool
+	PollInterval       time.Duration
+	AttestationService string
+	// CaffeinationHeightEspresso is the HotShot height the streamer starts
+	// scanning for batches from, on every start. The pinned streamer never
+	// fast-forwards this cursor (its light-client fallback is maintained but
+	// unconsumed), so restarts replay HotShot history from here; on long-lived
+	// chains the value must be kept close to the last processed batch. CLI
+	// validation requires it to be set explicitly when Espresso is enabled.
 	CaffeinationHeightEspresso uint64
 	// CaffeinationHeightL2 is the L2 batch position at which the Espresso
 	// streamer should start emitting batches. Operational parameter for
