@@ -329,12 +329,10 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 }
 
 // isBatchAuthEnforcedAtTip reports whether event-based batch authentication is
-// enforced at the current L1 tip. Enforcement is monotone in time — once true it
-// never reverts — so the first true observation is memoized on batchAuthEnforced
-// and later calls skip the tip fetch; the gate runs once per publishStateToL1
-// iteration, so post-enforcement (the chain's steady state forever) this keeps
-// the per-tick cost at the isBatcherActive contract reads alone. An unscheduled
-// fork can never enforce and is answered without any RPC.
+// enforced at the current L1 tip. Enforcement is monotone in time, so the first
+// true observation is memoized and later calls skip the tip fetch — the gate
+// runs every publish tick, forever. An unscheduled fork never enforces and is
+// answered without any RPC.
 func (l *BatchSubmitter) isBatchAuthEnforcedAtTip(ctx context.Context) (bool, error) {
 	if l.batchAuthEnforced.Load() {
 		return true, nil
