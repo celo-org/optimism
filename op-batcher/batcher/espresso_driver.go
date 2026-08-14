@@ -287,31 +287,23 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 }
 
 // shouldSkipPublishForActiveSeq returns true if publishStateToL1 should skip
-// publishing this tick. Ownership of batch submission is keyed on the verifier's
-// event-auth enforcement boundary (derive.IsEspressoAuthEnforced at the L1 tip
-// time), not on the EspressoTime fork or the BatchAuthenticator's
-// activeIsEspresso flag alone:
+// publishing this tick. Batch-submission ownership is keyed on the verifier's
+// enforcement boundary (derive.IsEspressoAuthEnforced at the L1 tip time):
+// pre-enforcement, only sender-authenticated batches from the SystemConfig
+// batcher key derive, so the fallback batcher publishes unconditionally —
+// without consulting activeIsEspresso, whose default of true would leave no
+// publisher — and the TEE batcher stands down rather than burn L1 fees on
+// batches every verifier drops. Once enforced, activeIsEspresso plus the
+// sender-identity check decide (see isBatcherActive).
 //
-//   - Pre-enforcement (pre-fork and the whole grace window), derivation accepts
-//     only sender-authenticated batches from the SystemConfig batcher key. The
-//     fallback batcher therefore keeps publishing regardless of activeIsEspresso
-//     — which defaults to true and would otherwise stand it down mid-window,
-//     leaving no publisher at all — and the TEE batcher must not publish: its
-//     batches would mine, burn L1 fees, and be dropped by every verifier. The
-//     contract is not consulted at all.
-//   - Once enforced, the activeIsEspresso flag plus the sender-identity check
-//     (see isBatcherActive) decide which batcher owns publishing.
-//
-// Deciding on the L1 tip time is safe on both sides of the boundary:
-// enforcement is monotone in time and a batch published now lands after the
-// tip, so a TEE batch decided post-enforcement lands enforced, and a fallback
+// Deciding on the tip time is safe on both sides of the boundary: enforcement
+// is monotone and a batch published now lands after the tip, and a fallback
 // batch straddling the boundary stays valid because the fallback
-// event-authenticates from fork time (see isFallbackAuthRequired, deliberately
-// still keyed at fork time; the grace window exists to cover exactly this
-// inclusion delay).
+// event-authenticates from fork time (see isFallbackAuthRequired; the grace
+// window exists to cover exactly this inclusion delay).
 //
-// Fails closed: if any gate input cannot be evaluated, publishing is skipped
-// for this tick and retried on the next.
+// Fails closed: if a gate input cannot be evaluated, publishing is skipped for
+// this tick and retried on the next.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return false
