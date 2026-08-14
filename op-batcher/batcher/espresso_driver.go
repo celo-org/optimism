@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
@@ -286,27 +287,48 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 }
 
 // shouldSkipPublishForActiveSeq returns true if publishStateToL1 should skip
-// publishing because this batcher is not the on-chain "active" batcher
-// (BatchAuthenticator.activeIsEspresso). The Espresso TEE batcher always
-// honors the flag (it is fundamentally a post-fork actor); the fallback
-// batcher honors it only once fallback auth is required (pre-fork it must run
-// as a vanilla upstream Optimism batcher with no BatchAuthenticator coupling).
-// Fails closed: if either gate cannot be evaluated, publishing is skipped for
-// this tick and retried on the next.
+// publishing this tick. Ownership of batch submission is keyed on the verifier's
+// event-auth enforcement boundary (derive.IsEspressoAuthEnforced at the L1 tip
+// time), not on the EspressoTime fork or the BatchAuthenticator's
+// activeIsEspresso flag alone:
+//
+//   - Pre-enforcement (pre-fork and the whole grace window), derivation accepts
+//     only sender-authenticated batches from the SystemConfig batcher key. The
+//     fallback batcher therefore keeps publishing regardless of activeIsEspresso
+//     (which defaults to true and would otherwise stand it down mid-window), and
+//     the TEE batcher must not publish: its batches would mine, burn L1 fees,
+//     and be dropped by every verifier. The contract is not consulted at all.
+//   - Once enforced, the activeIsEspresso flag plus the sender-identity check
+//     (see isBatcherActive) decide which batcher owns publishing.
+//
+// Gating only the TEE side would not be enough: with activeIsEspresso=true
+// during the grace window the fallback would stand down, leaving a guaranteed
+// no-publisher gap. Keying both roles on the same boundary leaves no
+// dropped-sender window and no gap. Deciding on the L1 tip time is safe on both
+// sides of the boundary: enforcement is monotone in time and a batch published
+// now lands after the tip, so a TEE batch decided post-enforcement lands
+// enforced, and a fallback batch straddling the boundary stays valid because the
+// fallback event-authenticates from fork time (see isFallbackAuthRequired,
+// deliberately still keyed at fork time; the grace window exists to cover
+// exactly this inclusion delay).
+//
+// Fails closed: if any gate input cannot be evaluated, publishing is skipped
+// for this tick and retried on the next.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return false
 	}
-	consultActiveFlag := l.Config.Espresso.Enabled
-	if !consultActiveFlag {
-		fallbackAuthRequired, err := l.isFallbackAuthRequired(ctx)
-		if err != nil {
-			l.Log.Warn("Failed to evaluate fallback-auth gate, skipping publish", "err", err)
+	tip, err := l.l1Tip(ctx)
+	if err != nil {
+		l.Log.Warn("Failed to fetch the L1 tip for the publish gate, skipping publish", "err", err)
+		return true
+	}
+	if !derive.IsEspressoAuthEnforced(l.RollupConfig, tip.Time) {
+		if l.Config.Espresso.Enabled {
+			l.Log.Info("Event-based batch auth is not enforced at the L1 tip yet, leaving publishing to the fallback batcher",
+				"tipTime", tip.Time)
 			return true
 		}
-		consultActiveFlag = fallbackAuthRequired
-	}
-	if !consultActiveFlag {
 		return false
 	}
 	isActive, err := l.isBatcherActive(ctx)

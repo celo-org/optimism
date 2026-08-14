@@ -36,9 +36,11 @@ const BatchAuthLookbackWindow uint64 = 100
 // authentication is only enforced for L1 blocks with origin time >= EspressoTime +
 // BatchAuthEnforcementDelaySecs.
 //
-// This is the canonical description of the grace-period mechanism; isEspressoAuthEnforced
-// (batch_authenticator.go), the op-batcher fallback-auth gate (isFallbackAuthRequired in
-// espresso_fallback_gate.go), and the fork-boundary tests all defer here.
+// This is the canonical description of the grace-period mechanism; IsEspressoAuthEnforced
+// (batch_authenticator.go), the op-batcher gates (the fork-time auth-dispatch gate
+// isFallbackAuthRequired in espresso_fallback_gate.go and the enforcement-time publish
+// gate shouldSkipPublishForActiveSeq in espresso_driver.go), and the fork-boundary tests
+// all defer here.
 //
 // Behavior by L1 origin time t relative to EspressoTime (E):
 //   - before enforcement (t < E+delay, i.e. pre-fork or within the grace window):
