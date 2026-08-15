@@ -1,6 +1,7 @@
 package rollup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1147,4 +1148,56 @@ func TestConfig_ActivateAtGenesis(t *testing.T) {
 		}
 		require.Zero(t, cfg)
 	})
+}
+
+// TestConfig_Upgrade18 covers the optional Celo Upgrade 18 (CGT v2) migration fork: boundary
+// semantics of the predicates and the ActivationTime/SetActivationTime wiring (which also backs
+// the --override.upgrade18 CLI flag).
+func TestConfig_Upgrade18(t *testing.T) {
+	cfg := Config{BlockTime: 2}
+
+	// Unset: never active.
+	require.False(t, cfg.IsUpgrade18(^uint64(0)))
+	require.Nil(t, cfg.ActivationTime(forks.Upgrade18))
+
+	ts := uint64(1000)
+	cfg.SetActivationTime(forks.Upgrade18, &ts)
+	require.Equal(t, &ts, cfg.Upgrade18Time)
+	require.Equal(t, &ts, cfg.ActivationTime(forks.Upgrade18))
+	require.False(t, cfg.IsUpgrade18(999))
+	require.True(t, cfg.IsUpgrade18(1000))
+	require.True(t, cfg.IsForkActive(forks.Upgrade18, 1000))
+
+	// The activation block is the first post-fork block, and only that one.
+	require.False(t, cfg.IsUpgrade18ActivationBlock(998))
+	require.True(t, cfg.IsUpgrade18ActivationBlock(1000))
+	require.False(t, cfg.IsUpgrade18ActivationBlock(1002))
+
+	// Activation at genesis is not an activation block: the migration only exists as a
+	// boundary between a pre-fork and a post-fork block.
+	genesisActive := Config{BlockTime: 2, Upgrade18Time: ptr.Zero64}
+	require.False(t, genesisActive.IsUpgrade18ActivationBlock(0))
+	require.False(t, genesisActive.IsUpgrade18ActivationBlock(2))
+}
+
+// TestConfig_Upgrade18JSON pins the exact JSON key of Upgrade18Time: celo-kona's
+// `CeloRollupConfig` keys the migration off `upgrade18_time` in the same rollup.json, so the two
+// sides must stay key-identical. ParseRollupConfig rejects unknown fields, which makes this the
+// cross-client contract test — before the field existed, op-node refused a rollup.json
+// carrying it.
+func TestConfig_Upgrade18JSON(t *testing.T) {
+	config := randConfig()
+	ts := uint64(4242)
+	config.Upgrade18Time = &ts
+
+	data, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	var keys map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &keys))
+	require.Contains(t, keys, "upgrade18_time")
+
+	var roundTripped Config
+	require.NoError(t, roundTripped.ParseRollupConfig(bytes.NewReader(data)))
+	require.Equal(t, config, &roundTripped)
 }

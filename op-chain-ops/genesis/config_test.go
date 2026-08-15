@@ -91,6 +91,19 @@ func TestCanyonTimeOffset(t *testing.T) {
 	require.Equal(t, uint64(1234+1500), *config.CanyonTime(1234))
 }
 
+func TestUpgrade18TimeOffset(t *testing.T) {
+	upgrade18Offset := hexutil.Uint64(1500)
+	config := &DeployConfig{
+		L2InitializationConfig: L2InitializationConfig{
+			UpgradeScheduleDeployConfig: UpgradeScheduleDeployConfig{
+				L2GenesisUpgrade18TimeOffset: &upgrade18Offset,
+			},
+		},
+	}
+	require.Equal(t, uint64(1234+1500), *config.Upgrade18Time(1234))
+	require.Nil(t, (&DeployConfig{}).Upgrade18Time(1234))
+}
+
 func TestForksCantActivateAtSamePostGenesisBlock(t *testing.T) {
 	postGenesisOffset := uint64(1500)
 	config := &UpgradeScheduleDeployConfig{}

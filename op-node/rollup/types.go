@@ -185,6 +185,13 @@ type Config struct {
 	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
 	// BatchInfoAuthenticated(bytes32,address) events the derivation pipeline scans post-Espresso.
 	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
+
+	// Celo: Upgrade18Time sets the activation time of the Upgrade 18 (CGT v2) migration, an
+	// irregular state transition performed by the execution layer; the op-node has no boundary
+	// behavior of its own. The JSON key must stay identical to celo-kona's `CeloRollupConfig`,
+	// which parses the same rollup.json. The field name is provisional until the final
+	// activation trigger is decided (celo-blockchain-planning#1407).
+	Upgrade18Time *uint64 `json:"upgrade18_time,omitempty"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -537,6 +544,12 @@ func (c *Config) IsCel2(timestamp uint64) bool {
 	return c.Cel2Time != nil && timestamp >= *c.Cel2Time
 }
 
+// IsUpgrade18 returns true if the Upgrade 18 (CGT v2) migration is active at or past the given
+// timestamp.
+func (c *Config) IsUpgrade18(timestamp uint64) bool {
+	return c.IsForkActive(forks.Upgrade18, timestamp)
+}
+
 func (c *Config) IsRegolithActivationBlock(l2BlockTime uint64) bool {
 	return c.IsRegolith(l2BlockTime) &&
 		l2BlockTime >= c.BlockTime &&
@@ -617,6 +630,15 @@ func (c *Config) IsInteropActivationBlock(l2BlockTime uint64) bool {
 		!c.IsInterop(l2BlockTime-c.BlockTime)
 }
 
+// IsUpgrade18ActivationBlock returns whether the specified block is the first block subject to
+// the Upgrade 18 (CGT v2) migration. Activation at genesis does not count: the migration only
+// exists as a boundary between a pre-fork and a post-fork block.
+func (c *Config) IsUpgrade18ActivationBlock(l2BlockTime uint64) bool {
+	return c.IsUpgrade18(l2BlockTime) &&
+		l2BlockTime >= c.BlockTime &&
+		!c.IsUpgrade18(l2BlockTime-c.BlockTime)
+}
+
 func (c *Config) ActivationTime(fork ForkName) *uint64 {
 	// NEW FORKS MUST BE ADDED HERE
 	switch fork {
@@ -646,6 +668,8 @@ func (c *Config) ActivationTime(fork ForkName) *uint64 {
 	// Optional forks
 	case forks.PectraBlobSchedule:
 		return c.PectraBlobScheduleTime
+	case forks.Upgrade18:
+		return c.Upgrade18Time
 
 	default:
 		panic(fmt.Sprintf("unknown fork: %v", fork))
@@ -681,6 +705,8 @@ func (c *Config) SetActivationTime(fork ForkName, timestamp *uint64) {
 	// Optional forks
 	case forks.PectraBlobSchedule:
 		c.PectraBlobScheduleTime = timestamp
+	case forks.Upgrade18:
+		c.Upgrade18Time = timestamp
 
 	default:
 		panic(fmt.Sprintf("unknown fork: %v", fork))
@@ -903,6 +929,10 @@ func (c *Config) forEachFork(callback func(name string, logName string, time *ui
 	}
 	callback("Isthmus", "isthmus_time", c.IsthmusTime)
 	callback("Jovian", "jovian_time", c.JovianTime)
+	if c.Upgrade18Time != nil {
+		// only report if config is set
+		callback("Upgrade 18 (CGT v2)", "upgrade18_time", c.Upgrade18Time)
+	}
 	callback("Karst", "karst_time", c.KarstTime)
 	callback("Interop", "interop_time", c.InteropTime)
 	if c.EspressoTime != nil {
