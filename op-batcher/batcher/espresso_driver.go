@@ -193,10 +193,17 @@ const (
 // explicitly - nothing derives a handoff height from the rollup config, since
 // espresso_time is a timestamp and its L2 block height is not statically known.
 func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockRef, error) {
-	ctx, cancel := context.WithTimeout(ctx, espressoAnchorTimeout)
+	return l.waitForLocalSafeHeadWithTiming(ctx, espressoAnchorTimeout, espressoAnchorRetryInterval)
+}
+
+// waitForLocalSafeHeadWithTiming is waitForLocalSafeHead with the timeout and
+// retry interval injected so tests can exercise the retry and give-up paths
+// without waiting out the real one-minute anchor timeout.
+func (l *BatchSubmitter) waitForLocalSafeHeadWithTiming(ctx context.Context, timeout, retryInterval time.Duration) (eth.L2BlockRef, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	ticker := time.NewTicker(espressoAnchorRetryInterval)
+	ticker := time.NewTicker(retryInterval)
 	defer ticker.Stop()
 
 	caffeinationL2 := l.Config.Espresso.CaffeinationHeightL2
@@ -219,7 +226,7 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 		case <-ctx.Done():
 			return eth.L2BlockRef{}, fmt.Errorf(
 				"no local-safe L2 head at or past the caffeination point (%d) to anchor the Espresso streamer within %s (safe to retry once activation has been derived from L1): %w",
-				caffeinationL2, espressoAnchorTimeout, ctx.Err())
+				caffeinationL2, timeout, ctx.Err())
 		}
 	}
 }
