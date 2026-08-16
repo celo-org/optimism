@@ -57,7 +57,7 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
 		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2), nil)
 
-		anchor, err := l.waitForLocalSafeHeadWithTiming(t.Context(), time.Second, time.Millisecond)
+		anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, testCaffeinationL2, anchor.Number)
 	})
@@ -66,7 +66,7 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
 		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2+7), nil)
 
-		anchor, err := l.waitForLocalSafeHeadWithTiming(t.Context(), time.Second, time.Millisecond)
+		anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, testCaffeinationL2+7, anchor.Number)
 	})
@@ -75,7 +75,7 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
 		ep.rollupClient.Mock.On("SyncStatus").Return(anchorStatus(testCaffeinationL2-1), nil)
 
-		_, err := l.waitForLocalSafeHeadWithTiming(t.Context(), 50*time.Millisecond, 5*time.Millisecond)
+		_, err := l.waitForLocalSafeHead(t.Context(), 50*time.Millisecond, 5*time.Millisecond)
 		require.ErrorContains(t, err, "caffeination point (500)",
 			"the give-up error must name the height the operator is waiting on")
 		require.ErrorIs(t, err, context.DeadlineExceeded)
@@ -86,7 +86,7 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 		ep.rollupClient.ExpectSyncStatus(nil, errors.New("transient RPC failure"))
 		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2), nil)
 
-		anchor, err := l.waitForLocalSafeHeadWithTiming(t.Context(), 5*time.Second, time.Millisecond)
+		anchor, err := l.waitForLocalSafeHead(t.Context(), 5*time.Second, time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, testCaffeinationL2, anchor.Number)
 	})
@@ -96,7 +96,7 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 		ep.rollupClient.ExpectSyncStatus(anchorStatus(0), nil) // populated status, zero LocalSafeL2
 		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2), nil)
 
-		anchor, err := l.waitForLocalSafeHeadWithTiming(t.Context(), 5*time.Second, time.Millisecond)
+		anchor, err := l.waitForLocalSafeHead(t.Context(), 5*time.Second, time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, testCaffeinationL2, anchor.Number)
 	})
@@ -107,7 +107,7 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 		l, ep := newAnchorTestSubmitter(t, 0)
 		ep.rollupClient.ExpectSyncStatus(anchorStatus(1), nil)
 
-		anchor, err := l.waitForLocalSafeHeadWithTiming(t.Context(), time.Second, time.Millisecond)
+		anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
 		require.NoError(t, err)
 		require.Equal(t, uint64(1), anchor.Number)
 	})

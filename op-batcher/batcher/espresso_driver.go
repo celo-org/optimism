@@ -112,7 +112,7 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 		return nil
 	}
 
-	anchor, err := l.waitForLocalSafeHead(ctx)
+	anchor, err := l.waitForLocalSafeHead(ctx, espressoAnchorTimeout, espressoAnchorRetryInterval)
 	if err != nil {
 		return err
 	}
@@ -192,14 +192,10 @@ const (
 // is the derived tip), but a handoff from the fallback batcher must set the flag
 // explicitly - nothing derives a handoff height from the rollup config, since
 // espresso_time is a timestamp and its L2 block height is not statically known.
-func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockRef, error) {
-	return l.waitForLocalSafeHeadWithTiming(ctx, espressoAnchorTimeout, espressoAnchorRetryInterval)
-}
-
-// waitForLocalSafeHeadWithTiming is waitForLocalSafeHead with the timeout and
-// retry interval injected so tests can exercise the retry and give-up paths
-// without waiting out the real one-minute anchor timeout.
-func (l *BatchSubmitter) waitForLocalSafeHeadWithTiming(ctx context.Context, timeout, retryInterval time.Duration) (eth.L2BlockRef, error) {
+// The timeout and retry interval are parameters (espressoAnchorTimeout and
+// espressoAnchorRetryInterval in production) so tests can exercise the retry
+// and give-up paths without waiting out the real one-minute anchor timeout.
+func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context, timeout, retryInterval time.Duration) (eth.L2BlockRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 

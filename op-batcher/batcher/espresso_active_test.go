@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
@@ -33,22 +32,54 @@ var (
 	errContractCallFailed = errors.New("contract call failed")
 )
 
-// contractCallHandler produces the raw return data (or error) for one contract
-// method invocation.
-type contractCallHandler func() ([]byte, error)
+// The two contract ABIs the active-batcher gate reads from, parsed once.
+var (
+	authABI   = mustGetABI(bindings.BatchAuthenticatorMetaData)
+	sysCfgABI = mustGetABI(bindings.SystemConfigMetaData)
+)
+
+func mustGetABI(md *bind.MetaData) *abi.ABI {
+	parsed, err := md.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	return parsed
+}
+
+// gateMethodBySelector resolves the calldata's 4-byte selector to a method of
+// one of the two gate ABIs.
+func gateMethodBySelector(data []byte) (abi.Method, error) {
+	if m, err := authABI.MethodById(data[:4]); err == nil {
+		return *m, nil
+	}
+	if m, err := sysCfgABI.MethodById(data[:4]); err == nil {
+		return *m, nil
+	}
+	return abi.Method{}, fmt.Errorf("unknown method selector %#x", data[:4])
+}
+
+// contractCallHandler produces the raw return data (or error) for one
+// invocation of the given contract method.
+type contractCallHandler func(method abi.Method) ([]byte, error)
+
+// contractHandlers routes contract calls per contract address, then per method
+// name.
+type contractHandlers map[common.Address]map[string]contractCallHandler
 
 // mockContractL1Client is an L1Client whose CallContract dispatches on the
-// 4-byte method selector of the incoming call. Selectors are unique across the
-// BatchAuthenticator and SystemConfig ABIs, so one dispatch table serves both
-// contracts. Calls with no registered handler fail loudly: the tests below also
-// use that to prove a method was NOT consulted on a given path.
+// target contract address and the method named by the calldata selector.
+// Keying on the address matters: the two ABIs share several selectors (owner,
+// version, ...), and it makes the tests prove a value was read from the right
+// contract, not merely that the method was called somewhere. Calls with no
+// registered handler fail loudly: the tests below also use that to prove a
+// method was NOT consulted on a given path.
 type mockContractL1Client struct {
 	bind.ContractBackend
 	code     []byte
 	codeErr  error
 	tipTime  uint64
 	tipErr   error
-	handlers map[string]contractCallHandler // hex selector -> handler
+	handlers contractHandlers
 }
 
 func (m *mockContractL1Client) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
@@ -56,12 +87,18 @@ func (m *mockContractL1Client) CodeAt(ctx context.Context, contract common.Addre
 }
 
 func (m *mockContractL1Client) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-	sel := hexutil.Encode(call.Data[:4])
-	handler, ok := m.handlers[sel]
-	if !ok {
-		return nil, fmt.Errorf("unexpected contract call with selector %s", sel)
+	if call.To == nil {
+		return nil, errors.New("unexpected contract-creation call")
 	}
-	return handler()
+	method, err := gateMethodBySelector(call.Data)
+	if err != nil {
+		return nil, err
+	}
+	handler, ok := m.handlers[*call.To][method.Name]
+	if !ok {
+		return nil, fmt.Errorf("unexpected call to method %s on contract %s", method.Name, call.To)
+	}
+	return handler(method)
 }
 
 func (m *mockContractL1Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
@@ -75,44 +112,16 @@ func (m *mockContractL1Client) NonceAt(ctx context.Context, account common.Addre
 	return 0, nil
 }
 
-func batchAuthenticatorABI(t *testing.T) *abi.ABI {
-	a, err := bindings.BatchAuthenticatorMetaData.GetAbi()
-	require.NoError(t, err)
-	return a
-}
-
-func systemConfigABI(t *testing.T) *abi.ABI {
-	a, err := bindings.SystemConfigMetaData.GetAbi()
-	require.NoError(t, err)
-	return a
-}
-
-func methodSelector(t *testing.T, a *abi.ABI, method string) string {
-	m, ok := a.Methods[method]
-	require.True(t, ok, "ABI has no method %q", method)
-	return hexutil.Encode(m.ID)
-}
-
-// returns registers a handler that packs vals as the method's return values.
-func returns(t *testing.T, a *abi.ABI, method string, vals ...any) contractCallHandler {
-	m := a.Methods[method]
-	return func() ([]byte, error) {
-		out, err := m.Outputs.Pack(vals...)
-		require.NoError(t, err)
-		return out, nil
+// returns builds a handler that packs vals as the called method's return
+// values.
+func returns(vals ...any) contractCallHandler {
+	return func(method abi.Method) ([]byte, error) {
+		return method.Outputs.Pack(vals...)
 	}
 }
 
 func fails() contractCallHandler {
-	return func() ([]byte, error) { return nil, errContractCallFailed }
-}
-
-// addressAsBytes32 left-pads an address into the low 20 bytes of a bytes32,
-// mirroring how SystemConfig stores batcherHash.
-func addressAsBytes32(addr common.Address) [32]byte {
-	var out [32]byte
-	copy(out[12:], addr[:])
-	return out
+	return func(abi.Method) ([]byte, error) { return nil, errContractCallFailed }
 }
 
 func newActiveGateSubmitter(t *testing.T, espressoEnabled bool, client *mockContractL1Client) *BatchSubmitter {
@@ -136,36 +145,32 @@ func newActiveGateSubmitter(t *testing.T, espressoEnabled bool, client *mockCont
 // all during a handoff, and an inverted mode check compiles and passes CI, so
 // every quadrant of (activeIsEspresso x Espresso.Enabled) is pinned explicitly.
 func TestIsBatcherActive(t *testing.T) {
-	authABI := batchAuthenticatorABI(t)
-	sysABI := systemConfigABI(t)
-
-	selActive := methodSelector(t, authABI, "activeIsEspresso")
-	selEspressoBatcher := methodSelector(t, authABI, "espressoBatcher")
-	selSystemConfig := methodSelector(t, authABI, "systemConfig")
-	selBatcherHash := methodSelector(t, sysABI, "batcherHash")
-
 	tests := []struct {
 		name            string
 		espressoEnabled bool
-		handlers        map[string]contractCallHandler
+		handlers        contractHandlers
 		want            bool
 		wantErr         bool
 	}{
 		{
 			name:            "espresso batcher active and authorized",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive:          returns(t, authABI, "activeIsEspresso", true),
-				selEspressoBatcher: returns(t, authABI, "espressoBatcher", testSenderAddr),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(true),
+					"espressoBatcher":  returns(testSenderAddr),
+				},
 			},
 			want: true,
 		},
 		{
 			name:            "espresso batcher active but key not authorized",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive:          returns(t, authABI, "activeIsEspresso", true),
-				selEspressoBatcher: returns(t, authABI, "espressoBatcher", testOtherAddr),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(true),
+					"espressoBatcher":  returns(testOtherAddr),
+				},
 			},
 			want: false,
 		},
@@ -174,8 +179,10 @@ func TestIsBatcherActive(t *testing.T) {
 			// must not even be consulted once the mode gate fails.
 			name:            "espresso batcher while fallback mode is active",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive: returns(t, authABI, "activeIsEspresso", false),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+				},
 			},
 			want: false,
 		},
@@ -185,28 +192,38 @@ func TestIsBatcherActive(t *testing.T) {
 			// Espresso handoff.
 			name:            "fallback batcher while espresso mode is active",
 			espressoEnabled: false,
-			handlers: map[string]contractCallHandler{
-				selActive: returns(t, authABI, "activeIsEspresso", true),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(true),
+				},
 			},
 			want: false,
 		},
 		{
 			name:            "fallback batcher active and authorized via batcherHash",
 			espressoEnabled: false,
-			handlers: map[string]contractCallHandler{
-				selActive:       returns(t, authABI, "activeIsEspresso", false),
-				selSystemConfig: returns(t, authABI, "systemConfig", testSysCfgAddr),
-				selBatcherHash:  returns(t, sysABI, "batcherHash", addressAsBytes32(testSenderAddr)),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+					"systemConfig":     returns(testSysCfgAddr),
+				},
+				testSysCfgAddr: {
+					"batcherHash": returns(eth.AddressAsLeftPaddedHash(testSenderAddr)),
+				},
 			},
 			want: true,
 		},
 		{
 			name:            "fallback batcher active but key not authorized",
 			espressoEnabled: false,
-			handlers: map[string]contractCallHandler{
-				selActive:       returns(t, authABI, "activeIsEspresso", false),
-				selSystemConfig: returns(t, authABI, "systemConfig", testSysCfgAddr),
-				selBatcherHash:  returns(t, sysABI, "batcherHash", addressAsBytes32(testOtherAddr)),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+					"systemConfig":     returns(testSysCfgAddr),
+				},
+				testSysCfgAddr: {
+					"batcherHash": returns(eth.AddressAsLeftPaddedHash(testOtherAddr)),
+				},
 			},
 			want: false,
 		},
@@ -216,15 +233,19 @@ func TestIsBatcherActive(t *testing.T) {
 			// slice the low 20 bytes rather than compare the whole word.
 			name:            "batcherHash high bytes do not obscure the low-20-byte address",
 			espressoEnabled: false,
-			handlers: map[string]contractCallHandler{
-				selActive:       returns(t, authABI, "activeIsEspresso", false),
-				selSystemConfig: returns(t, authABI, "systemConfig", testSysCfgAddr),
-				selBatcherHash: func() ([]byte, error) {
-					versioned := addressAsBytes32(testSenderAddr)
-					for i := 0; i < 12; i++ {
-						versioned[i] = 0xff
-					}
-					return sysABI.Methods["batcherHash"].Outputs.Pack(versioned)
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+					"systemConfig":     returns(testSysCfgAddr),
+				},
+				testSysCfgAddr: {
+					"batcherHash": func(method abi.Method) ([]byte, error) {
+						versioned := eth.AddressAsLeftPaddedHash(testSenderAddr)
+						for i := 0; i < 12; i++ {
+							versioned[i] = 0xff
+						}
+						return method.Outputs.Pack(versioned)
+					},
 				},
 			},
 			want: true,
@@ -232,36 +253,46 @@ func TestIsBatcherActive(t *testing.T) {
 		{
 			name:            "activeIsEspresso read failure is an error",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive: fails(),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": fails(),
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name:            "espressoBatcher read failure is an error",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive:          returns(t, authABI, "activeIsEspresso", true),
-				selEspressoBatcher: fails(),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(true),
+					"espressoBatcher":  fails(),
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name:            "systemConfig read failure is an error",
 			espressoEnabled: false,
-			handlers: map[string]contractCallHandler{
-				selActive:       returns(t, authABI, "activeIsEspresso", false),
-				selSystemConfig: fails(),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+					"systemConfig":     fails(),
+				},
 			},
 			wantErr: true,
 		},
 		{
 			name:            "batcherHash read failure is an error",
 			espressoEnabled: false,
-			handlers: map[string]contractCallHandler{
-				selActive:       returns(t, authABI, "activeIsEspresso", false),
-				selSystemConfig: returns(t, authABI, "systemConfig", testSysCfgAddr),
-				selBatcherHash:  fails(),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+					"systemConfig":     returns(testSysCfgAddr),
+				},
+				testSysCfgAddr: {
+					"batcherHash": fails(),
+				},
 			},
 			wantErr: true,
 		},
@@ -310,44 +341,43 @@ func TestIsBatcherActive(t *testing.T) {
 // skipping the tick.
 func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 	const espressoTime = 1000
-	authABI := batchAuthenticatorABI(t)
-	sysABI := systemConfigABI(t)
-
-	selActive := methodSelector(t, authABI, "activeIsEspresso")
-	selEspressoBatcher := methodSelector(t, authABI, "espressoBatcher")
-	selSystemConfig := methodSelector(t, authABI, "systemConfig")
-	selBatcherHash := methodSelector(t, sysABI, "batcherHash")
 
 	tests := []struct {
 		name            string
 		espressoEnabled bool
 		tipTime         uint64
 		tipErr          error
-		handlers        map[string]contractCallHandler
+		handlers        contractHandlers
 		wantSkip        bool
 	}{
 		{
 			name:            "active espresso batcher publishes",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive:          returns(t, authABI, "activeIsEspresso", true),
-				selEspressoBatcher: returns(t, authABI, "espressoBatcher", testSenderAddr),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(true),
+					"espressoBatcher":  returns(testSenderAddr),
+				},
 			},
 			wantSkip: false,
 		},
 		{
 			name:            "espresso batcher skips while fallback mode is active",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive: returns(t, authABI, "activeIsEspresso", false),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+				},
 			},
 			wantSkip: true,
 		},
 		{
 			name:            "espresso batcher fails closed on gate error",
 			espressoEnabled: true,
-			handlers: map[string]contractCallHandler{
-				selActive: fails(),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": fails(),
+				},
 			},
 			wantSkip: true,
 		},
@@ -365,10 +395,14 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			name:            "post-fork fallback batcher publishes while active and authorized",
 			espressoEnabled: false,
 			tipTime:         espressoTime,
-			handlers: map[string]contractCallHandler{
-				selActive:       returns(t, authABI, "activeIsEspresso", false),
-				selSystemConfig: returns(t, authABI, "systemConfig", testSysCfgAddr),
-				selBatcherHash:  returns(t, sysABI, "batcherHash", addressAsBytes32(testSenderAddr)),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(false),
+					"systemConfig":     returns(testSysCfgAddr),
+				},
+				testSysCfgAddr: {
+					"batcherHash": returns(eth.AddressAsLeftPaddedHash(testSenderAddr)),
+				},
 			},
 			wantSkip: false,
 		},
@@ -376,8 +410,10 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			name:            "post-fork fallback batcher skips while espresso mode is active",
 			espressoEnabled: false,
 			tipTime:         espressoTime,
-			handlers: map[string]contractCallHandler{
-				selActive: returns(t, authABI, "activeIsEspresso", true),
+			handlers: contractHandlers{
+				testAuthAddr: {
+					"activeIsEspresso": returns(true),
+				},
 			},
 			wantSkip: true,
 		},
@@ -405,9 +441,9 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 	}
 
 	t.Run("no authenticator configured never skips", func(t *testing.T) {
-		// A nil L1 client proves neither gate is evaluated: any RPC use would panic.
+		// The typed-nil client panics on any RPC use, proving neither gate is
+		// evaluated.
 		l := newActiveGateSubmitter(t, true, nil)
-		l.L1Client = nil
 		l.RollupConfig.BatchAuthenticatorAddress = common.Address{}
 
 		require.False(t, l.shouldSkipPublishForActiveSeq(context.Background()))
