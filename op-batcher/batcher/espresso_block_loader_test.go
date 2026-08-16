@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"math/rand"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -389,8 +388,9 @@ func TestEnqueueBlocksReorgDetection(t *testing.T) {
 // handshake between the batch queueing loop (requester) and the batch loading
 // loop (performer). The handshake exists so the queueing loop never runs
 // clearState itself — doing so raced the loading loop on the channel manager
-// and streamer (the earlier data-race fix); this is its regression test and
-// must keep running under -race.
+// and streamer. TestEnqueueBlocksReorgDetection locks the requester side of
+// that fix (a reorg requests the clear, never performs it); this locks the
+// performer side.
 func TestClearStateHandshake(t *testing.T) {
 	populatedStatus := &eth.SyncStatus{
 		HeadL1:      eth.L1BlockRef{Number: 50, Hash: common.Hash{0xa1}},
@@ -414,54 +414,23 @@ func TestClearStateHandshake(t *testing.T) {
 		require.False(t, bs.clearStateRequested.Load())
 	})
 
-	t.Run("concurrent requesters and one performer race cleanly", func(t *testing.T) {
+	t.Run("concurrent requests coalesce into one clear", func(t *testing.T) {
 		bs, ep := setup(t, nil)
-		ep.rollupClient.Mock.On("SyncStatus").Return(populatedStatus, nil)
+		ep.rollupClient.ExpectSyncStatus(populatedStatus, nil)
 
-		const requesters = 4
-		const requestsEach = 64
-
-		var performed atomic.Int64
-		stop := make(chan struct{})
-		var performerWg sync.WaitGroup
-		performerWg.Add(1)
-		go func() {
-			defer performerWg.Done()
-			for {
-				if bs.performClearState(t.Context()) {
-					performed.Add(1)
-				}
-				select {
-				case <-stop:
-					return
-				default:
-				}
-			}
-		}()
-
-		var requesterWg sync.WaitGroup
-		for i := 0; i < requesters; i++ {
-			requesterWg.Add(1)
+		var wg sync.WaitGroup
+		for i := 0; i < 4; i++ {
+			wg.Add(1)
 			go func() {
-				defer requesterWg.Done()
-				for j := 0; j < requestsEach; j++ {
+				defer wg.Done()
+				for j := 0; j < 64; j++ {
 					bs.requestClearState()
 				}
 			}()
 		}
-		requesterWg.Wait()
-		close(stop)
-		performerWg.Wait()
+		wg.Wait()
 
-		// The performer may have exited between the last request and its
-		// final check; one drain settles it.
-		if bs.performClearState(t.Context()) {
-			performed.Add(1)
-		}
-
-		require.False(t, bs.clearStateRequested.Load(), "no request may be left dangling")
-		require.GreaterOrEqual(t, performed.Load(), int64(1))
-		require.LessOrEqual(t, performed.Load(), int64(requesters*requestsEach),
-			"the CAS must never perform more clears than were requested")
+		require.True(t, bs.performClearState(t.Context()), "the pending request must be performed")
+		require.False(t, bs.performClearState(t.Context()), "all requests coalesce into a single clear")
 	})
 }

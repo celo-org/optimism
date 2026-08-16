@@ -124,15 +124,15 @@ func TestEvaluateVerification(t *testing.T) {
 // panics on any other method, proving no other client call is involved.
 type stuckReceiptEspressoClient struct {
 	espressoClient.EspressoClient
-	height      atomic.Uint64
-	heightStep  uint64
 	fetches     atomic.Int64
 	submissions atomic.Int64
 }
 
+// FetchLatestBlockHeight advances HotShot by 10 blocks per poll from a base of
+// 100, so a single step already exceeds the 5-block verify budget the test
+// configures.
 func (c *stuckReceiptEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
-	c.fetches.Add(1)
-	return c.height.Add(c.heightStep), nil
+	return 100 + 10*uint64(c.fetches.Add(1)), nil
 }
 
 func (c *stuckReceiptEspressoClient) SubmitTransaction(ctx context.Context, tx espressoTypesCommon.Transaction) (*espressoTypesCommon.TaggedBase64, error) {
@@ -152,14 +152,10 @@ func (c *stuckReceiptEspressoClient) FetchTransactionByHash(ctx context.Context,
 // the first attempt, and evaluateVerification routing the job back to the
 // submission queue.
 func TestVerifyReceiptBlockCountTimeoutResubmits(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-
-	client := &stuckReceiptEspressoClient{heightStep: 10}
-	client.height.Store(100)
+	client := &stuckReceiptEspressoClient{}
 
 	submitter := NewEspressoTransactionSubmitter(
-		WithContext(ctx),
+		WithContext(t.Context()),
 		WithEspressoClient(client),
 		WithVerifyReceiptMaxBlocks(5),
 		// Keep the wall-clock backstop out of play so only the block-count
