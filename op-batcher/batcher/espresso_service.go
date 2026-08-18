@@ -105,11 +105,9 @@ func (bs *BatcherService) initKeyPair() error {
 }
 
 // initEspresso configures the Espresso TEE-batcher integration on the
-// BatcherService. When --espresso.enabled is false this is a no-op (the
-// fallback batcher gets its own FallbackAuthLeadTime knob from
-// BatcherConfig). When enabled, it wires up the Espresso query-service
-// client, light client, ephemeral key pair, and Nitro Enclave attestation
-// (if running in TEE).
+// BatcherService. When --espresso.enabled is false this is a no-op. When
+// enabled, it wires up the Espresso query-service client, light client,
+// ephemeral key pair, and Nitro Enclave attestation (if running in TEE).
 func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) error {
 	if !cfg.Espresso.Enabled {
 		return nil
