@@ -133,9 +133,6 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			EnvVars:  espressoEnvs(envPrefix, "VERIFY_RECEIPT_RETRY_DELAY"),
 			Category: category,
 		},
-		// Note: --espresso.fallback-auth-lead-time is registered by the
-		// fallback batcher in op-batcher/flags/flags.go; it is read by both
-		// the fallback and the TEE batcher paths.
 	}
 }
 
