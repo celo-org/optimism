@@ -325,10 +325,14 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 // boundary (derive.IsEspressoAuthEnforced at the L1 tip time): pre-enforcement,
 // only sender-authenticated batches from the SystemConfig batcher key derive,
 // so the fallback batcher publishes unconditionally — without consulting
-// activeIsEspresso, whose default of true would leave no publisher — and the
-// TEE batcher stands down rather than burn L1 fees on batches every verifier
-// drops. Once enforced, activeIsEspresso plus the sender-identity check decide
-// (see checkBatcherActive).
+// activeIsEspresso, which cannot confer ownership here — and the TEE batcher
+// stands down rather than burn L1 fees on batches every verifier drops. That
+// leaves the fallback as the only possible publisher before enforcement, which
+// is why activeIsEspresso must be false until the boundary: with it set, the
+// fallback's authenticateBatchInfo call reverts and takes the paired batch leg
+// with it. See op-batcher/readme.md. Once enforced, the flag is consulted
+// normally, and activeIsEspresso plus the sender-identity check decide (see
+// checkBatcherActive).
 //
 // Deciding on the tip time is safe on both sides of the boundary: enforcement
 // is monotone and a batch published now lands after the tip, and a fallback
