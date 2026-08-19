@@ -79,8 +79,11 @@ contract DeployBatchAuthenticator is Script {
                 _espressoBatcher,
                 ISystemConfig(_systemConfig),
                 _batchAuthenticatorOwner,
-                // First deployment: start with the Espresso batcher active.
-                true
+                // The fallback batcher owns publishing until handoff: it can only
+                // authenticate through the pre-enforcement grace window while this is
+                // false, and no other role may publish there. Handing off is
+                // setActiveIsEspresso(true). See op-batcher/readme.md.
+                false
             )
         );
         // Initialize directly via the proxy. The deployer is still the proxy admin at this point, so

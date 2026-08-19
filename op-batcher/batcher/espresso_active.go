@@ -17,7 +17,8 @@ import (
 // Only meaningful once event-based batch auth is enforced: the caller
 // (shouldSkipPublishForActiveSeq) must gate on derive.IsEspressoAuthEnforced
 // first, since pre-enforcement the contract may be undeployed and its
-// activeIsEspresso default of true does not confer ownership.
+// activeIsEspresso flag does not confer ownership: only the SystemConfig batcher
+// key can publish a batch that derives before the boundary.
 //
 // It applies two gates:
 //  1. Mode: the contract's activeIsEspresso flag must match this node's role

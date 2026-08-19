@@ -155,8 +155,8 @@ func TestShouldSkipPublish_EnforcementBoundary(t *testing.T) {
 		},
 		{
 			// The #492 regression: inside the grace window the fallback keeps
-			// publishing despite activeIsEspresso defaulting true, and the TEE
-			// batcher stands down instead of burning fees on dropped batches.
+			// publishing whatever activeIsEspresso says, and the TEE batcher
+			// stands down instead of burning fees on dropped batches.
 			name:             "at fork time, grace window opens",
 			tipTime:          espressoTime,
 			wantSkipTee:      true,
@@ -267,6 +267,130 @@ func TestShouldSkipPublish_EnforcementBoundary(t *testing.T) {
 				l.Txmgr = testutils.NewFakeTxMgr(logger, from, eth.ChainIDFromUInt64(0))
 
 				require.Equal(t, wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+			})
+		}
+	}
+}
+
+// contractAcceptsAuth mirrors the sender check in
+// BatchAuthenticator.authenticateBatchInfo (src/L1/BatchAuthenticator.sol): with
+// activeIsEspresso set, only espressoBatcher() may authenticate; otherwise only the
+// SystemConfig batcher may. Pinned on the Solidity side by BatchAuthenticator.t.sol —
+// mirrored here so a cell can be evaluated without a chain.
+func contractAcceptsAuth(activeIsEspresso bool, sender, espressoBatcher, fallbackBatcher common.Address) bool {
+	if activeIsEspresso {
+		return sender == espressoBatcher
+	}
+	return sender == fallbackBatcher
+}
+
+// batchLands reports whether a batch published by sender would reach the safe chain,
+// composing two rules the batcher has to satisfy at once:
+//
+//   - derivation (isBatchTxAuthorized): pre-enforcement it authorizes on the L1 sender
+//     alone, so only the SystemConfig batcher's batches derive no matter what was
+//     authenticated; once enforced the batch needs a BatchInfoAuthenticated event from
+//     its own sender.
+//   - the txmgr pairing contract (SendPairAsync): a reverted auth leg cancels the batch
+//     leg, so an auth call the contract rejects stops the batch reaching L1 at all —
+//     even where derivation would not have required it.
+func batchLands(enforced, authenticates, authAccepted bool, sender, fallbackBatcher common.Address) bool {
+	if authenticates && !authAccepted {
+		return false // cancelled batch leg
+	}
+	if enforced {
+		return authenticates
+	}
+	return sender == fallbackBatcher
+}
+
+// TestPublishAuthInvariant_RoleTimeFlag checks, across role x L1-tip-region x
+// activeIsEspresso, that exactly one role publishes and its batch lands (see
+// batchLands). Batches are judged at their decision-time tip, not landing time, so
+// the straddle case stays with the fork-boundary tests.
+//
+// The excluded cell — grace window, activeIsEspresso true — is ruled out by
+// deployment, not code: the fallback publishes, its auth call reverts, and the
+// cancelled batch leg stalls the safe head. Asserted here as a stall to record the
+// dependency on the deploy scripts' false initializer; see op-batcher/readme.md.
+func TestPublishAuthInvariant_RoleTimeFlag(t *testing.T) {
+	const espressoTime uint64 = 1_000_000
+
+	authAddr := common.HexToAddress("0x00000000000000000000000000000000000000aa")
+	sysCfgAddr := common.HexToAddress("0x00000000000000000000000000000000000000bb")
+	teeKey := common.HexToAddress("0x00000000000000000000000000000000000000c1")
+	fallbackKey := common.HexToAddress("0x00000000000000000000000000000000000000c2")
+
+	regions := []struct {
+		name string
+		tip  uint64
+	}{
+		{"pre-fork", espressoTime - 1},
+		{"grace window", espressoTime},
+		{"enforced", espressoTime + derive.BatchAuthEnforcementDelaySecs},
+	}
+	roles := []struct {
+		name     string
+		espresso bool
+		from     common.Address
+	}{
+		{"fallback", false, fallbackKey},
+		{"tee", true, teeKey},
+	}
+
+	for _, region := range regions {
+		for _, activeIsEspresso := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/activeIsEspresso=%v", region.name, activeIsEspresso), func(t *testing.T) {
+				var publishing, landing []string
+				for _, role := range roles {
+					logger := testlog.Logger(t, log.LevelDebug)
+					l := &BatchSubmitter{}
+					l.Log = logger
+					l.Metr = metrics.NoopMetrics
+					l.RollupConfig = &rollup.Config{
+						EspressoTime:              u64(espressoTime),
+						BatchAuthenticatorAddress: authAddr,
+					}
+					l.Config.NetworkTimeout = time.Second
+					l.Config.Espresso.Enabled = role.espresso
+					l.L1Client = &fakeBatchAuthBackend{
+						mockFixedTimeL1Client: mockFixedTimeL1Client{time: region.tip},
+						authAddr:              authAddr,
+						sysCfgAddr:            sysCfgAddr,
+						activeIsEspresso:      activeIsEspresso,
+						espressoBatcher:       teeKey,
+						fallbackBatcher:       fallbackKey,
+					}
+					l.Txmgr = testutils.NewFakeTxMgr(logger, role.from, eth.ChainIDFromUInt64(0))
+
+					if l.shouldSkipPublishForActiveSeq(context.Background()) {
+						continue
+					}
+					publishing = append(publishing, role.name)
+
+					// dispatchAuthenticatedSendTx always authenticates for the TEE
+					// role; the fallback consults the auth-dispatch gate.
+					authenticates := true
+					if !role.espresso {
+						required, err := l.isFallbackAuthRequired(context.Background())
+						require.NoError(t, err)
+						authenticates = required
+					}
+					accepted := contractAcceptsAuth(activeIsEspresso, role.from, teeKey, fallbackKey)
+					enforced := region.tip >= espressoTime+derive.BatchAuthEnforcementDelaySecs
+					if batchLands(enforced, authenticates, accepted, role.from, fallbackKey) {
+						landing = append(landing, role.name)
+					}
+				}
+
+				if region.name == "grace window" && activeIsEspresso {
+					// Excluded by deployment, not by code — see the doc comment.
+					require.Equal(t, []string{"fallback"}, publishing, "the fallback is the only role that may publish in the window")
+					require.Empty(t, landing, "no role can make progress in this cell")
+					return
+				}
+				require.Len(t, publishing, 1, "exactly one role must publish")
+				require.Equal(t, publishing, landing, "the publishing role's batch must land")
 			})
 		}
 	}
