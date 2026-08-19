@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
@@ -463,6 +464,7 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			l := &BatchSubmitter{}
 			l.Log = logger
 			l.degradedLog = oplog.NewRepeatStateLogger()
+			l.Metr = metrics.NoopMetrics
 			l.RollupConfig = &rollup.Config{EspressoTime: u64(espressoTime)}
 			l.Config.NetworkTimeout = time.Second
 			l.Config.Espresso.Enabled = test.espressoEnabled
