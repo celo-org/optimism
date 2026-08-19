@@ -19,10 +19,9 @@ const RepeatStateReminderInterval = 5 * time.Minute
 // State is keyed by a free-form string supplied by the caller; entries with
 // different keys are independent. Safe for concurrent use.
 //
-// Unlike DebouncingHandler (which operates at the slog.Handler level on a
-// short time window), RepeatStateLogger is caller-driven: the caller signals
-// state recovery explicitly via Clear, which lets it emit a recovery log a
-// handler-level facility can't produce.
+// RepeatStateLogger is caller-driven rather than a slog.Handler: the caller
+// signals state recovery explicitly via Clear, which lets it emit a recovery
+// log that a handler-level rate limiter can't produce.
 type RepeatStateLogger struct {
 	mu     sync.Mutex
 	states map[string]*repeatStateEntry
