@@ -46,27 +46,6 @@ func (c *clientSigner) Sign(ctx context.Context, data []byte) ([]byte, error) {
 	return c.signerClient.Sign(ctx, c.fromAddress, data)
 }
 
-// VerifySignature verifies that the signature was produced by the expected address.
-// data is the original message (e.g., txdata.CallData()) and signature is the result
-// from eth_sign.
-func Verify(data []byte, signature []byte, expected common.Address) error {
-
-	pubKey, err := crypto.SigToPub(data, signature)
-	if err != nil {
-		return fmt.Errorf("failed to recover public key: %w", err)
-	}
-
-	// Convert the ecdsa.PublicKey to an Address
-	address := crypto.PubkeyToAddress(*pubKey)
-
-	// Ensure that the derived address matches the expected address.
-	if !bytes.Equal(address.Bytes(), expected.Bytes()) {
-		return fmt.Errorf("address mismatch: got %s, expected %s", address.Hex(), expected.Hex())
-	}
-
-	return nil
-}
-
 // SignTransaction implements Signer.
 func (c *clientSigner) SignTransaction(ctx context.Context, address common.Address, tx *types.Transaction) (*types.Transaction, error) {
 	if !bytes.Equal(address[:], c.fromAddress[:]) {
