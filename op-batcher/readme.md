@@ -204,6 +204,8 @@ Past the boundary the constraint lifts: the fallback keeps event-authenticating 
 
 A `BatchAuthenticator` deployed before the scripts were corrected was initialized with `true`, and needs `setActiveIsEspresso(false)` before `espresso_time` is reached.
 
+The `op_batcher_publish_gate_decision` gauge reports why a batcher is or is not publishing on each tick (`publishing`, `awaiting_enforcement`, `not_active_batcher`, `boundary_unavailable`, `active_check_failed`). A batcher reporting `publishing` while `op_batcher_batch_tx_submitted` stays flat is wedged; one reporting `not_active_batcher` is standing down as intended.
+
 ## Known issues and future work
 
 Link to [open issues with the `op-batcher` tag](https://github.com/ethereum-optimism/optimism/issues?q=is%3Aopen+is%3Aissue+label%3AA-op-batcher).

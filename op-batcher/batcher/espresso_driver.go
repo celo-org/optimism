@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
@@ -309,27 +310,45 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 // Fails closed: if a gate input cannot be evaluated, publishing is skipped for
 // this tick and retried on the next.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
+	// No BatchAuthenticator: the gate does not apply, and reporting a decision
+	// would put the gauge on chains that have no such gate.
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
 		return false
 	}
+	decision := l.publishGateDecision(ctx)
+	l.Metr.RecordPublishGateDecision(decision)
+	return decision != metrics.PublishGatePublishing
+}
+
+// publishGateDecision evaluates the gate and reports why it decided as it did,
+// so the reason reaches the gauge rather than only the logs. Every non-publishing
+// answer is a skip; see shouldSkipPublishForActiveSeq for the ownership rules.
+func (l *BatchSubmitter) publishGateDecision(ctx context.Context) metrics.PublishGateDecision {
 	enforced, err := l.isBatchAuthEnforcedAtTip(ctx)
 	if err != nil {
-		l.Log.Warn("Failed to evaluate the batch-auth enforcement boundary, skipping publish", "err", err)
-		return true
+		l.degradedLog.Warn(l.Log, "publishGate/boundary",
+			"Failed to evaluate the batch-auth enforcement boundary, skipping publish", "err", err)
+		return metrics.PublishGateBoundaryUnavailable
 	}
+	l.degradedLog.Clear(l.Log, "publishGate/boundary", "Batch-auth enforcement boundary readable again")
 	if !enforced {
 		if l.Config.Espresso.Enabled {
 			l.Log.Debug("Event-based batch auth is not enforced at the L1 tip yet, leaving publishing to the fallback batcher")
-			return true
+			return metrics.PublishGateAwaitingEnforcement
 		}
-		return false
+		return metrics.PublishGatePublishing
 	}
 	isActive, err := l.isBatcherActive(ctx)
 	if err != nil {
-		l.Log.Warn("Failed to check if batcher is active, skipping publish", "err", err)
-		return true
+		l.degradedLog.Warn(l.Log, "publishGate/activeCheck",
+			"Failed to check if batcher is active, skipping publish", "err", err)
+		return metrics.PublishGateActiveCheckFailed
 	}
-	return !isActive
+	l.degradedLog.Clear(l.Log, "publishGate/activeCheck", "Batcher active-check reads recovered")
+	if !isActive {
+		return metrics.PublishGateNotActiveBatcher
+	}
+	return metrics.PublishGatePublishing
 }
 
 // isBatchAuthEnforcedAtTip reports whether event-based batch authentication is
