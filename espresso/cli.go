@@ -151,7 +151,6 @@ type CLIConfig struct {
 	VerifyReceiptMaxBlocks     uint64
 	VerifyReceiptSafetyTimeout time.Duration
 	VerifyReceiptRetryDelay    time.Duration
-
 }
 
 func (c CLIConfig) Check() error {
