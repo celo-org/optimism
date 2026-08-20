@@ -1399,6 +1399,7 @@ where
                 da_config: self.da_config.clone(),
                 gas_limit_config: self.gas_limit_config.clone(),
                 sdm_post_exec_opt_in: self.sdm_post_exec_opt_in.clone(),
+                ..Default::default()
             },
         )
         .with_transactions(self.best_transactions.clone())

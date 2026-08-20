@@ -1,5 +1,6 @@
 use super::{
-    ExecutionInfo, OpPayloadBuilderCtx, build_post_exec_recovered_tx, try_include_post_exec_tx,
+    ExecutionInfo, OpPayloadBuilderCtx, await_sparse_trie_state_root, build_post_exec_recovered_tx,
+    try_include_post_exec_tx,
 };
 use crate::{OpPayloadBuilderAttributes, config::OpBuilderConfig};
 use alloy_consensus::{
@@ -30,7 +31,17 @@ use reth_payload_util::PayloadTransactionsFixed;
 use reth_primitives_traits::{Account, InMemorySize, SealedHeader};
 use reth_revm::{database::StateProviderDatabase, db::State, test_utils::StateProviderTest};
 use reth_transaction_pool::PoolTransaction;
-use std::{borrow::Cow, cell::Cell, sync::Arc};
+use reth_trie_parallel::{
+    root::ParallelStateRootError,
+    state_root_task::{StateRootComputeOutcome, StateRootHandle, StateRootMessage},
+};
+use std::{
+    borrow::Cow,
+    cell::Cell,
+    sync::{Arc, mpsc},
+    thread,
+    time::Duration,
+};
 
 fn entries(specs: &[(u64, u64)]) -> Vec<SDMGasEntry> {
     specs.iter().map(|&(index, gas_refund)| SDMGasEntry { index, gas_refund }).collect()
@@ -455,4 +466,71 @@ fn miner_fee_uses_pool_wrapper_tip() {
     // somebody later tweaks the helper's fee fields and happens to land on `forced_priority_fee`.
     assert_eq!(info.total_fees, expected_fees);
     assert_ne!(info.total_fees, natural_fees);
+}
+
+/// Builds a [`StateRootHandle`] backed by live channels, plus the sender the fake trie task would
+/// answer on. Dropping that sender is how a task that died reports itself.
+fn fake_trie_task()
+-> (StateRootHandle, mpsc::Sender<Result<StateRootComputeOutcome, ParallelStateRootError>>) {
+    let (updates_tx, updates_rx) = crossbeam_channel::unbounded::<StateRootMessage>();
+    // The handle clones this sender for every state hook; keep the receiver alive so those sends
+    // do not fail for reasons unrelated to what is under test.
+    std::mem::forget(updates_rx);
+    let (root_tx, root_rx) = mpsc::channel();
+    (StateRootHandle::new(B256::ZERO, updates_tx, root_rx), root_tx)
+}
+
+fn root_outcome(state_root: B256) -> StateRootComputeOutcome {
+    StateRootComputeOutcome { state_root, trie_updates: Arc::new(Default::default()) }
+}
+
+#[test]
+fn bounded_wait_takes_the_root_the_trie_task_produced() {
+    let (mut handle, root_tx) = fake_trie_task();
+    let root = B256::repeat_byte(0x42);
+    root_tx.send(Ok(root_outcome(root))).unwrap();
+
+    let result = await_sparse_trie_state_root(&mut handle, Some(Duration::from_secs(10)));
+
+    assert_eq!(result.unwrap().state_root, root);
+}
+
+#[test]
+fn bounded_wait_gives_up_instead_of_parking_the_build() {
+    // The failure this guards against: a trie task that never answers used to park the payload
+    // job forever, so it never spawned another attempt and `getPayload` never resolved.
+    let (mut handle, _root_tx) = fake_trie_task();
+
+    let started = std::time::Instant::now();
+    let result = await_sparse_trie_state_root(&mut handle, Some(Duration::from_millis(50)));
+
+    assert!(started.elapsed() < Duration::from_secs(5), "wait was not bounded");
+    let err = result.expect_err("a silent trie task must not produce a root");
+    assert!(err.to_string().contains("did not produce a state root"), "unexpected error: {err}");
+}
+
+#[test]
+fn bounded_wait_reports_a_dropped_trie_task() {
+    let (mut handle, root_tx) = fake_trie_task();
+    drop(root_tx);
+
+    let err = await_sparse_trie_state_root(&mut handle, Some(Duration::from_secs(10)))
+        .expect_err("a dropped trie task must not produce a root");
+
+    assert!(err.to_string().contains("dropped"), "unexpected error: {err}");
+}
+
+#[test]
+fn unbounded_wait_still_waits_for_a_late_root() {
+    // `None` is the opt-out, and must keep the pre-existing behaviour of waiting indefinitely.
+    let (mut handle, root_tx) = fake_trie_task();
+    let root = B256::repeat_byte(0x7);
+    thread::spawn(move || {
+        thread::sleep(Duration::from_millis(100));
+        let _ = root_tx.send(Ok(root_outcome(root)));
+    });
+
+    let result = await_sparse_trie_state_root(&mut handle, None);
+
+    assert_eq!(result.unwrap().state_root, root);
 }
