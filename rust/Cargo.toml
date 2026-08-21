@@ -433,6 +433,7 @@ reth-trie = { git = "https://github.com/ethereum-optimism/reth", tag = "op-v2.6.
 reth-trie-common = { git = "https://github.com/ethereum-optimism/reth", tag = "op-v2.6.0-1", default-features = false }
 reth-trie-db = { git = "https://github.com/ethereum-optimism/reth", tag = "op-v2.6.0-1" }
 reth-trie-parallel = { git = "https://github.com/ethereum-optimism/reth", tag = "op-v2.6.0-1" }
+reth-execution-cache = { git = "https://github.com/ethereum-optimism/reth", tag = "op-v2.6.0-1" }
 
 # ==================== REVM (latest: op-reth versions) ====================
 revm = { version = "43.0.2", default-features = false }
