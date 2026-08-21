@@ -22,6 +22,7 @@ use reth_evm::{
         BlockBuilder, BlockBuilderOutcome, BlockExecutionError, BlockExecutor, BlockValidationError,
     },
 };
+use reth_execution_cache::{CachedStateMetrics, CachedStateMetricsSource, CachedStateProvider};
 use reth_execution_types::BlockExecutionOutput;
 use reth_metrics::{
     Metrics,
@@ -295,11 +296,11 @@ where
     {
         let BuildArguments {
             mut cached_reads,
+            execution_cache,
             config,
             cancel,
             best_payload,
             state_root_handle,
-            ..
         } = args;
 
         let ctx = OpPayloadBuilderCtx {
@@ -313,7 +314,26 @@ where
 
         let builder = OpBuilder::new(best).with_state_root_handle(state_root_handle);
 
-        let state_provider = self.client.state_by_block_hash(ctx.parent().hash())?;
+        let mut state_provider = self.client.state_by_block_hash(ctx.parent().hash())?;
+
+        // Serve account, storage and bytecode reads from the engine's cache when it shares one.
+        // Trie and proof reads still go to the inner provider, which `CachedStateProvider`
+        // delegates to, so the state root walk in `BlockBuilder::finish` is unaffected. The
+        // provider reads without ever filling (`CacheFillMode::LookupOnly`), keeping the builder
+        // out of the engine's way.
+        if let Some(execution_cache) = execution_cache {
+            // The cache is only sound on the parent it was populated against. `get_cache_for`
+            // repairs a stale slot with `clear_with_hash(parent_hash)` before handing it out, so a
+            // mismatch means reth broke that contract, not a case to handle at runtime.
+            debug_assert_eq!(execution_cache.executed_block_hash(), ctx.parent().hash());
+
+            state_provider = Box::new(CachedStateProvider::new(
+                state_provider,
+                execution_cache.cache().clone(),
+                Some(CachedStateMetrics::zeroed(CachedStateMetricsSource::Builder)),
+            ));
+        }
+
         let state = StateProviderDatabase::new(&state_provider);
 
         if ctx.attributes().no_tx_pool() {
