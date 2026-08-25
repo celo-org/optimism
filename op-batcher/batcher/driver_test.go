@@ -561,6 +561,13 @@ func altDASetup(_ *testing.T, log log.Logger) (*BatchSubmitter, *mockL2EndpointP
 	}), ep, mockAltDAClient, fakeTxMgr
 }
 
+// blockAsPayloadEnv converts a test block to the payload envelope PayloadByNumber returns.
+func blockAsPayloadEnv(t *testing.T, bl *types.Block) *eth.ExecutionPayloadEnvelope {
+	env, err := eth.BlockAsPayloadEnv(bl, defaultTestRollupConfig)
+	require.NoError(t, err)
+	return env
+}
+
 func fakeSyncStatus(unsafeL2BlockNum uint64, L1BlockRef eth.L1BlockRef) *eth.SyncStatus {
 	return &eth.SyncStatus{
 		UnsafeL2: eth.L2BlockRef{
@@ -620,10 +627,10 @@ func TestBatchSubmitter_AltDA_FailureCase1_L2Reorg(t *testing.T) {
 	L2Block3Prime := newMiniL2BlockWithNumberParent(1, big.NewInt(3), L2Block2Prime.Hash())
 
 	// L2block0 is the genesis block which is considered safe, so never loaded into the state.
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(1)).Twice().Return(L2Block1, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(2)).Once().Return(L2Block2, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(2)).Once().Return(L2Block2Prime, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(3)).Twice().Return(L2Block3Prime, nil)
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(1)).Twice().Return(blockAsPayloadEnv(t, L2Block1), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(2)).Once().Return(blockAsPayloadEnv(t, L2Block2), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(2)).Once().Return(blockAsPayloadEnv(t, L2Block2Prime), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(3)).Twice().Return(blockAsPayloadEnv(t, L2Block3Prime), new(error))
 
 	err := bs.StartBatchSubmitting()
 	require.NoError(t, err)
@@ -705,10 +712,10 @@ func TestBatchSubmitter_AltDA_FailureCase2_FailedL1Tx(t *testing.T) {
 	L2Block4 := newMiniL2BlockWithNumberParent(1, big.NewInt(4), L2Block3.Hash())
 
 	// L2block0 is the genesis block which is considered safe, so never loaded into the state.
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(1)).Once().Return(L2Block1, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(2)).Once().Return(L2Block2, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(3)).Once().Return(L2Block3, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(4)).Once().Return(L2Block4, nil)
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(1)).Once().Return(blockAsPayloadEnv(t, L2Block1), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(2)).Once().Return(blockAsPayloadEnv(t, L2Block2), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(3)).Once().Return(blockAsPayloadEnv(t, L2Block3), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(4)).Once().Return(blockAsPayloadEnv(t, L2Block4), new(error))
 
 	fakeTxMgr.ErrorEveryNthSend(2)
 	err := bs.StartBatchSubmitting()
@@ -751,10 +758,10 @@ func TestBatchSubmitter_AltDA_FailureCase4_FailedBlobSubmission(t *testing.T) {
 	L2Block4 := newMiniL2BlockWithNumberParent(1, big.NewInt(4), L2Block3.Hash())
 
 	// L2block0 is the genesis block which is considered safe, so never loaded into the state.
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(1)).Once().Return(L2Block1, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(2)).Once().Return(L2Block2, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(3)).Once().Return(L2Block3, nil)
-	ep.ethClient.Mock.On("BlockByNumber", big.NewInt(4)).Once().Return(L2Block4, nil)
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(1)).Once().Return(blockAsPayloadEnv(t, L2Block1), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(2)).Once().Return(blockAsPayloadEnv(t, L2Block2), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(3)).Once().Return(blockAsPayloadEnv(t, L2Block3), new(error))
+	ep.ethClient.Mock.On("PayloadByNumber", uint64(4)).Once().Return(blockAsPayloadEnv(t, L2Block4), new(error))
 
 	mockAltDAClient.DropEveryNthPut(2)
 
