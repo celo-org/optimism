@@ -89,6 +89,7 @@ serde_json = { workspace = true, optional = true }
 reth-optimism-node = { workspace = true, features = ["test-utils"] }
 reth-db = { workspace = true, features = ["test-utils"] }
 reth-node-builder = { workspace = true, features = ["test-utils"] }
+reth-node-metrics.workspace = true
 reth-provider = { workspace = true, features = ["test-utils"] }
 reth-tasks.workspace = true
 reth-payload-util.workspace = true

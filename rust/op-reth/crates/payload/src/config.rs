@@ -1,12 +1,18 @@
 //! Additional configuration for the OP builder
 
-use std::sync::{
-    Arc,
-    atomic::{AtomicBool, AtomicU64, Ordering},
+use std::{
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
+    time::Duration,
 };
 
+/// Default bound on waiting for the engine's shared sparse trie to produce a state root.
+pub const DEFAULT_STATE_ROOT_WAIT: Duration = Duration::from_secs(4);
+
 /// Settings for the OP builder.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct OpBuilderConfig {
     /// Data availability configuration for the OP builder.
     pub da_config: OpDAConfig,
@@ -14,12 +20,34 @@ pub struct OpBuilderConfig {
     pub gas_limit_config: OpGasLimitConfig,
     /// Local SDM `PostExec` production opt-in. Shared with the admin RPC.
     pub sdm_post_exec_opt_in: SdmPostExecOptIn,
+    /// How long to wait for the engine's shared sparse trie before falling back to the synchronous
+    /// trie walk.
+    ///
+    /// `None` preserves the previous unbounded wait. This setting is only used when the engine
+    /// shares a trie handle with the payload builder.
+    pub state_root_wait: Option<Duration>,
+}
+
+impl Default for OpBuilderConfig {
+    fn default() -> Self {
+        Self {
+            da_config: OpDAConfig::default(),
+            gas_limit_config: OpGasLimitConfig::default(),
+            sdm_post_exec_opt_in: SdmPostExecOptIn::default(),
+            state_root_wait: Some(DEFAULT_STATE_ROOT_WAIT),
+        }
+    }
 }
 
 impl OpBuilderConfig {
     /// Creates a new OP builder configuration with the given data availability configuration.
     pub fn new(da_config: OpDAConfig, gas_limit_config: OpGasLimitConfig) -> Self {
-        Self { da_config, gas_limit_config, sdm_post_exec_opt_in: SdmPostExecOptIn::default() }
+        Self {
+            da_config,
+            gas_limit_config,
+            sdm_post_exec_opt_in: SdmPostExecOptIn::default(),
+            state_root_wait: Some(DEFAULT_STATE_ROOT_WAIT),
+        }
     }
 
     /// Returns the Data Availability configuration for the OP builder, if it has configured
@@ -167,6 +195,7 @@ mod tests {
     fn test_da_constrained() {
         let config = OpBuilderConfig::default();
         assert!(config.constrained_da_config().is_none());
+        assert_eq!(config.state_root_wait, Some(Duration::from_secs(4)));
     }
 
     #[test]

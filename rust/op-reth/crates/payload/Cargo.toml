@@ -58,3 +58,4 @@ serde.workspace = true
 reth-optimism-chainspec.workspace = true
 reth-revm = { workspace = true, features = ["test-utils"] }
 alloy-rpc-types-eth.workspace = true
+crossbeam-channel.workspace = true

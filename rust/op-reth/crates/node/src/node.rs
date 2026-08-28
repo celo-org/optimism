@@ -66,7 +66,7 @@ use reth_transaction_pool::{
     TransactionValidationTaskExecutor, blobstore::DiskFileBlobStore,
 };
 use reth_trie_common::KeccakKeyHasher;
-use std::{marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc, time::Duration};
 use url::Url;
 
 use reth_optimism_payload_builder::OpPayloadAttrs;
@@ -1256,7 +1256,7 @@ where
 }
 
 /// A basic optimism payload service builder
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct OpPayloadBuilder<Txs = ()> {
     /// By default the pending block equals the latest block
     /// to save resources and not leak txs from the tx-pool,
@@ -1278,6 +1278,21 @@ pub struct OpPayloadBuilder<Txs = ()> {
     pub gas_limit_config: OpGasLimitConfig,
     /// Operator opt-in flag for SDM `PostExec` production. Shared with the admin RPC.
     pub sdm_post_exec_opt_in: SdmPostExecOptIn,
+    /// How long the payload builder waits for the shared sparse trie before falling back.
+    pub state_root_wait: Option<Duration>,
+}
+
+impl<Txs: Default> Default for OpPayloadBuilder<Txs> {
+    fn default() -> Self {
+        Self {
+            compute_pending_block: false,
+            best_transactions: Txs::default(),
+            da_config: OpDAConfig::default(),
+            gas_limit_config: OpGasLimitConfig::default(),
+            sdm_post_exec_opt_in: SdmPostExecOptIn::default(),
+            state_root_wait: OpBuilderConfig::default().state_root_wait,
+        }
+    }
 }
 
 impl OpPayloadBuilder {
@@ -1290,6 +1305,7 @@ impl OpPayloadBuilder {
             da_config: OpDAConfig::default(),
             gas_limit_config: OpGasLimitConfig::default(),
             sdm_post_exec_opt_in: SdmPostExecOptIn::default(),
+            state_root_wait: OpBuilderConfig::default().state_root_wait,
         }
     }
 
@@ -1302,6 +1318,13 @@ impl OpPayloadBuilder {
     /// Configure the gas limit configuration for the OP payload builder.
     pub fn with_gas_limit_config(mut self, gas_limit_config: OpGasLimitConfig) -> Self {
         self.gas_limit_config = gas_limit_config;
+        self
+    }
+
+    /// Configure how long the payload builder waits for the shared sparse trie before falling
+    /// back to a synchronous trie walk.
+    pub const fn with_state_root_wait(mut self, state_root_wait: Option<Duration>) -> Self {
+        self.state_root_wait = state_root_wait;
         self
     }
 
@@ -1318,7 +1341,12 @@ impl<Txs> OpPayloadBuilder<Txs> {
     /// payload.
     pub fn with_transactions<T>(self, best_transactions: T) -> OpPayloadBuilder<T> {
         let Self {
-            compute_pending_block, da_config, gas_limit_config, sdm_post_exec_opt_in, ..
+            compute_pending_block,
+            da_config,
+            gas_limit_config,
+            sdm_post_exec_opt_in,
+            state_root_wait,
+            ..
         } = self;
         OpPayloadBuilder {
             compute_pending_block,
@@ -1326,7 +1354,24 @@ impl<Txs> OpPayloadBuilder<Txs> {
             da_config,
             gas_limit_config,
             sdm_post_exec_opt_in,
+            state_root_wait,
         }
+    }
+}
+
+#[cfg(test)]
+mod payload_builder_tests {
+    use super::*;
+    use reth_optimism_payload_builder::config::DEFAULT_STATE_ROOT_WAIT;
+
+    #[test]
+    fn default_and_transaction_swap_preserve_state_root_wait() {
+        let builder = OpPayloadBuilder::<()>::default();
+        assert_eq!(builder.state_root_wait, Some(DEFAULT_STATE_ROOT_WAIT));
+
+        let wait = Duration::from_millis(123);
+        let builder = builder.with_state_root_wait(Some(wait)).with_transactions("transactions");
+        assert_eq!(builder.state_root_wait, Some(wait));
     }
 }
 
@@ -1376,6 +1421,7 @@ where
                 da_config: self.da_config.clone(),
                 gas_limit_config: self.gas_limit_config.clone(),
                 sdm_post_exec_opt_in: self.sdm_post_exec_opt_in.clone(),
+                state_root_wait: self.state_root_wait,
             },
         )
         .with_transactions(self.best_transactions.clone())
