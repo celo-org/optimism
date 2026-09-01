@@ -18,6 +18,7 @@ use reth_evm::{
         BlockBuilder, BlockBuilderOutcome, BlockExecutionError, BlockExecutor, BlockValidationError,
     },
 };
+use reth_execution_cache::{CachedStateMetrics, CachedStateMetricsSource, CachedStateProvider};
 use reth_execution_types::BlockExecutionOutput;
 use reth_metrics::{
     Metrics,
@@ -282,8 +283,14 @@ where
         Txs:
             PayloadTransactions<Transaction: PoolTransaction<Consensus = N::SignedTx> + OpPooledTx>,
     {
-        let BuildArguments { mut cached_reads, config, cancel, best_payload, trie_handle, .. } =
-            args;
+        let BuildArguments {
+            mut cached_reads,
+            execution_cache,
+            config,
+            cancel,
+            best_payload,
+            trie_handle,
+        } = args;
 
         let ctx = OpPayloadBuilderCtx {
             evm_config: self.evm_config.clone(),
@@ -296,7 +303,21 @@ where
 
         let builder = OpBuilder::new(best).with_trie_handle(trie_handle);
 
-        let state_provider = self.client.state_by_block_hash(ctx.parent().hash())?;
+        let mut state_provider = self.client.state_by_block_hash(ctx.parent().hash())?;
+
+        // Serve account, storage and bytecode reads from the engine's cache when it shares one.
+        // Trie and proof reads still go to the inner provider, which `CachedStateProvider`
+        // delegates to, so the state root walk in `BlockBuilder::finish` is unaffected.
+        if let Some(execution_cache) = execution_cache {
+            debug_assert_eq!(execution_cache.executed_block_hash(), ctx.parent().hash());
+
+            state_provider = Box::new(CachedStateProvider::new(
+                state_provider,
+                execution_cache.cache().clone(),
+                CachedStateMetrics::zeroed(CachedStateMetricsSource::Builder),
+            ));
+        }
+
         let state = StateProviderDatabase::new(&state_provider);
 
         if ctx.attributes().no_tx_pool() {

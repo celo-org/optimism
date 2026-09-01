@@ -54,6 +54,13 @@ async fn test_share_sparse_trie_with_payload_builder() -> eyre::Result<()> {
          ({fallbacks} fallbacks)"
     );
 
+    let builder_account_reads = labeled_gauge("account_cache_hits", "builder") +
+        labeled_gauge("account_cache_misses", "builder");
+    assert!(
+        builder_account_reads > 0.0,
+        "expected payload-builder account reads to use the shared execution cache"
+    );
+
     // Independently walk the canonical database trie and compare its root with the payload header.
     // This catches a shared-trie wiring bug even if the engine accepts the same incorrect result.
     let header =
@@ -73,4 +80,15 @@ fn counter(name: &str) -> u64 {
         .find_map(|line| line.strip_prefix(&key))
         .and_then(|value| value.trim().parse().ok())
         .unwrap_or(0)
+}
+
+/// Reads a labelled `sync.caching` gauge from the process-wide Prometheus recorder.
+fn labeled_gauge(name: &str, source: &str) -> f64 {
+    let rendered = install_prometheus_recorder().handle().render();
+    let key = format!("reth_sync_caching_{name}{{source=\"{source}\"}} ");
+    rendered
+        .lines()
+        .find_map(|line| line.strip_prefix(&key))
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(0.0)
 }
