@@ -11,11 +11,9 @@ use std::{
 
 /// Default bound on waiting for the engine's shared sparse trie to produce a state root.
 ///
-/// Matches `TreeConfig`'s own `DEFAULT_STATE_ROOT_TASK_TIMEOUT`, which bounds the same computation
-/// on the `newPayload` path. Kept short deliberately: unlike the engine, the builder cannot race
-/// the fallback against the trie task, so a build that times out pays the wait *and* the
-/// synchronous trie walk, and on a one-second chain a longer bound costs whole slots.
-pub const DEFAULT_STATE_ROOT_WAIT: Duration = Duration::from_secs(1);
+/// Matches reth's `--engine.state-root-task-timeout` default. Chains with shorter slots can
+/// override this in their node-specific payload builder configuration.
+pub const DEFAULT_STATE_ROOT_WAIT: Duration = Duration::from_secs(4);
 
 /// Settings for the OP builder.
 #[derive(Debug, Clone)]
