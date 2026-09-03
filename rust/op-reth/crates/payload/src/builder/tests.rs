@@ -15,10 +15,12 @@ use alloy_eips::{
 use alloy_evm::RecoveredTx;
 use alloy_primitives::{Address, B256, Bytes, Signature, TxHash, TxKind, U256};
 use alloy_rpc_types_eth::erc4337::TransactionConditional;
+use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
 use op_alloy_consensus::SDMGasEntry;
 use reth_basic_payload_builder::PayloadConfig;
 use reth_chainspec::MIN_TRANSACTION_GAS;
 use reth_evm::execute::{BlockBuilder, BlockExecutionError};
+use reth_metrics::metrics;
 use reth_optimism_chainspec::{OpChainSpec, OpChainSpecBuilder};
 use reth_optimism_evm::OpEvmConfig;
 use reth_optimism_primitives::{OpPrimitives, OpTransactionSigned};
@@ -38,6 +40,7 @@ use reth_trie_parallel::{
 use std::{
     borrow::Cow,
     cell::Cell,
+    collections::HashMap,
     sync::{Arc, mpsc},
     thread,
     time::Duration,
@@ -461,6 +464,59 @@ fn fake_trie_task()
 
 fn root_outcome(state_root: B256) -> StateRootComputeOutcome {
     StateRootComputeOutcome { state_root, trie_updates: Arc::new(Default::default()) }
+}
+
+fn state_root_wait_samples(snapshot: Snapshot) -> HashMap<String, usize> {
+    snapshot
+        .into_vec()
+        .into_iter()
+        .filter_map(|(key, _, _, value)| {
+            let is_wait_metric =
+                key.key().name() == "optimism_payload_builder.state_root_wait_duration_seconds";
+            let outcome = key
+                .key()
+                .labels()
+                .find(|label| label.key() == "outcome")
+                .map(|label| label.value().to_string());
+            match (is_wait_metric, outcome, value) {
+                (true, Some(outcome), DebugValue::Histogram(samples)) => {
+                    Some((outcome, samples.len()))
+                }
+                _ => None,
+            }
+        })
+        .collect()
+}
+
+#[test]
+fn state_root_wait_records_each_outcome() {
+    let recorder = DebuggingRecorder::new();
+    let snapshotter = recorder.snapshotter();
+
+    metrics::with_local_recorder(&recorder, || {
+        let (mut success_handle, success_tx) = fake_trie_task();
+        success_tx.send(Ok(root_outcome(B256::repeat_byte(0x42)))).unwrap();
+        await_sparse_trie_state_root(&mut success_handle, Some(Duration::from_secs(1))).unwrap();
+
+        let (mut task_error_handle, task_error_tx) = fake_trie_task();
+        task_error_tx.send(Err(ParallelStateRootError::Other("failed".to_string()))).unwrap();
+        await_sparse_trie_state_root(&mut task_error_handle, Some(Duration::from_secs(1)))
+            .unwrap_err();
+
+        let (mut timeout_handle, _timeout_tx) = fake_trie_task();
+        await_sparse_trie_state_root(&mut timeout_handle, Some(Duration::from_millis(1)))
+            .unwrap_err();
+
+        let (mut disconnected_handle, disconnected_tx) = fake_trie_task();
+        drop(disconnected_tx);
+        let error = await_sparse_trie_state_root(&mut disconnected_handle, None).unwrap_err();
+        assert_eq!(error.to_string(), "sparse trie task dropped");
+    });
+
+    let samples = state_root_wait_samples(snapshotter.snapshot());
+    for outcome in ["success", "task_error", "timeout", "disconnected"] {
+        assert_eq!(samples.get(outcome), Some(&1), "missing outcome {outcome}");
+    }
 }
 
 #[test]
