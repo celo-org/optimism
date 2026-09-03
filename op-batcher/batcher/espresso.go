@@ -29,9 +29,9 @@ import (
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 
 	"github.com/ethereum-optimism/optimism/espresso"
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -1235,7 +1235,7 @@ func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) error {
 		// If batcher authenticator address is nil, we will keep teeVerifierAddress to nil as well
 		return nil
 	}
-	auth, err := bindings.NewBatchAuthenticatorCaller(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
+	auth, err := batchauthenticator.NewBatchAuthenticatorCaller(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
 	if err != nil {
 		return fmt.Errorf("failed to create BatchAuthenticator caller: %w", err)
 	}
@@ -1272,7 +1272,7 @@ func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
 		return fmt.Errorf("no contract deployed at this address %w", err)
 	}
 
-	abi, err := bindings.BatchAuthenticatorMetaData.GetAbi()
+	abi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
 	if err != nil {
 		return fmt.Errorf("failed to get Batch Authenticator ABI: %w", err)
 	}
@@ -1385,7 +1385,7 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 
 	l.Log.Debug("Signed transaction", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]), "sig", hexutil.Encode(signature))
 
-	batchAuthenticatorAbi, err := bindings.BatchAuthenticatorMetaData.GetAbi()
+	batchAuthenticatorAbi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
