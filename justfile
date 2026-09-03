@@ -35,6 +35,20 @@ build-go: submodules op-node op-proposer op-batcher op-challenger op-dispute-mon
 build-contracts:
   cd packages/contracts-bedrock && just build
 
+# Builds the contracts the bindings are generated from. forge-build-dev, not
+# forge-build: no script-cache pre-warm, and FOUNDRY_JOBS=1 against OOM.
+[private]
+build-bindings-contracts:
+  cd packages/contracts-bedrock && just forge-build-dev --skip test
+
+# Regenerates op-service/bindings from the contracts; `nix develop` has the pinned forge and abigen.
+gen-bindings: build-bindings-contracts
+  op-service/bindings/gen.sh
+
+# Fails if op-service/bindings is stale; leaves the regenerated files in place.
+check-bindings: build-bindings-contracts
+  op-service/bindings/check.sh
+
 # Builds the custom linter.
 build-customlint:
   cd linter && just build
