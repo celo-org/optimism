@@ -5,11 +5,7 @@
 # the contracts first.
 #
 # These are the bindings production services import; they live here so that no
-# production binary depends on op-e2e. One package per contract, so the struct
-# types abigen emits for shared Solidity types cannot collide. ABI-only because
-# nothing in Go deploys these contracts, and BatchAuthenticator's bytecode is
-# not reproducible across checkouts (it compiles in a source from a submodule
-# of a submodule); its ABI is.
+# production binary depends on op-e2e.
 
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
