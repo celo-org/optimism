@@ -1,0 +1,87 @@
+name: Espresso E2E tests
+
+# In-memory Espresso e2e suite (espresso/environment/...): mock Espresso client
+# + op-e2e in-process L1/L2, no docker devnet, so it runs on free runners.
+on:
+  pull_request:
+    paths:
+      - "espresso/**"
+      - "op-batcher/**"
+      - "op-e2e/**"
+      - "op-node/**"
+      - "packages/contracts-bedrock/**"
+      - ".github/workflows/espresso-e2e-tests.yaml"
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: espresso-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  espresso-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # In-memory groups (contracts only).
+          #
+          # The core group additionally matches the not-yet-ported stubs so
+          # they are visible as SKIP in CI output: the attestation tests
+          # (espresso/environment/5_batch_authentication_test.go) and the
+          # devnet test tier (espresso/devnet-tests, see its package doc).
+          # Stubs whose names already match another group's filter
+          # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
+          - group: core
+            needs_prestate: false
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestEspressoDockerDevNodeSmokeTest|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
+          - group: integrity
+            needs_prestate: false
+            tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
+          - group: fallback
+            needs_prestate: false
+            tests: "TestBatcherSwitching|TestFallbackMechanismIntegrationTestChannelNotClosed|TestEspressoEnforcementHardfork|TestE2eDevnetWithEspressoDegradedLiveness"
+          - group: forced-reorg
+            needs_prestate: false
+            tests: "TestForcedTransaction|TestBatcherWaitForFinality|TestE2eDevnetWithL1Reorg|TestPipelineEnhancement|TestEnforceMajorityRule"
+          # Needs cannon prestate + op-challenger; disabled until the prestate
+          # build works on free runners.
+          # - group: dispute
+          #   needs_prestate: true
+          #   tests: "TestOutputAlphabetGameWithEspresso_ChallengerWins"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up mise (forge, go, just, ...)
+        uses: jdx/mise-action@v2
+
+      - name: Restore forge-artifacts cache
+        id: forge-cache
+        uses: actions/cache@v4
+        with:
+          path: packages/contracts-bedrock/forge-artifacts
+          key: forge-artifacts-${{ hashFiles('packages/contracts-bedrock/foundry.toml', 'packages/contracts-bedrock/src/**/*.sol', 'packages/contracts-bedrock/interfaces/**/*.sol', 'packages/contracts-bedrock/scripts/**/*.sol', '.gitmodules') }}
+
+      - name: Compile contracts
+        if: steps.forge-cache.outputs.cache-hit != 'true'
+        run: mise exec -- just build-contracts
+
+      # Only the dispute group needs prestates.
+      - name: Build cannon prestates
+        if: matrix.needs_prestate
+        run: mise exec -- just cannon-prestates
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@latest
+
+      - name: Run ${{ matrix.group }} tests
+        run: |
+          gotestsum --format github-actions -- \
+            -timeout 45m -p 1 -count 1 \
+            -run '${{ matrix.tests }}' \
+            ./espresso/environment/... ./espresso/devnet-tests/... ./espresso/enclave-tests/...
