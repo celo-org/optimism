@@ -13,10 +13,10 @@ import (
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
@@ -402,7 +402,7 @@ func TestAuth_BatchFailureTxRefType(t *testing.T) {
 // unpackAuthenticateBatchInfo decodes an authenticateBatchInfo(bytes32,bytes) calldata blob into
 // its commitment and signature arguments.
 func unpackAuthenticateBatchInfo(t *testing.T, calldata []byte) (commitment [32]byte, signature []byte) {
-	abi, err := bindings.BatchAuthenticatorMetaData.GetAbi()
+	abi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
 	require.NoError(t, err)
 	method, ok := abi.Methods["authenticateBatchInfo"]
 	require.True(t, ok)
