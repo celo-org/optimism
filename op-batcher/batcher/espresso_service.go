@@ -61,19 +61,30 @@ func (bs *BatcherService) EspressoStreamer() *espressoStreamers.Streamer {
 	return bs.driver.espressoStreamer
 }
 
-// initChainSigner asserts that the configured TxManager implements the
-// ChainSigner interface and stores the embedded ChainSigner on the service.
-// Espresso uses ChainSigner to sign batch authentication payloads sent to the
-// BatchAuthenticator contract; the cast is required by every Espresso path.
+// initChainSigner builds the ChainSigner from the same signing configuration
+// the txmgr consumes and stores it on the service. Espresso uses ChainSigner to
+// sign batch authentication payloads sent to the BatchAuthenticator contract.
+// The signer is only used for Sign (arbitrary-hash signing), so the chain ID and
+// from address are taken from the already-built TxManager.
 func (bs *BatcherService) initChainSigner(cfg *CLIConfig) error {
 	if !cfg.Espresso.Enabled {
 		return nil
 	}
-	cast, castOk := bs.TxManager.(opcrypto.ChainSigner)
-	if !castOk {
-		return fmt.Errorf("tx manager does not implement ChainSigner")
+	tcfg := cfg.TxMgrConfig
+
+	// Mirror the txmgr's backwards-compatible HD-path resolution.
+	hdPath := tcfg.HDPath
+	if hdPath == "" && tcfg.SequencerHDPath != "" {
+		hdPath = tcfg.SequencerHDPath
+	} else if hdPath == "" && tcfg.L2OutputHDPath != "" {
+		hdPath = tcfg.L2OutputHDPath
 	}
-	bs.ChainSigner = cast
+
+	factory, from, err := opcrypto.ChainSignerFactoryFromConfig(bs.Log, tcfg.PrivateKey, tcfg.Mnemonic, hdPath, tcfg.SignerCLIConfig)
+	if err != nil {
+		return fmt.Errorf("failed to init Espresso chain signer: %w", err)
+	}
+	bs.ChainSigner = factory(bs.TxManager.ChainID().ToBig(), from)
 	return nil
 }
 
