@@ -535,8 +535,6 @@ func NewConfig(cfg CLIConfig, l log.Logger) (*Config, error) {
 		Signer:  chainSigner.SignTransaction,
 		From:    from,
 
-		ChainSigner: chainSigner,
-
 		TxSendTimeout:              cfg.TxSendTimeout,
 		TxNotInMempoolTimeout:      cfg.TxNotInMempoolTimeout,
 		NetworkTimeout:             cfg.NetworkTimeout,
@@ -666,9 +664,6 @@ type Config struct {
 	// Signer is used to sign transactions when the gas price is increased.
 	Signer opcrypto.SignerFn
 	From   common.Address
-
-	// ChainSigner is used to allow for easy signing of transactions and arbitrary data.
-	ChainSigner opcrypto.ChainSigner
 
 	// GasPriceEstimatorFn is used to estimate the gas price for a transaction.
 	// If nil, DefaultGasPriceEstimatorFn is used.
