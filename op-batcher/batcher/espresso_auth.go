@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -55,7 +55,7 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	}
 	l.Log.Debug("Computed fallback batch commitment", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]))
 
-	batchAuthenticatorAbi, err := bindings.BatchAuthenticatorMetaData.GetAbi()
+	batchAuthenticatorAbi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,

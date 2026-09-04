@@ -7,7 +7,8 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
 )
 
 // isBatcherActive checks if the current batcher is the active one by querying
@@ -33,7 +34,7 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("no contract code at BatchAuthenticator address %s", l.RollupConfig.BatchAuthenticatorAddress.Hex())
 	}
 
-	batchAuthenticator, err := bindings.NewBatchAuthenticator(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
+	batchAuthenticator, err := batchauthenticator.NewBatchAuthenticator(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
 	if err != nil {
 		return false, fmt.Errorf("failed to create BatchAuthenticator binding: %w", err)
 	}
@@ -89,12 +90,12 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 }
 
 // fallbackBatcherAddr returns the address the BatchAuthenticator's fallback batcher
-func (l *BatchSubmitter) fallbackBatcherAddr(batchAuthenticator *bindings.BatchAuthenticator, opts *bind.CallOpts) (common.Address, error) {
+func (l *BatchSubmitter) fallbackBatcherAddr(batchAuthenticator *batchauthenticator.BatchAuthenticator, opts *bind.CallOpts) (common.Address, error) {
 	systemConfigAddr, err := batchAuthenticator.SystemConfig(opts)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to read systemConfig address: %w", err)
 	}
-	systemConfig, err := bindings.NewSystemConfigCaller(systemConfigAddr, l.L1Client)
+	systemConfig, err := systemconfig.NewSystemConfigCaller(systemConfigAddr, l.L1Client)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to create SystemConfig binding: %w", err)
 	}
