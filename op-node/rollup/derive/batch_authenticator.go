@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
@@ -26,13 +27,15 @@ func isEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
 	return cfg.IsEspresso(l1OriginTime) && l1OriginTime >= *cfg.EspressoTime+BatchAuthEnforcementDelaySecs
 }
 
-var (
-	// BatchInfoAuthenticatedABI is the event signature for
-	// BatchInfoAuthenticated(bytes32 commitment, address indexed caller).
-	// The commitment is an unindexed (data) argument; only caller is indexed.
-	BatchInfoAuthenticatedABI     = "BatchInfoAuthenticated(bytes32,address)"
-	BatchInfoAuthenticatedABIHash = crypto.Keccak256Hash([]byte(BatchInfoAuthenticatedABI))
-)
+// batchAuthenticatorLogs decodes BatchAuthenticator logs. Parsing needs only the
+// ABI, so it is bound to no address and no backend.
+var batchAuthenticatorLogs = func() *batchauthenticator.BatchAuthenticatorFilterer {
+	f, err := batchauthenticator.NewBatchAuthenticatorFilterer(common.Address{}, nil)
+	if err != nil {
+		panic(fmt.Errorf("parse BatchAuthenticator ABI: %w", err))
+	}
+	return f
+}()
 
 // BatchAuthCaches holds the LRU caches used by CollectAuthenticatedBatches.
 // Keyed by block hash so they are naturally reorg-safe: after a reorg the
@@ -102,11 +105,11 @@ func collectAuthEventsFromReceipts(receipts types.Receipts, authenticatorAddr co
 			if lg.Address != authenticatorAddr {
 				continue
 			}
-			if len(lg.Topics) >= 2 && lg.Topics[0] == BatchInfoAuthenticatedABIHash && len(lg.Data) >= 32 {
-				commitment := common.BytesToHash(lg.Data[:32])
-				caller := common.BytesToAddress(lg.Topics[1][:])
-				result[commitment] = caller
+			ev, err := batchAuthenticatorLogs.ParseBatchInfoAuthenticated(*lg)
+			if err != nil {
+				continue // another event, or malformed
 			}
+			result[common.Hash(ev.Commitment)] = ev.Caller
 		}
 	}
 	return result
