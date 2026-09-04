@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 
 	lru "github.com/hashicorp/golang-lru/v2"
 
@@ -29,15 +28,14 @@ func isEspressoAuthEnforced(cfg *rollup.Config, l1OriginTime uint64) bool {
 }
 
 // batchAuthenticatorLogs decodes BatchAuthenticator logs. Parsing needs only the
-// ABI, so it is bound to no address and no backend, and it is parsed on first
-// use so that binaries which never derive Espresso batches do not pay for it.
-var batchAuthenticatorLogs = sync.OnceValue(func() *batchauthenticator.BatchAuthenticatorFilterer {
+// ABI, so it is bound to no address and no backend.
+var batchAuthenticatorLogs = func() *batchauthenticator.BatchAuthenticatorFilterer {
 	f, err := batchauthenticator.NewBatchAuthenticatorFilterer(common.Address{}, nil)
 	if err != nil {
 		panic(fmt.Errorf("parse BatchAuthenticator ABI: %w", err))
 	}
 	return f
-})
+}()
 
 // BatchAuthCaches holds the LRU caches used by CollectAuthenticatedBatches.
 // Keyed by block hash so they are naturally reorg-safe: after a reorg the
@@ -107,7 +105,7 @@ func collectAuthEventsFromReceipts(receipts types.Receipts, authenticatorAddr co
 			if lg.Address != authenticatorAddr {
 				continue
 			}
-			ev, err := batchAuthenticatorLogs().ParseBatchInfoAuthenticated(*lg)
+			ev, err := batchAuthenticatorLogs.ParseBatchInfoAuthenticated(*lg)
 			if err != nil {
 				continue // another event, or malformed
 			}
