@@ -41,7 +41,7 @@ build-contracts:
 build-bindings-contracts:
   cd packages/contracts-bedrock && just forge-build-dev --skip test
 
-# Regenerates op-service/bindings from the contracts; `nix develop` has the pinned forge and abigen.
+# Regenerates op-service/bindings from the contracts; `mise install` gives the pinned forge and abigen.
 gen-bindings: build-bindings-contracts
   op-service/bindings/gen.sh
 
