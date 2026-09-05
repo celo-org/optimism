@@ -18,8 +18,10 @@ import (
 // fallback batcher consults isFallbackAuthRequired to gate authentication
 // behind the EspressoTime hardfork: pre-fork the verifier accepts plain
 // sender-authenticated batches, and the BatchAuthenticator contract is
-// irrelevant; calling authenticateBatchInfo pre-fork would also revert against
-// the default activeIsEspresso=true contract state.
+// irrelevant. From EspressoTime onward the fallback authenticates every batch,
+// which requires activeIsEspresso to be false: the contract's fallback branch is
+// the only one its key can satisfy, and a rejected auth leg cancels the paired
+// batch leg. See op-batcher/readme.md.
 func (l *BatchSubmitter) dispatchAuthenticatedSendTx(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) bool {
 	if isCancel {
 		return false

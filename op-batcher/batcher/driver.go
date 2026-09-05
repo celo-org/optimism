@@ -162,6 +162,11 @@ type BatchSubmitter struct {
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
 
+	// batchAuthEnforced memoizes the first time derive.IsEspressoAuthEnforced was
+	// observed true at the L1 tip; enforcement is monotone in time, so once set the
+	// publish gate skips the per-tick tip fetch (see isBatchAuthEnforcedAtTip).
+	batchAuthEnforced atomic.Bool
+
 	teeVerifierAddress common.Address
 
 	// degradedLog throttles repeated warnings from tick-driven loops so the
@@ -872,6 +877,12 @@ func (l *BatchSubmitter) publishStateToL1(ctx context.Context, queue *txmgr.Queu
 		}
 
 		if l.shouldSkipPublishForActiveSeq(ctx) {
+			// A force-publish must not override the gate (it would double-publish
+			// or revert), but dropping pi silently makes admin_flushBatcher look
+			// like it did nothing.
+			if pi.forcePublish {
+				l.Log.Warn("Discarding a forced publish: this batcher is not currently publishing (see the publish_gate_decision metric)")
+			}
 			return
 		}
 

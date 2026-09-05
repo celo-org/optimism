@@ -192,6 +192,20 @@ cast rpc admin_flushBatcher -r http://localhost:8545
 ```
 The command can either be run on the batcher host machine itself, or remotely by replacing `localhost` with the appropriate remote hostname.
 
+### Espresso batcher handoff
+
+On an Espresso chain the fallback batcher (signing with the `SystemConfig` batcher key) and the TEE batcher (`--espresso.enabled`) take turns publishing. `BatchAuthenticator.activeIsEspresso` decides which of the two the contract will authenticate for, and so which one can make progress.
+
+**`activeIsEspresso` must be `false` from deployment until event-based batch authentication is enforced**, i.e. until `espresso_time + BatchAuthEnforcementDelaySecs` (20 minutes). Both deploy scripts initialize it that way.
+
+Before that boundary, derivation authorizes batches on the L1 sender alone, so only the `SystemConfig` batcher key can publish anything that derives, and the TEE batcher stands down. The fallback starts calling `authenticateBatchInfo` at `espresso_time` — a full grace period early, so batches straddling the boundary stay valid — and that call only succeeds while the flag is `false`. With the flag set it reverts, the reverted auth leg cancels the paired batch leg, and the safe head stalls for the rest of the window while the batcher retries every tick.
+
+Past the boundary the constraint lifts: the fallback keeps event-authenticating indefinitely, so the handoff is not coupled to the fork. To hand off, confirm the TEE batcher has registered with the `BatchAuthenticator` and that the L1 tip is past the boundary, then call `setActiveIsEspresso(true)`. Handing back is the same with `false`.
+
+A `BatchAuthenticator` deployed before the scripts were corrected was initialized with `true`, and needs `setActiveIsEspresso(false)` before `espresso_time` is reached.
+
+The `op_batcher_publish_gate_decision` gauge reports why a batcher is or is not publishing on each tick (`publishing`, `awaiting_enforcement`, `not_active_batcher`, `boundary_unavailable`, `active_check_failed`). A batcher reporting `publishing` while `op_batcher_batch_tx_submitted` stays flat is wedged; one reporting `not_active_batcher` is standing down as intended.
+
 ## Known issues and future work
 
 Link to [open issues with the `op-batcher` tag](https://github.com/ethereum-optimism/optimism/issues?q=is%3Aopen+is%3Aissue+label%3AA-op-batcher).
