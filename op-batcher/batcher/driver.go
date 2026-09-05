@@ -319,9 +319,7 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.wg.Wait()
 	l.cancelKillCtx()
 
-	if l.espressoStreamer != nil {
-		l.espressoStreamer.Stop()
-	}
+	l.teardownEspressoStreamer()
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil
