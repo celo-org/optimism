@@ -88,6 +88,21 @@ func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context
 	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }
 
+// hotshotScanStart is the HotShot height the streamer starts scanning for
+// batches from. It is not configurable: an operator-supplied caffeination height
+// was only ever a lower bound on where scanning could usefully begin, and a value
+// that outlived its deployment silently made every restart replay HotShot history
+// (too high a value stalled the batcher with no log line at all).
+//
+// Zero means the pinned streamer scans from HotShot genesis on every start, so
+// this is a placeholder for a streamer that resolves its own scan start.
+//
+// TODO(#488): bump the espresso-streamers pin to v2, which fast-forwards the
+// HotShot cursor to the light-client position at startup
+// (EspressoSystems/espresso-streamers#36); until then the value below is the
+// literal scan start.
+const hotshotScanStart = 0
+
 // setupEspressoStreamer constructs the Espresso streamer for a BatchSubmitter that
 // is starting up; no-op when --espresso.enabled is false.
 //
@@ -105,8 +120,8 @@ func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context
 // permanently wedge fork selection. The configured height is never looked up either:
 // NewStreamer resolves its anchor block's hash from the L2 client, which fails on
 // endpoints that no longer serve the (ever aging) configured height and would wedge
-// restarts. --espresso.origin-height-espresso keeps its role: it decides where the
-// streamer starts polling HotShot.
+// restarts. Where the streamer starts polling HotShot is not configurable: see
+// hotshotScanStart.
 func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	if !l.Config.Espresso.Enabled {
 		return nil
@@ -145,7 +160,7 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 		l.getSyncStatus,
 		l.Config.Espresso.PollInterval,
 		l.Log,
-		l.Config.Espresso.CaffeinationHeightEspresso,
+		hotshotScanStart,
 		anchor.Number,
 	)
 	if err != nil {
@@ -156,7 +171,12 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	// Re-anchor on the exact ref we resolved: NewStreamer resolved a hash for the
 	// same height, but the sync status is the authoritative view.
 	streamer.SetBatchPosition(anchor)
-	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "anchor", anchor)
+	// The scan start is logged because the pinned streamer scans HotShot forward
+	// from it on every start, which on a long-lived chain is a long, silent
+	// backfill before any batch is published to L1; this line is the operator's
+	// first clue of where that scan began.
+	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head",
+		"anchor", anchor, "hotshotScanStart", hotshotScanStart)
 	return nil
 }
 

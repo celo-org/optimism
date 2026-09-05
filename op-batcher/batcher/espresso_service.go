@@ -28,10 +28,9 @@ import (
 // by initKeyPair (TEE) or copied from CLIConfig.Espresso.TestingBatcherPrivateKey
 // (devnet/test).
 type EspressoBatcherConfig struct {
-	Enabled                    bool
-	PollInterval               time.Duration
-	AttestationService         string
-	CaffeinationHeightEspresso uint64
+	Enabled            bool
+	PollInterval       time.Duration
+	AttestationService string
 	// CaffeinationHeightL2 is the L2 batch position at which the Espresso
 	// streamer should start emitting batches. Operational parameter for
 	// starting batchers mid-chain (e.g. handing off from the fallback
@@ -124,7 +123,6 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	bs.Espresso.Enabled = true
 	bs.Espresso.PollInterval = cfg.Espresso.PollInterval
 	bs.Espresso.AttestationService = cfg.Espresso.EspressoAttestationService
-	bs.Espresso.CaffeinationHeightEspresso = cfg.Espresso.CaffeinationHeightEspresso
 	bs.Espresso.CaffeinationHeightL2 = cfg.Espresso.CaffeinationHeightL2
 	bs.Espresso.VerifyReceiptMaxBlocks = cfg.Espresso.VerifyReceiptMaxBlocks
 	bs.Espresso.VerifyReceiptSafetyTimeout = cfg.Espresso.VerifyReceiptSafetyTimeout

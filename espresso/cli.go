@@ -41,7 +41,6 @@ var (
 	LightClientAddrFlagName            = espressoFlags("light-client-addr")
 	L1UrlFlagName                      = espressoFlags("l1-url")
 	TestingBatcherPrivateKeyFlagName   = espressoFlags("testing-batcher-private-key")
-	CaffeinationHeightEspresso         = espressoFlags("origin-height-espresso")
 	CaffeinationHeightL2               = espressoFlags("origin-height-l2")
 	AttestationServiceFlagName         = espressoFlags("espresso-attestation-service")
 	VerifyReceiptMaxBlocksFlagName     = espressoFlags("verify-receipt-max-blocks")
@@ -87,12 +86,6 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			Name:     TestingBatcherPrivateKeyFlagName,
 			Usage:    "Pre-approved batcher ephemeral key (testing only)",
 			EnvVars:  espressoEnvs(envPrefix, "TESTING_BATCHER_PRIVATE_KEY"),
-			Category: category,
-		},
-		&cli.Uint64Flag{
-			Name:     CaffeinationHeightEspresso,
-			Usage:    "Espresso transactions below this height will not be considered",
-			EnvVars:  espressoEnvs(envPrefix, "ORIGIN_HEIGHT_ESPRESSO"),
 			Category: category,
 		},
 		&cli.Uint64Flag{
@@ -143,7 +136,6 @@ type CLIConfig struct {
 	LightClientAddr            common.Address
 	L1URL                      string
 	TestingBatcherPrivateKey   *ecdsa.PrivateKey
-	CaffeinationHeightEspresso uint64
 	CaffeinationHeightL2       uint64
 	EspressoAttestationService string
 
@@ -189,7 +181,6 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 		Enabled:                    c.Bool(EnabledFlagName),
 		PollInterval:               c.Duration(PollIntervalFlagName),
 		L1URL:                      c.String(L1UrlFlagName),
-		CaffeinationHeightEspresso: c.Uint64(CaffeinationHeightEspresso),
 		CaffeinationHeightL2:       c.Uint64(CaffeinationHeightL2),
 		EspressoAttestationService: c.String(AttestationServiceFlagName),
 		VerifyReceiptMaxBlocks:     c.Uint64(VerifyReceiptMaxBlocksFlagName),
