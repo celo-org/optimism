@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher"
 	opbindings "github.com/ethereum-optimism/optimism/op-e2e/bindings"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/wait"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/stretchr/testify/require"
@@ -90,7 +90,7 @@ func TestEspressoEnforcementHardfork(t *testing.T) {
 	deployerTransactor, err := bind.NewKeyedTransactorWithChainID(
 		system.Config().Secrets.Deployer, system.Cfg.L1ChainIDBig())
 	require.NoError(t, err)
-	batchAuthenticator, err := bindings.NewBatchAuthenticator(
+	batchAuthenticator, err := batchauthenticator.NewBatchAuthenticator(
 		system.RollupConfig.BatchAuthenticatorAddress, l1Client)
 	require.NoError(t, err)
 
