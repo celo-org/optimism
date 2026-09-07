@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-batcher/batcher"
 	"github.com/ethereum-optimism/optimism/op-batcher/compressor"
@@ -19,6 +18,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive/params"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/sources"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -97,7 +97,7 @@ func TestBatcherSwitching(t *testing.T) {
 	deployerTransactor, err := bind.NewKeyedTransactorWithChainID(system.Config().Secrets.Deployer, system.Cfg.L1ChainIDBig())
 	require.NoError(t, err)
 
-	batchAuthenticator, err := bindings.NewBatchAuthenticator(system.RollupConfig.BatchAuthenticatorAddress, l1Client)
+	batchAuthenticator, err := batchauthenticator.NewBatchAuthenticator(system.RollupConfig.BatchAuthenticatorAddress, l1Client)
 	require.NoError(t, err)
 
 	defer env.Stop(t, system)
@@ -600,7 +600,7 @@ func TestFallbackMechanismIntegrationTestChannelNotClosed(t *testing.T) {
 	options, err := bind.NewKeyedTransactorWithChainID(system.Config().Secrets.Deployer, system.Cfg.L1ChainIDBig())
 	require.NoError(t, err)
 
-	batchAuthenticator, err := bindings.NewBatchAuthenticator(system.RollupConfig.BatchAuthenticatorAddress, l1Client)
+	batchAuthenticator, err := batchauthenticator.NewBatchAuthenticator(system.RollupConfig.BatchAuthenticatorAddress, l1Client)
 	require.NoError(t, err)
 
 	tx, err := batchAuthenticator.SetActiveIsEspresso(options, false)
