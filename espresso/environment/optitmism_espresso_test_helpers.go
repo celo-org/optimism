@@ -481,7 +481,10 @@ func launchEspressoDevNodeStartOption(ct *E2eDevnetLauncherContext) e2esys.Start
 			// pinning the HotShot height. Use the configured address if present, else a
 			// fixed dummy so tests don't require ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS.
 			c.Espresso.LightClientAddr = mockLightClientAddr()
-			c.Espresso.AllowEmptyAttestationService()
+			// No Nitro enclave in the e2e harness, so the batcher's attestation is
+			// empty and registerBatcher returns before it ever dials the attestation
+			// service. The URL only has to be non-empty to satisfy CLIConfig.Check.
+			c.Espresso.EspressoAttestationService = "http://espresso-attestation-mock.invalid"
 		},
 	}
 }
