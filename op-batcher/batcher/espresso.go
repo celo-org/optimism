@@ -856,133 +856,136 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 	return false
 }
 
-// requestClearState asks the batch loading loop to perform `l.clearState`.
-func (l *BatchSubmitter) requestClearState() {
-	l.clearStateRequested.Store(true)
-}
-
-// performClearState runs clearState if it was requested via requestClearState,
-// reporting whether a clear was performed.
-func (l *BatchSubmitter) performClearState(ctx context.Context) bool {
-	if !l.clearStateRequested.CompareAndSwap(true, false) {
-		return false
-	}
-	l.Log.Info("Clearing state as requested by the block queueing loop")
-	l.clearState(ctx)
-	return true
-}
-
-// Periodically refreshes the sync status and drains the Espresso streamer of any
-// batches that extend the tip it is tracking.
-// Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the loops
-// ranging over them (publishingLoop, throttlingLoop) terminate when this loop exits.
-func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.WaitGroup, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
-	l.Log.Info("Starting EspressoBatchLoadingLoop", "polling interval", l.Config.Espresso.PollInterval)
+// espressoBatchLoop merges block-queueing and batch-loading onto a single
+// goroutine. Two independent tickers preserve the original cadences:
+// Config.PollInterval drives queueing (sequencer -> Espresso) and
+// Config.Espresso.PollInterval drives loading (Espresso streamer -> channel
+// manager).
+//
+// Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the
+// loops ranging over them (publishingLoop, throttlingLoop) terminate when this
+// loop exits.
+func (l *BatchSubmitter) espressoBatchLoop(ctx context.Context, wg *sync.WaitGroup, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
+	l.Log.Info("Starting EspressoBatchLoop", "queueingInterval", l.Config.PollInterval, "loadingInterval", l.Config.Espresso.PollInterval)
 
 	defer wg.Done()
-	ticker := time.NewTicker(l.Config.Espresso.PollInterval)
-	defer ticker.Stop()
+	queueTicker := time.NewTicker(l.Config.PollInterval)
+	defer queueTicker.Stop()
+	loadTicker := time.NewTicker(l.Config.Espresso.PollInterval)
+	defer loadTicker.Stop()
 	defer close(publishSignal)
 	defer close(unsafeBytesUpdated)
 
+	loader := BlockLoader{
+		batcher: l,
+	}
+
+	// *
+	// * BEFORE we start:
+	// * - scan batchInbox from batchInbox.lastBackfilled
+	// * - enqueue all batches from batchInbox that are _by fallback batcher_ to Espresso
+	// * - wait for espresso queue to clear
+	// * - set lastBackfilled to block height of the last of such batches
+	// *
+
 	for {
 		select {
-		case <-ticker.C:
-			// Check if block loader requested to clear state
-			l.performClearState(ctx)
-
-			newSyncStatus, err := l.getSyncStatus(ctx)
-			if err != nil {
-				l.degradedLog.Warn(l.Log, "syncStatusErr/espressoBatchLoading", "failed to refresh sync status", "err", err)
-				continue
-			}
-			l.degradedLog.Clear(l.Log, "syncStatusErr/espressoBatchLoading", "sync status fetch recovered")
-
-			// An out-of-sync status (zeroed fields or reversed CurrentL1) cannot
-			// be trusted as the drain floor: with LocalSafeL2 zeroed, the
-			// stale-batch re-anchor check below never fires and already-derived
-			// blocks would be republished. Skip the tick, mirroring how the base
-			// driver skips loading when computeSyncActions reports out-of-sync.
-			if l.espressoSyncChannelManager(newSyncStatus) {
-				continue
-			}
-
-			blocksAdded := 0
-
-			for {
-				// Check if block loader requested to clear state
-				if l.performClearState(ctx) {
-					break
-				}
-
-				batch := l.espressoStreamer.Peek(ctx)
-				if batch == nil {
-					break
-				}
-
-				// A batch at or below the local-safe head is already derived from L1,
-				// and adding it would make the publish path resubmit it. The cursor
-				// falls behind the safe head when previously submitted channels finish
-				// deriving while the streamer backfills (e.g. after a restart), and an
-				// empty channel manager gives computeSyncActions nothing to reconcile.
-				// Jump past the whole stale range in one re-anchor: the sync status ref
-				// is canonical, unlike a stale candidate's own hash, which advancing
-				// batch-by-batch would promote to the streamer's tip.
-				if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
-					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
-						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
-					l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
-					break
-				}
-
-				// This should happen ONLY if the batch is malformed. ToBlock has to guarantee no
-				// transient errors. Advancing past it would promote a block the channel manager
-				// never received to the streamer's tip, stalling every later batch, so re-anchor
-				// instead of skipping.
-				block, err := batch.ToBlock(l.RollupConfig)
-				if err != nil {
-					l.Log.Error("failed to convert singular batch to block", "err", err)
-					l.clearState(ctx)
-					break
-				}
-
-				l.Log.Info(
-					"Received block from Espresso",
-					"blockNr", block.NumberU64(),
-					"blockHash", block.Hash(),
-					"parentHash", block.ParentHash(),
-				)
-
-				l.channelMgrMutex.Lock()
-				err = l.channelMgr.AddL2Block(block)
-				l.channelMgrMutex.Unlock()
-
-				if err != nil {
-					l.Log.Error("failed to add L2 block to channel manager", "err", err)
-					// clearState re-anchors the streamer to the safe head.
-					l.clearState(ctx)
-					break
-				}
-
-				l.espressoStreamer.AdvancePosition()
-				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
-
-				// During a large drain, signal periodically so throttling can engage
-				// before the whole backlog is consumed (mirrors loadBlocksIntoState).
-				blocksAdded++
-				if blocksAdded%100 == 0 {
-					l.sendToThrottlingLoop(unsafeBytesUpdated)
-				}
-			}
-
-			l.sendToThrottlingLoop(unsafeBytesUpdated)
-			l.tryPublishSignal(publishSignal, pubInfo{})
-
+		case <-queueTicker.C:
+			l.queueBlocksTick(ctx, &loader)
+		case <-loadTicker.C:
+			l.loadBatchesTick(ctx, publishSignal, unsafeBytesUpdated)
 		case <-ctx.Done():
-			l.Log.Info("espressoBatchLoadingLoop returning")
+			l.Log.Info("espressoBatchLoop returning")
 			return
 		}
 	}
+}
+
+// loadBatchesTick refreshes the sync status and drains the Espresso streamer of
+// any batches that extend the tip it is tracking, adding them to the channel
+// manager. It is one tick of espressoBatchLoop's loading cadence.
+func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
+	newSyncStatus, err := l.getSyncStatus(ctx)
+	if err != nil {
+		l.degradedLog.Warn(l.Log, "syncStatusErr/espressoBatchLoading", "failed to refresh sync status", "err", err)
+		return
+	}
+	l.degradedLog.Clear(l.Log, "syncStatusErr/espressoBatchLoading", "sync status fetch recovered")
+
+	// An out-of-sync status (zeroed fields or reversed CurrentL1) cannot
+	// be trusted as the drain floor: with LocalSafeL2 zeroed, the
+	// stale-batch re-anchor check below never fires and already-derived
+	// blocks would be republished. Skip the tick, mirroring how the base
+	// driver skips loading when computeSyncActions reports out-of-sync.
+	if l.espressoSyncChannelManager(newSyncStatus) {
+		return
+	}
+
+	blocksAdded := 0
+
+	for {
+		batch := l.espressoStreamer.Peek(ctx)
+		if batch == nil {
+			break
+		}
+
+		// A batch at or below the local-safe head is already derived from L1,
+		// and adding it would make the publish path resubmit it. The cursor
+		// falls behind the safe head when previously submitted channels finish
+		// deriving while the streamer backfills (e.g. after a restart), and an
+		// empty channel manager gives computeSyncActions nothing to reconcile.
+		// Jump past the whole stale range in one re-anchor: the sync status ref
+		// is canonical, unlike a stale candidate's own hash, which advancing
+		// batch-by-batch would promote to the streamer's tip.
+		if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
+			l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
+				"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
+			l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+			break
+		}
+
+		// This should happen ONLY if the batch is malformed. ToBlock has to guarantee no
+		// transient errors. Advancing past it would promote a block the channel manager
+		// never received to the streamer's tip, stalling every later batch, so re-anchor
+		// instead of skipping.
+		block, err := batch.ToBlock(l.RollupConfig)
+		if err != nil {
+			l.Log.Error("failed to convert singular batch to block", "err", err)
+			l.clearState(ctx)
+			break
+		}
+
+		l.Log.Info(
+			"Received block from Espresso",
+			"blockNr", block.NumberU64(),
+			"blockHash", block.Hash(),
+			"parentHash", block.ParentHash(),
+		)
+
+		l.channelMgrMutex.Lock()
+		err = l.channelMgr.AddL2Block(block)
+		l.channelMgrMutex.Unlock()
+
+		if err != nil {
+			l.Log.Error("failed to add L2 block to channel manager", "err", err)
+			// clearState re-anchors the streamer to the safe head.
+			l.clearState(ctx)
+			break
+		}
+
+		l.espressoStreamer.AdvancePosition()
+		l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
+
+		// During a large drain, signal periodically so throttling can engage
+		// before the whole backlog is consumed (mirrors loadBlocksIntoState).
+		blocksAdded++
+		if blocksAdded%100 == 0 {
+			l.sendToThrottlingLoop(unsafeBytesUpdated)
+		}
+	}
+
+	l.sendToThrottlingLoop(unsafeBytesUpdated)
+	l.tryPublishSignal(publishSignal, pubInfo{})
 }
 
 type BlockLoader struct {
@@ -991,10 +994,14 @@ type BlockLoader struct {
 	batcher        *BatchSubmitter
 }
 
-func (l *BlockLoader) reset() {
+// reset drops the loader's queued-block state and clears the channel manager,
+// re-anchoring the streamer to the safe head. Safe to call clearState directly:
+// reset only runs from espressoBatchLoop's queueing tick, which shares its
+// goroutine with the loading tick, so there is no concurrent streamer access.
+func (l *BlockLoader) reset(ctx context.Context) {
 	l.prevSyncStatus = nil
 	l.queuedBlocks = nil
-	l.batcher.requestClearState()
+	l.batcher.clearState(ctx)
 }
 
 func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusiveBlockRange) {
@@ -1013,7 +1020,7 @@ func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusive
 
 		if len(l.queuedBlocks) > 0 && block.ParentHash() != l.queuedBlocks[len(l.queuedBlocks)-1].Hash {
 			l.batcher.Log.Warn("Found L2 reorg", "block_number", i)
-			l.reset()
+			l.reset(ctx)
 			break
 		}
 
@@ -1148,66 +1155,41 @@ func (i inclusiveBlockRange) numBlocks() uint64 {
 // interested in being alerted when we're falling behind.
 const LARGE_BLOCK_GAP_THRESHOLD = 30 * 60
 
-// blockLoadingLoop
-// -  polls the sequencer,
-// -  queues unsafe blocks from the sequencer to Espresso
-func (l *BatchSubmitter) espressoBatchQueueingLoop(ctx context.Context, wg *sync.WaitGroup) {
-	ticker := time.NewTicker(l.Config.PollInterval)
-	defer ticker.Stop()
-	defer wg.Done()
+// queueBlocksTick polls the sequencer and queues its unsafe blocks to Espresso.
+// It is one tick of espressoBatchLoop's queueing cadence; loader persists across
+// ticks so it can track the blocks already queued.
+func (l *BatchSubmitter) queueBlocksTick(ctx context.Context, loader *BlockLoader) {
+	newSyncStatus, err := l.getSyncStatus(ctx)
+	if err != nil {
+		l.degradedLog.Warn(l.Log, "syncStatusErr/espressoBatchQueueing", "Couldn't get sync status", "error", err)
+		return
+	}
+	l.degradedLog.Clear(l.Log, "syncStatusErr/espressoBatchQueueing", "sync status fetch recovered")
 
-	loader := BlockLoader{
-		batcher: l,
+	blocksToQueue, action := loader.nextBlockRange(newSyncStatus)
+
+	// We add a check here to add visibility to us that we've exceeded
+	// a threshold.
+	if numBlocks := blocksToQueue.numBlocks(); numBlocks >= LARGE_BLOCK_GAP_THRESHOLD {
+		l.Log.Warn("Large gap of blocks to enqueue to Espresso detected", "numBlocks", numBlocks, "blocksToQueue", blocksToQueue)
 	}
 
-	// *
-	// * BEFORE we start:
-	// * - scan batchInbox from batchInbox.lastBackfilled
-	// * - enqueue all batches from batchInbox that are _by fallback batcher_ to Espresso
-	// * - wait for espresso queue to clear
-	// * - set lastBackfilled to block height of the last of such batches
-	// *
+	if action == ActionEnqueue {
+		numEnqueuedBlocksBefore := len(loader.queuedBlocks)
+		loader.EnqueueBlocks(ctx, blocksToQueue)
+		numEnqueuedBlocksAfter := len(loader.queuedBlocks)
 
-	for {
-		select {
-		case <-ticker.C:
-			newSyncStatus, err := l.getSyncStatus(ctx)
-			if err != nil {
-				l.degradedLog.Warn(l.Log, "syncStatusErr/espressoBatchQueueing", "Couldn't get sync status", "error", err)
-				continue
-			}
-			l.degradedLog.Clear(l.Log, "syncStatusErr/espressoBatchQueueing", "sync status fetch recovered")
-
-			blocksToQueue, action := loader.nextBlockRange(newSyncStatus)
-
-			// We add a check here to add visibility to us that we've exceeded
-			// a threshold.
-			if numBlocks := blocksToQueue.numBlocks(); numBlocks >= LARGE_BLOCK_GAP_THRESHOLD {
-				l.Log.Warn("Large gap of blocks to enqueue to Espresso detected", "numBlocks", numBlocks, "blocksToQueue", blocksToQueue)
-			}
-
-			if action == ActionEnqueue {
-				numEnqueuedBlocksBefore := len(loader.queuedBlocks)
-				loader.EnqueueBlocks(ctx, blocksToQueue)
-				numEnqueuedBlocksAfter := len(loader.queuedBlocks)
-
-				// This is a check to help us determine whether we're able to
-				// push through all of the blocks we've attempted to or not.
-				if enqueued := numEnqueuedBlocksAfter - numEnqueuedBlocksBefore; enqueued < int(blocksToQueue.numBlocks()) {
-					// We weren't able to submit all of the blocks to Espresso
-					// that we were attempting to.
-					//
-					// TODO: We should probably throttle a bit.
-					l.Log.Debug("Could not enqueue all blocks to Espresso", "enqueued", enqueued, "attempted", blocksToQueue.numBlocks())
-				}
-			} else if action == ActionReset {
-				loader.reset()
-			}
-
-		case <-ctx.Done():
-			l.Log.Info("blockLoadingLoop returning")
-			return
+		// This is a check to help us determine whether we're able to
+		// push through all of the blocks we've attempted to or not.
+		if enqueued := numEnqueuedBlocksAfter - numEnqueuedBlocksBefore; enqueued < int(blocksToQueue.numBlocks()) {
+			// We weren't able to submit all of the blocks to Espresso
+			// that we were attempting to.
+			//
+			// TODO: We should probably throttle a bit.
+			l.Log.Debug("Could not enqueue all blocks to Espresso", "enqueued", enqueued, "attempted", blocksToQueue.numBlocks())
 		}
+	} else if action == ActionReset {
+		loader.reset(ctx)
 	}
 }
 
