@@ -19,8 +19,6 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -1231,19 +1229,13 @@ func (l *BatchSubmitter) fetchBlock(ctx context.Context, blockNumber uint64) (*t
 // resolveTEEVerifierAddress queries the BatchAuthenticator contract to get the
 // EspressoTEEVerifier address.
 func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) error {
-	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+	if l.batchAuth == nil {
 		// If batcher authenticator address is nil, we will keep teeVerifierAddress to nil as well
 		return nil
 	}
-	auth, err := batchauthenticator.NewBatchAuthenticatorCaller(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
+	addr, err := l.batchAuth.EspressoTEEVerifier(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create BatchAuthenticator caller: %w", err)
-	}
-	callCtx, cancel := l.networkTimeoutCtx(ctx)
-	defer cancel()
-	addr, err := auth.EspressoTEEVerifier(&bind.CallOpts{Context: callCtx})
-	if err != nil {
-		return fmt.Errorf("failed to query EspressoTEEVerifier address: %w", err)
+		return err
 	}
 	l.teeVerifierAddress = addr
 	l.Log.Info("Resolved TEE verifier address", "address", addr.Hex())
@@ -1261,15 +1253,12 @@ func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
 		return nil
 	}
 
-	l.Log.Info("Batch authenticator address", "value", l.RollupConfig.BatchAuthenticatorAddress)
-	codeCtx, cancel := l.networkTimeoutCtx(ctx)
-	code, err := l.L1Client.CodeAt(codeCtx, l.RollupConfig.BatchAuthenticatorAddress, nil)
-	cancel()
-	if err != nil {
-		return fmt.Errorf("failed to check code at contract address: %w", err)
+	if l.batchAuth == nil {
+		return errors.New("cannot register batcher: no BatchAuthenticator address configured")
 	}
-	if len(code) == 0 {
-		return fmt.Errorf("no contract deployed at this address %w", err)
+	l.Log.Info("Batch authenticator address", "value", l.batchAuth.Address())
+	if err := l.batchAuth.ensureDeployed(ctx); err != nil {
+		return err
 	}
 
 	abi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
