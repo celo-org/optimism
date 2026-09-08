@@ -66,9 +66,9 @@ func TestNextBlockRangeZeroStatusFields(t *testing.T) {
 }
 
 // espressoSyncChannelManager must report an out-of-sync status so that
-// espressoBatchLoadingLoop skips draining against an untrustworthy local-safe
-// floor: with LocalSafeL2 zeroed, the stale-batch re-anchor check in the drain
-// loop never fires and already-derived blocks would be republished.
+// loadBatchesTick skips draining against an untrustworthy local-safe floor:
+// with LocalSafeL2 zeroed, the stale-batch re-anchor check in the drain loop
+// never fires and already-derived blocks would be republished.
 func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 	newTestSubmitter := func(t *testing.T) *BatchSubmitter {
 		lgr := testlog.Logger(t, log.LevelDebug)
