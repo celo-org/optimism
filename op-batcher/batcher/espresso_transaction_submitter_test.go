@@ -46,7 +46,6 @@ func TestEspressoTransactionSubmitterDeadlock(t *testing.T) {
 		batcher.WithContext(ctx),
 	)
 
-	submitter.SpawnWorkers(4, 4)
 	submitter.Start()
 
 	for i := 0; i < NUMBER_OF_TRANSACTIONS_TO_SUBMIT; i++ {
@@ -119,7 +118,6 @@ func TestEspressoTransactionSubmitterProgress(t *testing.T) {
 		batcher.WithContext(ctx),
 	)
 
-	submitter.SpawnWorkers(4, 4)
 	submitter.Start()
 
 	i := 0
