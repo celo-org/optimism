@@ -128,53 +128,58 @@ func testEspressoWorkerContexts(t *testing.T, start func(*testing.T, *espressoTr
 	})
 }
 
-func TestEspressoSubmitWorkerContexts(t *testing.T) {
+func TestEspressoSubmitContexts(t *testing.T) {
 	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
-		s.SpawnWorkers(1, 0)
-		s.submitJobQueue <- espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.submitToEspresso(s.ctx, &espressoCommon.Transaction{})
+		}()
 	})
 }
 
-func TestEspressoVerifyWorkerContexts(t *testing.T) {
+func TestEspressoVerifyContexts(t *testing.T) {
 	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
-		s.SpawnWorkers(0, 1)
-		s.verifyReceiptJobQueue <- espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.confirmReceipt(s.ctx, new(espressoCommon.TaggedBase64))
+		}()
 	})
 }
 
-// TestEspressoWorkersProcessJobsConcurrently proves that each shared job queue
-// feeds multiple workers: both client calls must start while the first is still
-// blocked. Start is intentionally omitted so response handlers cannot retry jobs.
-func TestEspressoWorkersProcessJobsConcurrently(t *testing.T) {
-	for _, stage := range []struct {
-		name          string
-		submitWorkers int
-		verifyWorkers int
-		enqueue       func(*espressoTransactionSubmitter)
-	}{
-		{
-			name: "submit", submitWorkers: 2,
-			enqueue: func(s *espressoTransactionSubmitter) {
-				s.submitJobQueue <- espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
-			},
-		},
-		{
-			name: "verify", verifyWorkers: 2,
-			enqueue: func(s *espressoTransactionSubmitter) {
-				s.verifyReceiptJobQueue <- espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}
-			},
-		},
-	} {
-		t.Run(stage.name, func(t *testing.T) {
+// blockingEspressoLifecycleClient blocks in the selected stage until cancellation.
+// Receipt tests let submission succeed so both transactions reach verification.
+type blockingEspressoLifecycleClient struct {
+	contextErrorEspressoClient
+	verify bool
+}
+
+func (c *blockingEspressoLifecycleClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+	if c.verify {
+		return taggedbase64.New("TX", []byte{1})
+	}
+	return c.contextErrorEspressoClient.SubmitTransaction(ctx, tx)
+}
+
+// TestEspressoTransactionsProcessConcurrently preserves #524's overlap check
+// across the errgroup rewrite: both transactions must reach the selected client
+// method while the first call is still blocked. Start is omitted to avoid height
+// queries competing with the calls observed by the test.
+func TestEspressoTransactionsProcessConcurrently(t *testing.T) {
+	for _, stage := range []string{"submit", "verify"} {
+		t.Run(stage, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(t.Context())
 			calls := make(chan context.Context, 2)
+			client := &blockingEspressoLifecycleClient{
+				contextErrorEspressoClient: contextErrorEspressoClient{calls: calls},
+				verify:                     stage == "verify",
+			}
 			s := NewEspressoTransactionSubmitter(WithContext(ctx),
-				WithEspressoSubmissionClient(&contextErrorEspressoClient{calls: calls}),
-				WithEspressoNetworkTimeout(time.Minute))
+				WithEspressoSubmissionClient(client), WithEspressoNetworkTimeout(time.Minute))
 			t.Cleanup(func() { cancel(); s.wg.Wait() })
-			s.SpawnWorkers(stage.submitWorkers, stage.verifyWorkers)
-			stage.enqueue(s)
-			stage.enqueue(s)
+			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{}))
+			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{}))
 
 			first := receiveTestValue(t, calls)
 			second := receiveTestValue(t, calls)
@@ -224,13 +229,31 @@ func espressoServiceTestSetup(t *testing.T, queryURL string) (*BatcherService, *
 	return service, cfg
 }
 
+// observedEspressoSubmissionClient reports real SDK results without changing retries.
+type observedEspressoSubmissionClient struct {
+	espressoSubmissionClient
+	results chan error
+}
+
+func (c *observedEspressoSubmissionClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+	hash, err := c.espressoSubmissionClient.SubmitTransaction(ctx, tx)
+	select {
+	case c.results <- err:
+	default:
+	}
+	return hash, err
+}
+
 func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 	expectedHash, err := taggedbase64.New("TX", []byte("second job"))
 	require.NoError(t, err)
 	serverRecovered := make(chan struct{})
-	requestReceived := make(chan struct{}, 2)
+	requestReceived := make(chan struct{}, 1)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		requestReceived <- struct{}{}
+		select {
+		case requestReceived <- struct{}{}:
+		default:
+		}
 		select {
 		case <-serverRecovered:
 			if err := json.NewEncoder(w).Encode(expectedHash); err != nil {
@@ -239,7 +262,6 @@ func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 			return
 		default:
 		}
-		// Give cleanup a backstop if a client bound regresses.
 		select {
 		case <-r.Context().Done():
 		case <-time.After(time.Second):
@@ -251,27 +273,36 @@ func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 	require.NoError(t, service.initEspresso(t.Context(), cfg))
 	setup := &DriverSetup{}
 	service.applyEspressoDriverSetup(setup)
+	client := &observedEspressoSubmissionClient{
+		espressoSubmissionClient: setup.Espresso.Client,
+		results:                  make(chan error, 1),
+	}
 	ctx, cancel := context.WithCancel(t.Context())
 	submitter := NewEspressoTransactionSubmitter(WithContext(ctx),
-		WithEspressoSubmissionClient(setup.Espresso.Client), WithEspressoNetworkTimeout(cfg.TxMgrConfig.NetworkTimeout))
-	// Exactly one worker processes both jobs. Leave Start uncalled so this test
-	// is the sole consumer of submitRespQueue, without a competing response handler.
-	submitter.SpawnWorkers(1, 0)
+		WithEspressoSubmissionClient(client), WithEspressoNetworkTimeout(cfg.TxMgrConfig.NetworkTimeout))
 	t.Cleanup(func() { cancel(); submitter.wg.Wait() })
-	responses := submitter.submitRespQueue
-	job := espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
-	submitter.submitJobQueue <- job
-	receiveTestValue(t, requestReceived) // Proves initialization and propagation reached the real SDK/server.
-	response := receiveTestValue(t, responses)
-	require.ErrorIs(t, response.err, sdkclient.ErrEphemeral)
-	require.ErrorContains(t, response.err, context.DeadlineExceeded.Error())
+
+	type submissionResult struct {
+		hash *espressoCommon.TaggedBase64
+		ok   bool
+	}
+	result := make(chan submissionResult, 1)
+	submitter.wg.Add(1)
+	go func() {
+		defer submitter.wg.Done()
+		hash, ok := submitter.submitToEspresso(ctx, &espressoCommon.Transaction{})
+		result <- submissionResult{hash: hash, ok: ok}
+	}()
+	receiveTestValue(t, requestReceived)
+	submitErr := receiveTestValue(t, client.results)
+	require.ErrorIs(t, submitErr, sdkclient.ErrEphemeral)
+	require.ErrorContains(t, submitErr, context.DeadlineExceeded.Error())
 	require.NoError(t, ctx.Err(), "request timeout must not cancel the parent context")
 
-	// The sole worker must process the next job after its first request times out.
+	// The same transaction must retry and succeed after the endpoint recovers.
 	close(serverRecovered)
-	submitter.submitJobQueue <- job
-	response = receiveTestValue(t, responses)
-	require.NoError(t, response.err)
+	response := receiveTestValue(t, result)
+	require.True(t, response.ok)
 	require.Equal(t, expectedHash, response.hash)
 }
 
