@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
@@ -46,82 +47,33 @@ type EspressoOnchainProof struct {
 	OnchainProof string `json:"onchain_proof"`
 }
 
-// espressoSubmitTransactionJob is a struct that holds the state required to
-// submit a transaction to Espresso.
-// It contains the transaction to be submitted itself, and a number to
-// track the total number of attempts to submit this transaction to Espresso.
-type espressoSubmitTransactionJob struct {
-	attempts    int
-	transaction *espressoCommon.Transaction
-}
-
-// espressoSubmitTransactionJobResponse is a struct that holds the
-// response from the Espresso client after submitting a transaction.
-// It contains the job that was submitted, the hash of the transaction
-// that was submitted (if successful), and any error that occurred during the
-// submission (if unsuccessful).
-type espressoSubmitTransactionJobResponse struct {
-	job  espressoSubmitTransactionJob
-	hash *espressoCommon.TaggedBase64
-	err  error
-}
-
-// espressoVerifyReceiptJob is a struct that holds the state required to
-// verify a receipt for a transaction that was submitted to Espresso.
-// It contains the transaction that was submitted, the hash of the
-// transaction, and the number of attempts to verify the receipt.
-type espressoVerifyReceiptJob struct {
-	attempts    int
-	startHeight uint64    // HotShot block height when verification began (set on first attempt)
-	startTime   time.Time // wall-clock time when verification began (safety backstop)
-	transaction espressoSubmitTransactionJob
-	hash        *espressoCommon.TaggedBase64
-}
-
-// espressoVerifyReceiptJobResponse is a struct that holds the
-// response from the Espresso client after verifying a receipt.
-// It contains the job that was submitted, and any error that occurred
-// during the verification (if unsuccessful).
-type espressoVerifyReceiptJobResponse struct {
-	job           espressoVerifyReceiptJob
-	err           error
-	currentHeight uint64 // latest known HotShot block height at time of verification attempt
-}
-
-// espressoTransactionSubmitter is a struct that holds the state that governs
-// the worker queue processing details for submitting transactions to Espresso
-// without spawning arbitrarily many goroutines.
+// espressoTransactionSubmitter submits transactions to Espresso and confirms
+// their receipts. Each accepted transaction runs its whole lifecycle (submit,
+// then poll for the receipt) in its own goroutine, bounded by an errgroup so at
+// most maxInFlight run at once.
 type espressoTransactionSubmitter struct {
 	ctx                        context.Context
 	wg                         *sync.WaitGroup
-	submitJobQueue             chan espressoSubmitTransactionJob
-	submitRespQueue            chan espressoSubmitTransactionJobResponse
-	verifyReceiptJobQueue      chan espressoVerifyReceiptJob
-	verifyReceiptRespQueue     chan espressoVerifyReceiptJobResponse
+	eg                         *errgroup.Group // bounds concurrent submitAndConfirm goroutines
 	espresso                   espressoClient.EspressoClient
 	latestBlockHeight          atomic.Uint64 // shared HotShot block height, updated by trackBlockHeight
 	verifyReceiptMaxBlocks     uint64
 	verifyReceiptSafetyTimeout time.Duration
 	verifyReceiptRetryDelay    time.Duration
-	numInFlightJobs            atomic.Int64
-	numMaxInFlightJobs         int
+	maxInFlight                int
 }
 
 // EspressoTransactionSubmitterConfig is a configuration struct for the
 // EspressoTransactionSubmitter. It contains the configurable details for
 // creating the EspressoTransactionSubmitter.
 type EspressoTransactionSubmitterConfig struct {
-	Ctx                                context.Context
-	EspressoClient                     espressoClient.EspressoClient
-	Wg                                 *sync.WaitGroup
-	SubmitJobQueueCapacity             int
-	SubmitResponseQueueCapacity        int
-	VerifyReceiptJobQueueCapacity      int
-	VerifyReceiptResponseQueueCapacity int
-	VerifyReceiptMaxBlocks             uint64
-	VerifyReceiptSafetyTimeout         time.Duration
-	VerifyReceiptRetryDelay            time.Duration
-	MaxInFlightJobs                    int
+	Ctx                        context.Context
+	EspressoClient             espressoClient.EspressoClient
+	Wg                         *sync.WaitGroup
+	VerifyReceiptMaxBlocks     uint64
+	VerifyReceiptSafetyTimeout time.Duration
+	VerifyReceiptRetryDelay    time.Duration
+	MaxInFlightJobs            int
 }
 
 // EspressoTransactionSubmitterOption is a function that can be used to
@@ -191,22 +143,16 @@ func WithMaxInFlightJobs(n int) EspressoTransactionSubmitterOption {
 // the configuration.
 //
 // The resulting instance should reflect the given configuration.
-// After returning, the caller should call SpawnWorkers to start the workers,
-// and Start to start the job scheduling and response handling portions of the
-// transaction submitter. After that, the user should be able to submit
-// transactions to the submitter via the SubmitTransaction method.
+// After returning, the caller should call Start to launch the block-height
+// tracker, after which transactions can be submitted via SubmitTransaction.
 func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOption) *espressoTransactionSubmitter {
 	config := EspressoTransactionSubmitterConfig{
-		Ctx:                                context.Background(),
-		Wg:                                 new(sync.WaitGroup),
-		SubmitJobQueueCapacity:             espresso.DefaultMaxInFlightRequestsToEspresso,
-		SubmitResponseQueueCapacity:        10,
-		VerifyReceiptJobQueueCapacity:      espresso.DefaultMaxInFlightRequestsToEspresso,
-		VerifyReceiptResponseQueueCapacity: 10,
-		VerifyReceiptMaxBlocks:             espresso.DefaultVerifyReceiptMaxBlocks,
-		VerifyReceiptSafetyTimeout:         espresso.DefaultVerifyReceiptSafetyTimeout,
-		VerifyReceiptRetryDelay:            espresso.DefaultVerifyReceiptRetryDelay,
-		MaxInFlightJobs:                    espresso.DefaultMaxInFlightRequestsToEspresso,
+		Ctx:                        context.Background(),
+		Wg:                         new(sync.WaitGroup),
+		VerifyReceiptMaxBlocks:     espresso.DefaultVerifyReceiptMaxBlocks,
+		VerifyReceiptSafetyTimeout: espresso.DefaultVerifyReceiptSafetyTimeout,
+		VerifyReceiptRetryDelay:    espresso.DefaultVerifyReceiptRetryDelay,
+		MaxInFlightJobs:            espresso.DefaultMaxInFlightRequestsToEspresso,
 	}
 
 	for _, option := range options {
@@ -217,81 +163,51 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		panic("Espresso client is required")
 	}
 
+	eg := new(errgroup.Group)
+	eg.SetLimit(config.MaxInFlightJobs)
+
 	return &espressoTransactionSubmitter{
 		ctx:                        config.Ctx,
 		wg:                         config.Wg,
-		submitJobQueue:             make(chan espressoSubmitTransactionJob, config.SubmitJobQueueCapacity),
-		submitRespQueue:            make(chan espressoSubmitTransactionJobResponse, config.SubmitResponseQueueCapacity),
-		verifyReceiptJobQueue:      make(chan espressoVerifyReceiptJob, config.VerifyReceiptJobQueueCapacity),
-		verifyReceiptRespQueue:     make(chan espressoVerifyReceiptJobResponse, config.VerifyReceiptResponseQueueCapacity),
+		eg:                         eg,
 		espresso:                   config.EspressoClient,
 		verifyReceiptMaxBlocks:     config.VerifyReceiptMaxBlocks,
 		verifyReceiptSafetyTimeout: config.VerifyReceiptSafetyTimeout,
 		verifyReceiptRetryDelay:    config.VerifyReceiptRetryDelay,
-		numInFlightJobs:            atomic.Int64{},
-		numMaxInFlightJobs:         config.MaxInFlightJobs,
+		maxInFlight:                config.MaxInFlightJobs,
 	}
 }
 
-// ErrTooManyInFlightRequests is an error that is returned when there are
-// too many requests in flight at once right now.
+// ErrTooManyInFlightRequests is returned when the maximum number of in-flight
+// transactions is already running, so a new one cannot be started right now.
 type ErrTooManyInFlightRequests struct {
-	NumInFlightRequests int
 	MaxInFlightRequests int
 }
 
 // Error implements error
 func (e ErrTooManyInFlightRequests) Error() string {
-	return fmt.Sprintf("too many requests in flight to espresso, in flight requests: %d, maximum allowed: %d", e.NumInFlightRequests, e.MaxInFlightRequests)
+	return fmt.Sprintf("too many requests in flight to espresso, maximum allowed: %d", e.MaxInFlightRequests)
 }
 
-// ErrSubmitToEspressoChannelFull is an error that is returned when the channel
-// to submit a transaction to the espresso job channel is full.
+// SubmitTransaction starts a goroutine that submits the transaction to Espresso
+// and confirms its receipt, retrying as needed.
 //
-// This ultimately means that the channel buffer size of the job channel is
-// smaller than the max number of in flight requests allowed.
-type ErrSubmitToEspressoChannelFull struct {
-	Capacity int
-	Len      int
-}
-
-// Error implements error
-func (e ErrSubmitToEspressoChannelFull) Error() string {
-	return fmt.Sprintf("submit transaction to espresso job channel is full, len: %d, capacity: %d", e.Len, e.Capacity)
-}
-
-// SubmitTransaction will submit a transaction to the Job queue.
-//
-// NOTE: There is a limit on the maximum number of inflight requests we allow
-// at once.  If we're over or at capacity, we'll return an error indicating so.
-// If we have capacity available, we'll attempt to submit to the channel, and
-// if we're unable to, we'll return an error.  This will **NOT** block.
-func (s *espressoTransactionSubmitter) SubmitTransaction(job *espressoCommon.Transaction) error {
-	// Check to see if we're over capacity, and if we are, then immediately
-	// return an error.
-	if numInFlightRequests, numMaxInFlightRequests := s.numInFlightJobs.Load(), int64(s.numMaxInFlightJobs); numInFlightRequests >= numMaxInFlightRequests {
-		return ErrTooManyInFlightRequests{
-			NumInFlightRequests: int(numInFlightRequests),
-			MaxInFlightRequests: int(numMaxInFlightRequests),
-		}
-	}
-
-	// Construct the job submission
-	jobSubmission := espressoSubmitTransactionJob{
-		transaction: job,
-	}
-
-	select {
-	default:
-		return ErrSubmitToEspressoChannelFull{
-			Len:      len(s.submitJobQueue),
-			Capacity: cap(s.submitJobQueue),
-		}
-	case s.submitJobQueue <- jobSubmission:
-		// increment in flight requests
-		s.numInFlightJobs.Add(1)
+// It does NOT block: if the maximum number of in-flight transactions is already
+// running, it returns ErrTooManyInFlightRequests immediately so the caller can
+// apply back pressure and try again later.
+func (s *espressoTransactionSubmitter) SubmitTransaction(tx *espressoCommon.Transaction) error {
+	// wg tracks the goroutine for shutdown; the errgroup bounds concurrency.
+	s.wg.Add(1)
+	started := s.eg.TryGo(func() error {
+		defer s.wg.Done()
+		s.submitAndConfirm(s.ctx, tx)
 		return nil
+	})
+	if !started {
+		s.wg.Done()
+		return ErrTooManyInFlightRequests{MaxInFlightRequests: s.maxInFlight}
 	}
+	return nil
 }
 
 // Evaluation result for a job.
@@ -317,9 +233,7 @@ const (
 // * If there is a permanent issue that won't be fixed by a retry: Skip.
 //
 // * Otherwise: RetrySubmission.
-func evaluateSubmission(jobResp espressoSubmitTransactionJobResponse) JobEvaluation {
-	err := jobResp.err
-
+func evaluateSubmission(err error) JobEvaluation {
 	// If there's no error, continue handling the submission.
 	if err == nil {
 		return Handle
@@ -338,60 +252,110 @@ func evaluateSubmission(jobResp espressoSubmitTransactionJobResponse) JobEvaluat
 	return RetrySubmission
 }
 
-// handleTransactionSubmitJobResponse is a function that is meant to be run in a
-// goroutine.
-//
-// It handles the responses from the submit transaction jobs.  It will
-// determine if the transaction was successfully submitted to Espresso, and
-// if not, it will retry the transaction.  If the transaction was successfully
-// submitted, it will then submit a job to the verify receipt job queue to
-// verify the receipt of the transaction.
-func (s *espressoTransactionSubmitter) handleTransactionSubmitJobResponse() {
-	ticker := time.NewTicker(10 * time.Minute)
-	defer ticker.Stop()
-
+// submitAndConfirm runs the full lifecycle for one transaction: submit it to
+// Espresso, then poll until its receipt is verifiable. A verification timeout
+// loops back to re-submit. It returns once the transaction is confirmed,
+// permanently fails, or the context is cancelled.
+func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx *espressoCommon.Transaction) {
 	for {
-		var jobResp espressoSubmitTransactionJobResponse
-		var ok bool
+		hash, ok := s.submitToEspresso(ctx, tx)
+		if !ok {
+			return // context cancelled or a permanent submit failure
+		}
 
-		select {
-		case <-s.ctx.Done():
+		switch s.confirmReceipt(ctx, hash) {
+		case verifyDone:
+			log.Info("Transaction confirmed on Espresso", "hash", hash.String())
 			return
-		case <-ticker.C:
-			log.Debug("Espresso transaction submitter queue status",
-				"submitJobQueue", len(s.submitJobQueue),
-				"submitRespQueue", len(s.submitRespQueue),
-				"verifyReceiptJobQueue", len(s.verifyReceiptJobQueue),
-				"verifyReceiptRespQueue", len(s.verifyReceiptRespQueue))
-			continue
-		case jobResp, ok = <-s.submitRespQueue:
-			if !ok {
-				// Our channel is closed, and we are done
-				return
+		case verifyResubmit:
+			continue // verification timed out; submit a fresh copy
+		default: // verifyAbort
+			return
+		}
+	}
+}
+
+// submitToEspresso submits the transaction, retrying ephemeral failures (with a
+// short delay so a persistently failing endpoint is not hammered). It returns
+// the transaction hash on success, or ok=false if the failure is permanent or
+// the context is cancelled.
+func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx *espressoCommon.Transaction) (*espressoCommon.TaggedBase64, bool) {
+	for {
+		if ctx.Err() != nil {
+			return nil, false
+		}
+
+		hash, err := s.espresso.SubmitTransaction(ctx, *tx)
+		if err == nil {
+			log.Info("Submitted transaction to Espresso", "hash", hash)
+		}
+
+		switch evaluateSubmission(err) {
+		case Handle:
+			return hash, true
+		case Skip:
+			return nil, false
+		default: // RetrySubmission
+			if !sleep(ctx, s.verifyReceiptRetryDelay) {
+				return nil, false
 			}
 		}
+	}
+}
 
-		switch evaluation := evaluateSubmission(jobResp); evaluation {
+// verifyOutcome is the result of confirmReceipt.
+type verifyOutcome int
+
+const (
+	verifyDone     verifyOutcome = iota // receipt is verifiable; we are done
+	verifyResubmit                      // verification timed out; re-submit
+	verifyAbort                         // permanent failure or context cancelled
+)
+
+// confirmReceipt polls for the transaction's receipt until it is verifiable,
+// re-submitting (verifyResubmit) if it takes too long. The first attempt is
+// immediate; subsequent attempts wait verifyReceiptRetryDelay.
+func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash *espressoCommon.TaggedBase64) verifyOutcome {
+	startTime := time.Now()
+	// Snapshot the current height so we can measure how many blocks pass.
+	startHeight := s.latestBlockHeight.Load()
+
+	for attempt := 0; ; attempt++ {
+		if attempt > 0 {
+			if !sleep(ctx, s.verifyReceiptRetryDelay) {
+				return verifyAbort
+			}
+		}
+		if ctx.Err() != nil {
+			return verifyAbort
+		}
+
+		_, err := s.espresso.FetchTransactionByHash(ctx, hash)
+		currentHeight := s.latestBlockHeight.Load()
+
+		switch s.evaluateVerification(err, startHeight, currentHeight, startTime) {
+		case Handle:
+			return verifyDone
 		case Skip:
-			s.numInFlightJobs.Add(-1)
-			continue
+			return verifyAbort
 		case RetrySubmission:
-			s.submitJobQueue <- jobResp.job
+			return verifyResubmit
+		default: // RetryVerification
 			continue
 		}
+	}
+}
 
-		verifyJob := espressoVerifyReceiptJob{
-			startTime:   time.Now(),
-			transaction: jobResp.job,
-			hash:        jobResp.hash,
-		}
-
-		select {
-		case <-s.ctx.Done():
-			return
-		// Move to verifying the receipt
-		case s.verifyReceiptJobQueue <- verifyJob:
-		}
+// sleep waits for d or until ctx is cancelled. It returns false if ctx was
+// cancelled first.
+func sleep(ctx context.Context, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
 
@@ -412,9 +376,7 @@ func (s *espressoTransactionSubmitter) handleTransactionSubmitJobResponse() {
 // * If the wall-clock safety timeout is exceeded: RetrySubmission.
 //
 // * Otherwise: RetryVerification.
-func (s *espressoTransactionSubmitter) evaluateVerification(jobResp espressoVerifyReceiptJobResponse) JobEvaluation {
-	err := jobResp.err
-
+func (s *espressoTransactionSubmitter) evaluateVerification(err error, startHeight, currentHeight uint64, startTime time.Time) JobEvaluation {
 	// If there's no error, continue handling the verification.
 	if err == nil {
 		return Handle
@@ -432,17 +394,17 @@ func (s *espressoTransactionSubmitter) evaluateVerification(jobResp espressoVeri
 	// Block-count-based timeout: re-submit if enough HotShot blocks have
 	// passed since verification started. The startHeight guard handles the
 	// edge case where the height tracker hasn't fetched its first value yet.
-	if jobResp.job.startHeight > 0 && jobResp.currentHeight >= jobResp.job.startHeight+s.verifyReceiptMaxBlocks {
+	if startHeight > 0 && currentHeight >= startHeight+s.verifyReceiptMaxBlocks {
 		log.Info("Verification timed out by block count, re-submitting",
-			"startHeight", jobResp.job.startHeight,
-			"currentHeight", jobResp.currentHeight,
+			"startHeight", startHeight,
+			"currentHeight", currentHeight,
 			"maxBlocks", s.verifyReceiptMaxBlocks)
 		return RetrySubmission
 	}
 
 	// Wall-clock safety backstop in case the block height tracker is stale
 	// or broken (e.g., query service returning old data).
-	if elapsed := time.Since(jobResp.job.startTime); elapsed > s.verifyReceiptSafetyTimeout {
+	if elapsed := time.Since(startTime); elapsed > s.verifyReceiptSafetyTimeout {
 		log.Warn("Verification timed out by safety timeout, re-submitting",
 			"elapsed", elapsed,
 			"safetyTimeout", s.verifyReceiptSafetyTimeout)
@@ -453,195 +415,9 @@ func (s *espressoTransactionSubmitter) evaluateVerification(jobResp espressoVeri
 	return RetryVerification
 }
 
-// handleVerifyReceiptJobResponse is a function that is meant to be run in a
-// goroutine.
-//
-// This function handles responses from the verify receipt job queue.  It will
-// check the results for any errors, and if there are any errors that are
-// applicable to retry, it will requeue the job for another attempt.
-// If the the job is successful, no further processing is needed and it is
-// considered complete.
-// If the job has taken too long to verify, then it will re-submit the job
-// back to the submit transaction queue for another attempt.
-//
-// NOTE: This function currently will loop forever if the transaction is
-// never going to be available.
-func (s *espressoTransactionSubmitter) handleVerifyReceiptJobResponse() {
-	for {
-		var jobResp espressoVerifyReceiptJobResponse
-		var ok bool
-
-		select {
-		case <-s.ctx.Done():
-			return
-		case jobResp, ok = <-s.verifyReceiptRespQueue:
-			if !ok {
-				// Our channel is closed, and we are done
-				return
-			}
-		}
-
-		switch evaluation := s.evaluateVerification(jobResp); evaluation {
-		case Skip:
-			// decrement in flight jobs on skip, since we're done with this job
-			s.numInFlightJobs.Add(-1)
-			continue
-		case RetrySubmission:
-			s.submitJobQueue <- jobResp.job.transaction
-			continue
-		case RetryVerification:
-			s.verifyReceiptJobQueue <- jobResp.job
-			continue
-		}
-
-		s.numInFlightJobs.Add(-1)
-		// We're done with this job and transaction, we have successfully
-		// confirmed that the transaction was submitted to Espresso
-		commitment := jobResp.job.transaction.transaction.Commit()
-		hash, _ := tagged_base64.New("TX", commitment[:])
-		log.Info("Transaction confirmed on Espresso", "hash", hash.String())
-	}
-}
-
-// espressoSubmitTransactionWorker is a function that is meant to be run as a
-// goroutine. It reads submit jobs from the shared jobs channel — the Go runtime
-// balances jobs across the workers all reading it — submits the transaction
-// contained within to Espresso using the given client, and sends the result on
-// the shared responses channel.
-//
-// Its lifetime is governed by the context passed to it, and it will stop
-// processing when that context is cancelled.
-//
-// NOTE: If the context is cancelled after a job has been received, but before
-// it is able to submit the transaction, or report about its result, the job
-// may be lost.
-func espressoSubmitTransactionWorker(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	cli espressoClient.EspressoClient,
-	jobs <-chan espressoSubmitTransactionJob,
-	responses chan<- espressoSubmitTransactionJobResponse,
-) {
-	defer wg.Done()
-
-	for {
-		// Wait for a job to run
-		var job espressoSubmitTransactionJob
-		select {
-		case <-ctx.Done():
-			return
-		case j, ok := <-jobs:
-			if !ok {
-				return
-			}
-			job = j
-		}
-
-		// Submit the transaction to Espresso
-		hash, err := cli.SubmitTransaction(ctx, *job.transaction)
-		if err == nil {
-			log.Info("Submitted transaction to Espresso", "hash", hash)
-		}
-
-		job.attempts++
-		resp := espressoSubmitTransactionJobResponse{
-			job:  job,
-			hash: hash,
-			err:  err,
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case responses <- resp:
-		}
-	}
-}
-
-// espressoVerifyTransactionWorker is a function that is meant to be run as a
-// goroutine. It reads verify jobs from the shared jobs channel — the Go runtime
-// balances jobs across the workers all reading it — verifies the receipt of the
-// transaction contained within using the given client, and sends the result on
-// the shared responses channel.
-func espressoVerifyTransactionWorker(
-	ctx context.Context,
-	wg *sync.WaitGroup,
-	cli espressoClient.EspressoClient,
-	jobs <-chan espressoVerifyReceiptJob,
-	responses chan<- espressoVerifyReceiptJobResponse,
-	latestHeight *atomic.Uint64,
-	retryDelay time.Duration,
-) {
-	defer wg.Done()
-
-	for {
-		// Wait for a job to run
-		var job espressoVerifyReceiptJob
-		select {
-		case <-ctx.Done():
-			return
-		case j, ok := <-jobs:
-			if !ok {
-				return
-			}
-			job = j
-		}
-
-		// On the first attempt, snapshot the current block height so we
-		// can measure how many blocks pass during verification.
-		if job.attempts == 0 {
-			job.startHeight = latestHeight.Load()
-		}
-
-		if job.attempts > 0 {
-			// We have already attempted this job, so we will wait a bit
-			// NOTE: this prevents this worker from being able to process
-			// other jobs while we wait for this delay.
-			retryTimer := time.NewTimer(retryDelay)
-			select {
-			case <-ctx.Done():
-				retryTimer.Stop()
-				return
-			case <-retryTimer.C:
-			}
-		}
-
-		_, err := cli.FetchTransactionByHash(ctx, job.hash)
-
-		job.attempts++
-		resp := espressoVerifyReceiptJobResponse{
-			job:           job,
-			err:           err,
-			currentHeight: latestHeight.Load(),
-		}
-
-		select {
-		case <-ctx.Done():
-			return
-		case responses <- resp:
-		}
-	}
-}
-
-// SpawnWorkers spawns the given number of workers to process the
-// submit transaction jobs and verify receipt jobs.
-func (s *espressoTransactionSubmitter) SpawnWorkers(numSubmitTransactionWorkers, numVerifyReceiptWorkers int) {
-	workersCtx := s.ctx
-
-	for i := 0; i < numSubmitTransactionWorkers; i++ {
-		s.wg.Add(1)
-		go espressoSubmitTransactionWorker(workersCtx, s.wg, s.espresso, s.submitJobQueue, s.submitRespQueue)
-	}
-
-	for i := 0; i < numVerifyReceiptWorkers; i++ {
-		s.wg.Add(1)
-		go espressoVerifyTransactionWorker(workersCtx, s.wg, s.espresso, s.verifyReceiptJobQueue, s.verifyReceiptRespQueue, &s.latestBlockHeight, s.verifyReceiptRetryDelay)
-	}
-}
-
 // trackBlockHeight periodically polls FetchLatestBlockHeight and stores
 // the result in s.latestBlockHeight for verify jobs to compare against.
-// This avoids redundant height queries from individual verify workers.
+// This avoids redundant height queries from individual verify goroutines.
 func (s *espressoTransactionSubmitter) trackBlockHeight() {
 	for {
 		height, err := s.espresso.FetchLatestBlockHeight(s.ctx)
@@ -660,17 +436,10 @@ func (s *espressoTransactionSubmitter) trackBlockHeight() {
 	}
 }
 
+// Start launches the shared block-height tracker. Per-transaction work is
+// started on demand by SubmitTransaction.
 func (s *espressoTransactionSubmitter) Start() {
-	// Block height tracker for verify receipt timeout
 	go s.trackBlockHeight()
-
-	// Submit Transaction Jobs. Workers read s.submitJobQueue directly (spawned
-	// by SpawnWorkers); this goroutine handles their responses.
-	go s.handleTransactionSubmitJobResponse()
-
-	// Verify Receipt Jobs. Workers read s.verifyReceiptJobQueue directly;
-	// this goroutine handles their responses.
-	go s.handleVerifyReceiptJobResponse()
 }
 
 // Converts a block to an EspressoBatch and starts a goroutine that publishes it to Espresso
