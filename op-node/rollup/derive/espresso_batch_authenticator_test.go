@@ -13,10 +13,20 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
+
+// batchInfoAuthenticatedTopic is the event's topic as the binding declares it.
+var batchInfoAuthenticatedTopic = func() common.Hash {
+	parsed, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
+	if err != nil {
+		panic(err)
+	}
+	return parsed.Events["BatchInfoAuthenticated"].ID
+}()
 
 // batchAuthLog builds a BatchInfoAuthenticated log as emitted by the
 // BatchAuthenticator contract at address authenticatorAddr: Topics[0] is the
@@ -26,7 +36,7 @@ func batchAuthLog(authenticatorAddr, caller common.Address, commitment common.Ha
 	return &types.Log{
 		Address: authenticatorAddr,
 		Topics: []common.Hash{
-			BatchInfoAuthenticatedABIHash,
+			batchInfoAuthenticatedTopic,
 			common.BytesToHash(caller.Bytes()),
 		},
 		Data: commitment.Bytes(),
@@ -372,9 +382,8 @@ func TestCollectAuthenticatedBatchesResetOnNotFound(t *testing.T) {
 	})
 }
 
-func TestBatchInfoAuthenticatedABIHash(t *testing.T) {
-	// Verify the ABI hash matches what Solidity would compute for
-	// BatchInfoAuthenticated(bytes32 commitment, address indexed caller).
+// The derivation pipeline relies on the contract emitting exactly this event.
+func TestBatchInfoAuthenticatedTopic(t *testing.T) {
 	expected := crypto.Keccak256Hash([]byte("BatchInfoAuthenticated(bytes32,address)"))
-	require.Equal(t, expected, BatchInfoAuthenticatedABIHash)
+	require.Equal(t, expected, batchInfoAuthenticatedTopic)
 }

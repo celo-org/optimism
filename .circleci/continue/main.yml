@@ -1632,6 +1632,23 @@ jobs:
           path: ./fuzzdata
           when: always
 
+  check-bindings:
+    docker:
+      - image: <<pipeline.parameters.c-default_docker_image>>
+    resource_class: medium
+    steps:
+      - utils/checkout-with-mise:
+          checkout-method: blobless
+          enable-mise-cache: true
+      - check-changed:
+          patterns: contracts-bedrock,op-service/bindings
+      # forge-artifacts from contracts-bedrock-build
+      - attach_workspace:
+          at: .
+      - run:
+          name: check generated bindings against the built contracts
+          command: op-service/bindings/check.sh
+
   go-lint:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
@@ -2537,6 +2554,11 @@ workflows:
           scan_command: semgrep scan --test --config .semgrep/rules/ .semgrep/tests/
           context:
             - slack
+            - circleci-repo-readonly-authenticated-github-token
+      - check-bindings:
+          requires:
+            - contracts-bedrock-build
+          context:
             - circleci-repo-readonly-authenticated-github-token
       - go-lint:
           requires:

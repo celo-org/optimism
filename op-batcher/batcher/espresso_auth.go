@@ -8,8 +8,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 
-	"github.com/ethereum-optimism/optimism/espresso/bindings"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -43,13 +43,6 @@ func computeCommitment(candidate *txmgr.TxCandidate) ([32]byte, error) {
 // separate signature is needed — the L1 transaction is already signed by the TxManager's key.
 func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
 	transactionReference := newTxRef(txdata, isCancel)
-	// The auth tx shares the batch txdata's identity (so a failure requeues the right frames)
-	// but is always a calldata tx. Auth failures must carry its real type: an ErrAlreadyReserved
-	// receipt labeled with the batch's blob type would make cancelBlockingTx cancel the wrong
-	// pool, leaving the reserving tx stuck.
-	authReference := transactionReference
-	authReference.isBlob = false
-	authReference.daType = DaTypeCalldata
 	l.Log.Debug("Sending fallback-authenticated L1 transaction", "txRef", transactionReference)
 
 	commitment, err := computeCommitment(candidate)
@@ -62,7 +55,7 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	}
 	l.Log.Debug("Computed fallback batch commitment", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]))
 
-	batchAuthenticatorAbi, err := bindings.BatchAuthenticatorMetaData.GetAbi()
+	batchAuthenticatorAbi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
@@ -86,10 +79,35 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
+	l.submitAuthenticatedBatch(transactionReference, verifyCandidate, candidate, queue, receiptsCh)
+}
+
+// submitAuthenticatedBatch submits an authenticateBatchInfo tx (verifyCandidate) followed by the
+// batch inbox tx (candidate), then spawns a watcher (tracked by authGroup so the publishing loop
+// drains it before closing receiptsCh) that validates both receipts and emits a single synthetic
+// receipt for the batch txData.
+//
+// Both the TEE and fallback auth paths share this submission flow; they differ only in how the
+// authenticateBatchInfo calldata in verifyCandidate is built (TEE-attested signature vs empty
+// signature relying on the contract's msg.sender check).
+//
+// The auth leg must land at or before the batch leg (the verifier scans a lookback window ending
+// at the batch tx's L1 block), so the auth tx must take the lower, earlier-mined nonce. Calldata
+// pairs are pipelined via queue.SendPair (auth leg first); blob batches fall back to a serialized
+// submission because geth's cross-pool account reservation cannot hold a calldata auth tx and a
+// blob batch tx at once.
+func (l *BatchSubmitter) submitAuthenticatedBatch(transactionReference txRef, verifyCandidate txmgr.TxCandidate, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
+	// The auth tx shares the batch txdata's identity (so a failure requeues the right frames)
+	// but is always a calldata tx. Auth failures must carry its real type: an ErrAlreadyReserved
+	// receipt labeled with the batch's blob type would make cancelBlockingTx cancel the wrong
+	// pool, leaving the reserving tx stuck.
+	authReference := transactionReference
+	authReference.isBlob = false
+	authReference.daType = DaTypeCalldata
+
 	l.Log.Debug(
-		"Sending fallback authenticateBatchInfo transaction",
+		"Sending authenticateBatchInfo transaction",
 		"txRef", transactionReference,
-		"commitment", hexutil.Encode(commitment[:]),
 		"address", l.RollupConfig.BatchAuthenticatorAddress.String(),
 	)
 
@@ -97,7 +115,7 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 		// SendPair doesn't support blobs. Unreachable while calldata-only DA is
 		// enforced: checkEspressoDataAvailability refuses to start a blob- or
 		// auto-configured batcher on a chain with EspressoTime set.
-		l.sendFallbackAuthSerialized(transactionReference, authReference, verifyCandidate, candidate, queue, receiptsCh)
+		l.sendAuthSerialized(transactionReference, authReference, verifyCandidate, candidate, queue, receiptsCh)
 		return
 	}
 
@@ -114,21 +132,21 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	l.authGroup.Add(1)
 	go func() {
 		defer l.authGroup.Done()
-		l.watchFallbackAuthReceipts(transactionReference, authReference, authReceiptCh, batchReceiptCh, receiptsCh)
+		l.watchAuthReceipts(transactionReference, authReference, authReceiptCh, batchReceiptCh, receiptsCh)
 	}()
 }
 
-// sendFallbackAuthSerialized submits an auth+batch pair serially: the auth tx is sent
+// sendAuthSerialized submits an auth+batch pair serially: the auth tx is sent
 // and confirmed first, then the batch tx. It runs on the publishing-loop goroutine and
 // blocks it for the pair's full confirmation cycle, so consecutive pairs never overlap.
-// Its only caller is the blob branch of sendTxWithFallbackAuth, so it cannot run while
+// Its only caller is the blob branch of submitAuthenticatedBatch, so it cannot run while
 // calldata-only DA is enforced.
-func (l *BatchSubmitter) sendFallbackAuthSerialized(transactionReference, authReference txRef, verifyCandidate txmgr.TxCandidate, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
+func (l *BatchSubmitter) sendAuthSerialized(transactionReference, authReference txRef, verifyCandidate txmgr.TxCandidate, candidate *txmgr.TxCandidate, queue TxSender[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
 	authReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
 	queue.Send(authReference, verifyCandidate, authReceiptCh)
 	authResult := <-authReceiptCh
-	if err := fallbackAuthResultError(authResult); err != nil {
-		l.Log.Error("Fallback authenticateBatchInfo transaction failed", "txRef", transactionReference, "err", err)
+	if err := authResultError(authResult); err != nil {
+		l.Log.Error("authenticateBatchInfo transaction failed", "txRef", transactionReference, "err", err)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  authReference,
 			Err: err,
@@ -141,42 +159,42 @@ func (l *BatchSubmitter) sendFallbackAuthSerialized(transactionReference, authRe
 	batchReceiptCh := make(chan txmgr.TxReceipt[txRef], 1)
 	queue.Send(transactionReference, *candidate, batchReceiptCh)
 	batchResult := <-batchReceiptCh
-	l.resolveFallbackAuthPair(transactionReference, authReference, authResult, batchResult, receiptsCh)
+	l.resolveAuthPair(transactionReference, authReference, authResult, batchResult, receiptsCh)
 }
 
-// watchFallbackAuthReceipts collects the auth and batch receipts of a pipelined fallback-auth
-// pair and resolves them into a single synthetic receipt (see resolveFallbackAuthPair).
-func (l *BatchSubmitter) watchFallbackAuthReceipts(transactionReference, authReference txRef, authReceiptCh, batchReceiptCh chan txmgr.TxReceipt[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
+// watchAuthReceipts collects the auth and batch receipts of a pipelined auth+batch
+// pair and resolves them into a single synthetic receipt (see resolveAuthPair).
+func (l *BatchSubmitter) watchAuthReceipts(transactionReference, authReference txRef, authReceiptCh, batchReceiptCh chan txmgr.TxReceipt[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
 	authResult := <-authReceiptCh
 	batchResult := <-batchReceiptCh
-	l.resolveFallbackAuthPair(transactionReference, authReference, authResult, batchResult, receiptsCh)
+	l.resolveAuthPair(transactionReference, authReference, authResult, batchResult, receiptsCh)
 }
 
-// fallbackAuthResultError interprets the auth leg's receipt: a send failure or a
+// authResultError interprets the auth leg's receipt: a send failure or a
 // mined-but-reverted auth tx both fail the pair, since a reverted authenticateBatchInfo call
 // emits no BatchInfoAuthenticated event and the verifier would drop the batch (txmgr returns a
 // receipt as soon as the tx is mined, regardless of execution status). The batch inbox tx
 // needs no such status check: derivation reads its data by L1 inclusion, not by execution
 // status.
-func fallbackAuthResultError(authResult txmgr.TxReceipt[txRef]) error {
+func authResultError(authResult txmgr.TxReceipt[txRef]) error {
 	if authResult.Err != nil {
-		return fmt.Errorf("failed to send fallback authenticateBatchInfo transaction: %w", authResult.Err)
+		return fmt.Errorf("failed to send authenticateBatchInfo transaction: %w", authResult.Err)
 	}
 	if authResult.Receipt.Status != types.ReceiptStatusSuccessful {
-		return fmt.Errorf("fallback authenticateBatchInfo transaction reverted: %s", authResult.Receipt.TxHash)
+		return fmt.Errorf("authenticateBatchInfo transaction reverted: %s", authResult.Receipt.TxHash)
 	}
 	return nil
 }
 
-// resolveFallbackAuthPair validates the receipts of an auth+batch pair — auth success, batch
+// resolveAuthPair validates the receipts of an auth+batch pair — auth success, batch
 // success, and that the batch tx landed within the lookback window of the auth tx — and
 // forwards a single synthetic receipt keyed to the batch txData onto receiptsCh. Any failure
 // produces an error receipt so the channel manager rewinds and resubmits the frame set. Auth
-// failures are reported under authReference (see its construction in sendTxWithFallbackAuth
+// failures are reported under authReference (see its construction in submitAuthenticatedBatch
 // for why the calldata typing matters).
-func (l *BatchSubmitter) resolveFallbackAuthPair(transactionReference, authReference txRef, authResult, batchResult txmgr.TxReceipt[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
-	if err := fallbackAuthResultError(authResult); err != nil {
-		l.Log.Error("Fallback authenticateBatchInfo transaction failed", "txRef", transactionReference, "err", err)
+func (l *BatchSubmitter) resolveAuthPair(transactionReference, authReference txRef, authResult, batchResult txmgr.TxReceipt[txRef], receiptsCh chan txmgr.TxReceipt[txRef]) {
+	if err := authResultError(authResult); err != nil {
+		l.Log.Error("authenticateBatchInfo transaction failed", "txRef", transactionReference, "err", err)
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  authReference,
 			Err: err,
