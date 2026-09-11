@@ -346,11 +346,30 @@ func (l *EspressoDevNodeLauncherDocker) StartE2eDevnet(ctx context.Context, t *t
 		// We want to ensure that the lifecycle of the system node is tied to
 		// the context we were given.  So if the context is canceled, or
 		// otherwise closed, it will automatically clean up the system.
-		go (func(ctx context.Context) {
-			<-ctx.Done()
+		//
+		// The goroutine must not outlive the test. System.Close logs through
+		// t.Log, and logging after the test function has returned panics the
+		// whole test binary rather than failing one test. A test that cancels
+		// its own context on the way out (the usual defer cancel()) races this
+		// goroutine, so t.Cleanup stops it and waits for it: any Close it does
+		// run is therefore guaranteed to happen while the test is still alive.
+		stop := make(chan struct{})
+		done := make(chan struct{})
 
-			// The system is guaranteed to not be null here.
-			system.Close()
+		t.Cleanup(func() {
+			close(stop)
+			<-done
+		})
+
+		go (func(ctx context.Context) {
+			defer close(done)
+
+			select {
+			case <-ctx.Done():
+				// The system is guaranteed to not be null here.
+				system.Close()
+			case <-stop:
+			}
 		})(originalCtx)
 	}
 
