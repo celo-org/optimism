@@ -7,6 +7,7 @@ on:
     paths:
       - "espresso/**"
       - "op-batcher/**"
+      - "op-challenger/**"
       - "op-e2e/**"
       - "op-node/**"
       - "packages/contracts-bedrock/**"
@@ -36,7 +37,7 @@ jobs:
           # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
           - group: core
             needs_prestate: false
-            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestEspressoDockerDevNodeSmokeTest|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
           - group: integrity
             needs_prestate: false
             tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
@@ -45,12 +46,14 @@ jobs:
             tests: "TestBatcherSwitching|TestFallbackMechanismIntegrationTestChannelNotClosed|TestEspressoEnforcementHardfork|TestE2eDevnetWithEspressoDegradedLiveness"
           - group: forced-reorg
             needs_prestate: false
-            tests: "TestForcedTransaction|TestBatcherWaitForFinality|TestE2eDevnetWithL1Reorg|TestPipelineEnhancement|TestEnforceMajorityRule"
-          # Needs cannon prestate + op-challenger; disabled until the prestate
-          # build works on free runners.
-          # - group: dispute
-          #   needs_prestate: true
-          #   tests: "TestOutputAlphabetGameWithEspresso_ChallengerWins"
+            tests: "TestForcedTransaction|TestBatcherWaitForFinality|TestE2eDevnetWithL1Reorg|TestPipelineEnhancement"
+          # The Espresso fault-proof test. It plays an output *alphabet* game,
+          # whose trace is generated in-process by the challenger, so it needs
+          # no cannon prestate despite living next to the cannon game helpers.
+          # Runs in ~90s.
+          - group: dispute
+            needs_prestate: false
+            tests: "TestOutputAlphabetGameWithEspresso_ChallengerWins"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -71,7 +74,8 @@ jobs:
         if: steps.forge-cache.outputs.cache-hit != 'true'
         run: mise exec -- just build-contracts
 
-      # Only the dispute group needs prestates.
+      # No group needs prestates today; the step is kept for a future
+      # cannon-based group, which would set needs_prestate: true.
       - name: Build cannon prestates
         if: matrix.needs_prestate
         run: mise exec -- just cannon-prestates
