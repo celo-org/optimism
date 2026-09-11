@@ -1,0 +1,71 @@
+# Builds and publishes the two images that EspressoSystems/tee-image-builder's
+# nitro-op-poster workflow consumes to produce the TEE batch poster:
+#
+#   ghcr.io/celo-org/optimism/op-batcher-enclave-app  — wrapped into the Nitro EIF
+#   ghcr.io/celo-org/optimism/op-batcher-tee          — enclave-tools is extracted from it
+
+name: Build and Push Espresso Enclave Images
+
+on:
+  push:
+    branches:
+      - "espresso/**"
+  pull_request:
+    branches:
+      - "espresso/**"
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/celo-org/optimism
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: op-batcher-enclave-app
+            target: op-batcher-enclave-app
+          - image: op-batcher-tee
+            target: op-batcher-enclave-target
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-,enable=${{ github.event_name == 'push' }}
+
+      - name: Build and push ${{ matrix.image }}
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ops/docker/op-stack-go/Dockerfile
+          target: ${{ matrix.target }}
+          platforms: linux/amd64
+          push: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_COMMIT=${{ github.sha }}

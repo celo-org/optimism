@@ -12,6 +12,9 @@ ARG TARGET_BASE_IMAGE=alpine:3.20
 # The ubuntu target base image is used for the op-challenger build with kona.
 ARG UBUNTU_TARGET_BASE_IMAGE=ubuntu:24.04
 
+# Base for the Espresso Nitro enclave targets.
+ARG ENCLAVE_BASE_IMAGE=alpine:3.22
+
 # builder_foundry does not need to be built on $BUILDPLATFORM, as foundry produces static binaries.
 FROM alpine:3.21 AS builder_foundry
 
@@ -141,6 +144,10 @@ FROM --platform=$BUILDPLATFORM builder AS op-batcher-builder
 ARG OP_BATCHER_VERSION=v0.0.0
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
   cd op-batcher && GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE VERSION="$OP_BATCHER_VERSION" just op-batcher
+
+FROM --platform=$BUILDPLATFORM builder AS enclave-tools-builder
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+  cd op-batcher && GOOS=$TARGETOS GOARCH=$TARGETARCH GITCOMMIT=$GIT_COMMIT GITDATE=$GIT_DATE just enclave-tools
 
 FROM --platform=$BUILDPLATFORM builder AS op-proposer-builder
 ARG OP_PROPOSER_VERSION=v0.0.0
@@ -300,6 +307,23 @@ CMD ["op-dispute-mon"]
 FROM $TARGET_BASE_IMAGE AS op-batcher-target
 COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
 CMD ["op-batcher"]
+
+# Runs inside the AWS Nitro enclave.
+FROM $ENCLAVE_BASE_IMAGE AS op-batcher-enclave-app
+RUN apk add --no-cache libgcc bash socat trurl
+COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
+COPY op-batcher/enclave-entrypoint.bash /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+ENTRYPOINT ["/app/entrypoint.sh"]
+
+# Runs outside the enclave (published as op-batcher-tee).
+FROM $ENCLAVE_BASE_IMAGE AS op-batcher-enclave-target
+ARG ENCLAVER_VERSION=v0.6.1
+RUN apk add --no-cache libgcc docker curl
+RUN curl -L "https://github.com/enclaver-io/enclaver/releases/download/${ENCLAVER_VERSION}/enclaver-linux-x86_64-${ENCLAVER_VERSION}.tar.gz" \
+  | tar xz --strip-components=1 -C /usr/local/bin "enclaver-linux-x86_64-${ENCLAVER_VERSION}/enclaver"
+COPY --from=enclave-tools-builder /app/op-batcher/bin/enclave-tools /usr/local/bin/
+CMD ["enclave-tools"]
 
 FROM $TARGET_BASE_IMAGE AS op-proposer-target
 COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
