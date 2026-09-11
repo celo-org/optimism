@@ -901,9 +901,16 @@ func (l *BatchSubmitter) espressoBatchLoop(ctx context.Context, wg *sync.WaitGro
 	}
 }
 
-// loadBatchesTick refreshes the sync status and drains the Espresso streamer of
-// any batches that extend the tip it is tracking, adding them to the channel
-// manager. It is one tick of espressoBatchLoop's loading cadence.
+// maxBatchesPerLoadTick bounds a single loading tick's drain so it can't
+// monopolize the shared goroutine: yielding lets the queueing tick run its reorg
+// check, and each re-entry re-gates on a fresh sync status. The streamer cursor
+// persists, so the next tick resumes where this one stopped.
+const maxBatchesPerLoadTick = 100
+
+// loadBatchesTick refreshes the sync status and drains up to
+// maxBatchesPerLoadTick batches from the Espresso streamer that extend the tip
+// it is tracking, adding them to the channel manager. It is one tick of
+// espressoBatchLoop's loading cadence.
 func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
 	newSyncStatus, err := l.getSyncStatus(ctx)
 	if err != nil {
@@ -923,7 +930,7 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 
 	blocksAdded := 0
 
-	for {
+	for blocksAdded < maxBatchesPerLoadTick { // bounded; see maxBatchesPerLoadTick
 		batch := l.espressoStreamer.Peek(ctx)
 		if batch == nil {
 			break
@@ -975,13 +982,7 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 
 		l.espressoStreamer.AdvancePosition()
 		l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
-
-		// During a large drain, signal periodically so throttling can engage
-		// before the whole backlog is consumed (mirrors loadBlocksIntoState).
 		blocksAdded++
-		if blocksAdded%100 == 0 {
-			l.sendToThrottlingLoop(unsafeBytesUpdated)
-		}
 	}
 
 	l.sendToThrottlingLoop(unsafeBytesUpdated)
