@@ -94,6 +94,13 @@ type ChainIntent struct {
 	DAFootprintGasScalar       uint16                    `json:"daFootprintGasScalar,omitempty" toml:"daFootprintGasScalar,omitempty"`
 	CustomGasToken             CustomGasToken            `json:"customGasToken" toml:"customGasToken"`
 
+	// EspressoEnabled enables deployment of the Espresso BatchAuthenticator + TEE verifier
+	// contracts for this chain.
+	EspressoEnabled bool `json:"espressoEnabled,omitzero" toml:"espressoEnabled,omitzero"`
+	// EspressoBatcher is the address of the Espresso (TEE) batcher EOA authorized to call
+	// the BatchAuthenticator. Only used when EspressoEnabled is true.
+	EspressoBatcher common.Address `json:"espressoBatcher,omitzero" toml:"espressoBatcher,omitzero"`
+
 	// Optional. For development purposes only. Only enabled if the operation mode targets a genesis-file output.
 	L2DevGenesisParams *L2DevGenesisParams `json:"l2DevGenesisParams,omitempty" toml:"l2DevGenesisParams,omitempty"`
 }

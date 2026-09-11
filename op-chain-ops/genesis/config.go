@@ -406,6 +406,12 @@ type UpgradeScheduleDeployConfig struct {
 	// Set it to 0 to activate at genesis. Nil to disable the PectraBlobSchedule fix.
 	L2GenesisPectraBlobScheduleTimeOffset *hexutil.Uint64 `json:"l2GenesisPectraBlobScheduleTimeOffset,omitempty"`
 
+	// L2GenesisEspressoTimeOffset is the number of seconds after genesis block that the Espresso
+	// upgrade activates. Set it to 0 to activate at genesis. Nil to disable Espresso (in which case
+	// the chain runs as upstream Optimism). Espresso is not a core OP Stack fork, so it is excluded
+	// from ForkTimeOffset/SetForkTimeOffset and the fork-iteration helpers.
+	L2GenesisEspressoTimeOffset *hexutil.Uint64 `json:"l2GenesisEspressoTimeOffset,omitempty"`
+
 	// When Cancun activates. Relative to L1 genesis.
 	L1CancunTimeOffset *hexutil.Uint64 `json:"l1CancunTimeOffset,omitempty"`
 	// When Prague activates. Relative to L1 genesis.
@@ -570,6 +576,10 @@ func (d *UpgradeScheduleDeployConfig) KarstTime(genesisTime uint64) *uint64 {
 
 func (d *UpgradeScheduleDeployConfig) InteropTime(genesisTime uint64) *uint64 {
 	return offsetToUpgradeTime(d.L2GenesisInteropTimeOffset, genesisTime)
+}
+
+func (d *UpgradeScheduleDeployConfig) EspressoTime(genesisTime uint64) *uint64 {
+	return offsetToUpgradeTime(d.L2GenesisEspressoTimeOffset, genesisTime)
 }
 
 func (d *UpgradeScheduleDeployConfig) AllocMode(genesisTime uint64) L2AllocsMode {
@@ -939,6 +949,11 @@ type L1DependenciesConfig struct {
 
 	// DAChallengeProxy represents the L1 address of the DataAvailabilityChallenge contract.
 	DAChallengeProxy common.Address `json:"daChallengeProxy"`
+
+	// BatchAuthenticatorAddress represents the L1 address of the Espresso BatchAuthenticator
+	// contract whose BatchInfoAuthenticated events gate post-Espresso derivation. Only set for
+	// Espresso-enabled chains.
+	BatchAuthenticatorAddress common.Address `json:"batchAuthenticatorAddress,omitempty,omitzero"`
 }
 
 // DependencyContext is the contextual configuration needed to verify the L1 dependencies,
@@ -1150,6 +1165,9 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *eth.BlockRef, l2GenesisBlockHa
 		AltDAConfig:            altDA,
 		ChainOpConfig:          chainOpConfig,
 		Cel2Time:               func() *uint64 { v := uint64(0); return &v }(),
+
+		EspressoTime:              d.EspressoTime(l1StartTime),
+		BatchAuthenticatorAddress: d.BatchAuthenticatorAddress,
 	}, nil
 }
 
