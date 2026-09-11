@@ -10,6 +10,8 @@ TEST_PKGS := "./op-alt-da/... ./op-batcher/... ./op-chain-ops/... ./op-core/... 
 
 FRAUD_PROOF_TEST_PKGS := "./op-e2e/faultproofs/..."
 
+ESPRESSO_E2E_TEST_PKGS := "./espresso/environment/... ./espresso/devnet-tests/... ./espresso/enclave-tests/..."
+
 RPC_TEST_PKGS := "./op-validator/pkg/validations/... ./op-deployer/pkg/deployer/bootstrap/... ./op-deployer/pkg/deployer/manage/... ./op-deployer/pkg/deployer/opcm/... ./op-deployer/pkg/deployer/pipeline/... ./op-deployer/pkg/deployer/upgrade/..."
 
 ALL_TEST_PACKAGES := TEST_PKGS + " " + RPC_TEST_PKGS + " " + FRAUD_PROOF_TEST_PKGS
@@ -352,6 +354,30 @@ go-tests-fraud-proofs-ci:
       --rerun-fails-max-failures=50 \
       --packages="{{FRAUD_PROOF_TEST_PKGS}}" \
       -- -parallel="$PARALLEL" -coverprofile=coverage.out -timeout={{TEST_TIMEOUT}}
+
+# Mirrors .github/workflows/espresso-e2e-tests.yaml (all shards, serially).
+# The optional argument is a Go -run regexp, e.g.
+# `just go-tests-espresso-e2e TestBatcherSwitching`. Needs built contracts
+# (`just build-contracts`); the in-memory Espresso mock needs no docker.
+
+# Runs the Espresso e2e tests like CI; optional -run regexp selects tests.
+[script('bash')]
+go-tests-espresso-e2e filter='.':
+  set -euo pipefail
+  if [ ! -d packages/contracts-bedrock/forge-artifacts ]; then
+    echo "forge-artifacts not found; run 'just build-contracts' first" >&2
+    exit 1
+  fi
+  # OP_TESTLOG_FILE_LOGGER_OUTDIR=<dir> writes one log file per test. testlog
+  # does not create the directory and fails silently without it, so do it here.
+  if [ -n "${OP_TESTLOG_FILE_LOGGER_OUTDIR:-}" ]; then
+    mkdir -p "$OP_TESTLOG_FILE_LOGGER_OUTDIR"
+  fi
+  # GOTESTSUM_FORMAT=standard-verbose streams every test's full output live.
+  gotestsum --format "${GOTESTSUM_FORMAT:-testname}" -- \
+      -timeout 45m -p 1 -count 1 \
+      -run '{{filter}}' \
+      {{ESPRESSO_E2E_TEST_PKGS}}
 
 # Runs comprehensive Go tests (alias for go-tests).
 test: go-tests
