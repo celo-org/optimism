@@ -862,9 +862,8 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 // Config.Espresso.PollInterval drives loading (Espresso streamer -> channel
 // manager).
 //
-// Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the
-// loops ranging over them (publishingLoop, throttlingLoop) terminate when this
-// loop exits.
+// Closes publishSignal and unsafeBytesUpdated on exit (the defer closes below),
+// which is what makes publishingLoop and throttlingLoop stop ranging over them.
 func (l *BatchSubmitter) espressoBatchLoop(ctx context.Context, wg *sync.WaitGroup, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
 	l.Log.Info("Starting EspressoBatchLoop", "queueingInterval", l.Config.PollInterval, "loadingInterval", l.Config.Espresso.PollInterval)
 
@@ -880,13 +879,8 @@ func (l *BatchSubmitter) espressoBatchLoop(ctx context.Context, wg *sync.WaitGro
 		batcher: l,
 	}
 
-	// *
-	// * BEFORE we start:
-	// * - scan batchInbox from batchInbox.lastBackfilled
-	// * - enqueue all batches from batchInbox that are _by fallback batcher_ to Espresso
-	// * - wait for espresso queue to clear
-	// * - set lastBackfilled to block height of the last of such batches
-	// *
+	// TODO: backfill the fallback batcher's batchInbox batches on startup (from
+	// the original TEE integration; not implemented).
 
 	for {
 		select {
@@ -950,6 +944,7 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 		if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
 			l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
 				"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
+			// TODO: revisit once the streamer re-anchor design is settled.
 			l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 			break
 		}
@@ -993,6 +988,7 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 		}
 	}
 
+	// Report final DA bytes and wake publishingLoop to publish what we added.
 	l.sendToThrottlingLoop(unsafeBytesUpdated)
 	l.tryPublishSignal(publishSignal, pubInfo{})
 }
