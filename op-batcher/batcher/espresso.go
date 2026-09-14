@@ -901,6 +901,10 @@ func (l *BatchSubmitter) espressoBatchLoop(ctx context.Context, wg *sync.WaitGro
 	}
 }
 
+// throttleUpdateInterval is how often (in blocks) the drain reports DA bytes to
+// the throttling loop so it can engage mid-backlog. Mirrors loadBlocksIntoState.
+const throttleUpdateInterval = 100
+
 // loadBatchesTick refreshes the sync status and drains the Espresso streamer of
 // every batch that extends the tip it is tracking, adding them to the channel
 // manager. It is one tick of espressoBatchLoop's loading cadence.
@@ -926,6 +930,8 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 	if l.espressoSyncChannelManager(newSyncStatus) {
 		return
 	}
+
+	blocksAdded := 0
 
 	for {
 		batch := l.espressoStreamer.Peek(ctx)
@@ -979,6 +985,12 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 
 		l.espressoStreamer.AdvancePosition()
 		l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
+
+		// Let throttling engage mid-drain, not just after (see throttleUpdateInterval).
+		blocksAdded++
+		if blocksAdded%throttleUpdateInterval == 0 {
+			l.sendToThrottlingLoop(unsafeBytesUpdated)
+		}
 	}
 
 	l.sendToThrottlingLoop(unsafeBytesUpdated)
