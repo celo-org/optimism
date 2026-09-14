@@ -901,16 +901,15 @@ func (l *BatchSubmitter) espressoBatchLoop(ctx context.Context, wg *sync.WaitGro
 	}
 }
 
-// maxBatchesPerLoadTick bounds a single loading tick's drain so it can't
-// monopolize the shared goroutine: yielding lets the queueing tick run its reorg
-// check, and each re-entry re-gates on a fresh sync status. The streamer cursor
-// persists, so the next tick resumes where this one stopped.
-const maxBatchesPerLoadTick = 100
-
-// loadBatchesTick refreshes the sync status and drains up to
-// maxBatchesPerLoadTick batches from the Espresso streamer that extend the tip
-// it is tracking, adding them to the channel manager. It is one tick of
-// espressoBatchLoop's loading cadence.
+// loadBatchesTick refreshes the sync status and drains the Espresso streamer of
+// every batch that extends the tip it is tracking, adding them to the channel
+// manager. It is one tick of espressoBatchLoop's loading cadence.
+//
+// The drain runs to completion rather than in bounded chunks: queueing and
+// loading share one goroutine and their tick bodies run atomically by design
+// (see espressoBatchLoop), so a reorg is handled on the next tick — every tick
+// re-gates on a fresh sync status before draining — with clearState serialized
+// against the drain rather than racing it.
 func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
 	newSyncStatus, err := l.getSyncStatus(ctx)
 	if err != nil {
@@ -928,9 +927,7 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 		return
 	}
 
-	blocksAdded := 0
-
-	for blocksAdded < maxBatchesPerLoadTick { // bounded; see maxBatchesPerLoadTick
+	for {
 		batch := l.espressoStreamer.Peek(ctx)
 		if batch == nil {
 			break
@@ -982,7 +979,6 @@ func (l *BatchSubmitter) loadBatchesTick(ctx context.Context, publishSignal chan
 
 		l.espressoStreamer.AdvancePosition()
 		l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
-		blocksAdded++
 	}
 
 	l.sendToThrottlingLoop(unsafeBytesUpdated)
