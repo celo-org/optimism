@@ -190,6 +190,7 @@ func WithL1NodesSubprocess(id stack.L1ELNodeID, clID stack.L1CLNodeID) stack.Opt
 			"--verbosity", "5",
 			"--miner.recommit", "2s",
 			"--gcmode", "archive",
+			"--syncmode", "full",
 		}
 
 		l1EL := &ExternalL1Geth{
