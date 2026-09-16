@@ -85,6 +85,9 @@ needs_socat_proxy() {
     return 1  # is external, use HTTPS_PROXY
 }
 
+# Strip userinfo, path, query and fragment from (comma-separated) URLs, as they may carry API keys
+redact_urls() { sed -E 's|://[^/?#,]*@|://[REDACTED]@|g; s|(://[^/?#,]+)[/?#][^,]*|\1/[REDACTED]|g' <<< "$1"; }
+
 # Helper function to wait for socat to open a port
 wait_for_port() {
     local port="$1"
@@ -107,7 +110,7 @@ launch_socat() {
 
     local host port scheme path
     if ! read -r host port scheme path < <(trurl --url "$original_url" --default-port --get "{host} {port} {scheme} {path}"); then
-        echo "[ERROR] Failed to parse URL: $original_url" >&2
+        echo "[ERROR] Failed to parse URL: $(redact_urls "$original_url")" >&2
         return 1
     fi
 
@@ -194,14 +197,14 @@ while [ $# -gt 0 ]; do
             for part in "${parts[@]}"; do
                 if needs_socat_proxy "$part"; then
                     if ! new_url=$(launch_socat "$part" "$SOCAT_PORT"); then
-                        echo "[ERROR] Failed to launch socat for $flag=$part" >&2
+                        echo "[ERROR] Failed to launch socat for $flag=$(redact_urls "$part")" >&2
                         exit 1
                     fi
-                    echo "[DEBUG] Proxying internal URL via socat: $part -> $new_url" >&2
+                    echo "[DEBUG] Proxying internal URL via socat: $(redact_urls "$part") -> $(redact_urls "$new_url")" >&2
                     rewritten_parts+=("$new_url")
                     SOCAT_PORT=$((SOCAT_PORT + 1))
                 else
-                    echo "[DEBUG] Keeping external URL unchanged (will use HTTPS_PROXY): $part" >&2
+                    echo "[DEBUG] Keeping external URL unchanged (will use HTTPS_PROXY): $(redact_urls "$part")" >&2
                     rewritten_parts+=("$part")
                 fi
             done
@@ -211,14 +214,14 @@ while [ $# -gt 0 ]; do
         else
             if needs_socat_proxy "$value"; then
                 if ! new_url=$(launch_socat "$value" "$SOCAT_PORT"); then
-                    echo "[ERROR] Failed to launch socat for $flag=$value" >&2
+                    echo "[ERROR] Failed to launch socat for $flag=$(redact_urls "$value")" >&2
                     exit 1
                 fi
-                echo "[DEBUG] Proxying internal URL via socat: $value -> $new_url" >&2
+                echo "[DEBUG] Proxying internal URL via socat: $(redact_urls "$value") -> $(redact_urls "$new_url")" >&2
                 url_args+=("$flag" "$new_url")
                 SOCAT_PORT=$((SOCAT_PORT + 1))
             else
-                echo "[DEBUG] Keeping external URL unchanged (will use HTTPS_PROXY): $value" >&2
+                echo "[DEBUG] Keeping external URL unchanged (will use HTTPS_PROXY): $(redact_urls "$value")" >&2
                 url_args+=("$flag" "$value")
             fi
         fi
@@ -235,8 +238,6 @@ echo ""
 echo "=== Final op-batcher arguments ==="
 echo "Total arguments: ${#all_args[@]}"
 SECRET_ARG_RE='^--(private-key|mnemonic|signer\.header|espresso\.testing-batcher-private-key)(=|$)'
-# Strip userinfo, path, query and fragment from (comma-separated) URLs, as they may carry API keys
-redact_urls() { sed -E 's|://[^/?#,]*@|://[REDACTED]@|g; s|(://[^/?#,]+)[/?#][^,]*|\1/[REDACTED]|g' <<< "$1"; }
 next_is_secret=false
 next_is_url=false
 for i in "${!all_args[@]}"; do
