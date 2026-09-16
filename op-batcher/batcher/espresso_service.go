@@ -61,19 +61,31 @@ func (bs *BatcherService) EspressoStreamer() *espressoStreamers.Streamer {
 	return bs.driver.espressoStreamer
 }
 
-// initChainSigner asserts that the configured TxManager implements the
-// ChainSigner interface and stores the embedded ChainSigner on the service.
-// Espresso uses ChainSigner to sign batch authentication payloads sent to the
-// BatchAuthenticator contract; the cast is required by every Espresso path.
+// initChainSigner builds the ChainSigner that signs the Espresso transaction
+// envelope (see EspressoBatch.ToEspressoTransaction), from the same signing config
+// the txmgr uses. Distinct from the enclave key pair, which signs the EIP-712
+// commitment BatchAuthenticator verifies.
 func (bs *BatcherService) initChainSigner(cfg *CLIConfig) error {
-	if !cfg.Espresso.Enabled {
-		return nil
+	tcfg := cfg.TxMgrConfig
+
+	// Same HD-path resolution as txmgr.NewConfig.
+	hdPath := tcfg.HDPath
+	if hdPath == "" && tcfg.SequencerHDPath != "" {
+		hdPath = tcfg.SequencerHDPath
+	} else if hdPath == "" && tcfg.L2OutputHDPath != "" {
+		hdPath = tcfg.L2OutputHDPath
 	}
-	cast, castOk := bs.TxManager.(opcrypto.ChainSigner)
-	if !castOk {
-		return fmt.Errorf("tx manager does not implement ChainSigner")
+
+	factory, from, err := opcrypto.ChainSignerFactoryFromConfig(bs.Log, tcfg.PrivateKey, tcfg.Mnemonic, hdPath, tcfg.SignerCLIConfig)
+	if err != nil {
+		return fmt.Errorf("failed to init Espresso chain signer: %w", err)
 	}
-	bs.ChainSigner = cast
+	if txFrom := bs.TxManager.From(); from != txFrom {
+		return fmt.Errorf(
+			"espresso chain signer resolved to %s but the txmgr sends from %s: the two "+
+				"derivations of the same signing config have diverged", from, txFrom)
+	}
+	bs.ChainSigner = factory(bs.TxManager.ChainID().ToBig(), from)
 	return nil
 }
 
@@ -153,6 +165,12 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 		return fmt.Errorf("failed to create Espresso light client: %w", err)
 	}
 	bs.EspressoLightClient = lightClient
+
+	// Two distinct signing identities: the L1 batcher key below, and the ephemeral
+	// enclave key after it.
+	if err := bs.initChainSigner(cfg); err != nil {
+		return err
+	}
 
 	if err := bs.initKeyPair(); err != nil {
 		return fmt.Errorf("failed to create key pair for batcher: %w", err)

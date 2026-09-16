@@ -82,6 +82,11 @@ var _ ChainSigner = &privateKeySigner{}
 // ChainSignerFactoryFromConfig considers three ways that signers are created & then creates single factory from those config options.
 // It can either take a remote signer (via opsigner.CLIConfig) or it can be provided either a mnemonic + derivation path or a private key.
 // It prefers the remote signer, then the mnemonic or private key (only one of which can be provided).
+//
+// Duplicates the key resolution in SignerFactoryFromConfig (signature.go) rather
+// than wrapping it: SignerFactory yields a SignerFn, which signs transactions only,
+// while ChainSigner also needs Sign over an arbitrary hash. txmgr uses the former,
+// Espresso the latter; neither is redundant.
 func ChainSignerFactoryFromConfig(l log.Logger, privateKey, mnemonic, hdPath string, signerConfig opsigner.CLIConfig) (ChainSignerFactory, common.Address, error) {
 	var signer ChainSignerFactory
 	var fromAddress common.Address
