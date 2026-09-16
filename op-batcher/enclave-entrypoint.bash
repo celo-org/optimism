@@ -120,8 +120,8 @@ launch_socat() {
         host="host"
     fi
 
-    if [[ "$scheme" != "http" ]] && [[ "$scheme" != "https" ]]; then
-        echo "[ERROR] Invalid scheme: '$scheme'. Only http and https are supported." >&2
+    if [[ "$scheme" != "http" ]]; then
+        echo "[ERROR] Invalid scheme: '$scheme'. Only http is supported for internal URLs." >&2
         return 1
     fi
 
