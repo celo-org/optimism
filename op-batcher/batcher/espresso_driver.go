@@ -242,9 +242,9 @@ func (l *BatchSubmitter) rollbackFailedStart() {
 
 // startEspressoLoops registers the batcher with the BatchAuthenticator
 // contract, resolves the TEE verifier address, spawns the Espresso transaction
-// submitter, and starts the four Espresso-specific batcher goroutines (in
-// addition to the upstream receiptsLoop and publishingLoop). Replaces the
-// upstream three-goroutine pattern when --espresso.enabled is set.
+// submitter, and starts the three Espresso-specific batcher goroutines
+// (receiptsLoop, espressoBatchLoop, publishingLoop). Replaces the upstream
+// three-goroutine pattern when --espresso.enabled is set.
 func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo, unsafeBytesUpdated chan int64) error {
 	regCtx, cancelReg := context.WithTimeout(l.killCtx, espressoRegistrationTimeout)
 	defer cancelReg()
@@ -258,7 +258,7 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	}
 
 	// The streamer drives itself from its own poll loops, so it is started here rather
-	// than being pumped by espressoBatchLoadingLoop. Bound to shutdownCtx so it stops
+	// than being pumped by espressoBatchLoop. Bound to shutdownCtx so it stops
 	// fetching before the publish path winds down. Kept as the last setup step that
 	// can fail, so a setup error never has running poll loops to unwind
 	// (rollbackFailedStart would stop them anyway).
@@ -277,11 +277,10 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	l.espressoSubmitter.SpawnWorkers(4, 4)
 	l.espressoSubmitter.Start()
 
-	l.wg.Add(4)
-	go l.receiptsLoop(l.wg, receiptsCh) // ranges over receiptsCh channel
-	go l.espressoBatchQueueingLoop(l.shutdownCtx, l.wg)
-	go l.espressoBatchLoadingLoop(l.shutdownCtx, l.wg, publishSignal, unsafeBytesUpdated) // sends on unsafeBytesUpdated (if throttling enabled) and publishSignal. Closes them both when done
-	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)                       // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
+	l.wg.Add(3)
+	go l.receiptsLoop(l.wg, receiptsCh)                                            // ranges over receiptsCh channel
+	go l.espressoBatchLoop(l.shutdownCtx, l.wg, publishSignal, unsafeBytesUpdated) // queues sequencer blocks to Espresso and loads streamer batches into the channel manager; sends on unsafeBytesUpdated (if throttling enabled) and publishSignal, closing both when done
+	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)                // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
 	return nil
 }
 
