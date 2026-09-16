@@ -234,18 +234,30 @@ all_args=("${filtered_args[@]}" "${url_args[@]}")
 echo ""
 echo "=== Final op-batcher arguments ==="
 echo "Total arguments: ${#all_args[@]}"
+SECRET_ARG_RE='^--(private-key|mnemonic|signer\.header|espresso\.testing-batcher-private-key)(=|$)'
+# Strip userinfo, path, query and fragment from (comma-separated) URLs, as they may carry API keys
+redact_urls() { sed -E 's|://[^/?#,]*@|://[REDACTED]@|g; s|(://[^/?#,]+)[/?#][^,]*|\1/[REDACTED]|g' <<< "$1"; }
 next_is_secret=false
+next_is_url=false
 for i in "${!all_args[@]}"; do
     arg="${all_args[$i]}"
     if $next_is_secret; then
         echo "  [$i]: [REDACTED]" >&2
         next_is_secret=false
-    elif [[ "$arg" =~ ^--(private-key|mnemonic)= ]]; then
+    elif $next_is_url; then
+        echo "  [$i]: $(redact_urls "$arg")" >&2
+        next_is_url=false
+    elif [[ "$arg" =~ $SECRET_ARG_RE && "$arg" == *=* ]]; then
         flag="${arg%%=*}"
         echo "  [$i]: ${flag}=[REDACTED]" >&2
-    elif [[ "$arg" == "--private-key" || "$arg" == "--mnemonic" ]]; then
+    elif [[ "$arg" =~ $SECRET_ARG_RE ]]; then
         echo "  [$i]: $arg" >&2
         next_is_secret=true
+    elif [[ "$arg" =~ $URL_ARG_RE && "$arg" == *=* ]]; then
+        echo "  [$i]: ${arg%%=*}=$(redact_urls "${arg#*=}")" >&2
+    elif [[ "$arg" =~ $URL_ARG_RE ]]; then
+        echo "  [$i]: $arg" >&2
+        next_is_url=true
     else
         echo "  [$i]: $arg" >&2
     fi
