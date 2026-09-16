@@ -274,7 +274,6 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),
 	)
-	l.espressoSubmitter.SpawnWorkers(4, 4)
 	l.espressoSubmitter.Start()
 
 	l.wg.Add(4)
