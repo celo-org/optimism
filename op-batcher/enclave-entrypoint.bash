@@ -167,7 +167,7 @@ else
 fi
 
 # Batcher flags whose values are URLs
-URL_ARG_RE='^(--altda\.da-server|--espresso\.espresso-attestation-service|--espresso\.urls|--espresso\.l1-url|--l1-eth-rpc|--l2-eth-rpc|--rollup-rpc|--signer\.endpoint)(=|$)'
+URL_ARG_RE='^(--altda\.da-server|--espresso\.espresso-attestation-service|--espresso\.urls|--espresso\.l1-url|--l1-eth-rpc|--l2-eth-rpc|--rollup-rpc|--signer\.endpoint|--throttle\.additional-endpoints)(=|$)'
 # Process all arguments
 filtered_args=()
 url_args=()
