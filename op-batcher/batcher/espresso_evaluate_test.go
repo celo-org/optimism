@@ -10,6 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// TestEvaluateSubmission covers evaluateSubmission, the pure decision function
+// submitToEspresso uses to classify the result of submitting an Espresso
+// transaction: no error -> Handle (proceed to receipt verification), a permanent
+// error -> Skip (drop the tx), an ephemeral or unclassified error ->
+// RetrySubmission (submit again).
 func TestEvaluateSubmission(t *testing.T) {
 	tests := []struct {
 		name string
@@ -30,6 +35,11 @@ func TestEvaluateSubmission(t *testing.T) {
 	}
 }
 
+// TestEvaluateVerification covers evaluateVerification, the pure decision
+// function confirmReceipt uses after each receipt-poll attempt: receipt found ->
+// Handle (confirmed, done), a permanent error -> Skip, verification that has
+// outlasted its block-count or wall-clock budget -> RetrySubmission (re-submit a
+// fresh copy), otherwise -> RetryVerification (keep polling).
 func TestEvaluateVerification(t *testing.T) {
 	const maxBlocks = 5
 	const safetyTimeout = 5 * time.Minute

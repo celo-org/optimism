@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -125,15 +126,6 @@ func WithVerifyReceiptSafetyTimeout(d time.Duration) EspressoTransactionSubmitte
 func WithVerifyReceiptRetryDelay(d time.Duration) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
 		config.VerifyReceiptRetryDelay = d
-	}
-}
-
-// WithMaxInFlightJobs sets the maximum number of inflight requests to
-// have at once.  Once at capacity all new submission attempts will
-// automatically fail.
-func WithMaxInFlightJobs(n int) EspressoTransactionSubmitterOption {
-	return func(config *EspressoTransactionSubmitterConfig) {
-		config.MaxInFlightJobs = n
 	}
 }
 
@@ -275,12 +267,13 @@ func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx 
 	}
 }
 
-// submitToEspresso submits the transaction, retrying ephemeral failures (with a
-// short delay so a persistently failing endpoint is not hammered). It returns
-// the transaction hash on success, or ok=false if the failure is permanent or
-// the context is cancelled.
+// submitToEspresso submits the transaction, retrying ephemeral failures with
+// exponential backoff so a persistently failing endpoint is not hammered by the
+// many in-flight submissions at once. It returns the transaction hash on
+// success, or ok=false if the failure is permanent or the context is cancelled.
 func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx *espressoCommon.Transaction) (*espressoCommon.TaggedBase64, bool) {
-	for {
+	backoff := retry.Exponential()
+	for attempt := 0; ; attempt++ {
 		if ctx.Err() != nil {
 			return nil, false
 		}
@@ -296,7 +289,7 @@ func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx 
 		case Skip:
 			return nil, false
 		default: // RetrySubmission
-			if !sleep(ctx, s.verifyReceiptRetryDelay) {
+			if !sleep(ctx, backoff.Duration(attempt)) {
 				return nil, false
 			}
 		}
