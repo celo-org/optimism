@@ -8,10 +8,13 @@ import (
 	"math/big"
 	_ "net/http/pprof"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
 
+	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -28,6 +31,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -85,6 +89,7 @@ func (r txRef) string(txIDStringer func(txID) string) string {
 type L1Client interface {
 	HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error)
 	NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error)
+	bind.ContractBackend
 }
 
 type L2Client interface {
@@ -112,6 +117,11 @@ type DriverSetup struct {
 	ChannelConfig     ChannelConfigProvider
 	AltDA             AltDAClient
 	ChannelOutFactory ChannelOutFactory
+
+	// Espresso groups all TEE-batcher-specific runtime state plumbed from
+	// BatcherService. Defined in espresso_driver.go to keep the upstream
+	// Optimism field block compact.
+	Espresso EspressoDriverSetup
 }
 
 // BatchSubmitter encapsulates a service responsible for submitting L2 tx
@@ -137,7 +147,7 @@ type BatchSubmitter struct {
 
 	publishSignal chan pubInfo
 
-	// authGroup tracks the fallback batcher's receipt-watcher goroutines (one
+	// authGroup tracks the fallback and TEE batchers' auth goroutines (one
 	// per auth+batch pair) so the publishing loop can drain them via
 	// waitForAuthGroup before closing receiptsCh. New watchers are back-pressured
 	// (not hard-bounded) by the txmgr Queue: queue.Send blocks at
@@ -145,6 +155,18 @@ type BatchSubmitter struct {
 	// though a slow receipts loop can briefly leave more than that parked on their
 	// final receiptsCh send.
 	authGroup sync.WaitGroup
+
+	espressoSubmitter *espressoTransactionSubmitter
+	espressoStreamer  *espressoStreamers.Streamer
+
+	// clearStateRequested asks the espresso batch loading loop to run clearState
+	clearStateRequested atomic.Bool
+
+	teeVerifierAddress common.Address
+
+	// degradedLog throttles repeated warnings from tick-driven loops so the
+	// log debouncer doesn't see the same message every poll interval.
+	degradedLog *oplog.RepeatStateLogger
 }
 
 // NewBatchSubmitter initializes the BatchSubmitter driver from a preconfigured DriverSetup
@@ -157,6 +179,7 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	batcher := &BatchSubmitter{
 		DriverSetup: setup,
 		channelMgr:  state,
+		degradedLog: oplog.NewRepeatStateLogger(),
 	}
 
 	err := batcher.SetThrottleController(setup.Config.ThrottleParams.ControllerType, setup.Config.ThrottleParams.PIDConfig)
@@ -203,6 +226,24 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	publishSignal := make(chan pubInfo, 1)
 	l.publishSignal = publishSignal
 
+	if l.Config.Espresso.Enabled {
+		// Constructed here rather than in NewBatchSubmitter: it performs an L2 lookup, so
+		// it has to run after waitForL2Genesis and needs a context to do it with.
+		if err := l.setupEspressoStreamer(l.shutdownCtx); err != nil {
+			l.rollbackFailedStart()
+			return fmt.Errorf("could not set up the Espresso streamer: %w", err)
+		}
+		if err := l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
+			l.rollbackFailedStart()
+			return err
+		}
+	} else {
+		l.wg.Add(3)
+		go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
+		go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)               // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
+		go l.blockLoadingLoop(l.shutdownCtx, l.wg, unsafeBytesUpdated, publishSignal) // sends on unsafeBytesUpdated (if throttling enabled), and publishSignal. Closes them both when done
+	}
+
 	// DA throttling loop should always be started except for testing (indicated by ThrottleThreshold == 0)
 	if l.Config.ThrottleParams.LowerThreshold > 0 {
 		l.wg.Add(1)
@@ -210,11 +251,6 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	} else {
 		l.Log.Warn("Throttling loop is DISABLED due to 0 throttle-threshold. This should not be disabled in prod.")
 	}
-
-	l.wg.Add(3)
-	go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
-	go l.publishingLoop(l.killCtx, l.wg, receiptsCh, publishSignal)               // ranges over publishSignal, spawns routines which send on receiptsCh. Closes receiptsCh when done.
-	go l.blockLoadingLoop(l.shutdownCtx, l.wg, unsafeBytesUpdated, publishSignal) // sends on unsafeBytesUpdated (if throttling enabled), and publishSignal. Closes them both when done
 
 	l.Log.Info("Batch Submitter started")
 	return nil
@@ -282,6 +318,10 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.cancelShutdownCtx()
 	l.wg.Wait()
 	l.cancelKillCtx()
+
+	if l.espressoStreamer != nil {
+		l.espressoStreamer.Stop()
+	}
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil
@@ -831,6 +871,10 @@ func (l *BatchSubmitter) publishStateToL1(ctx context.Context, queue *txmgr.Queu
 			return
 		}
 
+		if l.shouldSkipPublishForActiveSeq(ctx) {
+			return
+		}
+
 		err := l.publishTxToL1(ctx, queue, receiptsCh, daGroup, pi)
 		if err != nil {
 			if err != io.EOF {
@@ -851,13 +895,22 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		if err != nil {
 			l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
 			return false
-		} else {
-			l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
-			l.channelMgrMutex.Lock()
-			defer l.channelMgrMutex.Unlock()
-			l.channelMgr.Clear(l1SafeOrigin)
-			return true
 		}
+		// Fetch the streamer re-anchor target before mutating anything so the
+		// channel-manager clear and the streamer re-anchor happen together or
+		// not at all; see espressoReanchorTarget for the partial-clear hazard.
+		reanchorTarget, ok := l.espressoReanchorTarget(ctx)
+		if !ok {
+			return false
+		}
+		l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
+		l.channelMgrMutex.Lock()
+		defer l.channelMgrMutex.Unlock()
+		l.channelMgr.Clear(l1SafeOrigin)
+		if reanchorTarget != nil {
+			l.espressoStreamer.SetBatchPosition(*reanchorTarget)
+		}
+		return true
 	}
 
 	// Attempt to set the L1 safe origin and clear the state, if fetching fails -- fall through to an infinite retry
