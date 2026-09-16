@@ -120,7 +120,7 @@ type espressoTransactionSubmitter struct {
 	verifyReceiptJobQueue      chan espressoVerifyReceiptJob
 	verifyReceiptRespQueue     chan espressoVerifyReceiptJobResponse
 	verifyReceiptWorkerQueue   chan chan espressoVerifyReceiptJobAttempt
-	espresso                   espressoClient.EspressoClient
+	espresso                   EspressoSubmitClient
 	latestBlockHeight          atomic.Uint64 // shared HotShot block height, updated by trackBlockHeight
 	verifyReceiptMaxBlocks     uint64
 	verifyReceiptSafetyTimeout time.Duration
@@ -134,7 +134,7 @@ type espressoTransactionSubmitter struct {
 // creating the EspressoTransactionSubmitter.
 type EspressoTransactionSubmitterConfig struct {
 	Ctx                                context.Context
-	EspressoClient                     espressoClient.EspressoClient
+	EspressoClient                     EspressoSubmitClient
 	Wg                                 *sync.WaitGroup
 	SubmitJobQueueCapacity             int
 	SubmitResponseQueueCapacity        int
@@ -160,7 +160,7 @@ func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 
 // WithEspressoClient is an option that can be used to set the Espresso client
 // for the EspressoTransactionSubmitterConfig.
-func WithEspressoClient(client espressoClient.EspressoClient) EspressoTransactionSubmitterOption {
+func WithEspressoClient(client EspressoSubmitClient) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
 		config.EspressoClient = client
 	}
@@ -631,7 +631,7 @@ func (s *espressoTransactionSubmitter) scheduleVerifyReceiptsJobs() {
 func espressoSubmitTransactionWorker(
 	ctx context.Context,
 	wg *sync.WaitGroup,
-	cli espressoClient.EspressoClient,
+	cli EspressoSubmitClient,
 	workerQueue chan<- chan espressoTransactionJobAttempt,
 ) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -688,7 +688,7 @@ func espressoSubmitTransactionWorker(
 func espressoVerifyTransactionWorker(
 	ctx context.Context,
 	wg *sync.WaitGroup,
-	cli espressoClient.EspressoClient,
+	cli EspressoSubmitClient,
 	workerQueue chan<- chan espressoVerifyReceiptJobAttempt,
 	latestHeight *atomic.Uint64,
 	retryDelay time.Duration,
@@ -915,7 +915,15 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				batch := l.espressoStreamer.Peek(ctx)
+				// Peek retries undecided batches' validity checks, which read L1
+				// (a contract call and a header fetch, both uncached on a miss)
+				// with no deadline of their own. Unbounded, a hung L1 RPC would
+				// silently stall frame publication for good, so it gets the same
+				// per-call bound as every other raw RPC; on expiry the batch
+				// stays undecided and is retried next tick.
+				peekCtx, peekCancel := l.networkTimeoutCtx(ctx)
+				batch := l.espressoStreamer.Peek(peekCtx)
+				peekCancel()
 				if batch == nil {
 					break
 				}

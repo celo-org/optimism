@@ -234,10 +234,23 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 func (l *BatchSubmitter) rollbackFailedStart() {
 	l.cancelShutdownCtx()
 	l.cancelKillCtx()
-	if l.espressoStreamer != nil {
-		l.espressoStreamer.Stop()
-	}
+	l.teardownEspressoStreamer()
 	l.running = false
+}
+
+// teardownEspressoStreamer stops and drops the streamer, if any. Every teardown
+// path (StopBatchSubmitting, rollbackFailedStart) must come through here: a dead
+// run's streamer must never survive into the next start, or that start's
+// clearState would run the espressoReanchorTarget gate against it — a retry
+// loop with no deadline, running under the start mutex that the stop able to
+// cancel it would itself need — to re-anchor an object the start is about to
+// replace anyway (setupEspressoStreamer anchors the fresh streamer itself).
+func (l *BatchSubmitter) teardownEspressoStreamer() {
+	if l.espressoStreamer == nil {
+		return
+	}
+	l.espressoStreamer.Stop()
+	l.espressoStreamer = nil
 }
 
 // startEspressoLoops registers the batcher with the BatchAuthenticator
@@ -269,7 +282,7 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	l.espressoSubmitter = NewEspressoTransactionSubmitter(
 		WithContext(l.shutdownCtx),
 		WithWaitGroup(l.wg),
-		WithEspressoClient(l.Espresso.Client),
+		WithEspressoClient(newBoundedEspressoClient(l.Espresso.Client, l.Config.NetworkTimeout)),
 		WithVerifyReceiptMaxBlocks(l.Config.Espresso.VerifyReceiptMaxBlocks),
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),
@@ -329,7 +342,8 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 // LocalSafeL2: the caller must retry the whole clear rather than perform it
 // partially. Reports a nil target (and ok=true) when there is nothing to
 // re-anchor: --espresso.enabled unset, or the startup path, where clearState
-// runs before the streamer is constructed.
+// runs before the streamer is constructed. Every start takes that path — see
+// teardownEspressoStreamer for why no earlier run's streamer can be left over.
 func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *eth.L2BlockRef, ok bool) {
 	if !l.Config.Espresso.Enabled || l.espressoStreamer == nil {
 		return nil, true

@@ -111,7 +111,7 @@ func TestEspressoTransactionSubmitterProgress(t *testing.T) {
 	failingClient := new(AlwaysFailingEspressoClient)
 	succeedingClient := new(FakeSubmissionSucceedingEspressoClient)
 	succeedingClient.Init()
-	succeedingClient.EspressoClient = failingClient
+	succeedingClient.EspressoSubmitClient = failingClient
 	espClient := new(EspressoClientSwappableImplementation)
 	espClient.SetEspressoClient(failingClient)
 	submitter := batcher.NewEspressoTransactionSubmitter(
