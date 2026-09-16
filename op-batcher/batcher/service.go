@@ -196,6 +196,7 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
 		return err
 	}
+	bs.warnIfEspressoUnscheduled(cfg)
 	if err := bs.initTxManager(ctx, cfg); err != nil {
 		return fmt.Errorf("failed to init Tx manager: %w", err)
 	}
@@ -306,6 +307,22 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 			cfg.DataAvailabilityType)
 	}
 	return nil
+}
+
+// warnIfEspressoUnscheduled reports the one configuration in which a TEE batcher
+// can never publish: --espresso.enabled with no espresso_time. The publish gate
+// keys on the enforcement boundary, which an unscheduled fork never reaches, so
+// the batcher starts, syncs, streams and then stands down forever — visible only
+// at Debug per tick, so say it once at startup where it is actionable. A warning
+// rather than an error, since standing down is correct here and refusing to start
+// would break running the TEE batcher ahead of scheduling the fork.
+func (bs *BatcherService) warnIfEspressoUnscheduled(cfg *CLIConfig) {
+	if !cfg.Espresso.Enabled || bs.RollupConfig.EspressoTime != nil {
+		return
+	}
+	bs.Log.Warn("Espresso batcher enabled on a chain with no espresso_time scheduled: " +
+		"it will never publish, since event-based batch auth is never enforced. " +
+		"The fallback batcher owns batch submission until the fork is scheduled and enforced.")
 }
 
 // checkFallbackAuthConfirmations validates that the configured number of L1
