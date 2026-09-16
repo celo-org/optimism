@@ -491,7 +491,7 @@ func NewConfig(cfg CLIConfig, l log.Logger) (*Config, error) {
 		hdPath = cfg.L2OutputHDPath
 	}
 
-	chainSignerFactory, from, err := opcrypto.ChainSignerFactoryFromConfig(l, cfg.PrivateKey, cfg.Mnemonic, hdPath, cfg.SignerCLIConfig)
+	signerFactory, from, err := opcrypto.SignerFactoryFromConfig(l, cfg.PrivateKey, cfg.Mnemonic, hdPath, cfg.SignerCLIConfig)
 	if err != nil {
 		return nil, fmt.Errorf("could not init signer: %w", err)
 	}
@@ -527,12 +527,11 @@ func NewConfig(cfg CLIConfig, l log.Logger) (*Config, error) {
 	}
 
 	cellProofTime := fallbackToOsakaCellProofTimeIfKnown(chainID, cfg.CellProofTime)
-	chainSigner := chainSignerFactory(chainID, from)
 
 	res := Config{
 		Backend: l1,
 		ChainID: chainID,
-		Signer:  chainSigner.SignTransaction,
+		Signer:  signerFactory(chainID),
 		From:    from,
 
 		TxSendTimeout:              cfg.TxSendTimeout,
