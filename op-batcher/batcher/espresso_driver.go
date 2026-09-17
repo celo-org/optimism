@@ -294,7 +294,7 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 // Fails closed: if either gate cannot be evaluated, publishing is skipped for
 // this tick and retried on the next.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
-	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+	if l.batchAuth == nil {
 		return false
 	}
 	consultActiveFlag := l.Config.Espresso.Enabled
