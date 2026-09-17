@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"regexp"
 	"time"
@@ -192,18 +193,25 @@ func IsURLAvailable(ctx context.Context, address string, timeout time.Duration) 
 	if err != nil {
 		return false
 	}
-	addr := u.Host
-	if u.Port() == "" {
-		switch u.Scheme {
-		case "http", "ws":
-			addr += ":80"
-		case "https", "wss":
-			addr += ":443"
-		default:
-			// Fail open if we can't figure out what the port should be
-			return true
+	addr := hostPort(u)
+	if addr == "" {
+		// Fail open if we can't figure out what the port should be
+		return true
+	}
+
+	// When a proxy is configured for this URL the RPC client dials the proxy,
+	// not the target, so probing the target tests a route nothing uses. In a
+	// network-isolated environment it is worse than useless: inside an AWS
+	// Nitro enclave every packet leaves through a local proxy and there is no
+	// direct route at all, so this check fails for every address and the
+	// caller gives up before rpc.DialOptions — which would have succeeded —
+	// is ever reached. Probe whatever the client will actually dial.
+	if proxyURL, err := proxyForRequest(&http.Request{URL: u}); err == nil && proxyURL != nil {
+		if proxyAddr := hostPort(proxyURL); proxyAddr != "" {
+			addr = proxyAddr
 		}
 	}
+
 	dialer := net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -211,6 +219,27 @@ func IsURLAvailable(ctx context.Context, address string, timeout time.Duration) 
 	}
 	conn.Close()
 	return true
+}
+
+// proxyForRequest resolves the proxy for a request from the environment.
+// Indirected so tests can supply a proxy without mutating process env, which
+// net/http reads only once per process.
+var proxyForRequest = http.ProxyFromEnvironment
+
+// hostPort returns u's host with an explicit port, defaulting the port from the
+// scheme. It returns "" when the scheme implies no well-known port.
+func hostPort(u *url.URL) string {
+	if u.Port() != "" {
+		return u.Host
+	}
+	switch u.Scheme {
+	case "http", "ws":
+		return u.Host + ":80"
+	case "https", "wss":
+		return u.Host + ":443"
+	default:
+		return ""
+	}
 }
 
 // BaseRPCClient is a wrapper around a concrete *rpc.Client instance to make it compliant
