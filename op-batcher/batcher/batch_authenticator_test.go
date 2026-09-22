@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"math/big"
@@ -39,6 +40,9 @@ type mockAuthBackend struct {
 	espressoBatcher  common.Address
 	fallbackBatcher  common.Address
 	teeVerifier      common.Address
+	// systemConfigAddr is the address the BatchAuthenticator reports as its
+	// SystemConfig, and the only address serving batcherHash.
+	systemConfigAddr common.Address
 
 	codeAtCalls int
 	callCalls   int
@@ -54,9 +58,10 @@ func newMockAuthBackend(t *testing.T) *mockAuthBackend {
 	systemConfigABI, err := systemconfig.SystemConfigMetaData.GetAbi()
 	require.NoError(t, err)
 	return &mockAuthBackend{
-		authABI:         authABI,
-		systemConfigABI: systemConfigABI,
-		code:            []byte{0x60, 0x00},
+		authABI:          authABI,
+		systemConfigABI:  systemConfigABI,
+		code:             []byte{0x60, 0x00},
+		systemConfigAddr: testSystemConfigAddr,
 	}
 }
 
@@ -74,26 +79,35 @@ func (m *mockAuthBackend) CallContract(ctx context.Context, call ethereum.CallMs
 	if len(call.Data) < 4 {
 		return nil, errors.New("short calldata")
 	}
-	selector := string(call.Data[:4])
-	switch {
-	case selector == string(m.authABI.Methods["activeIsEspresso"].ID):
-		return m.authABI.Methods["activeIsEspresso"].Outputs.Pack(m.activeIsEspresso)
-	case selector == string(m.authABI.Methods["espressoBatcher"].ID):
-		return m.authABI.Methods["espressoBatcher"].Outputs.Pack(m.espressoBatcher)
-	case selector == string(m.authABI.Methods["espressoTEEVerifier"].ID):
-		return m.authABI.Methods["espressoTEEVerifier"].Outputs.Pack(m.teeVerifier)
-	case selector == string(m.systemConfigABI.Methods["batcherHash"].ID):
-		var batcherHash [32]byte
-		copy(batcherHash[12:], m.fallbackBatcher.Bytes())
-		return m.systemConfigABI.Methods["batcherHash"].Outputs.Pack(batcherHash)
-	default:
-		return nil, errors.New("unexpected method call")
+	if call.To == nil {
+		return nil, errors.New("call without a recipient")
 	}
+	selector := call.Data[:4]
+	switch *call.To {
+	case testAuthAddr:
+		switch {
+		case bytes.Equal(selector, m.authABI.Methods["activeIsEspresso"].ID):
+			return m.authABI.Methods["activeIsEspresso"].Outputs.Pack(m.activeIsEspresso)
+		case bytes.Equal(selector, m.authABI.Methods["espressoBatcher"].ID):
+			return m.authABI.Methods["espressoBatcher"].Outputs.Pack(m.espressoBatcher)
+		case bytes.Equal(selector, m.authABI.Methods["espressoTEEVerifier"].ID):
+			return m.authABI.Methods["espressoTEEVerifier"].Outputs.Pack(m.teeVerifier)
+		case bytes.Equal(selector, m.authABI.Methods["systemConfig"].ID):
+			return m.authABI.Methods["systemConfig"].Outputs.Pack(m.systemConfigAddr)
+		}
+	case m.systemConfigAddr:
+		if bytes.Equal(selector, m.systemConfigABI.Methods["batcherHash"].ID) {
+			var batcherHash [32]byte
+			copy(batcherHash[12:], m.fallbackBatcher.Bytes())
+			return m.systemConfigABI.Methods["batcherHash"].Outputs.Pack(batcherHash)
+		}
+	}
+	return nil, errors.New("unexpected method call")
 }
 
 func newTestReader(t *testing.T, backend *mockAuthBackend) *batchAuthenticatorReader {
 	t.Helper()
-	r, err := newBatchAuthenticatorReader(testAuthAddr, testSystemConfigAddr, backend, time.Second)
+	r, err := newBatchAuthenticatorReader(testAuthAddr, backend, time.Second)
 	require.NoError(t, err)
 	return r
 }
@@ -171,9 +185,9 @@ func TestBatchAuthenticatorReader_EspressoTEEVerifier(t *testing.T) {
 }
 
 // TestBatchAuthenticatorReader_FallbackBatcher locks in that the fallback
-// batcher address comes from the SystemConfig bound at construction, rather
-// than from a per-tick BatchAuthenticator.systemConfig() lookup. Reaching for
-// the latter would surface here as an "unexpected method call".
+// batcher address is read through the SystemConfig the BatchAuthenticator
+// itself names, which is the address the contract checks msg.sender against.
+// Resolving it costs one extra read the first time and nothing afterwards.
 func TestBatchAuthenticatorReader_FallbackBatcher(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.fallbackBatcher = common.HexToAddress("0x00000000000000000000000000000000000000dd")
@@ -182,11 +196,38 @@ func TestBatchAuthenticatorReader_FallbackBatcher(t *testing.T) {
 	got, err := r.FallbackBatcher(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, backend.fallbackBatcher, got)
-	require.Equal(t, 1, backend.callCalls, "fallback batcher should cost a single batcherHash read")
+	require.Equal(t, 2, backend.callCalls, "first read resolves the SystemConfig address, then reads batcherHash")
+
+	got, err = r.FallbackBatcher(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, backend.fallbackBatcher, got)
+	require.Equal(t, 3, backend.callCalls, "the SystemConfig address is resolved once")
+}
+
+// TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched covers a
+// BatchAuthenticator whose proxy holds code but has not been initialized: it
+// reports a zero SystemConfig address. Binding that address would pin the
+// reader to a contract that never answers, so the reader must reject it and
+// resolve again once the contract is initialized.
+func TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched(t *testing.T) {
+	backend := newMockAuthBackend(t)
+	backend.fallbackBatcher = common.HexToAddress("0x00000000000000000000000000000000000000dd")
+	backend.systemConfigAddr = common.Address{} // not initialized yet
+	r := newTestReader(t, backend)
+
+	_, err := r.FallbackBatcher(context.Background())
+	require.ErrorContains(t, err, "zero systemConfig address")
+
+	backend.systemConfigAddr = testSystemConfigAddr
+	got, err := r.FallbackBatcher(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, backend.fallbackBatcher, got)
 }
 
 // TestIsBatcherActive covers the publish gate's two checks - mode, then
-// identity - and pins the per-tick cost at two eth_calls in either mode.
+// identity - and pins their cost. Both modes settle at two eth_calls; the
+// fallback mode pays one more on its first evaluation to learn which
+// SystemConfig the BatchAuthenticator resolves the fallback batcher through.
 func TestIsBatcherActive(t *testing.T) {
 	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 	fallbackAddr := common.HexToAddress("0x00000000000000000000000000000000000000e2")
@@ -201,9 +242,9 @@ func TestIsBatcherActive(t *testing.T) {
 		wantCalls        int
 	}{
 		{"espresso batcher, espresso active, authorized", true, true, espressoAddr, true, 2},
-		{"fallback batcher, fallback active, authorized", false, false, fallbackAddr, true, 2},
+		{"fallback batcher, fallback active, authorized", false, false, fallbackAddr, true, 3},
 		{"espresso batcher, espresso active, wrong key", true, true, otherAddr, false, 2},
-		{"fallback batcher, fallback active, wrong key", false, false, otherAddr, false, 2},
+		{"fallback batcher, fallback active, wrong key", false, false, otherAddr, false, 3},
 		// Mode mismatch short-circuits before the identity read.
 		{"espresso batcher while fallback active", false, true, espressoAddr, false, 1},
 		{"fallback batcher while espresso active", true, false, fallbackAddr, false, 1},

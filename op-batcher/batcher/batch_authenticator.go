@@ -17,46 +17,41 @@ import (
 // BatchAuthenticator contract, bound once at construction and shared by
 // registerBatcher, resolveTEEVerifierAddress and isBatcherActive.
 //
-// The SystemConfig binding comes from RollupConfig.L1SystemConfigAddress
-// rather than from BatchAuthenticator.systemConfig(), which the batcher would
-// otherwise re-read on every publish tick to reach the same address.
+// The SystemConfig binding is resolved from BatchAuthenticator.systemConfig(),
+// the address the contract itself resolves the fallback batcher through. Taking
+// it from anywhere else would let this gate and the on-chain check disagree.
 //
 // The deployment probe is lazy and latching: it runs on each call until it
 // first observes code, then never again. Lazy so a batcher started before the
-// contract is deployed keeps skipping publishes per tick rather than failing
-// to start; latching keeps the probe off the steady-state publish path, which
-// leaves the gate at two eth_calls per tick in either mode.
+// contract is deployed keeps skipping publishes rather than failing to start;
+// latching keeps the probe off the steady-state publish path. The SystemConfig
+// address latches the same way, leaving the gate at two eth_calls in either
+// mode.
 //
 // A zero BatchAuthenticator address is a nil reader, not a reader bound to the
 // zero address.
 type batchAuthenticatorReader struct {
-	addr         common.Address
-	auth         *batchauthenticator.BatchAuthenticatorCaller
-	systemConfig *systemconfig.SystemConfigCaller
-	backend      bind.ContractCaller
-	timeout      time.Duration
+	addr    common.Address
+	auth    *batchauthenticator.BatchAuthenticatorCaller
+	backend bind.ContractCaller
+	timeout time.Duration
 
-	mu       sync.Mutex
-	haveCode bool
+	mu           sync.Mutex
+	haveCode     bool
+	systemConfig *systemconfig.SystemConfigCaller
 }
 
-// newBatchAuthenticatorReader binds a reader to addr, resolving the fallback
-// batcher through the SystemConfig at systemConfigAddr.
-func newBatchAuthenticatorReader(addr, systemConfigAddr common.Address, backend bind.ContractCaller, timeout time.Duration) (*batchAuthenticatorReader, error) {
+// newBatchAuthenticatorReader binds a reader to addr.
+func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCaller, timeout time.Duration) (*batchAuthenticatorReader, error) {
 	auth, err := batchauthenticator.NewBatchAuthenticatorCaller(addr, backend)
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind BatchAuthenticator at %s: %w", addr, err)
 	}
-	systemConfig, err := systemconfig.NewSystemConfigCaller(systemConfigAddr, backend)
-	if err != nil {
-		return nil, fmt.Errorf("failed to bind SystemConfig at %s: %w", systemConfigAddr, err)
-	}
 	return &batchAuthenticatorReader{
-		addr:         addr,
-		auth:         auth,
-		systemConfig: systemConfig,
-		backend:      backend,
-		timeout:      timeout,
+		addr:    addr,
+		auth:    auth,
+		backend: backend,
+		timeout: timeout,
 	}, nil
 }
 
@@ -127,15 +122,49 @@ func (r *batchAuthenticatorReader) EspressoBatcher(ctx context.Context) (common.
 // FallbackBatcher returns the address authorized to authenticate batches while
 // activeIsEspresso is false, read from the SystemConfig's batcherHash.
 func (r *batchAuthenticatorReader) FallbackBatcher(ctx context.Context) (common.Address, error) {
+	if err := r.ensureDeployed(ctx); err != nil {
+		return common.Address{}, err
+	}
+	systemConfig, err := r.systemConfigCaller(ctx)
+	if err != nil {
+		return common.Address{}, err
+	}
 	opts, cancel := r.callOpts(ctx)
 	defer cancel()
-	batcherHash, err := r.systemConfig.BatcherHash(opts)
+	batcherHash, err := systemConfig.BatcherHash(opts)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to read batcherHash: %w", err)
 	}
 	// batcherHash stores the batcher address in its low 20 bytes,
 	// which is why we use bytes to address
 	return common.BytesToAddress(batcherHash[:]), nil
+}
+
+// systemConfigCaller binds the SystemConfig named by the BatchAuthenticator,
+// reading the address once and keeping the binding. Only a usable address is
+// kept, so a contract read before its initialization is retried rather than
+// pinning the reader to the zero address.
+func (r *batchAuthenticatorReader) systemConfigCaller(ctx context.Context) (*systemconfig.SystemConfigCaller, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.systemConfig != nil {
+		return r.systemConfig, nil
+	}
+	opts, cancel := r.callOpts(ctx)
+	defer cancel()
+	addr, err := r.auth.SystemConfig(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read systemConfig address: %w", err)
+	}
+	if addr == (common.Address{}) {
+		return nil, fmt.Errorf("BatchAuthenticator at %s has a zero systemConfig address", r.addr)
+	}
+	systemConfig, err := systemconfig.NewSystemConfigCaller(addr, r.backend)
+	if err != nil {
+		return nil, fmt.Errorf("failed to bind SystemConfig at %s: %w", addr, err)
+	}
+	r.systemConfig = systemConfig
+	return systemConfig, nil
 }
 
 // EspressoTEEVerifier returns the contract's configured EspressoTEEVerifier
