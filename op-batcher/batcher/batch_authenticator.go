@@ -27,9 +27,6 @@ import (
 // latching keeps the probe off the steady-state publish path. The SystemConfig
 // address latches the same way, leaving the gate at two eth_calls in either
 // mode.
-//
-// A zero BatchAuthenticator address is a nil reader, not a reader bound to the
-// zero address.
 type batchAuthenticatorReader struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
@@ -41,8 +38,13 @@ type batchAuthenticatorReader struct {
 	systemConfig *systemconfig.SystemConfigCaller
 }
 
-// newBatchAuthenticatorReader binds a reader to addr.
+// newBatchAuthenticatorReader binds a reader to addr. A zero addr means the
+// chain has no BatchAuthenticator and yields no reader, never one bound to the
+// zero address; callers read that nil as "no BatchAuthenticator configured".
 func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCaller, timeout time.Duration) (*batchAuthenticatorReader, error) {
+	if addr == (common.Address{}) {
+		return nil, nil
+	}
 	auth, err := batchauthenticator.NewBatchAuthenticatorCaller(addr, backend)
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind BatchAuthenticator at %s: %w", addr, err)

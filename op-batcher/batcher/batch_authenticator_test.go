@@ -112,6 +112,16 @@ func newTestReader(t *testing.T, backend *mockAuthBackend) *batchAuthenticatorRe
 	return r
 }
 
+// TestNewBatchAuthenticatorReader_ZeroAddressIsNilReader pins the invariant
+// every call site reads: a chain without a BatchAuthenticator gets no reader,
+// never one bound to the zero address that would answer every question with a
+// failed call.
+func TestNewBatchAuthenticatorReader_ZeroAddressIsNilReader(t *testing.T) {
+	r, err := newBatchAuthenticatorReader(common.Address{}, newMockAuthBackend(t), time.Second)
+	require.NoError(t, err)
+	require.Nil(t, r)
+}
+
 // TestBatchAuthenticatorReader_ProbeLatches is the core claim of the shared
 // reader: the deployment probe is paid once, not once per publish tick. It also
 // checks that the reader applies the network timeout itself, so no call site
