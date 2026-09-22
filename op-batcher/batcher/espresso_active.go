@@ -19,8 +19,11 @@ import (
 //     be the authorized batcher for that mode, otherwise every authenticateBatchInfo
 //     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
 //
-// publishStateToL1 evaluates this before each batch transaction it sends, and
-// each evaluation costs two eth_calls in either mode.
+// publishStateToL1 evaluates this before each batch transaction it sends. Each
+// evaluation costs two eth_calls in either mode, on top of whatever
+// shouldSkipPublishForActiveSeq already spent reaching it. A batcher that is
+// not the active one takes a skip branch every time, so both warnings are
+// throttled.
 func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	if l.batchAuth == nil {
 		return false, errors.New("no BatchAuthenticator configured")
@@ -34,13 +37,14 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	batcherAddr := l.Txmgr.From()
 
 	if activeIsEspresso != l.Config.Espresso.Enabled {
-		l.Log.Warn("Batcher is not the active batcher, skipping publish",
+		l.degradedLog.Warn(l.Log, "batcherModeInactive", "Batcher is not the active batcher, skipping publish",
 			"batcherAddr", batcherAddr,
 			"activeIsEspresso", activeIsEspresso,
 			"EspressoEnabled", l.Config.Espresso.Enabled,
 		)
 		return false, nil
 	}
+	l.degradedLog.Clear(l.Log, "batcherModeInactive", "Batcher mode is active again")
 
 	// Our mode is active; make sure our sender key is the authorized batcher for it,
 	// otherwise every publish reverts (Unauthorized*Batcher) in a loop.
@@ -55,13 +59,14 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	}
 
 	if batcherAddr != expected {
-		l.Log.Warn("Configured batcher key is not the authorized batcher for the active mode, skipping publish",
+		l.degradedLog.Warn(l.Log, "batcherKeyUnauthorized", "Configured batcher key is not the authorized batcher for the active mode, skipping publish",
 			"batcherAddr", batcherAddr,
 			"expected", expected,
 			"activeIsEspresso", activeIsEspresso,
 		)
 		return false, nil
 	}
+	l.degradedLog.Clear(l.Log, "batcherKeyUnauthorized", "Configured batcher key is authorized again")
 
 	return true, nil
 }
