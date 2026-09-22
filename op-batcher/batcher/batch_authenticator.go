@@ -22,11 +22,11 @@ import (
 // it from anywhere else would let this gate and the on-chain check disagree.
 //
 // The deployment probe is lazy and latching: it runs on each call until it
-// first observes code, then never again. Lazy so a batcher started before the
-// contract is deployed keeps skipping publishes rather than failing to start;
-// latching keeps the probe off the steady-state publish path. The SystemConfig
-// address latches the same way, leaving the gate at two eth_calls in either
-// mode.
+// first observes code, then never again. Lazy so the fallback batcher, which
+// never registers with the contract, keeps skipping publishes rather than
+// failing to start against a BatchAuthenticator deployed after it; latching
+// keeps the probe off the steady-state publish path. The SystemConfig address
+// latches the same way, leaving the gate at two eth_calls in either mode.
 type batchAuthenticatorReader struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller

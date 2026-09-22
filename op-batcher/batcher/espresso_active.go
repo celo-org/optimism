@@ -19,7 +19,8 @@ import (
 //     be the authorized batcher for that mode, otherwise every authenticateBatchInfo
 //     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
 //
-// This runs on every publish tick and costs two eth_calls in either mode.
+// publishStateToL1 evaluates this before each batch transaction it sends, and
+// each evaluation costs two eth_calls in either mode.
 func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	if l.batchAuth == nil {
 		return false, errors.New("no BatchAuthenticator configured")
