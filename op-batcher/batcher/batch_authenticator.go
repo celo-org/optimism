@@ -168,7 +168,9 @@ func (r *batchAuthenticatorReader) systemConfigCaller(ctx context.Context) (*sys
 }
 
 // EspressoTEEVerifier returns the contract's configured EspressoTEEVerifier
-// address. Read once at startup.
+// address. A zero address is an error: it is the EIP-712 verifying contract
+// every authentication is signed against, and initialize rejects it, so the
+// contract reporting one means it has code but no state yet.
 func (r *batchAuthenticatorReader) EspressoTEEVerifier(ctx context.Context) (common.Address, error) {
 	if err := r.ensureDeployed(ctx); err != nil {
 		return common.Address{}, err
@@ -178,6 +180,9 @@ func (r *batchAuthenticatorReader) EspressoTEEVerifier(ctx context.Context) (com
 	addr, err := r.auth.EspressoTEEVerifier(opts)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to query EspressoTEEVerifier address: %w", err)
+	}
+	if addr == (common.Address{}) {
+		return common.Address{}, fmt.Errorf("BatchAuthenticator at %s has a zero espressoTEEVerifier address", r.addr)
 	}
 	return addr, nil
 }

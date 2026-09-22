@@ -184,6 +184,20 @@ func TestBatchAuthenticatorReader_EspressoTEEVerifier(t *testing.T) {
 	require.True(t, backend.lastCallHadDeadline, "reader must bound reads by NetworkTimeout")
 }
 
+// TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected covers a
+// BatchAuthenticator proxy holding code but no state. Its espressoTEEVerifier
+// reads as zero, and accepting it would have the batcher sign every
+// authentication against the zero address as EIP-712 verifying contract, which
+// the real verifier rejects. Startup must fail instead.
+func TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected(t *testing.T) {
+	backend := newMockAuthBackend(t)
+	backend.teeVerifier = common.Address{} // not initialized yet
+	r := newTestReader(t, backend)
+
+	_, err := r.EspressoTEEVerifier(context.Background())
+	require.ErrorContains(t, err, "zero espressoTEEVerifier address")
+}
+
 // TestBatchAuthenticatorReader_FallbackBatcher locks in that the fallback
 // batcher address is read through the SystemConfig the BatchAuthenticator
 // itself names, which is the address the contract checks msg.sender against.
