@@ -83,7 +83,8 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 // StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
 // mutex before it can cancel anything, so an unbounded call on a stalled endpoint
 // would wedge the batcher beyond even a graceful shutdown. Calls with their own
-// timeout regime (the attestation service client, Txmgr.Send) are exempt.
+// timeout regime (the attestation service client, Txmgr.Send, batchAuthenticatorReader)
+// are exempt.
 func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }

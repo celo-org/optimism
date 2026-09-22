@@ -1254,9 +1254,9 @@ func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
 	}
 
 	if l.batchAuth == nil {
-		return errors.New("cannot register batcher: no BatchAuthenticator address configured")
+		return errors.New("no BatchAuthenticator configured")
 	}
-	l.Log.Info("Batch authenticator address", "value", l.batchAuth.Address())
+	l.Log.Info("Batch authenticator address", "value", l.RollupConfig.BatchAuthenticatorAddress)
 	if err := l.batchAuth.ensureDeployed(ctx); err != nil {
 		return err
 	}

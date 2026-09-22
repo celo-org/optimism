@@ -1,9 +1,9 @@
 package batcher
 
 import (
-	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
+	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
@@ -76,33 +77,34 @@ func (m *mockAuthBackend) CodeAt(ctx context.Context, contract common.Address, b
 func (m *mockAuthBackend) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	m.callCalls++
 	_, m.lastCallHadDeadline = ctx.Deadline()
-	if len(call.Data) < 4 {
-		return nil, errors.New("short calldata")
-	}
 	if call.To == nil {
 		return nil, errors.New("call without a recipient")
 	}
-	selector := call.Data[:4]
-	switch *call.To {
-	case testAuthAddr:
-		switch {
-		case bytes.Equal(selector, m.authABI.Methods["activeIsEspresso"].ID):
-			return m.authABI.Methods["activeIsEspresso"].Outputs.Pack(m.activeIsEspresso)
-		case bytes.Equal(selector, m.authABI.Methods["espressoBatcher"].ID):
-			return m.authABI.Methods["espressoBatcher"].Outputs.Pack(m.espressoBatcher)
-		case bytes.Equal(selector, m.authABI.Methods["espressoTEEVerifier"].ID):
-			return m.authABI.Methods["espressoTEEVerifier"].Outputs.Pack(m.teeVerifier)
-		case bytes.Equal(selector, m.authABI.Methods["systemConfig"].ID):
-			return m.authABI.Methods["systemConfig"].Outputs.Pack(m.systemConfigAddr)
-		}
-	case m.systemConfigAddr:
-		if bytes.Equal(selector, m.systemConfigABI.Methods["batcherHash"].ID) {
-			var batcherHash [32]byte
-			copy(batcherHash[12:], m.fallbackBatcher.Bytes())
-			return m.systemConfigABI.Methods["batcherHash"].Outputs.Pack(batcherHash)
-		}
+	// Each address serves only its own ABI, so a getter read from the wrong
+	// contract fails the lookup.
+	contractABI := m.authABI
+	if *call.To == m.systemConfigAddr {
+		contractABI = m.systemConfigABI
 	}
-	return nil, errors.New("unexpected method call")
+	method, err := contractABI.MethodById(call.Data)
+	if err != nil {
+		return nil, err
+	}
+	switch method.Name {
+	case "activeIsEspresso":
+		return method.Outputs.Pack(m.activeIsEspresso)
+	case "espressoBatcher":
+		return method.Outputs.Pack(m.espressoBatcher)
+	case "espressoTEEVerifier":
+		return method.Outputs.Pack(m.teeVerifier)
+	case "systemConfig":
+		return method.Outputs.Pack(m.systemConfigAddr)
+	case "batcherHash":
+		var batcherHash [32]byte
+		copy(batcherHash[12:], m.fallbackBatcher.Bytes())
+		return method.Outputs.Pack(batcherHash)
+	}
+	return nil, fmt.Errorf("unexpected method call %s", method.Name)
 }
 
 func newTestReader(t *testing.T, backend *mockAuthBackend) *batchAuthenticatorReader {
@@ -172,26 +174,15 @@ func TestBatchAuthenticatorReader_ProbeFailureIsNotLatched(t *testing.T) {
 	require.Equal(t, 1, backend.callCalls)
 }
 
-// TestBatchAuthenticatorReader_EspressoTEEVerifier covers what the reader adds
-// over the generated binding: it refuses to read from an undeployed address,
-// and it bounds the call with NetworkTimeout. The resolved address feeds the
-// EIP-712 VerifyingContract domain field, so a silently zeroed result would
-// sign against the wrong verifier.
+// TestBatchAuthenticatorReader_EspressoTEEVerifier pins the address the batcher
+// signs against: it is whatever the contract reports, unchanged.
 func TestBatchAuthenticatorReader_EspressoTEEVerifier(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.teeVerifier = common.HexToAddress("0x00000000000000000000000000000000000000bb")
-	backend.code = nil // not deployed yet
-	r := newTestReader(t, backend)
 
-	_, err := r.EspressoTEEVerifier(context.Background())
-	require.ErrorContains(t, err, "no contract code at BatchAuthenticator address")
-	require.Zero(t, backend.callCalls, "should not read from an undeployed address")
-
-	backend.code = []byte{0x60, 0x00}
-	got, err := r.EspressoTEEVerifier(context.Background())
+	got, err := newTestReader(t, backend).EspressoTEEVerifier(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, backend.teeVerifier, got)
-	require.True(t, backend.lastCallHadDeadline, "reader must bound reads by NetworkTimeout")
 }
 
 // TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected covers a
@@ -210,8 +201,8 @@ func TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected(t *testing.T) {
 
 // TestBatchAuthenticatorReader_FallbackBatcher locks in that the fallback
 // batcher address is read through the SystemConfig the BatchAuthenticator
-// itself names, which is the address the contract checks msg.sender against.
-// Resolving it costs one extra read the first time and nothing afterwards.
+// itself names, which is the address the contract checks msg.sender against,
+// and that the reader learns that address once.
 func TestBatchAuthenticatorReader_FallbackBatcher(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.fallbackBatcher = common.HexToAddress("0x00000000000000000000000000000000000000dd")
@@ -249,9 +240,8 @@ func TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched(t *testing.T) {
 }
 
 // TestIsBatcherActive covers the publish gate's two checks - mode, then
-// identity - and pins their cost. Both modes settle at two eth_calls; the
-// fallback mode pays one more on its first evaluation to learn which
-// SystemConfig the BatchAuthenticator resolves the fallback batcher through.
+// identity - and pins their cost, since the gate runs before every batch
+// transaction. A mode mismatch must not pay for the identity read.
 func TestIsBatcherActive(t *testing.T) {
 	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 	fallbackAddr := common.HexToAddress("0x00000000000000000000000000000000000000e2")
@@ -283,6 +273,7 @@ func TestIsBatcherActive(t *testing.T) {
 
 			l := &BatchSubmitter{}
 			l.Log = testlog.Logger(t, log.LevelDebug)
+			l.degradedLog = oplog.NewRepeatStateLogger()
 			l.Txmgr = &testutils.FakeTxMgr{FromAddr: test.from}
 			l.Config.Espresso.Enabled = test.espressoEnabled
 			l.batchAuth = newTestReader(t, backend)
@@ -301,6 +292,7 @@ func TestIsBatcherActive(t *testing.T) {
 func TestIsBatcherActive_NoAuthenticator(t *testing.T) {
 	l := &BatchSubmitter{}
 	l.Log = testlog.Logger(t, log.LevelDebug)
+	l.degradedLog = oplog.NewRepeatStateLogger()
 
 	_, err := l.isBatcherActive(context.Background())
 	require.ErrorContains(t, err, "no BatchAuthenticator configured")
