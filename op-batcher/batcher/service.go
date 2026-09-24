@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	sdkclient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -94,7 +94,7 @@ type BatcherService struct {
 	// Espresso runtime state. Defined in espresso_service.go to keep the
 	// upstream Optimism field block compact. EspressoClient and
 	// EspressoLightClient are nil when --espresso.enabled=false.
-	EspressoClient      *espressoClient.MultipleNodesClient
+	EspressoClient      *sdkclient.MultipleNodesClient
 	EspressoLightClient *espressoLightClient.LightclientCaller
 	// EspressoL1Client backs the light-client reads; non-nil only when
 	// --espresso.l1-url points at a different RPC than --l1-eth-rpc.
