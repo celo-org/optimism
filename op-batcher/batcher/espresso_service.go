@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	sdkclient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -142,7 +142,7 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	bs.Espresso.VerifyReceiptSafetyTimeout = cfg.Espresso.VerifyReceiptSafetyTimeout
 	bs.Espresso.VerifyReceiptRetryDelay = cfg.Espresso.VerifyReceiptRetryDelay
 
-	client, err := espressoClient.NewMultipleNodesClient(cfg.Espresso.QueryServiceURLs)
+	client, err := sdkclient.NewMultipleNodesClient(cfg.Espresso.QueryServiceURLs)
 	if err != nil {
 		return fmt.Errorf("failed to create Espresso client: %w", err)
 	}
