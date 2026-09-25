@@ -29,12 +29,12 @@ import (
 // after the first success so steady-state publishes do not pay for it. The
 // SystemConfig address is cached the same way.
 //
-// A contract that is deployed but not yet initialized returns zero from every
-// address getter. The SystemConfig and TEE verifier addresses are read once
-// and cached, so a zero would be cached for good. Both reads reject it. The
-// batcher addresses are re-read on every check and only compared with the
-// batcher's own sender address. A zero fails that comparison like any other
-// mismatch, so the publish is skipped and the next check reads it again.
+// A zero address is an error for the SystemConfig and TEE verifier addresses
+// but not for the two batcher addresses. A deployed contract that has not been
+// initialized yet returns zero from every getter. The first two are read once
+// and cached, so a cached zero would stay wrong forever. The batcher addresses
+// are compared with the batcher's own address on every check, so a zero just
+// skips the publish until the contract is initialized.
 type batchAuthenticatorReader struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
