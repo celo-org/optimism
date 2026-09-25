@@ -13,32 +13,35 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
 )
 
-// batchAuthenticatorReader is the batcher's single read-only view of the
-// BatchAuthenticator contract, bound once at construction and shared by
+// batchAuthenticatorReader is the batcher's read-only view of the
+// BatchAuthenticator contract. It is bound once at construction and shared by
 // registerBatcher, resolveTEEVerifierAddress and isBatcherActive.
 //
-// The SystemConfig binding is resolved from BatchAuthenticator.systemConfig(),
-// the address the contract itself resolves the fallback batcher through. Taking
-// it from anywhere else would let this gate and the on-chain check disagree.
+// The SystemConfig address is read from BatchAuthenticator.systemConfig(),
+// because that is where the contract itself looks up the fallback batcher.
+// Reading it from anywhere else could make this gate and the on-chain check
+// disagree.
 //
-// The deployment probe is lazy and latching: it runs on each call until it
-// first observes code, then never again. Lazy so the fallback batcher, which
-// never registers with the contract, keeps skipping publishes rather than
-// failing to start against a BatchAuthenticator deployed after it; latching
-// keeps the probe off the steady-state publish path. The SystemConfig address
-// latches the same way.
+// The deployment check is lazy: it runs on each call until it first sees code
+// at the address, then never again. It is deferred so the fallback batcher,
+// which never registers with the contract, can start before the
+// BatchAuthenticator is deployed and skip publishes until it appears. It stops
+// after the first success so steady-state publishes do not pay for it. The
+// SystemConfig address is cached the same way.
 //
-// A zero address is rejected wherever the reader keeps what it read, because a
-// contract holding code but no initialized state answers every address getter
-// with one, and a latched zero never recovers. The batcher identities are
-// compared and discarded, so a zero there matches no configured key and simply
-// skips the publish.
+// A contract that is deployed but not yet initialized returns zero from every
+// address getter. The SystemConfig and TEE verifier addresses are read once
+// and cached, so a zero would be cached for good. Both reads reject it. The
+// batcher addresses are re-read on every check and only compared with the
+// batcher's own sender address. A zero fails that comparison like any other
+// mismatch, so the publish is skipped and the next check reads it again.
 type batchAuthenticatorReader struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
 	backend bind.ContractCaller
 	timeout time.Duration
 
+	// mu guards the two cached fields below; callers are serialized today, but a shared reader should not depend on that.
 	mu           sync.Mutex
 	haveCode     bool
 	systemConfig *systemconfig.SystemConfigCaller
