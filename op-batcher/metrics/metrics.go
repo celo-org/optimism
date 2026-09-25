@@ -20,6 +20,40 @@ import (
 
 const Namespace = "op_batcher"
 
+// PublishGateDecision names the outcome of the Espresso publish gate
+// (shouldSkipPublishForActiveSeq) on a single tick. Exported as a gauge so a
+// batcher that is deliberately standing down can be told apart from one that is
+// wedged: both leave batch_tx_submitted flat and the safe head lagging, but only
+// the wedged one reports PublishGatePublishing while making no progress.
+type PublishGateDecision string
+
+const (
+	// PublishGatePublishing: the gate let this tick through.
+	PublishGatePublishing PublishGateDecision = "publishing"
+	// PublishGateBoundaryUnavailable: the enforcement boundary could not be
+	// evaluated (L1 tip fetch failed), so the tick failed closed.
+	PublishGateBoundaryUnavailable PublishGateDecision = "boundary_unavailable"
+	// PublishGateAwaitingEnforcement: event-based batch auth is not enforced at
+	// the L1 tip yet, so the TEE batcher leaves publishing to the fallback.
+	PublishGateAwaitingEnforcement PublishGateDecision = "awaiting_enforcement"
+	// PublishGateActiveCheckFailed: the BatchAuthenticator reads behind
+	// isBatcherActive failed, so the tick failed closed.
+	PublishGateActiveCheckFailed PublishGateDecision = "active_check_failed"
+	// PublishGateNotActiveBatcher: the contract names the other role, or this
+	// node's key is not the authorized batcher for its role.
+	PublishGateNotActiveBatcher PublishGateDecision = "not_active_batcher"
+)
+
+// PublishGateDecisions lists every decision, so the gauge can zero the labels
+// that do not apply on each observation.
+var PublishGateDecisions = []PublishGateDecision{
+	PublishGatePublishing,
+	PublishGateBoundaryUnavailable,
+	PublishGateAwaitingEnforcement,
+	PublishGateActiveCheckFailed,
+	PublishGateNotActiveBatcher,
+}
+
 type Metricer interface {
 	RecordInfo(version string)
 	RecordUp()
@@ -70,6 +104,7 @@ type Metricer interface {
 	RecordFailoverToEthDA()
 
 	RecordFallbackAuthWindowExceeded()
+	RecordPublishGateDecision(decision PublishGateDecision)
 
 	Document() []opmetrics.DocumentedMetric
 
@@ -116,6 +151,7 @@ type Metrics struct {
 	batchStoredDataSizeBytesTotal   prometheus.CounterVec
 	altDaFailoverTotal              prometheus.Counter
 	fallbackAuthWindowExceededTotal prometheus.Counter
+	publishGateDecision             prometheus.GaugeVec
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -263,6 +299,11 @@ func NewMetrics(procName string) *Metrics {
 			Name:      "fallback_auth_window_exceeded_total",
 			Help:      "Total number of fallback-auth submissions dropped because the batch tx landed beyond BatchAuthLookbackWindow blocks after its auth tx",
 		}),
+		publishGateDecision: *factory.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "publish_gate_decision",
+			Help:      "Outcome of the Espresso publish gate on the last tick; 1 on the active decision, 0 on the others",
+		}, []string{"decision"}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
 			Name:      "blob_used_bytes",
@@ -493,6 +534,16 @@ func (m *Metrics) RecordFailoverToEthDA() {
 
 func (m *Metrics) RecordFallbackAuthWindowExceeded() {
 	m.fallbackAuthWindowExceededTotal.Inc()
+}
+
+func (m *Metrics) RecordPublishGateDecision(decision PublishGateDecision) {
+	for _, d := range PublishGateDecisions {
+		v := 0.0
+		if d == decision {
+			v = 1.0
+		}
+		m.publishGateDecision.WithLabelValues(string(d)).Set(v)
+	}
 }
 
 func (m *Metrics) RecordChannelQueueLength(len int) {

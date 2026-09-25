@@ -15,6 +15,12 @@ import (
 // the BatchAuthenticator contract. Returns true if this batcher instance should
 // be publishing batches, false if it should stay idle.
 //
+// Only meaningful once event-based batch auth is enforced: the caller
+// (shouldSkipPublishForActiveSeq) must gate on derive.IsEspressoAuthEnforced
+// first, since pre-enforcement the contract may be undeployed and its
+// activeIsEspresso flag does not confer ownership: only the SystemConfig batcher
+// key can publish a batch that derives before the boundary.
+//
 // It applies two gates:
 //  1. Mode: the contract's activeIsEspresso flag must match this node's role
 //     (Config.Espresso.Enabled). activeIsEspresso==true means the Espresso batcher
@@ -54,13 +60,17 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	modeActive := (activeIsEspresso && l.Config.Espresso.Enabled) ||
 		(!activeIsEspresso && !l.Config.Espresso.Enabled)
 	if !modeActive {
-		l.Log.Warn("Batcher is not the active batcher, skipping publish",
+		// Throttled: standing by while the other role publishes is a normal
+		// steady state (the TEE batcher idles as a hot standby until handoff),
+		// and the gate re-evaluates on every publish tick.
+		l.degradedLog.Warn(l.Log, "batcherNotActive", "Batcher is not the active batcher, skipping publish",
 			"batcherAddr", batcherAddr,
 			"activeIsEspresso", activeIsEspresso,
 			"EspressoEnabled", l.Config.Espresso.Enabled,
 		)
 		return false, nil
 	}
+	l.degradedLog.Clear(l.Log, "batcherNotActive", "Batcher is now the active batcher")
 
 	// Our mode is active; make sure our sender key is the authorized batcher for it,
 	// otherwise every publish reverts (Unauthorized*Batcher) in a loop.
@@ -78,13 +88,15 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	}
 
 	if batcherAddr != expected {
-		l.Log.Warn("Configured batcher key is not the authorized batcher for the active mode, skipping publish",
+		l.degradedLog.Warn(l.Log, "batcherKeyUnauthorized",
+			"Configured batcher key is not the authorized batcher for the active mode, skipping publish",
 			"batcherAddr", batcherAddr,
 			"expected", expected,
 			"activeIsEspresso", activeIsEspresso,
 		)
 		return false, nil
 	}
+	l.degradedLog.Clear(l.Log, "batcherKeyUnauthorized", "Configured batcher key is the authorized batcher again")
 
 	return true, nil
 }
