@@ -206,7 +206,7 @@ func IsURLAvailable(ctx context.Context, address string, timeout time.Duration) 
 	// direct route at all, so this check fails for every address and the
 	// caller gives up before rpc.DialOptions — which would have succeeded —
 	// is ever reached. Probe whatever the client will actually dial.
-	if proxyURL, err := proxyForRequest(&http.Request{URL: u}); err == nil && proxyURL != nil {
+	if proxyURL, err := proxyForRequest(&http.Request{URL: proxyLookupURL(u)}); err == nil && proxyURL != nil {
 		if proxyAddr := hostPort(proxyURL); proxyAddr != "" {
 			addr = proxyAddr
 		}
@@ -225,6 +225,24 @@ func IsURLAvailable(ctx context.Context, address string, timeout time.Duration) 
 // Indirected so tests can supply a proxy without mutating process env, which
 // net/http reads only once per process.
 var proxyForRequest = http.ProxyFromEnvironment
+
+// proxyLookupURL maps ws/wss to http/https for proxy resolution. net/http only
+// selects a proxy for http and https URLs, and the WebSocket client resolves
+// its proxy the same way. Other URLs are returned unchanged.
+func proxyLookupURL(u *url.URL) *url.URL {
+	var scheme string
+	switch u.Scheme {
+	case "ws":
+		scheme = "http"
+	case "wss":
+		scheme = "https"
+	default:
+		return u
+	}
+	lookup := *u
+	lookup.Scheme = scheme
+	return &lookup
+}
 
 // hostPort returns u's host with an explicit port, defaulting the port from the
 // scheme. It returns "" when the scheme implies no well-known port.
