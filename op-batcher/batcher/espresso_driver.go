@@ -83,7 +83,8 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 // StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
 // mutex before it can cancel anything, so an unbounded call on a stalled endpoint
 // would wedge the batcher beyond even a graceful shutdown. Calls with their own
-// timeout regime (the attestation service client, Txmgr.Send) are exempt.
+// timeout regime (the attestation service client, Txmgr.Send, batchAuthenticatorReader)
+// are exempt.
 func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }
@@ -292,18 +293,22 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 // batcher honors it only once fallback auth is required (pre-fork it must run
 // as a vanilla upstream Optimism batcher with no BatchAuthenticator coupling).
 // Fails closed: if either gate cannot be evaluated, publishing is skipped for
-// this tick and retried on the next.
+// this tick and retried on the next. Those failures are throttled like the skip
+// branches in isBatcherActive: a fallback batcher started before the
+// BatchAuthenticator is deployed fails the reader's deployment probe on every
+// publish until the contract appears.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
-	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+	if l.batchAuth == nil {
 		return false
 	}
 	consultActiveFlag := l.Config.Espresso.Enabled
 	if !consultActiveFlag {
 		fallbackAuthRequired, err := l.isFallbackAuthRequired(ctx)
 		if err != nil {
-			l.Log.Warn("Failed to evaluate fallback-auth gate, skipping publish", "err", err)
+			l.degradedLog.Warn(l.Log, "fallbackAuthGateErr", "Failed to evaluate fallback-auth gate, skipping publish", "err", err)
 			return true
 		}
+		l.degradedLog.Clear(l.Log, "fallbackAuthGateErr", "Fallback-auth gate evaluation recovered")
 		consultActiveFlag = fallbackAuthRequired
 	}
 	if !consultActiveFlag {
@@ -311,9 +316,10 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 	}
 	isActive, err := l.isBatcherActive(ctx)
 	if err != nil {
-		l.Log.Warn("Failed to check if batcher is active, skipping publish", "err", err)
+		l.degradedLog.Warn(l.Log, "activeCheckErr", "Failed to check if batcher is active, skipping publish", "err", err)
 		return true
 	}
+	l.degradedLog.Clear(l.Log, "activeCheckErr", "Active-batcher check recovered")
 	return !isActive
 }
 

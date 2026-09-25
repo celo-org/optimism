@@ -2,13 +2,9 @@ package batcher
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-
-	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
-	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
 )
 
 // isBatcherActive checks if the current batcher is the active one by querying
@@ -22,88 +18,55 @@ import (
 //  2. Identity: once the mode matches, the configured sender key (Txmgr.From) must
 //     be the authorized batcher for that mode, otherwise every authenticateBatchInfo
 //     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
+//
+// publishStateToL1 evaluates this before each batch transaction it sends. Each
+// evaluation costs two eth_calls in either mode, on top of whatever
+// shouldSkipPublishForActiveSeq already spent reaching it. A batcher that is
+// not the active one takes a skip branch every time, so both warnings are
+// throttled.
 func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
-	// Check if contract code exists at the address
-	codeCtx, codeCancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
-	defer codeCancel()
-	code, err := l.L1Client.CodeAt(codeCtx, l.RollupConfig.BatchAuthenticatorAddress, nil)
-	if err != nil {
-		return false, fmt.Errorf("failed to check code at BatchAuthenticator address: %w", err)
-	}
-	if len(code) == 0 {
-		return false, fmt.Errorf("no contract code at BatchAuthenticator address %s", l.RollupConfig.BatchAuthenticatorAddress.Hex())
+	if l.batchAuth == nil {
+		return false, errors.New("no BatchAuthenticator configured")
 	}
 
-	batchAuthenticator, err := batchauthenticator.NewBatchAuthenticator(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
+	activeIsEspresso, err := l.batchAuth.ActiveIsEspresso(ctx)
 	if err != nil {
-		return false, fmt.Errorf("failed to create BatchAuthenticator binding: %w", err)
-	}
-
-	cCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
-	defer cancel()
-
-	callOpts := &bind.CallOpts{Context: cCtx}
-
-	activeIsEspresso, err := batchAuthenticator.ActiveIsEspresso(callOpts)
-	if err != nil {
-		return false, fmt.Errorf("failed to check activeIsEspresso: %w", err)
+		return false, err
 	}
 
 	batcherAddr := l.Txmgr.From()
 
-	modeActive := (activeIsEspresso && l.Config.Espresso.Enabled) ||
-		(!activeIsEspresso && !l.Config.Espresso.Enabled)
-	if !modeActive {
-		l.Log.Warn("Batcher is not the active batcher, skipping publish",
+	if activeIsEspresso != l.Config.Espresso.Enabled {
+		l.degradedLog.Warn(l.Log, "batcherModeInactive", "Batcher is not the active batcher, skipping publish",
 			"batcherAddr", batcherAddr,
 			"activeIsEspresso", activeIsEspresso,
 			"EspressoEnabled", l.Config.Espresso.Enabled,
 		)
 		return false, nil
 	}
+	l.degradedLog.Clear(l.Log, "batcherModeInactive", "Batcher mode is active again")
 
 	// Our mode is active; make sure our sender key is the authorized batcher for it,
 	// otherwise every publish reverts (Unauthorized*Batcher) in a loop.
 	var expected common.Address
 	if activeIsEspresso {
-		expected, err = batchAuthenticator.EspressoBatcher(callOpts)
-		if err != nil {
-			return false, fmt.Errorf("failed to read espressoBatcher: %w", err)
-		}
+		expected, err = l.batchAuth.EspressoBatcher(ctx)
 	} else {
-		expected, err = l.fallbackBatcherAddr(batchAuthenticator, callOpts)
-		if err != nil {
-			return false, err
-		}
+		expected, err = l.batchAuth.FallbackBatcher(ctx)
+	}
+	if err != nil {
+		return false, err
 	}
 
 	if batcherAddr != expected {
-		l.Log.Warn("Configured batcher key is not the authorized batcher for the active mode, skipping publish",
+		l.degradedLog.Warn(l.Log, "batcherKeyUnauthorized", "Configured batcher key is not the authorized batcher for the active mode, skipping publish",
 			"batcherAddr", batcherAddr,
 			"expected", expected,
 			"activeIsEspresso", activeIsEspresso,
 		)
 		return false, nil
 	}
+	l.degradedLog.Clear(l.Log, "batcherKeyUnauthorized", "Configured batcher key is authorized again")
 
 	return true, nil
-}
-
-// fallbackBatcherAddr returns the address the BatchAuthenticator's fallback batcher
-func (l *BatchSubmitter) fallbackBatcherAddr(batchAuthenticator *batchauthenticator.BatchAuthenticator, opts *bind.CallOpts) (common.Address, error) {
-	systemConfigAddr, err := batchAuthenticator.SystemConfig(opts)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("failed to read systemConfig address: %w", err)
-	}
-	systemConfig, err := systemconfig.NewSystemConfigCaller(systemConfigAddr, l.L1Client)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("failed to create SystemConfig binding: %w", err)
-	}
-	batcherHash, err := systemConfig.BatcherHash(opts)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("failed to read batcherHash: %w", err)
-	}
-	// batcherHash stores the batcher address in its low 20 bytes,
-	// which is why we use bytes to address
-	return common.BytesToAddress(batcherHash[:]), nil
 }
