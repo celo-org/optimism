@@ -193,6 +193,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
 		return err
 	}
+	if err := bs.checkEspressoBatchAuthenticator(cfg); err != nil {
+		return err
+	}
 	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
 		return err
 	}
@@ -304,6 +307,23 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 		return fmt.Errorf("data availability type %q is not supported on chains with Espresso scheduled: "+
 			"batch data must be posted as calldata only (blob DA is dropped by post-Espresso derivation)",
 			cfg.DataAvailabilityType)
+	}
+	return nil
+}
+
+// checkEspressoBatchAuthenticator refuses to start an Espresso (TEE) batcher
+// on a chain with no BatchAuthenticator: without one it would sign and send
+// every authentication to the zero address, failing silently on each batch.
+//
+// The fallback batcher is exempt. Pre-fork it runs as a vanilla upstream
+// batcher, so a zero address there is legitimate.
+func (bs *BatcherService) checkEspressoBatchAuthenticator(cfg *CLIConfig) error {
+	if !cfg.Espresso.Enabled {
+		return nil
+	}
+	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+		return errors.New("--espresso.enabled requires a BatchAuthenticator, but the rollup config has none " +
+			"(BatchAuthenticatorAddress is zero)")
 	}
 	return nil
 }
