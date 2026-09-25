@@ -34,6 +34,9 @@ func TestIsURLAvailableLocal(t *testing.T) {
 }
 
 func TestIsURLAvailableNonLocal(t *testing.T) {
+	// Probe the targets directly: through a proxy the fake domains look reachable.
+	swapProxyResolver(t, noProxy)
+
 	if !IsURLAvailable(context.Background(), "http://example.com", defaultConnectTimeout) {
 		t.Skip("No internet connection found, skipping this test")
 	}
@@ -75,8 +78,6 @@ func TestIsURLAvailableProxy(t *testing.T) {
 	require.NoError(t, err)
 	unreachable := closed.Addr().String()
 	require.NoError(t, closed.Close())
-
-	noProxy := func(*http.Request) (*url.URL, error) { return nil, nil }
 
 	// proxyAt acts like http.ProxyFromEnvironment with HTTP_PROXY and
 	// HTTPS_PROXY set to addr: it returns the proxy for http and https URLs
@@ -127,6 +128,9 @@ func TestIsURLAvailableProxy(t *testing.T) {
 		})
 	}
 }
+
+// noProxy is a proxy resolver that never returns a proxy.
+func noProxy(*http.Request) (*url.URL, error) { return nil, nil }
 
 // swapProxyResolver replaces proxyForRequest until the test ends. Tests using
 // it must not run in parallel.
