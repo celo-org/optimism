@@ -1230,8 +1230,7 @@ func (l *BatchSubmitter) fetchBlock(ctx context.Context, blockNumber uint64) (*t
 // EspressoTEEVerifier address.
 func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) error {
 	if l.batchAuth == nil {
-		// If batcher authenticator address is nil, we will keep teeVerifierAddress to nil as well
-		return nil
+		return errors.New("no BatchAuthenticator configured")
 	}
 	addr, err := l.batchAuth.EspressoTEEVerifier(ctx)
 	if err != nil {
