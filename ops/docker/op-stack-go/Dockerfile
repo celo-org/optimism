@@ -317,11 +317,17 @@ RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/app/entrypoint.sh"]
 
 # Runs outside the enclave (published as op-batcher-tee).
+# enclave-tools shells out to `enclaver` on $PATH to build the EIF. The version here
+# MUST match the one the EIF is actually built with, since enclaver feeds PCR0: the
+# CI build pipeline (EspressoSystems/tee-image-builder) pins v0.5.0.
 FROM $ENCLAVE_BASE_IMAGE AS op-batcher-enclave-target
-ARG ENCLAVER_VERSION=v0.6.1
+ARG ENCLAVER_VERSION=v0.5.0
+ARG ENCLAVER_SHA256=c1a09f9dc4c687bf321bbfa0cf42451a3b1618457e21c39498884cd3bce0b3e3
 RUN apk add --no-cache libgcc docker curl
-RUN curl -L "https://github.com/enclaver-io/enclaver/releases/download/${ENCLAVER_VERSION}/enclaver-linux-x86_64-${ENCLAVER_VERSION}.tar.gz" \
-  | tar xz --strip-components=1 -C /usr/local/bin "enclaver-linux-x86_64-${ENCLAVER_VERSION}/enclaver"
+RUN curl -fsSL "https://github.com/enclaver-io/enclaver/releases/download/${ENCLAVER_VERSION}/enclaver-linux-x86_64-${ENCLAVER_VERSION}.tar.gz" -o /tmp/enclaver.tar.gz \
+  && echo "${ENCLAVER_SHA256}  /tmp/enclaver.tar.gz" | sha256sum -c \
+  && tar xz --strip-components=1 -C /usr/local/bin "enclaver-linux-x86_64-${ENCLAVER_VERSION}/enclaver" < /tmp/enclaver.tar.gz \
+  && rm -f /tmp/enclaver.tar.gz
 COPY --from=enclave-tools-builder /app/op-batcher/bin/enclave-tools /usr/local/bin/
 CMD ["enclave-tools"]
 
