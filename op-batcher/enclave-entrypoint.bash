@@ -234,6 +234,17 @@ done
 # Combine all arguments
 all_args=("${filtered_args[@]}" "${url_args[@]}")
 
+# Expose Prometheus metrics on 0.0.0.0:7300 so the enclaver ingress (MetricsPort in
+# enclave-tools/enclaver.go) can bridge them to the parent. Must bind to 0.0.0.0, not
+# localhost, or the ingress cannot reach the endpoint. Skip if the caller already set it.
+metrics_already_set=false
+for arg in "${all_args[@]}"; do
+    case "$arg" in --metrics.enabled*) metrics_already_set=true; break;; esac
+done
+if ! $metrics_already_set; then
+    all_args+=(--metrics.enabled --metrics.addr=0.0.0.0 --metrics.port=7300)
+fi
+
 echo ""
 echo "=== Final op-batcher arguments ==="
 echo "Total arguments: ${#all_args[@]}"
