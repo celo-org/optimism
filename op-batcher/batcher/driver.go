@@ -8,7 +8,6 @@ import (
 	"math/big"
 	_ "net/http/pprof"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -141,7 +140,9 @@ type BatchSubmitter struct {
 
 	channelMgrMutex sync.Mutex // guards channelMgr and prevCurrentL1
 	channelMgr      *channelManager
-	prevCurrentL1   eth.L1BlockRef // cached CurrentL1 from the last syncStatus
+
+	espressoStreamerMutex sync.Mutex     // guards espressoStreamer's position
+	prevCurrentL1         eth.L1BlockRef // cached CurrentL1 from the last syncStatus
 
 	throttleController *throttler.ThrottleController
 
@@ -158,9 +159,6 @@ type BatchSubmitter struct {
 
 	espressoSubmitter *espressoTransactionSubmitter
 	espressoStreamer  *espressoStreamers.Streamer
-
-	// clearStateRequested asks the espresso batch loading loop to run clearState
-	clearStateRequested atomic.Bool
 
 	teeVerifierAddress common.Address
 
@@ -904,6 +902,10 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 			return false
 		}
 		l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
+		// Streamer is locked before the channelMgr, everywhere both are held
+		// so they can't deadlock.
+		l.espressoStreamerMutex.Lock()
+		defer l.espressoStreamerMutex.Unlock()
 		l.channelMgrMutex.Lock()
 		defer l.channelMgrMutex.Unlock()
 		l.channelMgr.Clear(l1SafeOrigin)
