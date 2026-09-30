@@ -154,19 +154,15 @@ func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context
 // endpoints that no longer serve the (ever aging) configured height and would wedge
 // restarts. --espresso.origin-height-espresso keeps its role: it decides where the
 // streamer starts polling HotShot.
-func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
-	if !l.Config.Espresso.Enabled {
-		return nil
-	}
-
+func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) (*espressoStreamers.Streamer, error) {
 	anchor, err := l.waitForLocalSafeHead(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	ethClient, err := l.EndpointProvider.EthClient(ctx)
 	if err != nil {
-		return fmt.Errorf("getting the L2 eth client for the Espresso streamer: %w", err)
+		return nil, fmt.Errorf("getting the L2 eth client for the Espresso streamer: %w", err)
 	}
 
 	// Convert typed nil pointer to untyped nil interface to avoid typed-nil interface panic
@@ -196,15 +192,14 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 		anchor.Number,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create Espresso streamer: %w", err)
+		return nil, fmt.Errorf("failed to create Espresso streamer: %w", err)
 	}
-	l.espressoStreamer = streamer
 
 	// Re-anchor on the exact ref we resolved: NewStreamer resolved a hash for the
 	// same height, but the sync status is the authoritative view.
 	streamer.SetBatchPosition(anchor)
 	l.Log.Info("Anchored the Espresso streamer at the local-safe L2 head", "anchor", anchor)
-	return nil
+	return streamer, nil
 }
 
 const (
@@ -271,34 +266,48 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 	}
 }
 
+// espressoSession is the Espresso state owned by one StartBatchSubmitting run.
+// It is built in full before being published to l.espresso, and dropped as a
+// whole on stop, so a partially built or stale session is unrepresentable.
+type espressoSession struct {
+	streamer  *espressoStreamers.Streamer
+	submitter *espressoTransactionSubmitter
+	// teeVerifierAddress is the EIP-712 verifying contract for batch
+	// commitments; zero when no BatchAuthenticator is configured.
+	teeVerifierAddress common.Address
+}
+
 // rollbackFailedStart undoes the startup state set at the top of StartBatchSubmitting
 // (running flag, shutdown/kill contexts) so a failed start does not wedge later
-// attempts behind "batcher is already running". Cancelling shutdownCtx also winds down
-// the streamer's poll loops if they were started, and Stop waits for them; a streamer
-// that was constructed but never started makes Stop a no-op. Only the Espresso setup
-// error paths roll back: the upstream error paths (waitForL2Genesis, waitNodeSync)
-// deliberately keep upstream's behavior. Caller must hold l.mutex.
+// attempts behind "batcher is already running". A failed start never publishes an
+// Espresso session, so there is none to drop here; the caller stops the streamer it
+// constructed. Only the Espresso setup error paths roll back: the upstream error paths
+// (waitForL2Genesis, waitNodeSync) deliberately keep upstream's behavior. Caller must
+// hold l.mutex.
 func (l *BatchSubmitter) rollbackFailedStart() {
 	l.cancelShutdownCtx()
 	l.cancelKillCtx()
-	l.stopEspressoStreamer()
 	l.running = false
 }
 
-func (l *BatchSubmitter) stopEspressoStreamer() {
-	if l.espressoStreamer == nil {
+// stopEspressoSession stops the session's streamer and drops the session, so the
+// next start reaches clearState session-free. Must run after l.wg.Wait(): every
+// reader of l.espresso runs on a goroutine tracked by l.wg.
+func (l *BatchSubmitter) stopEspressoSession() {
+	if l.espresso == nil {
 		return
 	}
-	l.espressoStreamer.Stop()
-	l.espressoStreamer = nil
+	l.espresso.streamer.Stop()
+	l.espresso = nil
 }
 
 // startEspressoLoops registers the batcher with the BatchAuthenticator
-// contract, resolves the TEE verifier address, spawns the Espresso transaction
-// submitter, and starts the four Espresso-specific batcher goroutines (in
-// addition to the upstream receiptsLoop and publishingLoop). Replaces the
-// upstream three-goroutine pattern when --espresso.enabled is set.
-func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo, unsafeBytesUpdated chan int64) error {
+// contract, resolves the TEE verifier address, starts the streamer, spawns the
+// Espresso transaction submitter, publishes the resulting session, and starts
+// the four Espresso-specific batcher goroutines (in addition to the upstream
+// receiptsLoop and publishingLoop). Replaces the upstream three-goroutine
+// pattern when --espresso.enabled is set.
+func (l *BatchSubmitter) startEspressoLoops(streamer *espressoStreamers.Streamer, receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo, unsafeBytesUpdated chan int64) error {
 	regCtx, cancelReg := context.WithTimeout(l.killCtx, espressoRegistrationTimeout)
 	defer cancelReg()
 	if err := l.registerBatcher(regCtx); err != nil {
@@ -306,7 +315,8 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	}
 
 	// Resolve the TEE verifier address from the BatchAuthenticator contract.
-	if err := l.resolveTEEVerifierAddress(l.killCtx); err != nil {
+	teeVerifierAddress, err := l.resolveTEEVerifierAddress(l.killCtx)
+	if err != nil {
 		return fmt.Errorf("could not resolve TEE verifier address: %w", err)
 	}
 
@@ -314,12 +324,12 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	// than being pumped by espressoBatchLoadingLoop. Bound to shutdownCtx so it stops
 	// fetching before the publish path winds down. Kept as the last setup step that
 	// can fail, so a setup error never has running poll loops to unwind
-	// (rollbackFailedStart would stop them anyway).
-	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
+	// (the caller would stop them anyway).
+	if err := streamer.Start(l.shutdownCtx); err != nil {
 		return fmt.Errorf("could not start the Espresso streamer: %w", err)
 	}
 
-	l.espressoSubmitter = NewEspressoTransactionSubmitter(
+	submitter := NewEspressoTransactionSubmitter(
 		WithContext(l.shutdownCtx),
 		WithWaitGroup(l.wg),
 		WithEspressoClient(l.Espresso.Client),
@@ -327,8 +337,15 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),
 	)
-	l.espressoSubmitter.SpawnWorkers(4, 4)
-	l.espressoSubmitter.Start()
+	submitter.SpawnWorkers(4, 4)
+	submitter.Start()
+
+	// Published before the loops that read it are spawned.
+	l.espresso = &espressoSession{
+		streamer:           streamer,
+		submitter:          submitter,
+		teeVerifierAddress: teeVerifierAddress,
+	}
 
 	l.wg.Add(4)
 	go l.receiptsLoop(l.wg, receiptsCh) // ranges over receiptsCh channel
@@ -382,9 +399,9 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 // LocalSafeL2: the caller must retry the whole clear rather than perform it
 // partially. Reports a nil target (and ok=true) when there is nothing to
 // re-anchor: --espresso.enabled unset, or the startup path, where clearState
-// runs before the streamer is constructed.
+// runs before the session is published.
 func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *eth.L2BlockRef, ok bool) {
-	if !l.Config.Espresso.Enabled || l.espressoStreamer == nil {
+	if !l.Config.Espresso.Enabled || l.espresso == nil {
 		return nil, true
 	}
 	syncStatus, err := l.getSyncStatus(ctx)

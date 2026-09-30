@@ -116,6 +116,10 @@ func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 func TestEspressoReanchorTarget(t *testing.T) {
 	newReanchorSubmitter := func(t *testing.T, enabled bool, streamer *espressoStreamers.Streamer) (*BatchSubmitter, *mockL2EndpointProvider) {
 		ep := newEndpointProvider()
+		var session *espressoSession
+		if streamer != nil {
+			session = &espressoSession{streamer: streamer}
+		}
 		return &BatchSubmitter{
 			DriverSetup: DriverSetup{
 				Log: testlog.Logger(t, log.LevelDebug),
@@ -125,7 +129,7 @@ func TestEspressoReanchorTarget(t *testing.T) {
 				},
 				EndpointProvider: ep,
 			},
-			espressoStreamer: streamer,
+			espresso: session,
 		}, ep
 	}
 

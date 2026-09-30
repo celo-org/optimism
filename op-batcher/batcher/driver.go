@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -156,13 +155,13 @@ type BatchSubmitter struct {
 	// final receiptsCh send.
 	authGroup sync.WaitGroup
 
-	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  *espressoStreamers.Streamer
+	// espresso holds the Espresso state owned by the current run. It is set only
+	// once a start has fully succeeded and nil'ed on stop, so no start ever sees a
+	// previous run's streamer, submitter or verifier address.
+	espresso *espressoSession
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
-
-	teeVerifierAddress common.Address
 
 	// degradedLog throttles repeated warnings from tick-driven loops so the
 	// log debouncer doesn't see the same message every poll interval.
@@ -235,12 +234,16 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	if l.Config.Espresso.Enabled {
 		// Constructed here rather than in NewBatchSubmitter: it performs an L2 lookup, so
 		// it has to run after waitForL2Genesis and needs a context to do it with.
-		if err := l.setupEspressoStreamer(l.shutdownCtx); err != nil {
+		streamer, err := l.setupEspressoStreamer(l.shutdownCtx)
+		if err != nil {
 			l.rollbackFailedStart()
 			return fmt.Errorf("could not set up the Espresso streamer: %w", err)
 		}
-		if err := l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
+		if err := l.startEspressoLoops(streamer, receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
 			l.rollbackFailedStart()
+			// Never published to l.espresso, so it is stopped here. A no-op
+			// unless Start ran; the cancelled shutdownCtx has already ended its loops.
+			streamer.Stop()
 			return err
 		}
 	} else {
@@ -325,7 +328,7 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.wg.Wait()
 	l.cancelKillCtx()
 
-	l.stopEspressoStreamer()
+	l.stopEspressoSession()
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil
@@ -912,7 +915,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		defer l.channelMgrMutex.Unlock()
 		l.channelMgr.Clear(l1SafeOrigin)
 		if reanchorTarget != nil {
-			l.espressoStreamer.SetBatchPosition(*reanchorTarget)
+			l.espresso.streamer.SetBatchPosition(*reanchorTarget)
 		}
 		return true
 	}
