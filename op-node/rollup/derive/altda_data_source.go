@@ -42,8 +42,10 @@ func (s *AltDADataSource) Next(ctx context.Context) (eth.Data, error) {
 	// there is not commitment in the current origin.
 	if err := s.fetcher.AdvanceL1Origin(ctx, s.l1, s.id.ID()); err != nil {
 		if errors.Is(err, altda.ErrReorgRequired) {
+			s.log.Warn("reorg required, resetting altDA L1 origin", "origin", s.id)
 			return nil, NewResetError(errors.New("new expired challenge"))
 		}
+		s.log.Warn("failed to advance altDA L1 origin", "err", err)
 		return nil, NewTemporaryError(fmt.Errorf("failed to advance altDA L1 origin: %w", err))
 	}
 
@@ -60,6 +62,7 @@ func (s *AltDADataSource) Next(ctx context.Context) (eth.Data, error) {
 		// If the tx data type is not altDA, we forward it downstream to let the next
 		// steps validate and potentially parse it as L1 DA inputs.
 		if data[0] != params.DerivationVersion1 {
+			s.log.Info("forwarding downstream non altDA data", "version_byte", data[0])
 			return data, nil
 		}
 
@@ -74,6 +77,8 @@ func (s *AltDADataSource) Next(ctx context.Context) (eth.Data, error) {
 	}
 	// use the commitment to fetch the input from the AltDA provider.
 	data, err := s.fetcher.GetInput(ctx, s.l1, s.comm, s.id)
+	var dropEigenDACommitmentError altda.DropEigenDACommitmentError
+	// ========================= vvv keccak commitment errors ===========================
 	// GetInput may call for a reorg if the pipeline is stalled and the AltDA manager
 	// continued syncing origins detached from the pipeline origin.
 	if errors.Is(err, altda.ErrReorgRequired) {
@@ -87,7 +92,7 @@ func (s *AltDADataSource) Next(ctx context.Context) (eth.Data, error) {
 		return s.Next(ctx)
 	} else if errors.Is(err, altda.ErrExpiredChallenge) {
 		// this commitment was challenged and the challenge expired.
-		s.log.Warn("challenge expired, skipping batch", "comm", s.comm)
+		s.log.Warn("challenge expired, skipping batch", "comm", s.comm, "err", err)
 		s.comm = nil
 		// skip the input
 		return s.Next(ctx)
@@ -96,6 +101,15 @@ func (s *AltDADataSource) Next(ctx context.Context) (eth.Data, error) {
 	} else if errors.Is(err, altda.ErrPendingChallenge) {
 		// continue stepping without slowing down.
 		return nil, NotEnoughData
+		// ========================= ^^^ keccak commitment errors ===========================
+		// ========================= vvv eigenDA commitment errors ===========================
+	} else if errors.As(err, &dropEigenDACommitmentError) {
+		// DropEigenDACommitmentError is the only error that can lead to a cert being dropped from the derivation pipeline.
+		// Any other error should be retried.
+		s.log.Warn("dropping invalid commitment", "comm", s.comm, "err", err)
+		s.comm = nil
+		return s.Next(ctx) // skip the input
+		// ========================= ^^^ eigenDA commitment errors ===========================
 	} else if err != nil {
 		// return temporary error so we can keep retrying.
 		return nil, NewTemporaryError(fmt.Errorf("failed to fetch input data with comm %s from da service: %w", s.comm, err))

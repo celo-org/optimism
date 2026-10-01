@@ -32,11 +32,12 @@ func TestDynamicEthChannelConfig_ChannelConfig(t *testing.T) {
 	calldataCfg := ChannelConfig{
 		MaxFrameSize:    120_000 - 1,
 		TargetNumFrames: 1,
+		DaType:          DaTypeCalldata,
 	}
 	blobCfg := ChannelConfig{
 		MaxFrameSize:    eth.MaxBlobDataSize - 1,
 		TargetNumFrames: 3, // gets closest to amortized fixed tx costs
-		UseBlobs:        true,
+		DaType:          DaTypeBlob,
 	}
 
 	// Since Pectra is now always active on L1, we only test with Pectra pricing (totalCostFloorPerToken = 10)

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math/big"
 	"net"
@@ -97,6 +98,7 @@ var (
 type SystemConfigOpts struct {
 	AllocType config.AllocType
 	L2ELKind  services.ELKind
+	LogLevel  slog.Level
 }
 
 type SystemConfigOpt func(s *SystemConfigOpts)
@@ -114,10 +116,17 @@ func WithL2ELKind(kind services.ELKind) SystemConfigOpt {
 	}
 }
 
+func WithLogLevel(level slog.Level) SystemConfigOpt {
+	return func(s *SystemConfigOpts) {
+		s.LogLevel = level
+	}
+}
+
 func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 	sco := &SystemConfigOpts{
 		AllocType: config.DefaultAllocType,
 		L2ELKind:  services.DefaultELKind(),
+		LogLevel:  slog.LevelInfo,
 	}
 	for _, opt := range opts {
 		opt(sco)
@@ -128,7 +137,7 @@ func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 	require.Nil(t, deployConfig.L2GenesisKarstTimeOffset, "karst not supported yet")
 	deployConfig.L1GenesisBlockTimestamp = hexutil.Uint64(time.Now().Unix())
 	e2eutils.ApplyDeployConfigForks(deployConfig)
-	require.NoError(t, deployConfig.Check(testlog.Logger(t, log.LevelInfo)),
+	require.NoError(t, deployConfig.Check(testlog.Logger(t, sco.LogLevel).New("role", "config-check")),
 		"Deploy config is invalid, do you need to run make devnet-allocs?")
 	l1Deployments := config.L1Deployments(sco.AllocType)
 	require.NoError(t, l1Deployments.Check(deployConfig))
@@ -191,11 +200,12 @@ func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 			},
 		},
 		Loggers: map[string]log.Logger{
-			RoleVerif:   testlog.Logger(t, log.LevelInfo).New("role", RoleVerif),
-			RoleSeq:     testlog.Logger(t, log.LevelInfo).New("role", RoleSeq),
-			"batcher":   testlog.Logger(t, log.LevelInfo).New("role", "batcher"),
-			"proposer":  testlog.Logger(t, log.LevelInfo).New("role", "proposer"),
-			"da-server": testlog.Logger(t, log.LevelInfo).New("role", "da-server"),
+			RoleVerif:      testlog.Logger(t, sco.LogLevel).New("role", RoleVerif),
+			RoleSeq:        testlog.Logger(t, sco.LogLevel).New("role", RoleSeq),
+			"batcher":      testlog.Logger(t, sco.LogLevel).New("role", "batcher"),
+			"proposer":     testlog.Logger(t, sco.LogLevel).New("role", "proposer"),
+			"da-server":    testlog.Logger(t, sco.LogLevel).New("role", "da-server"),
+			"config-check": testlog.Logger(t, sco.LogLevel).New("role", "config-check"),
 		},
 		GethOptions:                   map[string][]geth.GethOption{},
 		P2PTopology:                   nil, // no P2P connectivity by default
@@ -308,12 +318,10 @@ type SystemConfig struct {
 	// L1FinalizedDistance is the distance from the L1 head that L1 blocks will be artificially finalized on.
 	L1FinalizedDistance uint64
 
-	Premine        map[common.Address]*big.Int
-	Nodes          map[string]*config2.Config // Per node config. Don't use populate rollup.Config
-	Loggers        map[string]log.Logger
-	GethOptions    map[string][]geth.GethOption
-	ProposerLogger log.Logger
-	BatcherLogger  log.Logger
+	Premine     map[common.Address]*big.Int
+	Nodes       map[string]*config2.Config // Per node config. Don't use populate rollup.Config
+	Loggers     map[string]log.Logger
+	GethOptions map[string][]geth.GethOption
 
 	ExternalL2Shim string
 
@@ -633,7 +641,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		clk = sys.TimeTravelClock
 	}
 
-	if err := cfg.DeployConfig.Check(testlog.Logger(t, log.LevelInfo)); err != nil {
+	if err := cfg.DeployConfig.Check(cfg.Loggers["config-check"]); err != nil {
 		return nil, err
 	}
 
@@ -740,6 +748,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 			JovianTime:             cfg.DeployConfig.JovianTime(l2GenesisTime),
 			KarstTime:              cfg.DeployConfig.KarstTime(l2GenesisTime),
 			LagoonTime:             cfg.DeployConfig.LagoonTime(l2GenesisTime),
+			Cel2Time:               func() *uint64 { v := uint64(0); return &v }(),
 			AltDAConfig:            rollupAltDAConfig,
 			ChainOpConfig: &opparams.OptimismConfig{
 				EIP1559Elasticity:        cfg.DeployConfig.EIP1559Elasticity,
@@ -886,6 +895,24 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		}
 	}
 
+	// The altDACLIConfig is shared by the batcher and rollup nodes.
+	var altDACLIConfig altda.CLIConfig
+	if cfg.DeployConfig.UseAltDA {
+		fakeAltDAServer := altda.NewFakeDAServer("127.0.0.1", 0, sys.Cfg.Loggers["da-server"])
+		if err := fakeAltDAServer.Start(); err != nil {
+			return nil, fmt.Errorf("failed to start fake altDA server: %w", err)
+		}
+		sys.FakeAltDAServer = fakeAltDAServer
+
+		altDACLIConfig = altda.CLIConfig{
+			Enabled:               cfg.DeployConfig.UseAltDA,
+			DAServerURL:           fakeAltDAServer.HttpEndpoint(),
+			VerifyOnRead:          true,
+			GenericDA:             true,
+			MaxConcurrentRequests: cfg.BatcherMaxConcurrentDARequest,
+		}
+	}
+
 	// Rollup nodes
 
 	// Ensure we are looping through the nodes in alphabetical order
@@ -901,6 +928,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 			return nil, err
 		}
 		c.L1ChainConfig = l1Genesis.Config
+		c.AltDA = altDACLIConfig
 
 		if p, ok := p2pNodes[name]; ok {
 			c.P2P = p
@@ -997,22 +1025,6 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		batcherTargetNumFrames = 1
 	}
 
-	var batcherAltDACLIConfig altda.CLIConfig
-	if cfg.DeployConfig.UseAltDA {
-		fakeAltDAServer := altda.NewFakeDAServer("127.0.0.1", 0, sys.Cfg.Loggers["da-server"])
-		if err := fakeAltDAServer.Start(); err != nil {
-			return nil, fmt.Errorf("failed to start fake altDA server: %w", err)
-		}
-		sys.FakeAltDAServer = fakeAltDAServer
-
-		batcherAltDACLIConfig = altda.CLIConfig{
-			Enabled:               cfg.DeployConfig.UseAltDA,
-			DAServerURL:           fakeAltDAServer.HttpEndpoint(),
-			VerifyOnRead:          true,
-			GenericDA:             true,
-			MaxConcurrentRequests: cfg.BatcherMaxConcurrentDARequest,
-		}
-	}
 	batcherCLIConfig := &bss.CLIConfig{
 		L1EthRpc:                 sys.EthInstances[RoleL1].UserRPC().RPC(),
 		L2EthRpc:                 []string{sys.EthInstances[RoleSeq].UserRPC().RPC()},
@@ -1035,7 +1047,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		MaxBlocksPerSpanBatch: cfg.BatcherMaxBlocksPerSpanBatch,
 		DataAvailabilityType:  sys.Cfg.DataAvailabilityType,
 		CompressionAlgo:       derive.Zlib,
-		AltDA:                 batcherAltDACLIConfig,
+		AltDA:                 altDACLIConfig,
 	}
 
 	// Apply batcher cli modifications

@@ -279,6 +279,8 @@ func (btx *spanBatchTxs) recoverV(chainID *big.Int) error {
 		case optypes.PostExecTxType:
 			// PostExec txs are synthetic, unsigned, and chain-agnostic.
 			v = big.NewInt(0)
+		case types.CeloDynamicFeeTxV2Type:
+			v = big.NewInt(int64(bit))
 		default:
 			return fmt.Errorf("invalid tx type: %d", txType)
 		}
@@ -388,6 +390,8 @@ func convertVToYParity(v *big.Int, txType int) (uint, error) {
 			yParityBit = uint(bigs.Uint64Strict(v) - 27)
 		}
 	case types.AccessListTxType, types.DynamicFeeTxType, types.SetCodeTxType:
+		yParityBit = uint(bigs.Uint64Strict(v))
+	case types.CeloDynamicFeeTxV2Type:
 		yParityBit = uint(bigs.Uint64Strict(v))
 	default:
 		return 0, fmt.Errorf("invalid tx type: %d", txType)

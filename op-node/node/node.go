@@ -559,7 +559,10 @@ func initL2(ctx context.Context, cfg *config.Config, node *OpNode) (*sources.Eng
 	if cfg.AltDA.Enabled && err != nil {
 		return nil, nil, nil, fmt.Errorf("failed to get altDA config: %w", err)
 	}
-	altDA := altda.NewAltDA(node.log, cfg.AltDA, rpCfg, node.metrics.AltDAMetrics)
+	altDA, err := altda.NewAltDA(node.log, cfg.AltDA, rpCfg, node.metrics.AltDAMetrics)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create altDA: %w", err)
+	}
 	var safeDB closableSafeDB
 	if cfg.SafeDBPath != "" {
 		node.log.Info("Safe head database enabled", "path", cfg.SafeDBPath)
@@ -734,6 +737,47 @@ func initP2PSigner(ctx context.Context, cfg *config.Config, node *OpNode) (p2p.S
 }
 
 func (n *OpNode) Start(ctx context.Context) error {
+	// If n.cfg.Driver.SequencerUseFinalized is true, the sequencer uses only finalized L1 blocks
+	// for the L1 origin blocks. This is handled by finalized.finalized block fetcher which only
+	// returns blocks with number less than or equal to the finalized L1 block number which it
+	// retrieves from the SyncStatusTracker. OpNode calls eth.PollBlockChanges to periodically
+	// update the SyncStatusTracker with the latest safe and finalized L1 block heights but it does
+	// this with an interval of 1 epoch (≒ 6.4 minutes by default). This means the latest safe and
+	// finalized L1 block heights are not available immediately after startup until the first
+	// polling occurs. In some cases, this can cause the sequencer to get stuck because it fails to
+	// retrieve the next L1 block. To prevent this, fetch and initialize the latest safe and
+	// finalized L1 block references at startup.
+	if n.cfg.Driver.SequencerUseFinalized {
+		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second*20)
+		defer reqCancel()
+
+		finalizedRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Finalized)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Finalized, "err", err)
+		} else if finalizedRef != (eth.L1BlockRef{}) {
+			n.l2Driver.StatusTracker.OnL1Finalized(finalizedRef)
+			// It seems safe not to call the following methods that are also called by
+			// eth.PollBlockChanges when updating the finalized l1 block for the following reasons:
+			//
+			// Finalizer.OnL1Finalized – Stores the finalized L1, resets triedFinalizeAt, and emits
+			// TryFinalizeEvent. At startup, finalityData is empty (no L2 blocks have been derived
+			// yet), so tryFinalize() would be a no-op anyway.
+			//
+			// SyncDeriver.OnL1Finalized – Just
+			// calls RequestStep() to trigger derivation. But at the point of Start(), the driver
+			// hasn't started yet (l2Driver.Start() comes after this code), so this step request
+			// wouldn't do anything useful.
+		}
+
+		// TODO: See if we really need to set the safe head here, it is defintely not required for
+		// the finalized block fetcher, since that only handles finalized blocks.
+		safeRef, err := n.l1Source.L1BlockRefByLabel(reqCtx, eth.Safe)
+		if err != nil {
+			log.Warn("failed to fetch L1 block", "label", eth.Safe, "err", err)
+		} else if safeRef != (eth.L1BlockRef{}) {
+			n.l2Driver.StatusTracker.OnL1Safe(safeRef)
+		}
+	}
 	n.log.Info("Starting execution engine driver")
 	// start driving engine: sync blocks by deriving them from L1 and driving them into the engine
 	if err := n.l2Driver.Start(); err != nil {

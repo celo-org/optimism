@@ -4,7 +4,7 @@ version: 2.1
 # This file contains all Rust CI commands, parameterized jobs, crate-specific jobs, and workflows.
 
 orbs:
-  utils: ethereum-optimism/circleci-utils@1.0.31
+  utils: karlb/circleci-utils@1.0.27
   gcp-cli: circleci/gcp-cli@3.0.1
 
 parameters:
@@ -228,7 +228,7 @@ jobs:
         default: "just test-docs"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -261,7 +261,7 @@ jobs:
         default: "release"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -479,8 +479,8 @@ jobs:
       - run:
           name: Generate compact vectors from base
           command: |
-            # Use develop as the base branch
-            BASE_BRANCH="develop"
+            # Use the main branch as the base
+            BASE_BRANCH="celo-rebase-18"
             SUPERCHAIN_TAR="rust/op-reth/crates/chainspec/res/superchain-configs.tar"
 
             # `git checkout` switches between base and PR without touching the superchain-registry

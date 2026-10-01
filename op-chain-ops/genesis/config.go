@@ -369,6 +369,8 @@ type EIP1559DeployConfig struct {
 	EIP1559Denominator uint64 `json:"eip1559Denominator"`
 	// EIP1559DenominatorCanyon is the denominator of EIP1559 base fee market when Canyon is active.
 	EIP1559DenominatorCanyon uint64 `json:"eip1559DenominatorCanyon"`
+	// EIP1559BaseFeeFloor is the fixed floor for the EIP1559 base fee market.
+	EIP1559BaseFeeFloor uint64 `json:"eip1559BaseFeeFloor,omitempty"`
 }
 
 var _ ConfigChecker = (*EIP1559DeployConfig)(nil)
@@ -1177,6 +1179,7 @@ func (d *DeployConfig) RollupConfig(l1StartBlock *eth.BlockRef, l2GenesisBlockHa
 		KeepKarstUpgradeGas:    d.KeepKarstUpgradeGas,
 		AltDAConfig:            altDA,
 		ChainOpConfig:          chainOpConfig,
+		Cel2Time:               func() *uint64 { v := uint64(0); return &v }(),
 	}, nil
 }
 
@@ -1306,7 +1309,7 @@ func (d *L1Deployments) Check(deployConfig *DeployConfig) error {
 			(name == "OptimismPortal" || name == "L2OutputOracle" || name == "L2OutputOracleProxy") {
 			continue
 		}
-		if !deployConfig.UseAltDA &&
+		if (!deployConfig.UseAltDA || deployConfig.DACommitmentType == altda.GenericCommitmentString) &&
 			(name == "DataAvailabilityChallenge" ||
 				name == "DataAvailabilityChallengeProxy") {
 			continue

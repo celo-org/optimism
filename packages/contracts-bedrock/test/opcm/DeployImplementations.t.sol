@@ -207,7 +207,7 @@ contract DeployImplementations_Test is Test, FeatureFlags {
         );
         superchainConfigProxy = ISuperchainConfig(
             DeployUtils.create1({
-                _name: "Proxy",
+                _name: "src/universal/Proxy.sol:Proxy", // Espresso: disambiguate from OZ v5 proxy/Proxy.sol artifact
                 _args: DeployUtils.encodeConstructor(
                     abi.encodeCall(IProxy.__constructor__, (address(superchainProxyAdmin)))
                 )

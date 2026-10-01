@@ -19,12 +19,14 @@ const (
 )
 
 // DefaultELKind returns the L2 EL backend selected by the OP_E2E_L2_EL_KIND
-// environment variable, defaulting to op-reth. A non-empty but unrecognized
-// value panics rather than silently misconfiguring the suite.
+// environment variable, defaulting to op-geth: Celo's execution changes (e.g. base
+// fees routed to the FeeHandler) live in celo op-geth, while this repo's op-reth is
+// upstream's. A non-empty but unrecognized value panics rather than silently
+// misconfiguring the suite.
 func DefaultELKind() ELKind {
 	switch v := os.Getenv("OP_E2E_L2_EL_KIND"); v {
 	case "":
-		return ELKindOpReth
+		return ELKindOpGeth
 	case string(ELKindOpGeth):
 		return ELKindOpGeth
 	case string(ELKindOpReth):

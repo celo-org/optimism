@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/addresses"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -102,8 +103,18 @@ func (ef *EcotoneFees) ValidateTransaction(from *EOA, to *EOA, amount *big.Int) 
 	}
 }
 
+// baseFeeRecipientAddr returns the address that receives base fees.
+// On Celo (IsCel2), base fees are routed to the FeeHandler instead of BaseFeeVault.
+func (ef *EcotoneFees) baseFeeRecipientAddr() common.Address {
+	rc := ef.l2Network.inner.RollupConfig()
+	if rc.IsCel2(rc.Genesis.L2Time) {
+		return addresses.GetAddressesOrDefault(rc.L2ChainID, addresses.MainnetAddresses).FeeHandler
+	}
+	return predeploys.BaseFeeVaultAddr
+}
+
 func (ef *EcotoneFees) getVaultBalances(client apis.EthClient) VaultBalances {
-	baseFee := ef.getBalance(client, predeploys.BaseFeeVaultAddr)
+	baseFee := ef.getBalance(client, ef.baseFeeRecipientAddr())
 	l1Fee := ef.getBalance(client, predeploys.L1FeeVaultAddr)
 	sequencer := ef.getBalance(client, predeploys.SequencerFeeVaultAddr)
 	operator := ef.getBalance(client, predeploys.OperatorFeeVaultAddr)

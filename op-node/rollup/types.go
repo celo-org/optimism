@@ -45,6 +45,9 @@ var (
 	ErrChainIDsSame                  = errors.New("L1 and L2 chain IDs must be different")
 	ErrL1ChainIDNotPositive          = errors.New("L1 chain ID must be non-zero and positive")
 	ErrL2ChainIDNotPositive          = errors.New("L2 chain ID must be non-zero and positive")
+
+	ErrMissingBatchAuthenticatorAddress = errors.New("missing batch authenticator address when Espresso is enabled")
+	ErrEspressoBeforeEcotone            = errors.New("espresso_time must be greater than or equal to ecotone_time; Espresso batch authentication only runs on the post-ecotone blob data source")
 )
 
 type Genesis struct {
@@ -114,6 +117,7 @@ type Config struct {
 	// "Regolith" is the loose deposited rock that sits on top of Bedrock.
 	// Active if RegolithTime != nil && L2 block timestamp >= *RegolithTime, inactive otherwise.
 	RegolithTime *uint64 `json:"regolith_time,omitempty"`
+	Cel2Time     *uint64 `json:"cel2_time,omitempty"`
 
 	// CanyonTime sets the activation time of the Canyon network upgrade.
 	// Active if CanyonTime != nil && L2 block timestamp >= *CanyonTime, inactive otherwise.
@@ -192,6 +196,22 @@ type Config struct {
 	// This feature (de)activates by L1 origin timestamp, to keep a consistent L1 block info per L2
 	// epoch.
 	PectraBlobScheduleTime *uint64 `json:"pectra_blob_schedule_time,omitempty"`
+
+	// EspressoTime sets the activation time of the Espresso upgrade.
+	// Pre-fork, the derivation pipeline behaves exactly as upstream Optimism: batches are
+	// accepted based on the L1 transaction sender matching the SystemConfig batcher address.
+	// Post-fork, batches must be authenticated via BatchInfoAuthenticated events emitted by
+	// the BatchAuthenticator contract; sender-based authorization is rejected.
+	// EspressoTime is conceptually an L2-timestamp fork activation time, but the
+	// derivation pipeline gates on it by comparing against the L1 origin time of the
+	// enclosing L1 block (the L2 epoch's L1 origin), mirroring upstream's ecotoneTime
+	// treatment, to keep a consistent batch-authorization decision per L2 epoch.
+	// Active if EspressoTime != nil && the block's L1 origin time >= *EspressoTime.
+	EspressoTime *uint64 `json:"espresso_time,omitempty"`
+
+	// BatchAuthenticatorAddress is the L1 address of the BatchAuthenticator contract whose
+	// BatchInfoAuthenticated(bytes32,address) events the derivation pipeline scans post-Espresso.
+	BatchAuthenticatorAddress common.Address `json:"batch_authenticator_address,omitempty,omitzero"`
 }
 
 // ValidateL1Config checks L1 config variables for errors.
@@ -389,6 +409,23 @@ func (cfg *Config) Check() error {
 		return err
 	}
 
+	if cfg.EspressoTime != nil {
+		// When Espresso is enabled, batches must be authenticated via BatchInfoAuthenticated
+		// events emitted by the BatchAuthenticator contract, so a non-zero authenticator
+		// address is required.
+		if cfg.BatchAuthenticatorAddress == (common.Address{}) {
+			return ErrMissingBatchAuthenticatorAddress
+		}
+		// Espresso event-based batch authentication only runs on the post-ecotone blob data
+		// source. If espresso_time were scheduled before ecotone_time (or ecotone were never
+		// scheduled), blocks in the [espresso_time, ecotone_time) window would route to the
+		// pre-ecotone calldata source and silently fall back to sender-based authorization.
+		// Every real Celo chain sets ecotone_time = 0, so this only guards a misconfiguration.
+		if cfg.EcotoneTime == nil || *cfg.EspressoTime < *cfg.EcotoneTime {
+			return ErrEspressoBeforeEcotone
+		}
+	}
+
 	return nil
 }
 
@@ -560,6 +597,10 @@ func (c *Config) IsKarst(timestamp uint64) bool {
 // IsLagoon returns true if the Lagoon hardfork is active at or past the given timestamp.
 func (c *Config) IsLagoon(timestamp uint64) bool {
 	return c.IsForkActive(forks.Lagoon, timestamp)
+}
+
+func (c *Config) IsCel2(timestamp uint64) bool {
+	return c.Cel2Time != nil && timestamp >= *c.Cel2Time
 }
 
 func (c *Config) IsRegolithActivationBlock(l2BlockTime uint64) bool {
@@ -921,6 +962,7 @@ func (c *Config) LogDescription(log log.Logger, l2Chains map[string]string) {
 	if c.AltDAConfig != nil {
 		ctx = append(ctx, "alt_da", *c.AltDAConfig)
 	}
+	ctx = append(ctx, "cel2_time", fmtForkTimeOrUnset(c.Cel2Time))
 	log.Info("Rollup Config", ctx...)
 }
 
@@ -940,6 +982,10 @@ func (c *Config) forEachFork(callback func(name string, logName string, time *ui
 	callback("Jovian", "jovian_time", c.JovianTime)
 	callback("Karst", "karst_time", c.KarstTime)
 	callback("Lagoon", "lagoon_time", c.LagoonTime)
+	if c.EspressoTime != nil {
+		// only report if config is set
+		callback("Espresso", "espresso_time", c.EspressoTime)
+	}
 }
 
 func (c *Config) ParseRollupConfig(in io.Reader) error {
