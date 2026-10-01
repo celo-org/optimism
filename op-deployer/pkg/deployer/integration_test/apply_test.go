@@ -898,6 +898,11 @@ func runEndToEndBootstrapAndApplyUpgradeTest(t *testing.T, afactsFS foundry.Stat
 
 			// Then test upgrade on the V2-deployed chain
 			t.Run("upgrade chain v2", func(t *testing.T) {
+				// TODO(ethereum-optimism/optimism#22934): Re-enable once the test handles U20 already applied.
+				// Live OP Sepolia's respectedGameType is SUPER_CANNON_KONA, which this config leaves disabled,
+				// so OPContractsManagerV2 reverts with InvalidGameConfigs. Real fix: upstream #22939 (OPCM v9 bump).
+				t.Skip("Test does not handle U20 already applied")
+
 				// FaultDisputeGameConfig just needs absolutePrestate (bytes32)
 				testPrestate := common.Hash{'P', 'R', 'E', 'S', 'T', 'A', 'T', 'E'}
 
