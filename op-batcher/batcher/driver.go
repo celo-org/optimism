@@ -155,9 +155,7 @@ type BatchSubmitter struct {
 	// final receiptsCh send.
 	authGroup sync.WaitGroup
 
-	// espresso holds the Espresso state owned by the current run. It is set only
-	// once a start has fully succeeded and nil'ed on stop, so no start ever sees a
-	// previous run's streamer, submitter or verifier address.
+	// espresso is the current run's Espresso session; nil when not running.
 	espresso *espressoSession
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
@@ -234,18 +232,13 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	if l.Config.Espresso.Enabled {
 		// Constructed here rather than in NewBatchSubmitter: it performs an L2 lookup, so
 		// it has to run after waitForL2Genesis and needs a context to do it with.
-		streamer, err := l.setupEspressoStreamer(l.shutdownCtx)
+		session, err := l.newEspressoSession()
 		if err != nil {
 			l.rollbackFailedStart()
-			return fmt.Errorf("could not set up the Espresso streamer: %w", err)
-		}
-		if err := l.startEspressoLoops(streamer, receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
-			l.rollbackFailedStart()
-			// Never published to l.espresso, so it is stopped here. A no-op
-			// unless Start ran; the cancelled shutdownCtx has already ended its loops.
-			streamer.Stop()
 			return err
 		}
+		l.espresso = session
+		l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated)
 	} else {
 		l.wg.Add(3)
 		go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
