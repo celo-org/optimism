@@ -114,37 +114,27 @@ func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 // the caller retry the whole clear instead of performing it partially, which
 // would leave an emptied channel manager with the streamer at its old cursor.
 func TestEspressoReanchorTarget(t *testing.T) {
-	newReanchorSubmitter := func(t *testing.T, enabled bool, streamer *espressoStreamers.Streamer) (*BatchSubmitter, *mockL2EndpointProvider) {
+	newReanchorSubmitter := func(t *testing.T, session *espressoSession) (*BatchSubmitter, *mockL2EndpointProvider) {
 		ep := newEndpointProvider()
 		return &BatchSubmitter{
 			DriverSetup: DriverSetup{
-				Log: testlog.Logger(t, log.LevelDebug),
-				Config: BatcherConfig{
-					NetworkTimeout: time.Second,
-					Espresso:       EspressoBatcherConfig{Enabled: enabled},
-				},
+				Log:              testlog.Logger(t, log.LevelDebug),
+				Config:           BatcherConfig{NetworkTimeout: time.Second},
 				EndpointProvider: ep,
 			},
-			espressoStreamer: streamer,
+			espresso: session,
 		}, ep
 	}
 
-	t.Run("espresso disabled needs no target", func(t *testing.T) {
-		l, _ := newReanchorSubmitter(t, false, nil)
-		target, ok := l.espressoReanchorTarget(t.Context())
-		require.True(t, ok)
-		require.Nil(t, target)
-	})
-
-	t.Run("startup before streamer construction needs no target", func(t *testing.T) {
-		l, _ := newReanchorSubmitter(t, true, nil)
+	t.Run("no session needs no target", func(t *testing.T) {
+		l, _ := newReanchorSubmitter(t, nil)
 		target, ok := l.espressoReanchorTarget(t.Context())
 		require.True(t, ok)
 		require.Nil(t, target)
 	})
 
 	t.Run("sync status failure blocks the clear", func(t *testing.T) {
-		l, ep := newReanchorSubmitter(t, true, &espressoStreamers.Streamer{})
+		l, ep := newReanchorSubmitter(t, &espressoSession{streamer: &espressoStreamers.Streamer{}})
 		ep.rollupClient.ExpectSyncStatus(nil, errors.New("transient RPC failure"))
 		target, ok := l.espressoReanchorTarget(t.Context())
 		require.False(t, ok)
@@ -152,7 +142,7 @@ func TestEspressoReanchorTarget(t *testing.T) {
 	})
 
 	t.Run("zeroed LocalSafeL2 blocks the clear", func(t *testing.T) {
-		l, ep := newReanchorSubmitter(t, true, &espressoStreamers.Streamer{})
+		l, ep := newReanchorSubmitter(t, &espressoSession{streamer: &espressoStreamers.Streamer{}})
 		ep.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
 			HeadL1: eth.L1BlockRef{Number: 5, Hash: common.Hash{0x01}},
 		}, nil)
@@ -162,7 +152,7 @@ func TestEspressoReanchorTarget(t *testing.T) {
 	})
 
 	t.Run("populated status yields the local-safe target", func(t *testing.T) {
-		l, ep := newReanchorSubmitter(t, true, &espressoStreamers.Streamer{})
+		l, ep := newReanchorSubmitter(t, &espressoSession{streamer: &espressoStreamers.Streamer{}})
 		localSafe := eth.L2BlockRef{Number: 104, Hash: common.Hash{0x03}}
 		ep.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
 			HeadL1:      eth.L1BlockRef{Number: 5, Hash: common.Hash{0x01}},

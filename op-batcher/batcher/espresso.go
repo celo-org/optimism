@@ -828,7 +828,7 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 	hash, _ := tagged_base64.New("TX", commitment[:])
 	l.Log.Info("Created Espresso transaction from batch", "hash", hash, "batchNr", bigs.Uint64Strict(espressoBatch.BatchHeader.Number))
 
-	if err := l.espressoSubmitter.SubmitTransaction(transaction); err != nil {
+	if err := l.espresso.submitter.SubmitTransaction(transaction); err != nil {
 		return fmt.Errorf("failed to submit job to espresso: %w", err)
 	}
 
@@ -854,7 +854,7 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 		// LocalSafeL2, matching the base computeSyncActions derived clearState from:
 		// the channel manager and the streamer must not be reset onto different heads.
 		// Always at or past the caffeination point: startup gates on that.
-		l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+		l.espresso.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 	} else {
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
@@ -921,7 +921,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				batch := l.espressoStreamer.Peek(ctx)
+				batch := l.espresso.streamer.Peek(ctx)
 				if batch == nil {
 					break
 				}
@@ -937,7 +937,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
 					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
 						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
-					l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+					l.espresso.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 					break
 				}
 
@@ -970,7 +970,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				l.espressoStreamer.AdvancePosition()
+				l.espresso.streamer.AdvancePosition()
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
 
 				// During a large drain, signal periodically so throttling can engage
@@ -1236,24 +1236,23 @@ func (l *BatchSubmitter) fetchBlock(ctx context.Context, blockNumber uint64) (*t
 
 // resolveTEEVerifierAddress queries the BatchAuthenticator contract to get the
 // EspressoTEEVerifier address.
-func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) error {
+func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) (common.Address, error) {
 	if l.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
-		// If batcher authenticator address is nil, we will keep teeVerifierAddress to nil as well
-		return nil
+		// If batcher authenticator address is nil, the TEE verifier address is zero as well
+		return common.Address{}, nil
 	}
 	auth, err := batchauthenticator.NewBatchAuthenticatorCaller(l.RollupConfig.BatchAuthenticatorAddress, l.L1Client)
 	if err != nil {
-		return fmt.Errorf("failed to create BatchAuthenticator caller: %w", err)
+		return common.Address{}, fmt.Errorf("failed to create BatchAuthenticator caller: %w", err)
 	}
 	callCtx, cancel := l.networkTimeoutCtx(ctx)
 	defer cancel()
 	addr, err := auth.EspressoTEEVerifier(&bind.CallOpts{Context: callCtx})
 	if err != nil {
-		return fmt.Errorf("failed to query EspressoTEEVerifier address: %w", err)
+		return common.Address{}, fmt.Errorf("failed to query EspressoTEEVerifier address: %w", err)
 	}
-	l.teeVerifierAddress = addr
 	l.Log.Info("Resolved TEE verifier address", "address", addr.Hex())
-	return nil
+	return addr, nil
 }
 
 func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
@@ -1436,7 +1435,7 @@ func (l *BatchSubmitter) signEIP712Commitment(commitment [32]byte) ([]byte, erro
 			Name:              "EspressoTEEVerifier",
 			Version:           "1",
 			ChainId:           (*math.HexOrDecimal256)(l.RollupConfig.L1ChainID),
-			VerifyingContract: l.teeVerifierAddress.String(),
+			VerifyingContract: l.espresso.teeVerifierAddress.String(),
 		},
 		Message: map[string]interface{}{
 			"commitment": commitment,
