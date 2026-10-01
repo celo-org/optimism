@@ -35,7 +35,7 @@ create_superchain_specs!(
     ("zora", "mainnet"),
     ("boba", "sepolia"),
     ("camp", "sepolia"),
-    ("celo-sep", "sepolia"),
+    ("celo", "sepolia"),
     ("cyber", "sepolia"),
     ("funki", "sepolia"),
     ("ink", "sepolia"),

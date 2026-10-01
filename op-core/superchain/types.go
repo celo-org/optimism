@@ -5,14 +5,11 @@ import (
 )
 
 type ChainConfig struct {
-	Name               string `toml:"name"`
-	PublicRPC          string `toml:"public_rpc"`
-	SequencerRPC       string `toml:"sequencer_rpc"`
-	Explorer           string `toml:"explorer"`
-	GovernedByOptimism bool   `toml:"governed_by_optimism"`
-	// SuperchainLevel is accepted for compatibility with celo's superchain-registry
-	// fork, which still carries the key upstream removed. The value is unused.
-	SuperchainLevel      *uint64      `toml:"superchain_level,omitempty"`
+	Name                 string       `toml:"name"`
+	PublicRPC            string       `toml:"public_rpc"`
+	SequencerRPC         string       `toml:"sequencer_rpc"`
+	Explorer             string       `toml:"explorer"`
+	GovernedByOptimism   bool         `toml:"governed_by_optimism"`
 	SuperchainTime       *uint64      `toml:"superchain_time"`
 	DataAvailabilityType string       `toml:"data_availability_type"`
 	DeploymentTxHash     *common.Hash `toml:"deployment_tx_hash"`
@@ -66,9 +63,6 @@ type HardforkConfig struct {
 	// Celo
 	Cel2Time     *uint64 `toml:"cel2_time,omitempty"`
 	EspressoTime *uint64 `toml:"espresso_time,omitempty"`
-	// InteropTime is accepted for compatibility with celo's superchain-registry fork,
-	// which still uses the pre-Lagoon fork name. The value is unused.
-	InteropTime *uint64 `toml:"interop_time,omitempty"`
 }
 
 // CeloConfig models the [celo] table in celo's superchain-registry fork.

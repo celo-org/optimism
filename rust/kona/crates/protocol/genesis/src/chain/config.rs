@@ -63,6 +63,10 @@ pub struct ChainConfig {
     /// will be inherited from the superchain-wide config.
     #[cfg_attr(feature = "serde", serde(rename = "SuperchainTime", alias = "superchain_time"))]
     pub superchain_time: Option<u64>,
+    /// Celo-specific chain parameters from celo's superchain-registry fork. Accepted for
+    /// compatibility; unused by the upstream kona derivation in this tree.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub celo: Option<CeloChainConfig>,
     /// Data availability type.
     #[cfg_attr(
         feature = "serde",
@@ -118,6 +122,17 @@ pub struct ChainConfig {
         serde(rename = "interop", default, skip_serializing_if = "Option::is_none")
     )]
     pub interop: Option<crate::InteropConfig>,
+}
+
+/// Celo-specific chain parameters (`[celo]` table in celo's superchain-registry fork).
+#[derive(Debug, Clone, Default, Hash, Eq, PartialEq)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+pub struct CeloChainConfig {
+    /// EIP-1559 base fee floor.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub eip1559_base_fee_floor: Option<u64>,
 }
 
 impl ChainConfig {

@@ -145,11 +145,6 @@ func requireAllHardforksSetCorrectly(t *testing.T, cfg rollup.Config, hardforkCf
 	cfgVal := reflect.ValueOf(&cfg).Elem()
 	for i := 0; i < hardforkVal.NumField(); i++ {
 		hardforkField := hardforkType.Field(i)
-		if hardforkField.Name == "InteropTime" {
-			// Compat-only key from celo's superchain-registry fork; deliberately unwired
-			// (upstream renamed the fork to Lagoon).
-			continue
-		}
 		cfgField := cfgVal.FieldByName(hardforkField.Name)
 		if hardforkField.Type.Kind() == reflect.Ptr {
 			require.Equalf(t, hardforkVal.Field(i).Elem(), cfgField.Elem(), "missing hard fork field %v", hardforkField.Name)

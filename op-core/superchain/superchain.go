@@ -14,11 +14,8 @@ type Superchain struct {
 	SuperchainConfigAddr   common.Address `toml:"superchain_config_addr"`
 	OpContractsManagerAddr common.Address `toml:"op_contracts_manager_addr"`
 	SaferSafesAddr         common.Address `toml:"safer_safes_addr"`
-	// ProtocolVersionsAddr is accepted for compatibility with celo's superchain-registry
-	// fork, which still carries the key upstream removed. The value is unused.
-	ProtocolVersionsAddr *common.Address `toml:"protocol_versions_addr,omitempty"`
-	Hardforks            HardforkConfig
-	L1                   L1Config
+	Hardforks              HardforkConfig
+	L1                     L1Config
 }
 
 type L1Config struct {

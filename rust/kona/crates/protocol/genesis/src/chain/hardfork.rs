@@ -88,6 +88,10 @@ pub struct HardForkConfig {
     /// otherwise.
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub lagoon_time: Option<u64>,
+    /// `cel2_time` is the Celo L2 transition time from celo's superchain-registry fork.
+    /// Accepted for compatibility; unused by the upstream kona derivation in this tree.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub cel2_time: Option<u64>,
 }
 
 impl Display for HardForkConfig {
@@ -252,6 +256,7 @@ mod tests {
             karst_time: None,
             keep_karst_upgrade_gas: false,
             lagoon_time: None,
+            cel2_time: None,
         };
 
         let deserialized: HardForkConfig = serde_json::from_str(raw).unwrap();
@@ -301,6 +306,7 @@ mod tests {
             karst_time: None,
             keep_karst_upgrade_gas: false,
             lagoon_time: None,
+            cel2_time: None,
         };
 
         let deserialized: HardForkConfig = toml::from_str(raw).unwrap();
@@ -337,6 +343,7 @@ mod tests {
             karst_time: Some(11),
             keep_karst_upgrade_gas: false,
             lagoon_time: Some(12),
+            cel2_time: None,
         };
 
         let mut iter = hardforks.iter();
