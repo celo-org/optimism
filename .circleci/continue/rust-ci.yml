@@ -1008,6 +1008,8 @@ workflows:
   # ==========================================================================
   rust-ci-gate-short:
     when: << pipeline.parameters.c-run_rust_ci_gate_short >>
+    # celo: Spot-preemption retries, see the main workflow in main.yml.
+    max_auto_reruns: 2
     jobs:
       - rust-ci-cargo-tests:
           name: rust-tests
