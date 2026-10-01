@@ -1,0 +1,9 @@
+# Allowlist-based dockerignore for espresso l1-geth builds.
+# This Dockerfile doesn't build Go code from the monorepo — it only copies
+# config files and deployment artifacts. Almost everything can be excluded.
+*
+
+!/espresso/docker/l1-geth
+
+# espresso/deployment is runtime-generated and no longer baked into the image;
+# services mount it via docker-compose volumes instead.

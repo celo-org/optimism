@@ -1,0 +1,143 @@
+name: TEE batcher upgrade
+
+on:
+  pull_request:
+    paths:
+      - "espresso/**"
+      - "op-batcher/**"
+      - "op-node/**"
+      - "op-service/**"
+      - "packages/contracts-bedrock/**"
+      - ".github/workflows/tee-batcher-upgrade.yaml"
+  workflow_dispatch:
+    inputs:
+      base-ref:
+        description: Branch to build the pre-upgrade batcher from
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: tee-batcher-upgrade-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  start-runner:
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.runner.outputs.label }}
+      instance-id: ${{ steps.runner.outputs.ec2-instance-id }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::324783324287:role/github-optimism-espresso-integration-access
+          role-duration-seconds: 10800
+          aws-region: us-east-2
+      - id: runner
+        uses: EspressoSystems/ec2-github-runner@v2-enclave
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0d259f3ae020af5f9
+          ec2-instance-type: m6a.2xlarge
+          subnet-id: ${{ secrets.AWS_EC2_SUBNET_ID }}
+          security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP_ID }}
+          enclave-options: true
+          ec2-volume-size: 100
+          ec2-volume-type: gp3
+          run-runner-as-user: ec2-user
+          startup-timeout-minutes: 10
+          pre-runner-script: |
+            sudo shutdown -h +110
+            sudo dnf install -y libicu
+            sudo systemctl stop nitro-enclaves-allocator.service || true
+            echo -e '---\nmemory_mib: 4096\ncpu_count: 2' | sudo tee /etc/nitro_enclaves/allocator.yaml
+            sudo systemctl start nitro-enclaves-allocator.service
+
+  test-upgrade:
+    needs: start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    timeout-minutes: 100
+    env:
+      BASE_REF: ${{ github.event.pull_request.base.ref || inputs.base-ref }}
+      ESPRESSO_RUN_ENCLAVE_TESTS: "true"
+      TEE_BATCHER_APP_IMAGE: op-batcher-enclave-app:base
+      TEE_BATCHER_UPGRADE_IMAGE: op-batcher-enclave-app:candidate
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Docker
+        run: |
+          sudo systemctl enable --now docker
+          sudo chown ec2-user /var/run/docker.sock
+          sudo mkdir -p /usr/libexec/docker/cli-plugins
+          sudo curl -SL https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64 \
+            -o /usr/libexec/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+
+      - name: Set up target branch
+        run: |
+          git fetch --depth=1 origin "$BASE_REF"
+          git worktree add --detach "$RUNNER_TEMP/tee-upgrade-base" FETCH_HEAD
+          mkdir -p "$RUNNER_TEMP/tee-upgrade-base/espresso/docker/op-stack"
+          cp espresso/docker/op-stack/Dockerfile "$RUNNER_TEMP/tee-upgrade-base/espresso/docker/op-stack/Dockerfile"
+          cp op-batcher/enclave-entrypoint.bash "$RUNNER_TEMP/tee-upgrade-base/op-batcher/enclave-entrypoint.bash"
+
+      - name: Build target and candidate batcher images
+        run: |
+          docker build \
+            --target op-batcher-enclave-app \
+            --tag "$TEE_BATCHER_APP_IMAGE" \
+            --file "$RUNNER_TEMP/tee-upgrade-base/espresso/docker/op-stack/Dockerfile" \
+            "$RUNNER_TEMP/tee-upgrade-base"
+          docker build \
+            --target op-batcher-enclave-app \
+            --tag "$TEE_BATCHER_UPGRADE_IMAGE" \
+            --file espresso/docker/op-stack/Dockerfile \
+            .
+
+      - name: Prepare devnet
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          export NIX_CONFIG="extra-experimental-features = nix-command flakes"
+          nix develop --command just build-contracts
+          nix develop --command bash -c '
+            cd op-deployer
+            just
+            export PATH="$PATH:$PWD/bin"
+            cd ../espresso
+            ./scripts/prepare-allocs.sh
+          '
+          cd espresso
+          TEE_BATCHER_APP_IMAGE="$TEE_BATCHER_UPGRADE_IMAGE" COMPOSE_PROFILES=tee docker compose build
+          COMPOSE_PROFILES=tee docker compose pull --ignore-buildable
+
+      - name: Test target-to-candidate upgrade
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          export NIX_CONFIG="extra-experimental-features = nix-command flakes"
+          nix develop --command gotestsum --format github-actions -- \
+            -timeout 35m -p 1 -count 1 -run 'TestTEEBatcherUpgrade/tee' \
+            ./espresso/devnet-tests/...
+
+  stop-runner:
+    needs: [start-runner, test-upgrade]
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::324783324287:role/github-optimism-espresso-integration-access
+          role-duration-seconds: 10800
+          aws-region: us-east-2
+      - uses: EspressoSystems/ec2-github-runner@v2-enclave
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.instance-id }}

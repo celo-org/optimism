@@ -1,0 +1,22 @@
+services:
+  op-geth:
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:${OP_HTTP_PORT}" ]
+      interval: 3s
+      timeout: 2s
+      retries: 40
+    image: op-geth:espresso
+    pull_policy: never  # built by op-geth-sequencer
+    depends_on:
+      l2-genesis:
+        condition: service_completed_successfully
+      l1-anvil:
+        condition: service_healthy
+    volumes:
+      - ./deployment:/deployment:ro
+      - ./deployment/deployer:/deployer:ro
+      - l2-config:/config:ro
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT:?err}
+      OP_HTTP_PORT: ${OP_HTTP_PORT:?err}
+      OP_ENGINE_PORT: ${OP_ENGINE_PORT:?err}

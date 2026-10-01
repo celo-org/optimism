@@ -1,0 +1,47 @@
+# Allowlist-based dockerignore for espresso op-geth builds.
+# The op-geth Dockerfile needs Go source for op-deployer and geth builds,
+# plus espresso deployment artifacts and init scripts.
+*
+
+# Build system
+!/go.mod
+!/go.sum
+
+# Go source directories needed for op-deployer and geth builds
+!/cannon
+!/devnet-sdk
+!/espresso
+!/op-alt-da
+!/op-batcher
+!/op-chain-ops
+!/op-challenger
+!/op-conductor
+!/op-core
+!/op-deployer
+!/op-dispute-mon
+!/op-dripper
+!/op-e2e/e2eutils
+!/op-faucet
+!/op-interop-filter
+!/op-interop-mon
+!/op-node
+!/op-preimage
+!/op-program
+!/op-proposer
+!/op-service
+!/op-supernode
+!/op-supervisor
+!/op-test-sequencer
+!/op-validator
+!/op-wheel
+
+# Go package embedded in contracts-bedrock (imported by op-node)
+!/packages/contracts-bedrock/snapshots
+
+# Exclude build outputs and test fixtures from allowed dirs
+**/bin
+**/testdata
+**/tests
+
+# Exclude runtime-generated deployment artifacts (same rationale as op-stack).
+espresso/deployment

@@ -1,0 +1,791 @@
+# Espresso OP Integration Docker Setup
+# Trigger docker-images workflow
+
+###########################################################################################
+# WARNING: Keep Terraform in sync.                                                        #
+#                                                                                         #
+# Whenever changing any setting here, update the corresponding setting (if applicable) in #
+# https://github.com/espressosystems/tee-op-deploy, or create a ticket there.             #
+###########################################################################################
+
+services:
+  # Deployment directory init — ensure the bind-mount dirs exist with correct ownership.
+  l1-data-init:
+    image: busybox
+    command: >
+      sh -c '
+        mkdir -p /deployment/l1-config /deployment/deployer
+        chown -R ${U_ID:-1000}:${GID:-1000} /deployment
+        '
+    volumes:
+      - ./deployment:/deployment
+
+  # Anvil replaces l1-geth + lighthouse beacon + validator.
+  # It serves both EL JSON-RPC and a Beacon REST API on the same port,
+  # and provides offset-based finalization (finalized = head − 2 blocks
+  # with --slots-in-an-epoch 1).  This eliminates the ~110 s wait for
+  # real Casper FFG finality that the Lighthouse stack required.
+  l1-anvil:
+    depends_on:
+      l1-data-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "cast bn --rpc-url http://localhost:${L1_HTTP_PORT} > /dev/null 2>&1 || exit 1",
+        ]
+      interval: 3s
+      timeout: 2s
+      retries: 40
+    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        anvil \
+          --silent \
+          --host 0.0.0.0 \
+          --port ${L1_HTTP_PORT} \
+          --chain-id ${L1_CHAIN_ID} \
+          --block-time 3 \
+          --slots-in-an-epoch 1 \
+          --init /config/genesis.json \
+          --timestamp $$(date +%s) \
+          --disable-code-size-limit \
+          --base-fee 1000000000 \
+          --gas-limit 45000000
+    volumes:
+      - ./deployment/l1-config:/config:ro
+    ports:
+      - "${L1_HTTP_PORT}:${L1_HTTP_PORT}"
+
+  l2-rollup:
+    restart: on-failure
+    image: op-geth:espresso
+    pull_policy: never # built by op-geth-sequencer
+    environment:
+      - MODE=rollup
+      - L1_RPC=http://l1-anvil:${L1_HTTP_PORT:?err}
+      - OP_RPC=http://op-geth-sequencer:${OP_HTTP_PORT:?err}
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      op-geth-sequencer:
+        condition: service_healthy
+    volumes:
+      - l2-config:/config
+      - ./deployment/deployer:/deployer:ro
+
+  l2-genesis:
+    restart: on-failure
+    depends_on:
+      l1-data-init:
+        condition: service_completed_successfully
+      l1-anvil:
+        condition: service_healthy
+    image: op-geth:espresso
+    pull_policy: never # built by op-geth-sequencer
+    environment:
+      - MODE=genesis
+      - HOME=/tmp
+      - L1_RPC=http://l1-anvil:${L1_HTTP_PORT:?err}
+    volumes:
+      - l2-config:/config
+      - ./deployment/deployer:/deployer:ro
+
+  op-geth-sequencer:
+    extends:
+      file: docker-compose-op-geth.yml
+      service: op-geth
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-geth/Dockerfile
+    volumes:
+      - op-data-seq:/data
+    ports:
+      - "${OP_HTTP_PORT}:${OP_HTTP_PORT}"
+      - "${OP_ENGINE_PORT}:${OP_ENGINE_PORT}"
+
+  op-geth-verifier:
+    extends:
+      file: docker-compose-op-geth.yml
+      service: op-geth
+    volumes:
+      - op-data-verifier:/data
+    ports:
+      - "8547:${OP_HTTP_PORT}"
+      - "8553:${OP_ENGINE_PORT}"
+
+  op-geth-caff-node:
+    extends:
+      file: docker-compose-op-geth.yml
+      service: op-geth
+    volumes:
+      - op-data-caff-node:/data
+    ports:
+      - "8548:${OP_HTTP_PORT}"
+      - "8554:${OP_ENGINE_PORT}"
+
+  op-node-sequencer:
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-node-target
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${ROLLUP_PORT}"]
+      interval: 3s
+      timeout: 2s
+      retries: 40
+    image: op-node-sequencer:espresso
+    depends_on:
+      l2-rollup:
+        condition: service_completed_successfully
+      op-geth-sequencer:
+        condition: service_healthy
+      l1-anvil:
+        condition: service_healthy
+      eigenda-proxy:
+        condition: service_healthy
+    environment:
+      OP_NODE_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L1_BEACON: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L2_ENGINE_RPC: http://op-geth-sequencer:${OP_ENGINE_PORT}
+      OP_NODE_RPC_PORT: ${ROLLUP_PORT}
+      OP_NODE_SAFEDB_PATH: /data/safedb
+      OP_NODE_ALTDA_ENABLED: "true"
+      OP_NODE_ALTDA_DA_SERVICE: "true"
+      OP_NODE_ALTDA_VERIFY_ON_READ: "false"
+      OP_NODE_ALTDA_DA_SERVER: http://eigenda-proxy:3100
+      OP_NODE_ALTDA_MAX_CONCURRENT_DA_REQUESTS: "32"
+      OP_NODE_ALTDA_PUT_TIMEOUT: "30s"
+      OP_NODE_ALTDA_GET_TIMEOUT: "30s"
+    ports:
+      - "${ROLLUP_PORT}:${ROLLUP_PORT}"
+    volumes:
+      - l2-config:/config:ro
+      - /etc/localtime:/etc/localtime:ro
+      - op-node-seq:/data
+    command:
+      - op-node
+      - --l2.jwt-secret=/config/jwt.txt
+      - --rollup.config=/config/rollup.json
+      - --sequencer.enabled=true
+      - --sequencer.use-finalized=true
+      - --rpc.addr=0.0.0.0
+      - --l1.http-poll-interval=1s
+      - --l1.epoch-poll-interval=1s
+      - --l1.beacon.ignore
+      - --p2p.disable=true
+
+  op-node-verifier:
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-node-target
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${VERIFIER_PORT}"]
+      interval: 3s
+      timeout: 2s
+      retries: 40
+    image: op-node-verifier:espresso
+    depends_on:
+      l2-rollup:
+        condition: service_completed_successfully
+      op-geth-verifier:
+        condition: service_started
+      l1-anvil:
+        condition: service_healthy
+      eigenda-proxy:
+        condition: service_healthy
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L1_BEACON: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L2_ENGINE_RPC: http://op-geth-verifier:${OP_ENGINE_PORT}
+      OP_NODE_RPC_PORT: ${VERIFIER_PORT}
+      OP_NODE_ALTDA_ENABLED: "true"
+      OP_NODE_ALTDA_DA_SERVICE: "true"
+      OP_NODE_ALTDA_VERIFY_ON_READ: "false"
+      OP_NODE_ALTDA_DA_SERVER: http://eigenda-proxy:3100
+      OP_NODE_ALTDA_MAX_CONCURRENT_DA_REQUESTS: "32"
+      OP_NODE_ALTDA_PUT_TIMEOUT: "30s"
+      OP_NODE_ALTDA_GET_TIMEOUT: "30s"
+    ports:
+      - "${VERIFIER_PORT}:${VERIFIER_PORT}"
+    volumes:
+      - l2-config:/config:ro
+    command:
+      - op-node
+      - --l2.jwt-secret=/config/jwt.txt
+      - --rollup.config=/config/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --l1.http-poll-interval=1s
+      - --l1.epoch-poll-interval=1s
+      - --l1.beacon.ignore
+      - --p2p.disable=true
+
+  caff-node:
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-node-target
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${CAFF_PORT}"]
+      interval: 3s
+      timeout: 2s
+      retries: 40
+    image: caff-node:espresso
+    depends_on:
+      op-geth-caff-node:
+        condition: service_started
+      espresso-dev-node:
+        condition: service_started
+      l2-rollup:
+        condition: service_completed_successfully
+    environment:
+      OP_NODE_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L1_BEACON: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_L2_ENGINE_RPC: http://op-geth-caff-node:${OP_ENGINE_PORT}
+      OP_NODE_ESPRESSO_L1_URL: http://l1-anvil:${L1_HTTP_PORT}
+      OP_NODE_ESPRESSO_LIGHT_CLIENT_ADDR: "${ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS}"
+      OP_NODE_ESPRESSO_URLS: http://espresso-dev-node:${ESPRESSO_SEQUENCER_API_PORT},http://espresso-dev-node:${ESPRESSO_SEQUENCER_API_PORT}
+      OP_NODE_RPC_PORT: ${CAFF_PORT}
+    ports:
+      - "${CAFF_PORT}:${CAFF_PORT}"
+    volumes:
+      - l2-config:/config:ro
+    command:
+      - op-node
+      - --l2.jwt-secret=/config/jwt.txt
+      - --rollup.config=/config/rollup.json
+      - --rpc.addr=0.0.0.0
+      - --sequencer.enabled=false
+      - --espresso.enabled=true
+      - --espresso.light-client-addr=${ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS}
+      - --verifier.l1-confs=0
+      - --rollup.load-protocol-versions=false
+      - --rollup.halt=none
+      - --l1.trustrpc=true
+      - --rpc.enable-admin=true
+      - --espresso.poll-interval=500ms
+      - --p2p.disable=true
+      - --l1.http-poll-interval=1s
+      - --l1.epoch-poll-interval=1s
+      - --l1.beacon.ignore
+    restart: "no"
+
+  op-batcher:
+    profiles: ["default"]
+    image: op-batcher:espresso
+    pull_policy: never # built by op-batcher-fallback
+    # It is not necessary to specify all dependencies, but a good practice.
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      op-geth-sequencer:
+        condition: service_started
+      op-node-sequencer:
+        condition: service_started
+      espresso-dev-node:
+        condition: service_started
+      eigenda-proxy:
+        condition: service_healthy
+      l2-genesis:
+        condition: service_completed_successfully
+      attestation-service-zk:
+        condition: service_healthy
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_BATCHER_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_BATCHER_L2_ETH_RPC: http://op-geth-sequencer:${OP_HTTP_PORT}
+      OP_BATCHER_ROLLUP_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      OP_BATCHER_ESPRESSO_URLS: http://espresso-dev-node:${ESPRESSO_SEQUENCER_API_PORT},http://espresso-dev-node:${ESPRESSO_SEQUENCER_API_PORT}
+      OP_BATCHER_MAX_CHANNEL_DURATION: ${MAX_CHANNEL_DURATION:-32}
+      OP_BATCHER_MAX_PENDING_TX: ${MAX_PENDING_TX:-32}
+    volumes:
+      - ../packages/contracts-bedrock/lib/superchain-registry/ops/testdata/monorepo:/config
+    command:
+      - op-batcher
+      - --espresso.enabled=true
+      - --espresso.poll-interval=1s
+      - --espresso.espresso-attestation-service=http://attestation-service-zk:${ESPRESSO_ATTESTATION_VERIFIER_PORT}
+      - --espresso.light-client-addr=${ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS}
+      - --espresso.testing-batcher-private-key=${OP_TESTING_BATCHER_PRIVATE_KEY:-$OPERATOR_PRIVATE_KEY}
+      - --private-key=${OP_BATCHER_PRIVATE_KEY:-$ESPRESSO_BATCHER_PRIVATE_KEY}
+      - --throttle.unsafe-da-bytes-lower-threshold=0
+      - --max-channel-duration=2
+      - --target-num-frames=1
+      - --max-pending-tx=32
+      - --altda.enabled=true
+      - --altda.da-server=http://eigenda-proxy:3100
+      - --altda.da-service=true
+      - --altda.max-concurrent-da-requests=32
+      - --altda.put-timeout=30s
+      - --altda.get-timeout=30s
+      - --data-availability-type=calldata
+      - --rpc.enable-admin
+
+  op-batcher-fallback:
+    profiles: ["default", "tee"]
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-batcher-target
+    image: op-batcher:espresso
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      op-geth-sequencer:
+        condition: service_started
+      op-node-sequencer:
+        condition: service_started
+      l2-genesis:
+        condition: service_completed_successfully
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_BATCHER_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_BATCHER_L2_ETH_RPC: http://op-geth-sequencer:${OP_HTTP_PORT}
+      OP_BATCHER_ROLLUP_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      OP_BATCHER_MAX_CHANNEL_DURATION: ${MAX_CHANNEL_DURATION:-32}
+      OP_BATCHER_MAX_PENDING_TX: ${MAX_PENDING_TX:-32}
+    volumes:
+      - ../packages/contracts-bedrock/lib/superchain-registry/ops/testdata/monorepo:/config
+    command:
+      - op-batcher
+      - --espresso.enabled=false
+      - --private-key=${FALLBACK_BATCHER_PRIVATE_KEY}
+      - --throttle.unsafe-da-bytes-lower-threshold=0
+      - --max-channel-duration=2
+      - --target-num-frames=1
+      - --max-pending-tx=32
+      - --data-availability-type=calldata
+      - --rpc.enable-admin
+
+  # Inner app image that Enclaver wraps into the EIF.  Built once during
+  # `docker compose build` so the TEE batcher can skip the expensive
+  # rebuild-from-source step at runtime and jump straight to EIF conversion.
+  op-batcher-enclave-app:
+    profiles: ["tee"]
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-batcher-enclave-app
+    image: ${TEE_BATCHER_APP_IMAGE:-op-batcher-enclave-app:espresso}
+    # Build-only image. This service is not intended to be run as part of the devnet, but
+    # `docker compose up` will start it if it shares the active profile.
+    # Override the entrypoint so it doesn't execute the enclave batcher entrypoint script.
+    entrypoint: ["sh", "-c"]
+    command: ["true"]
+
+  op-batcher-tee:
+    profiles: ["tee"]
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-batcher-enclave-target
+    image: ${TEE_BATCHER_RUNNER_IMAGE:-op-batcher-tee:espresso}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "test -f /tmp/enclave-tools.pid && kill -0 $(cat /tmp/enclave-tools.pid) 2>/dev/null || exit 1",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      op-geth-sequencer:
+        condition: service_started
+      op-node-sequencer:
+        condition: service_started
+      espresso-dev-node:
+        condition: service_started
+      eigenda-proxy:
+        condition: service_healthy
+      l2-genesis:
+        condition: service_completed_successfully
+      attestation-service-zk:
+        condition: service_healthy
+    network_mode: "host"
+    env_file:
+      - ./.env
+    environment:
+      APP_IMAGE: ${TEE_BATCHER_APP_IMAGE:-op-batcher-enclave-app:espresso}
+      ESPRESSO_LIGHT_CLIENT_ADDR: ${ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS}
+      http_proxy: http://127.0.0.1:3128
+      HTTP_PROXY: http://127.0.0.1:3128
+      OPERATOR_PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY}
+      ENCLAVE_DEBUG: ${ENCLAVE_DEBUG:-false}
+      CONTAINER_MONITOR_INTERVAL: ${CONTAINER_MONITOR_INTERVAL:-1}
+      ENCLAVE_MEMORY_MB: ${ENCLAVE_MEMORY_MB:-4096}
+      ENCLAVE_CPU_COUNT: ${ENCLAVE_CPU_COUNT:-2}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+      - ./deployment:/app/deployment:ro
+    privileged: true
+    devices:
+      - /dev/nitro_enclaves:/dev/nitro_enclaves
+    restart: "no"
+    stop_grace_period: 30s
+    command:
+      - sh
+      - -c
+      - |
+        export DEPLOYMENT_MODE=local
+        export L1_RPC_URL="http://127.0.0.1:${L1_HTTP_PORT}"
+        export L2_RPC_URL="http://127.0.0.1:${OP_HTTP_PORT}"
+        export ROLLUP_RPC_URL="http://127.0.0.1:${ROLLUP_PORT}"
+        export ESPRESSO_URL1="http://127.0.0.1:${ESPRESSO_SEQUENCER_API_PORT}"
+        export ESPRESSO_ATTESTATION_SERVICE_URL="http://127.0.0.1:${ESPRESSO_ATTESTATION_VERIFIER_PORT}"
+        export EIGENDA_PROXY_URL="http://127.0.0.1:${EIGENDA_PROXY_PORT}"
+        exec /app/run-enclave.sh
+
+  # One-shot container that deploys OPSuccinctFaultDisputeGame contracts at runtime.
+  # Computes real vkeys + rollup config hash via fetch-fault-dispute-game-config,
+  # then deploys via forge script. Must complete before proposer/challenger start.
+  fdg-deployer:
+    profiles: ["default"]
+    image: ghcr.io/espressosystems/op-succinct/op-succinct-fdg-deployer-celo:sha-075e0fe
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      l2-rollup:
+        condition: service_completed_successfully
+      op-node-sequencer:
+        condition: service_healthy
+      op-geth-sequencer:
+        condition: service_healthy
+    volumes:
+      - ./deployment/deployer:/deployer:ro
+    env_file:
+      - ./deployment/deployer/succinct.env
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      L2_RPC: http://op-geth-sequencer:${OP_HTTP_PORT}
+      L2_NODE_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY}
+      GAME_TYPE: "42"
+      MAX_CHALLENGE_DURATION: "10"
+      MAX_PROVE_DURATION: "60"
+      FALLBACK_TIMEOUT_FP_SECS: "3600"
+      INITIAL_BOND_WEI: "1000000000000000"
+      CHALLENGER_BOND_WEI: "1000000000000000"
+      DISPUTE_GAME_FINALITY_DELAY_SECONDS: "6"
+      OP_SUCCINCT_MOCK: "true"
+      PERMISSIONLESS_MODE: "true"
+      ACTIVATE_CONTRACTS: "true"
+      CONFIGURE_CONTRACTS: "true"
+      STARTING_L2_BLOCK_NUMBER: "0"
+
+  # Legacy op-proposer (for non-succinct mode)
+  op-proposer:
+    profiles: ["legacy"]
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-proposer-target
+    image: op-proposer:espresso
+    depends_on:
+      l1-data-init:
+        condition: service_completed_successfully
+      l2-rollup:
+        condition: service_completed_successfully
+      op-node-sequencer:
+        condition: service_started
+      op-batcher:
+        condition: service_started
+    volumes:
+      - ../packages/contracts-bedrock/lib/superchain-registry/ops/testdata/monorepo:/config
+      - ./deployment/deployer:/deployer
+    environment:
+      OP_PROPOSER_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_PROPOSER_ROLLUP_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      OP_PROPOSER_PROPOSAL_INTERVAL: 6s
+      OP_PROPOSER_MNEMONIC: "test test test test test test test test test test test junk"
+      OP_PROPOSER_HD_PATH: "m/44'/60'/0'/0/1"
+      OP_PROPOSER_GAME_TYPE: "1"
+
+  # Succinct proposer for ZK fault proofs
+  succinct-proposer:
+    profiles: ["default"]
+    image: ghcr.io/espressosystems/op-succinct/op-succinct-lite-proposer-celo:sha-075e0fe
+    depends_on:
+      l1-data-init:
+        condition: service_completed_successfully
+      l2-rollup:
+        condition: service_completed_successfully
+      op-node-sequencer:
+        condition: service_started
+      op-batcher:
+        condition: service_started
+      eigenda-proxy:
+        condition: service_started
+      fdg-deployer:
+        condition: service_completed_successfully
+    volumes:
+      - ./deployment/deployer:/deployer:ro
+    env_file:
+      - ./deployment/deployer/succinct.env
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      L1_BEACON_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      L2_RPC: http://op-geth-sequencer:${OP_HTTP_PORT}
+      L2_NODE_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      PRIVATE_KEY: ${PROPOSER_PRIVATE_KEY}
+      GAME_TYPE: "42"
+      PROPOSAL_INTERVAL_IN_BLOCKS: "30"
+      FETCH_INTERVAL: "1"
+      MOCK_MODE: "true"
+      USE_SAFE_HEAD_FOR_PROPOSALS: "false"
+      RUST_LOG: info
+    restart: unless-stopped
+
+  op-proposer-tee:
+    profiles: ["tee"]
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-proposer-target
+    image: op-proposer-tee:espresso
+    depends_on:
+      l1-data-init:
+        condition: service_completed_successfully
+      l2-rollup:
+        condition: service_completed_successfully
+      op-node-sequencer:
+        condition: service_started
+      op-batcher-tee:
+        condition: service_started
+    volumes:
+      - ../packages/contracts-bedrock/lib/superchain-registry/ops/testdata/monorepo:/config
+      - ./deployment/deployer:/deployer
+    environment:
+      OP_PROPOSER_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_PROPOSER_ROLLUP_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      OP_PROPOSER_PROPOSAL_INTERVAL: 6s
+      OP_PROPOSER_MNEMONIC: "test test test test test test test test test test test junk"
+      OP_PROPOSER_HD_PATH: "m/44'/60'/0'/0/1"
+      OP_PROPOSER_GAME_TYPE: "1"
+
+  # Legacy op-challenger (for non-succinct mode)
+  op-challenger:
+    profiles: ["legacy"]
+    build:
+      context: ../
+      dockerfile: espresso/docker/op-stack/Dockerfile
+      target: op-challenger-target
+    image: op-challenger:espresso
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      op-node-sequencer:
+        condition: service_started
+      op-geth-sequencer:
+        condition: service_started
+    volumes:
+      - ./deployment/deployer:/deployer:ro
+      - l2-config:/config:ro
+      - op-data-challenger:/data
+    environment:
+      OP_CHALLENGER_L1_ETH_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      OP_CHALLENGER_L1_BEACON: http://l1-anvil:${L1_HTTP_PORT}
+      OP_CHALLENGER_ROLLUP_RPC: http://op-node-sequencer:${ROLLUP_PORT}
+      OP_CHALLENGER_L2_ETH_RPC: http://op-geth-sequencer:${OP_HTTP_PORT}
+      OP_CHALLENGER_MNEMONIC: "test test test test test test test test test test test junk"
+      OP_CHALLENGER_HD_PATH: "m/44'/60'/0'/0/1"
+      OP_CHALLENGER_DATADIR: /data
+      OP_CHALLENGER_CANNON_ROLLUP_CONFIG: /config/rollup.json
+      OP_CHALLENGER_CANNON_L2_GENESIS: /config/genesis.json
+      OP_CHALLENGER_TRACE_TYPE: permissioned
+
+  # Succinct challenger for ZK fault proofs
+  succinct-challenger:
+    profiles: ["default"]
+    image: ghcr.io/espressosystems/op-succinct/op-succinct-lite-challenger-celo:sha-075e0fe
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+      op-node-sequencer:
+        condition: service_started
+      op-geth-sequencer:
+        condition: service_started
+      op-node-verifier:
+        condition: service_started
+      op-geth-verifier:
+        condition: service_started
+      eigenda-proxy:
+        condition: service_started
+      fdg-deployer:
+        condition: service_completed_successfully
+    volumes:
+      - ./deployment/deployer:/deployer:ro
+    env_file:
+      - ./deployment/deployer/succinct.env
+    environment:
+      L1_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      L1_BEACON_RPC: http://l1-anvil:${L1_HTTP_PORT}
+      L2_RPC: http://op-geth-verifier:${OP_HTTP_PORT}
+      L2_NODE_RPC: http://op-node-verifier:${VERIFIER_PORT}
+      PRIVATE_KEY: ${OPERATOR_PRIVATE_KEY}
+      GAME_TYPE: "42"
+      FETCH_INTERVAL: "10"
+      MOCK_MODE: "true"
+      DISABLE_MONITOR_ONLY: "true"
+      RUST_LOG: info
+    restart: unless-stopped
+
+  eigenda-proxy:
+    image: ghcr.io/layr-labs/eigenda-proxy:2.2.1
+    platform: linux/amd64
+    ports:
+      - "${EIGENDA_PROXY_PORT}:3100"
+    environment:
+      # EIGENDA_PROXY_STORAGE_BACKENDS_TO_ENABLE: V2
+      # EIGENDA_PROXY_STORAGE_DISPERSAL_BACKEND: V2
+      # EIGENDA_PROXY_EIGENDA_V2_NETWORK: ${EIGENDA_PROXY_EIGENDA_V2_NETWORK:-sepolia_testnet}
+      EIGENDA_PROXY_MEMSTORE_ENABLED: ${EIGENDA_PROXY_MEMSTORE_ENABLED:-true}
+      EIGENDA_PROXY_MEMSTORE_EXPIRATION: ${EIGENDA_PROXY_MEMSTORE_EXPIRATION:-25m0s}
+      EIGENDA_PROXY_LOG_FORMAT: ${EIGENDA_PROXY_LOG_FORMAT:-text}
+      EIGENDA_PROXY_LOG_LEVEL: ${EIGENDA_PROXY_LOG_LEVEL:-INFO}
+
+      # PORT configuration
+      PORT: "3100"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 3100 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 240s
+    restart: unless-stopped
+
+  attestation-service-zk:
+    image: ${ESPRESSO_ATTESTATION_VERIFIER_DOCKER_IMAGE}
+    platform: linux/amd64
+    ports:
+      - "${ESPRESSO_ATTESTATION_VERIFIER_PORT}:${ESPRESSO_ATTESTATION_VERIFIER_PORT}"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "timeout 2 bash -c 'cat < /dev/null > /dev/tcp/localhost/${ESPRESSO_ATTESTATION_VERIFIER_PORT}' || exit 1",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 150s
+    env_file:
+      - ./.env
+    environment:
+      # This is a demo private key for tests, it doesnt contain any funds
+      NETWORK_PRIVATE_KEY: "${ESPRESSO_ATTESTATION_VERIFIER_NETWORK_PRIVATE_KEY}"
+      NETWORK_RPC_URL: "${ESPRESSO_ATTESTATION_VERIFIER_NETWORK_RPC_URL}"
+      SP1_PROVER: "${ESPRESSO_ATTESTATION_VERIFIER_SP1_PROVER}"
+      RPC_URL: "${ESPRESSO_ATTESTATION_VERIFIER_RPC_URL}"
+      NITRO_VERIFIER_ADDRESS: "${ESPRESSO_ATTESTATION_VERIFIER_NITRO_VERIFIER_ADDRESS}"
+      USE_DOCKER: "${ESPRESSO_ATTESTATION_VERIFIER_NETWORK_USE_DOCKER}"
+      SKIP_TIME_VALIDITY_CHECK: "${ESPRESSO_ATTESTATION_VERIFIER_SKIP_TIME_VALIDITY_CHECK}"
+      RUST_LOG: "${ESPRESSO_ATTESTATION_VERIFIER_RUST_LOG}"
+      HOST: "${ESPRESSO_ATTESTATION_VERIFIER_HOST}"
+      PORT: "${ESPRESSO_ATTESTATION_VERIFIER_PORT}"
+
+  espresso-dev-node:
+    image: ${ESPRESSO_DEV_NODE_IMAGE}
+    depends_on:
+      l1-anvil:
+        condition: service_healthy
+    ports:
+      - "${ESPRESSO_SEQUENCER_API_PORT}:${ESPRESSO_SEQUENCER_API_PORT}"
+      - "${ESPRESSO_DEV_NODE_PORT}:${ESPRESSO_DEV_NODE_PORT}"
+      - "${ESPRESSO_BUILDER_PORT}:${ESPRESSO_BUILDER_PORT}"
+    volumes:
+      - espresso-data:/data
+    env_file:
+      - ./.env
+    environment:
+      RUST_LOG: warn
+      ESPRESSO_DEV_NODE_L1_DEPLOYMENT: skip
+      RUST_BACKTRACE: 1
+      ESPRESSO_SEQUENCER_STORAGE_PATH: /data/espresso
+      ESPRESSO_L1_PROVIDER: http://l1-anvil:${L1_HTTP_PORT}
+      ESPRESSO_NODE_API_PORT: ${ESPRESSO_SEQUENCER_API_PORT}
+      ESPRESSO_DEPLOYER_ACCOUNT_INDEX: 0
+      ESPRESSO_DEV_NODE_EPOCH_HEIGHT: "4294967295"
+      ESPRESSO_ETH_MNEMONIC: "giant issue aisle success illegal bike spike question tent bar rely arctic volcano long crawl hungry vocal artwork sniff fantasy very lucky have athlete"
+      ESPRESSO_DEV_NODE_VERSION: "0.4"
+
+  blockscout-db:
+    profiles: ["default"]
+    image: postgres:14
+    restart: on-failure
+    environment:
+      POSTGRES_USER: blockscout
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: blockscout
+    volumes:
+      - blockscout-db-data:/var/lib/postgresql/data
+
+  blockscout:
+    profiles: ["default"]
+    image: ghcr.io/blockscout/blockscout@sha256:7659f168e4e2f6b73dd559ae5278fe96ba67bc2905ea01b57a814c68adf5a9dc
+    restart: always
+    depends_on:
+      blockscout-db:
+        condition: service_started
+      op-geth-sequencer:
+        condition: service_started
+    ports:
+      - "4000:4000"
+    command: >
+      sh -c "bin/blockscout eval \"Elixir.Explorer.ReleaseTasks.create_and_migrate()\" && bin/blockscout start"
+    environment:
+      ETHEREUM_JSONRPC_VARIANT: geth
+      ETHEREUM_JSONRPC_HTTP_URL: http://op-geth-caff-node:${OP_HTTP_PORT}
+      ETHEREUM_JSONRPC_WS_URL: ws://op-geth-caff-node:${OP_HTTP_PORT}
+      INDEXER_DISABLE_INTERNAL_TRANSACTIONS_FETCHER: "true"
+      INDEXER_DISABLE_PENDING_TRANSACTIONS_FETCHER: "true"
+      DATABASE_URL: postgresql://blockscout:password@blockscout-db:5432/blockscout?ssl=false
+      ECTO_USE_SSL: "false"
+      SECRET_KEY_BASE: "56NtB48ear7+wMSf0IQuWDAAazhpb31qyc7GiyspBP2vh7t5zlCsF5QDv76chXeN"
+      CHAIN_ID: "${L2_CHAIN_ID}"
+      API_V2_ENABLED: "true"
+      MIX_ENV: "prod"
+
+  blockscout-frontend:
+    profiles: ["default"]
+    image: ghcr.io/blockscout/frontend@sha256:4b69f44148414b55c6b8550bc3270c63c9f99e923d54ef0b307e762af6bac90a
+    restart: always
+    depends_on:
+      blockscout:
+        condition: service_started
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_APP_PROTOCOL: http
+      NEXT_PUBLIC_APP_HOST: localhost
+      NEXT_PUBLIC_APP_PORT: "3000"
+      NEXT_PUBLIC_APP_ENV: development
+      NEXT_PUBLIC_API_PROTOCOL: http
+      NEXT_PUBLIC_API_HOST: localhost
+      NEXT_PUBLIC_API_PORT: "4000"
+      NEXT_PUBLIC_API_WEBSOCKET_PROTOCOL: ws
+      NEXT_PUBLIC_API_BASE_PATH: "/"
+      NEXT_PUBLIC_NETWORK_ID: "${L2_CHAIN_ID}"
+      NEXT_PUBLIC_NETWORK_NAME: "Celo x Espresso (Caff node)"
+      NEXT_PUBLIC_NETWORK_RPC_URL: http://op-geth-caff-node:${OP_HTTP_PORT}
+      NEXT_PUBLIC_NETWORK_CURRENCY_NAME: Ether
+      NEXT_PUBLIC_NETWORK_CURRENCY_SYMBOL: ETH
+      NEXT_PUBLIC_NETWORK_CURRENCY_DECIMALS: "18"
+
+volumes:
+  l2-config:
+  op-data-seq:
+  op-data-verifier:
+  op-data-caff-node:
+  op-data-challenger:
+  op-node-seq:
+  espresso-data:
+  blockscout-db-data:
