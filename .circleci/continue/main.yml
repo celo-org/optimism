@@ -2485,6 +2485,9 @@ jobs:
 workflows:
   main:
     when: << pipeline.parameters.c-run_main >>
+    # celo: self-hosted runners are GKE Spot nodes; preemptions surface as infrastructure_fail.
+    # Auto "rerun from failed"; real failures also retry, so keep this low.
+    max_auto_reruns: 2
     jobs:
       - contracts-bedrock-build:
           name: contracts-bedrock-build
