@@ -1,0 +1,111 @@
+name: TEE batcher upgrade
+
+# TODO: add a pull_request trigger once the AWS role and EC2 runner secrets exist for this repo.
+on:
+  workflow_dispatch:
+    inputs:
+      base-ref:
+        description: Ref to build the pre-upgrade batcher from
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_ROLE_ARN: arn:aws:iam::324783324287:role/github-celo-optimism-access
+
+concurrency:
+  group: tee-batcher-upgrade-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  start-runner:
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.runner.outputs.label }}
+      instance-id: ${{ steps.runner.outputs.ec2-instance-id }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - id: runner
+        uses: EspressoSystems/ec2-github-runner@v2-enclave
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0d259f3ae020af5f9
+          ec2-instance-type: m6a.2xlarge
+          subnet-id: ${{ secrets.AWS_EC2_SUBNET_ID }}
+          security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP_ID }}
+          enclave-options: true
+          ec2-volume-size: 100
+          ec2-volume-type: gp3
+          run-runner-as-user: ec2-user
+          startup-timeout-minutes: 10
+          # Shutdown terminates the instance, in case stop-runner never runs.
+          pre-runner-script: |
+            sudo shutdown -h +90
+            sudo dnf install -y libicu
+
+  test-upgrade:
+    needs: start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    timeout-minutes: 75
+    env:
+      TEE_BATCHER_APP_IMAGE: op-batcher-enclave-app:base
+      TEE_BATCHER_UPGRADE_IMAGE: op-batcher-enclave-app:candidate
+    steps:
+      - name: Set up Docker, Nitro enclaves and enclaver
+        run: |
+          printf 'memory_mib: 4096\ncpu_count: 2\n' | sudo tee /etc/nitro_enclaves/allocator.yaml
+          sudo systemctl restart nitro-enclaves-allocator.service
+          sudo systemctl enable --now docker
+          sudo chown ec2-user /var/run/docker.sock
+          curl -sSfL https://github.com/enclaver-io/enclaver/releases/download/v0.6.1/enclaver-linux-x86_64-v0.6.1.tar.gz \
+            | sudo tar xz --strip-components=1 -C /usr/local/bin enclaver-linux-x86_64-v0.6.1/enclaver
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.base-ref }}
+          path: base
+
+      - name: Build base and candidate batcher images
+        run: |
+          docker build --target op-batcher-target --tag op-batcher:base --file base/ops/docker/op-stack-go/Dockerfile base
+          docker build --target op-batcher-target --tag op-batcher:candidate --file ops/docker/op-stack-go/Dockerfile .
+          docker build --build-arg OP_BATCHER_IMAGE=op-batcher:base --tag "$TEE_BATCHER_APP_IMAGE" \
+            --file espresso/enclave-tests/Dockerfile espresso/enclave-tests
+          docker build --build-arg OP_BATCHER_IMAGE=op-batcher:candidate --tag "$TEE_BATCHER_UPGRADE_IMAGE" \
+            --file espresso/enclave-tests/Dockerfile espresso/enclave-tests
+
+      - name: Build contracts and run upgrade test
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          nix --extra-experimental-features "nix-command flakes" develop --command bash -euc '
+            just build-contracts
+            gotestsum --format github-actions -- -timeout 45m -count 1 -run TestTEEBatcherUpgrade ./espresso/enclave-tests/
+          '
+
+  stop-runner:
+    needs: [start-runner, test-upgrade]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - uses: EspressoSystems/ec2-github-runner@v2-enclave
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.instance-id }}
