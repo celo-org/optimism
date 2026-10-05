@@ -453,7 +453,7 @@ func TestEspressoAuth_Calldata(t *testing.T) {
 
 	l := newAuthSubmitter(t)
 	l.RollupConfig.L1ChainID = big.NewInt(1)
-	l.teeVerifierAddress = common.HexToAddress("0x00000000000000000000000000000000000000bb")
+	l.espressoSession = &espressoSession{teeVerifierAddress: common.HexToAddress("0x00000000000000000000000000000000000000bb")}
 	l.Config.Espresso.BatcherPrivateKey = key
 
 	txdata := testAuthTxData()
@@ -499,7 +499,7 @@ func TestEspressoAuth_Calldata(t *testing.T) {
 			Name:              "EspressoTEEVerifier",
 			Version:           "1",
 			ChainId:           (*math.HexOrDecimal256)(l.RollupConfig.L1ChainID),
-			VerifyingContract: l.teeVerifierAddress.String(),
+			VerifyingContract: l.espressoSession.teeVerifierAddress.String(),
 		},
 		Message: map[string]interface{}{
 			"commitment": commitment,
