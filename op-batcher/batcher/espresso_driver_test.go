@@ -18,8 +18,8 @@ func TestStopBatchSubmittingDropsEspressoSession(t *testing.T) {
 	l.killCtx, l.cancelKillCtx = context.WithCancel(context.Background())
 	l.wg = &sync.WaitGroup{}
 	l.running = true
-	l.espresso = &espressoSession{streamer: &espressoStreamers.Streamer{}}
+	l.espressoSession = &espressoSession{streamer: &espressoStreamers.Streamer{}}
 
 	require.NoError(t, l.StopBatchSubmitting(context.Background()))
-	require.Nil(t, l.espresso)
+	require.Nil(t, l.espressoSession)
 }

@@ -267,7 +267,7 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 }
 
 // espressoSession is the Espresso state owned by one StartBatchSubmitting run.
-// It is built in full before being published to l.espresso, and dropped as a
+// It is built in full before being published to l.espressoSession, and dropped as a
 // whole on stop, so a partially built or stale session is unrepresentable.
 type espressoSession struct {
 	streamer  *espressoStreamers.Streamer
@@ -290,13 +290,13 @@ func (l *BatchSubmitter) rollbackFailedStart() {
 
 // stopEspressoSession stops the session's streamer and drops the session, so the
 // next start reaches clearState session-free. Must run after l.wg.Wait(): every
-// reader of l.espresso runs on a goroutine tracked by l.wg.
+// reader of l.espressoSession runs on a goroutine tracked by l.wg.
 func (l *BatchSubmitter) stopEspressoSession() {
-	if l.espresso == nil {
+	if l.espressoSession == nil {
 		return
 	}
-	l.espresso.streamer.Stop()
-	l.espresso = nil
+	l.espressoSession.streamer.Stop()
+	l.espressoSession = nil
 }
 
 // newEspressoSession builds the Espresso state for one run: it constructs the
@@ -349,7 +349,7 @@ func (l *BatchSubmitter) newEspressoSession() (*espressoSession, error) {
 
 // startEspressoLoops starts the four Espresso-specific batcher goroutines (in
 // addition to the upstream receiptsLoop and publishingLoop), which read
-// l.espresso. Replaces the upstream three-goroutine pattern when
+// l.espressoSession. Replaces the upstream three-goroutine pattern when
 // --espresso.enabled is set.
 func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRef], publishSignal chan pubInfo, unsafeBytesUpdated chan int64) {
 	l.wg.Add(4)
@@ -405,7 +405,7 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 // re-anchor: no session, as with --espresso.enabled unset or on the startup
 // path, where clearState runs before the session is published.
 func (l *BatchSubmitter) espressoReanchorTarget(ctx context.Context) (target *eth.L2BlockRef, ok bool) {
-	if l.espresso == nil {
+	if l.espressoSession == nil {
 		return nil, true
 	}
 	syncStatus, err := l.getSyncStatus(ctx)

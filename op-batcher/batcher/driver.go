@@ -155,8 +155,8 @@ type BatchSubmitter struct {
 	// final receiptsCh send.
 	authGroup sync.WaitGroup
 
-	// espresso is the current run's Espresso session; nil when not running.
-	espresso *espressoSession
+	// espressoSession is the current run's Espresso session; nil when not running.
+	espressoSession *espressoSession
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
@@ -237,7 +237,7 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 			l.rollbackFailedStart()
 			return err
 		}
-		l.espresso = session
+		l.espressoSession = session
 		l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated)
 	} else {
 		l.wg.Add(3)
@@ -908,7 +908,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		defer l.channelMgrMutex.Unlock()
 		l.channelMgr.Clear(l1SafeOrigin)
 		if reanchorTarget != nil {
-			l.espresso.streamer.SetBatchPosition(*reanchorTarget)
+			l.espressoSession.streamer.SetBatchPosition(*reanchorTarget)
 		}
 		return true
 	}

@@ -122,7 +122,7 @@ func TestEspressoReanchorTarget(t *testing.T) {
 				Config:           BatcherConfig{NetworkTimeout: time.Second},
 				EndpointProvider: ep,
 			},
-			espresso: session,
+			espressoSession: session,
 		}, ep
 	}
 
