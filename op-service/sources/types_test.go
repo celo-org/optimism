@@ -55,6 +55,43 @@ func TestBlockHeaderJSON(t *testing.T) {
 	}
 }
 
+func TestRPCHeaderAmsterdamFields(t *testing.T) {
+	zero := uint64(0)
+	slotNumber := uint64(123)
+	blockAccessListHash := common.HexToHash("0x1234")
+	hdr := &types.Header{
+		ParentHash:          common.HexToHash("0x01"),
+		UncleHash:           types.EmptyUncleHash,
+		Root:                common.HexToHash("0x02"),
+		TxHash:              types.EmptyTxsHash,
+		ReceiptHash:         types.EmptyReceiptsHash,
+		Difficulty:          big.NewInt(0),
+		Number:              big.NewInt(1234),
+		GasLimit:            30_000_000,
+		Time:                123456,
+		BaseFee:             big.NewInt(100),
+		WithdrawalsHash:     &types.EmptyWithdrawalsHash,
+		BlobGasUsed:         &zero,
+		ExcessBlobGas:       &zero,
+		ParentBeaconRoot:    &common.Hash{},
+		RequestsHash:        &types.EmptyRequestsHash,
+		BlockAccessListHash: &blockAccessListHash,
+		SlotNumber:          &slotNumber,
+	}
+	data, err := json.Marshal(hdr)
+	require.NoError(t, err)
+
+	var rpcHeader RPCHeader
+	require.NoError(t, json.Unmarshal(data, &rpcHeader))
+	require.Equal(t, hdr.BlockAccessListHash, rpcHeader.BlockAccessListHash)
+	require.Equal(t, hdr.SlotNumber, (*uint64)(rpcHeader.SlotNumber))
+	require.Equal(t, hdr.Hash(), rpcHeader.Hash)
+	require.Equal(t, hdr.Hash(), rpcHeader.computeBlockHash())
+	info, err := rpcHeader.Info(false, true)
+	require.NoError(t, err)
+	require.Equal(t, hdr.Hash(), info.Hash())
+}
+
 func TestBlockJSON(t *testing.T) {
 	blocksDir, err := blocksTestdata.ReadDir("testdata/data/blocks")
 	require.NoError(t, err)
