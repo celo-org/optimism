@@ -826,7 +826,7 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 	hash, _ := tagged_base64.New("TX", commitment[:])
 	l.Log.Info("Created Espresso transaction from batch", "hash", hash, "batchNr", bigs.Uint64Strict(espressoBatch.BatchHeader.Number))
 
-	if err := l.espresso.submitter.SubmitTransaction(transaction); err != nil {
+	if err := l.espressoSession.submitter.SubmitTransaction(transaction); err != nil {
 		return fmt.Errorf("failed to submit job to espresso: %w", err)
 	}
 
@@ -852,7 +852,7 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 		// LocalSafeL2, matching the base computeSyncActions derived clearState from:
 		// the channel manager and the streamer must not be reset onto different heads.
 		// Always at or past the caffeination point: startup gates on that.
-		l.espresso.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+		l.espressoSession.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 	} else {
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
@@ -919,7 +919,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				batch := l.espresso.streamer.Peek(ctx)
+				batch := l.espressoSession.streamer.Peek(ctx)
 				if batch == nil {
 					break
 				}
@@ -935,7 +935,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
 					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
 						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
-					l.espresso.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+					l.espressoSession.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 					break
 				}
 
@@ -968,7 +968,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				l.espresso.streamer.AdvancePosition()
+				l.espressoSession.streamer.AdvancePosition()
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
 
 				// During a large drain, signal periodically so throttling can engage
@@ -1423,7 +1423,7 @@ func (l *BatchSubmitter) signEIP712Commitment(commitment [32]byte) ([]byte, erro
 			Name:              "EspressoTEEVerifier",
 			Version:           "1",
 			ChainId:           (*math.HexOrDecimal256)(l.RollupConfig.L1ChainID),
-			VerifyingContract: l.espresso.teeVerifierAddress.String(),
+			VerifyingContract: l.espressoSession.teeVerifierAddress.String(),
 		},
 		Message: map[string]interface{}{
 			"commitment": commitment,
