@@ -1417,6 +1417,7 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 }
 
 // signEIP712Commitment creates an EIP-712 signature for the given commitment using the batcher's private key.
+// It reads the verifying contract from l.espressoSession, so it must only be called while a session is active.
 func (l *BatchSubmitter) signEIP712Commitment(commitment [32]byte) ([]byte, error) {
 	typedData := apitypes.TypedData{
 		Types: apitypes.Types{
