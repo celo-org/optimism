@@ -90,7 +90,7 @@ orbs:
   gcp-cli: circleci/gcp-cli@3.0.1
   slack: circleci/slack@6.0.0
   shellcheck: circleci/shellcheck@3.2.0
-  codecov: codecov/codecov@5.0.3
+  codecov: codecov/codecov@6.1.0
   utils: piersy/circleci-utils@1.0.23
   docker: circleci/docker@2.8.2
   github-cli: circleci/github-cli@2.7.0
