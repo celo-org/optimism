@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum"
@@ -38,10 +39,11 @@ func (f *fakeL1) HeaderByNumber(_ context.Context, number *big.Int) (*types.Head
 	if number == nil {
 		return f.headers[len(f.headers)-1], nil
 	}
-	if number.Uint64() >= uint64(len(f.headers)) {
+	n := bigs.Uint64Strict(number)
+	if n >= uint64(len(f.headers)) {
 		return nil, ethereum.NotFound
 	}
-	return f.headers[number.Uint64()], nil
+	return f.headers[n], nil
 }
 
 func (f *fakeL1) ref(n uint64) eth.L1BlockRef {
