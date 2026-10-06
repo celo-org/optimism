@@ -613,6 +613,12 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 	for {
 		select {
 		case <-ticker.C:
+			// Read before the sync status: a clearState landing anywhere in this
+			// tick makes the snapshot's LocalSafeL2 untrustworthy as the drain floor.
+			l.espressoStreamerMutex.Lock()
+			epoch := l.espressoClearEpoch
+			l.espressoStreamerMutex.Unlock()
+
 			newSyncStatus, err := l.getSyncStatus(ctx)
 			if err != nil {
 				l.degradedLog.Warn(l.Log, "syncStatusErr/espressoBatchLoading", "failed to refresh sync status", "err", err)
@@ -637,6 +643,17 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				// and desync the streamer position from the channel manager.
 				l.espressoStreamerMutex.Lock()
 
+				// Another goroutine cleared state since this tick's snapshot was
+				// taken. Stop and refresh the next tick.
+				if l.espressoClearEpoch != epoch {
+					l.espressoStreamerMutex.Unlock()
+					l.Log.Info("State cleared during the drain, refreshing sync status next tick")
+					break
+				}
+
+				// Peek may read the batcher address from L1 for an undecided batch.
+				// Bound it so a stalled endpoint cannot hold the lock indefinitely.
+				// On timeout, the batch stays undecided and the next tick retries.
 				peekCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
 				batch := l.espressoSession.streamer.Peek(peekCtx)
 				cancel()
