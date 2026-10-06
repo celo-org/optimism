@@ -141,7 +141,8 @@ type BatchSubmitter struct {
 	channelMgrMutex sync.Mutex // guards channelMgr and prevCurrentL1
 	channelMgr      *channelManager
 
-	espressoStreamerMutex sync.Mutex     // guards espressoStreamer's position
+	espressoStreamerMutex sync.Mutex     // guards espressoStreamer's position and espressoClearEpoch
+	espressoClearEpoch    uint64         // bumped by every clearState; lets the loading loop spot a clear mid-drain
 	prevCurrentL1         eth.L1BlockRef // cached CurrentL1 from the last syncStatus
 
 	throttleController *throttler.ThrottleController
@@ -911,6 +912,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		if reanchorTarget != nil {
 			l.espressoStreamer.SetBatchPosition(*reanchorTarget)
 		}
+		l.espressoClearEpoch++
 		return true
 	}
 
