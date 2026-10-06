@@ -13,7 +13,9 @@ permissions:
   id-token: write
 
 env:
-  AWS_ROLE_ARN: arn:aws:iam::324783324287:role/github-celo-optimism-access
+  # Set the AWS_ROLE_ARN repository variable alongside the AWS credentials
+  # once available: an IAM role this repository can assume via GitHub OIDC.
+  AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
 
 concurrency:
   group: tee-batcher-upgrade-${{ github.ref }}
