@@ -73,11 +73,8 @@ func TestIsURLAvailableProxy(t *testing.T) {
 	defer proxy.Close()
 	proxyAddr := proxy.Addr().String()
 
-	// A port that was just released refuses connections immediately.
-	closed, err := net.Listen("tcp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	unreachable := closed.Addr().String()
-	require.NoError(t, closed.Close())
+	// Port 0 can't be dialed, so this refuses deterministically.
+	unreachable := "127.0.0.1:0"
 
 	// proxyAt acts like http.ProxyFromEnvironment with HTTP_PROXY and
 	// HTTPS_PROXY set to addr: it returns the proxy for http and https URLs
