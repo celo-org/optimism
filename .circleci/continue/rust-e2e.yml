@@ -446,12 +446,16 @@ jobs:
 workflows:
   # Rust E2E CI — runs on rust path changes or manual dispatch
   rust-e2e-ci:
-    when: << pipeline.parameters.c-run_rust_e2e_ci >>
+    # celo disable unwanted jobs/workflows — every rust e2e job is disabled; only an always-succeed gate is left
+    when: false
+    # when: << pipeline.parameters.c-run_rust_e2e_ci >>
     jobs:
-      - contracts-bedrock-build:
-          build_args: --skip test
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable contracts-bedrock-build and rust-workspace-release — their only
+      # consumers (the e2e test jobs below) are disabled.
+      # - contracts-bedrock-build:
+      #     build_args: --skip test
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       # celo: disable cannon-prestate — orphaned fault-proof artifact; its only consumers
       # (the rust-e2e / op-reth-e2e jobs) are disabled above.
       # - cannon-prestate: &rust-e2e-job-base
@@ -460,17 +464,17 @@ workflows:
       # rust-workspace-release builds the whole rust workspace (no binary filter),
       # so it produces kona-host, kona-node, op-reth, and the rest. Downstream
       # e2e jobs attach the workspace and consume the binaries directly.
-      - rust-build-binary: &rust-workspace-release
-          name: rust-workspace-release
-          directory: rust
-          profile: release
-          persist_to_workspace: true
-          # Release-build linking OOMs xlarge.gen2.
-          # celo: self-hosted runner, celo-org's plan has no 2xlarge.gen2
-          resource_class: celo-org/2xlarge
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - sccache-gcs-optimism
+      # - rust-build-binary: &rust-workspace-release
+      #     name: rust-workspace-release
+      #     directory: rust
+      #     profile: release
+      #     persist_to_workspace: true
+      #     # Release-build linking OOMs xlarge.gen2.
+      #     # celo: self-hosted runner, celo-org's plan has no 2xlarge.gen2
+      #     resource_class: celo-org/2xlarge
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - sccache-gcs-optimism
       # celo: skip rust e2e / kona proof tests until op-reth and kona-node support Celo
       # - rust-e2e-sysgo-tests:
       #     name: rust-e2e-<<matrix.devnet_config>>
@@ -517,17 +521,17 @@ workflows:
       # Required gate — fans in on all E2E test jobs
       # -----------------------------------------------------------------------
       - required-rust-e2e:
-          # celo: e2e tests disabled; still gate on the surviving build jobs.
-          requires:
-            - contracts-bedrock-build: terminal
-            - rust-workspace-release: terminal
+          # celo: every e2e job is disabled, so nothing is left to gate on.
+          always-succeed: true
           context:
             - circleci-api-token
 
   # Required Rust E2E gate (skip) — runs when no rust changes and no dispatch
   # Just runs action tests
   rust-e2e-gate-skip:
-    when: << pipeline.parameters.c-run_rust_e2e_gate_skip >>
+    # celo disable unwanted jobs/workflows — nothing requires the required-rust-e2e status
+    when: false
+    # when: << pipeline.parameters.c-run_rust_e2e_gate_skip >>
     jobs:
       - required-rust-e2e:
           always-succeed: true
@@ -535,7 +539,9 @@ workflows:
             - circleci-api-token
 
   scheduled-sp1-elf-smoke:
-    when: << pipeline.parameters.c-run_scheduled_sp1_elf_smoke >>
+    # celo disable unwanted jobs/workflows — Celo has no CircleCI schedules and doesn't use the SP1 programs
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_sp1_elf_smoke >>
     jobs:
       - prep-go-modules:
           context:

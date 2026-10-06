@@ -995,9 +995,10 @@ workflows:
           # Adds the `slack` context for the flaky-retry alert step (anchor on rust-deny).
           context: *rust-ci-context-slack
 
-      - interop-deposits-go-rust-diff:
-          name: interop-deposits-diff
-          context: *rust-ci-context
+      # celo: disable interop-deposits-diff — Celo doesn't use interop.
+      # - interop-deposits-go-rust-diff:
+      #     name: interop-deposits-diff
+      #     context: *rust-ci-context
 
       - rust-ci-doctest:
           name: rust-doctest
@@ -1072,19 +1073,21 @@ workflows:
       # -----------------------------------------------------------------------
       # Kona crate-specific jobs (lint, FPVM builds, host-client offline)
       # -----------------------------------------------------------------------
-      - kona-cargo-lint:
-          name: kona-lint-cannon
-          target: "cannon"
-          context: *rust-ci-context
-
-      - kona-build-fpvm:
-          name: kona-build-fpvm-cannon-client
-          target: "cannon-client"
-          context: *rust-ci-context
-
-      - kona-host-client-offline:
-          name: kona-host-client-offline-cannon
-          context: *rust-ci-context
+      # celo: disable the cannon lint, FPVM client build and offline host-client
+      # jobs — Celo doesn't use cannon fault proofs.
+      # - kona-cargo-lint:
+      #     name: kona-lint-cannon
+      #     target: "cannon"
+      #     context: *rust-ci-context
+      #
+      # - kona-build-fpvm:
+      #     name: kona-build-fpvm-cannon-client
+      #     target: "cannon-client"
+      #     context: *rust-ci-context
+      #
+      # - kona-host-client-offline:
+      #     name: kona-host-client-offline-cannon
+      #     context: *rust-ci-context
 
       - kona-registry-snapshot-check:
           context: *rust-ci-context
@@ -1102,7 +1105,8 @@ workflows:
             - rust-typos: terminal
             - rust-zepter: terminal
             - rust-tests: terminal
-            - interop-deposits-diff: terminal
+            # celo: disable interop-deposits-diff — job removed above.
+            # - interop-deposits-diff: terminal
             - rust-doctest: terminal
             - rust-docs: terminal
             - rust-udeps: terminal
@@ -1113,9 +1117,10 @@ workflows:
             - rust-wasm-wasi: terminal
             - op-reth-compact-codec: terminal
             - op-reth-integration-tests: terminal
-            - kona-lint-cannon: terminal
-            - kona-build-fpvm-cannon-client: terminal
-            - kona-host-client-offline-cannon: terminal
+            # celo: disable the cannon jobs — removed above.
+            # - kona-lint-cannon: terminal
+            # - kona-build-fpvm-cannon-client: terminal
+            # - kona-host-client-offline-cannon: terminal
             - kona-registry-snapshot-check: terminal
             - op-reth-superchain-snapshot-check: terminal
           context:

@@ -2658,24 +2658,28 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
             - sccache-gcs-optimism
-      - rust-build-sp1-super-range-executor:
-          name: rust-sp1-super-range-executor
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - sccache-gcs-optimism
+      # celo: disable rust-sp1-super-range-executor and rust-binaries-for-sysgo —
+      # their only consumers are the acceptance-test variants disabled below.
+      # - rust-build-sp1-super-range-executor:
+      #     name: rust-sp1-super-range-executor
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - sccache-gcs-optimism
       # Gates that the SP1 guest ELFs build reproducibly. The acceptance tests
       # no longer consume this job's workspace (they run with stub prestate
       # artifacts against the mock verifier), so it is required directly by
       # ci-gate rather than through them.
-      - kona-build-sp1-elfs:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - sccache-gcs-optimism
-      - rust-binaries-for-sysgo:
-          requires:
-            - rust-kona-binaries
-            - rust-op-reth-binary
-            - rust-sp1-super-range-executor
+      # celo: disable kona-build-sp1-elfs — Celo proves with op-succinct from celo-kona,
+      # not upstream's SP1 programs.
+      # - kona-build-sp1-elfs:
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - sccache-gcs-optimism
+      # - rust-binaries-for-sysgo:
+      #     requires:
+      #       - rust-kona-binaries
+      #       - rust-op-reth-binary
+      #       - rust-sp1-super-range-executor
       - go-binaries-for-sysgo:
           requires:
             - prep-go-modules
@@ -2747,7 +2751,8 @@ workflows:
             # celo: op-reth/kona acceptance variants removed (no Celo changes in this repo)
             # - memory-all-opn-op-reth-fusaka: terminal
             # - memory-all-kona-op-reth-fusaka: terminal
-            - kona-build-sp1-elfs: terminal
+            # celo: disable kona-build-sp1-elfs — job removed above.
+            # - kona-build-sp1-elfs: terminal
             # Go test/lint jobs previously fanned in via the bedrock-go-tests helper.
             # celo: disable cannon-go-lint-and-test — job removed above.
             # - cannon-go-lint-and-test: terminal
@@ -3006,7 +3011,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   circleci-schedule-trigger-check-workflow:
-    when: << pipeline.parameters.c-run_circleci_schedule_trigger_check >>
+    # celo disable unwanted jobs/workflows: celo-org/optimism has no scheduled pipelines
+    when: false
+    # when: << pipeline.parameters.c-run_circleci_schedule_trigger_check >>
     jobs:
       - circleci-schedule-trigger-check:
           context:
@@ -3116,8 +3123,10 @@ workflows:
               features: &features_matrix
                 - main
                 - CUSTOM_GAS_TOKEN
-                - OPTIMISM_PORTAL_INTEROP
-                - ZK_DISPUTE_GAME
+                # celo: disable the interop portal and upstream ZK dispute game
+                # variants — Celo uses neither.
+                # - OPTIMISM_PORTAL_INTEROP
+                # - ZK_DISPUTE_GAME
           context:
             - circleci-repo-readonly-authenticated-github-token
             - slack
@@ -3252,8 +3261,9 @@ workflows:
           requires:
             - contracts-bedrock-tests main: terminal
             - contracts-bedrock-tests CUSTOM_GAS_TOKEN: terminal
-            - contracts-bedrock-tests OPTIMISM_PORTAL_INTEROP: terminal
-            - contracts-bedrock-tests ZK_DISPUTE_GAME: terminal
+            # celo: disable the interop portal and ZK dispute game variants — removed above.
+            # - contracts-bedrock-tests OPTIMISM_PORTAL_INTEROP: terminal
+            # - contracts-bedrock-tests ZK_DISPUTE_GAME: terminal
             # celo: disable contracts-bedrock-tests-heavy-fuzz-modified — job removed above.
             # - contracts-bedrock-tests-heavy-fuzz-modified main: terminal
             # - contracts-bedrock-tests-heavy-fuzz-modified CUSTOM_GAS_TOKEN: terminal
