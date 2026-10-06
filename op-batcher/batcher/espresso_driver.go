@@ -42,36 +42,36 @@ type espressoRuntimeClient interface {
 	FetchHeadersByRange(ctx context.Context, fromHeight uint64, toHeight uint64) ([]espressoCommon.HeaderImpl, error)
 }
 
-type espressoClient struct {
+type espressoTimeoutClient struct {
 	client            espressoRuntimeClient
 	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
 }
 
-func (c *espressoClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+func (c *espressoTimeoutClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
 	callCtx, cancel := c.networkTimeoutCtx(ctx)
 	defer cancel()
 	return c.client.SubmitTransaction(callCtx, tx)
 }
 
-func (c *espressoClient) FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
+func (c *espressoTimeoutClient) FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
 	callCtx, cancel := c.networkTimeoutCtx(ctx)
 	defer cancel()
 	return c.client.FetchTransactionByHash(callCtx, hash)
 }
 
-func (c *espressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
+func (c *espressoTimeoutClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
 	callCtx, cancel := c.networkTimeoutCtx(ctx)
 	defer cancel()
 	return c.client.FetchLatestBlockHeight(callCtx)
 }
 
-func (c *espressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error) {
+func (c *espressoTimeoutClient) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error) {
 	callCtx, cancel := c.networkTimeoutCtx(ctx)
 	defer cancel()
 	return c.client.FetchNamespaceTransactionsInRange(callCtx, fromHeight, toHeight, namespace)
 }
 
-func (c *espressoClient) FetchHeadersByRange(ctx context.Context, fromHeight uint64, toHeight uint64) ([]espressoCommon.HeaderImpl, error) {
+func (c *espressoTimeoutClient) FetchHeadersByRange(ctx context.Context, fromHeight uint64, toHeight uint64) ([]espressoCommon.HeaderImpl, error) {
 	callCtx, cancel := c.networkTimeoutCtx(ctx)
 	defer cancel()
 	return c.client.FetchHeadersByRange(callCtx, fromHeight, toHeight)
@@ -131,6 +131,12 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 	return block.Hash(), nil
 }
 
+// networkTimeoutCtx bounds a single external call with the configured network
+// timeout. Every raw RPC read on the Espresso startup path must go through it:
+// StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
+// mutex before it can cancel anything, so an unbounded call on a stalled endpoint
+// would wedge the batcher beyond even a graceful shutdown. Calls with their own
+// timeout regime (the attestation service client, Txmgr.Send) are exempt.
 func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }
@@ -285,6 +291,15 @@ func (l *BatchSubmitter) rollbackFailedStart() {
 	l.running = false
 }
 
+// startEspressoStreamer starts the streamer's poll loops, bound to shutdownCtx
+// so it stops fetching before the publish path winds down.
+func (l *BatchSubmitter) startEspressoStreamer() error {
+	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
+		return fmt.Errorf("could not start the Espresso streamer: %w", err)
+	}
+	return nil
+}
+
 func (l *BatchSubmitter) stopEspressoStreamer() {
 	if l.espressoStreamer == nil {
 		return
@@ -315,8 +330,8 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	// fetching before the publish path winds down. Kept as the last setup step that
 	// can fail, so a setup error never has running poll loops to unwind
 	// (rollbackFailedStart would stop them anyway).
-	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
-		return fmt.Errorf("could not start the Espresso streamer: %w", err)
+	if err := l.startEspressoStreamer(); err != nil {
+		return err
 	}
 
 	l.espressoSubmitter = NewEspressoTransactionSubmitter(

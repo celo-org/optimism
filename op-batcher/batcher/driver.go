@@ -182,7 +182,7 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 		degradedLog: oplog.NewRepeatStateLogger(),
 	}
 	if batcher.Espresso.Client != nil {
-		batcher.Espresso.Client = &espressoClient{
+		batcher.Espresso.Client = &espressoTimeoutClient{
 			client:            batcher.Espresso.Client,
 			networkTimeoutCtx: batcher.networkTimeoutCtx,
 		}

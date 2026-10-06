@@ -38,7 +38,7 @@ func (c *testEspressoClient) FetchHeadersByRange(ctx context.Context, _, _ uint6
 
 func TestEspressoClientTimeout(t *testing.T) {
 	const timeout = 10 * time.Millisecond
-	client := &espressoClient{
+	client := &espressoTimeoutClient{
 		networkTimeoutCtx: func(ctx context.Context) (context.Context, context.CancelFunc) {
 			return context.WithTimeout(ctx, timeout)
 		},

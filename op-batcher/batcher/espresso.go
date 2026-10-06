@@ -15,7 +15,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	sdkclient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
@@ -140,7 +140,7 @@ type espressoSubmissionClient interface {
 // creating the EspressoTransactionSubmitter.
 type EspressoTransactionSubmitterConfig struct {
 	Ctx                                context.Context
-	EspressoClient                     espressoSubmissionClient
+	EspressoSubmissionClient           espressoSubmissionClient
 	Wg                                 *sync.WaitGroup
 	SubmitJobQueueCapacity             int
 	SubmitResponseQueueCapacity        int
@@ -168,7 +168,7 @@ func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 // for the EspressoTransactionSubmitterConfig.
 func WithEspressoClient(client espressoSubmissionClient) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
-		config.EspressoClient = client
+		config.EspressoSubmissionClient = client
 	}
 }
 
@@ -241,7 +241,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		option(&config)
 	}
 
-	if config.EspressoClient == nil {
+	if config.EspressoSubmissionClient == nil {
 		panic("Espresso client is required")
 	}
 
@@ -254,7 +254,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		verifyReceiptJobQueue:      make(chan espressoVerifyReceiptJob, config.VerifyReceiptJobQueueCapacity),
 		verifyReceiptRespQueue:     make(chan espressoVerifyReceiptJobResponse, config.VerifyReceiptResponseQueueCapacity),
 		verifyReceiptWorkerQueue:   make(chan chan espressoVerifyReceiptJobAttempt),
-		espresso:                   config.EspressoClient,
+		espresso:                   config.EspressoSubmissionClient,
 		verifyReceiptMaxBlocks:     config.VerifyReceiptMaxBlocks,
 		verifyReceiptSafetyTimeout: config.VerifyReceiptSafetyTimeout,
 		verifyReceiptRetryDelay:    config.VerifyReceiptRetryDelay,
@@ -355,11 +355,11 @@ func evaluateSubmission(jobResp espressoSubmitTransactionJobResponse) JobEvaluat
 		return Handle
 	}
 
-	if errors.Is(err, sdkclient.ErrPermanent) {
+	if errors.Is(err, espressoClient.ErrPermanent) {
 		return Skip
 	}
 
-	if !errors.Is(err, sdkclient.ErrEphemeral) {
+	if !errors.Is(err, espressoClient.ErrEphemeral) {
 		// Log the warning for a potentially missed error handling, but still retry it.
 		log.Warn("error not explicitly marked as retryable or not", "err", err)
 	}
@@ -450,11 +450,11 @@ func (s *espressoTransactionSubmitter) evaluateVerification(jobResp espressoVeri
 		return Handle
 	}
 
-	if errors.Is(err, sdkclient.ErrPermanent) {
+	if errors.Is(err, espressoClient.ErrPermanent) {
 		return Skip
 	}
 
-	if !errors.Is(err, sdkclient.ErrEphemeral) {
+	if !errors.Is(err, espressoClient.ErrEphemeral) {
 		// Log the warning for a potentially missed error handling, but still retry it.
 		log.Warn("error not explicitly marked as retryable or not", "err", err)
 	}
