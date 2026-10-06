@@ -69,14 +69,18 @@ func enclaveBatcherArgs(t *testing.T, sys *e2esys.System) []string {
 // query service URL and the light client address.
 func startEspressoDevNode(t *testing.T, l1 string) (string, string) {
 	envVars := map[string]string{
-		"ESPRESSO_DEV_NODE_L1_DEPLOYMENT":        "skip",
-		"ESPRESSO_SEQUENCER_L1_PROVIDER":         l1,
-		"ESPRESSO_SEQUENCER_ETH_MNEMONIC":        env.ESPRESSO_MNEMONIC,
-		"ESPRESSO_DEPLOYER_ACCOUNT_INDEX":        env.ESPRESSO_MNEMONIC_INDEX,
-		"ESPRESSO_SEQUENCER_STORAGE_PATH":        "/data/espresso",
-		"ESPRESSO_SEQUENCER_API_PORT":            fmt.Sprint(espressoAPIPort),
-		"ESPRESSO_DEV_NODE_VERSION":              "0.4",
-		"ESPRESSO_DEV_NODE_EPOCH_HEIGHT":         "18446744073709551615",
+		"ESPRESSO_DEV_NODE_L1_DEPLOYMENT": "skip",
+		"ESPRESSO_SEQUENCER_L1_PROVIDER":  l1,
+		"ESPRESSO_SEQUENCER_ETH_MNEMONIC": env.ESPRESSO_MNEMONIC,
+		"ESPRESSO_DEPLOYER_ACCOUNT_INDEX": env.ESPRESSO_MNEMONIC_INDEX,
+		"ESPRESSO_SEQUENCER_STORAGE_PATH": "/data/espresso",
+		"ESPRESSO_SEQUENCER_API_PORT":     fmt.Sprint(espressoAPIPort),
+		"ESPRESSO_DEV_NODE_VERSION":       "0.4",
+		// Even a local 0.4 node has epochs (300 blocks by default), which require
+		// finalized L1 staking events. We skip deployment and reuse genesis allocs
+		// rather than setting up those events. Keep epoch transitions outside this
+		// batcher-upgrade test; they are not the behavior under test here.
+		"ESPRESSO_DEV_NODE_EPOCH_HEIGHT":         "18446744073709551615", // u64::MAX
 		"ESPRESSO_SEQUENCER_L1_POLLING_INTERVAL": "30ms",
 	}
 	for address, account := range env.ESPRESSO_ALLOCS {

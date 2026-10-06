@@ -36,6 +36,11 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          # Same AL2023 AMI as ec2-devnet-test.yaml, in Espresso's AWS account.
+          # To refresh: launch an enclave-enabled AL2023 instance, run the preparation
+          # script (Nix, Docker, nitro-cli), then create an AMI in us-east-2:
+          # https://github.com/EspressoSystems/optimism-espresso-integration/blob/afc71f79f5f976b9a9b7538815e86558b4f5c225/espresso/scripts/enclave-prepare-ami.sh
+          # https://github.com/EspressoSystems/optimism-espresso-integration/blob/afc71f79f5f976b9a9b7538815e86558b4f5c225/README_ESPRESSO.md#running-enclave-tests-in-ec2
           ec2-image-id: ami-0d259f3ae020af5f9
           ec2-instance-type: m6a.2xlarge
           subnet-id: ${{ secrets.AWS_EC2_SUBNET_ID }}
