@@ -19,11 +19,11 @@ import (
 //     be the authorized batcher for that mode, otherwise every authenticateBatchInfo
 //     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
 //
-// publishStateToL1 evaluates this before each batch transaction it sends. Each
-// evaluation costs two eth_calls in either mode, on top of whatever
-// shouldSkipPublishForActiveSeq already spent reaching it. A batcher that is
-// not the active one takes a skip branch every time, so both warnings are
-// throttled.
+// publishStateToL1 evaluates this before every publishTxToL1 call, including
+// the final one of each pass that finds nothing to send. A mode mismatch costs
+// one eth_call and a matching mode at most two in steady state; the first check
+// pays extra to fill the reader's caches. A batcher that is not the active one
+// takes a skip branch every time, so both warnings are throttled.
 func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 	if l.batchAuth == nil {
 		return false, errors.New("no BatchAuthenticator configured")
