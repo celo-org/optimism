@@ -195,14 +195,14 @@ func TestBatchAuthenticatorReader_EspressoTEEVerifier(t *testing.T) {
 	require.Equal(t, backend.teeVerifier, got)
 }
 
-// TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected covers a
-// BatchAuthenticator proxy holding code but no state. Its espressoTEEVerifier
-// reads as zero, and accepting it would have the batcher sign every
-// authentication against the zero address as EIP-712 verifying contract, which
-// the real verifier rejects. Startup must fail instead.
+// TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected covers the reader's
+// guard against a zero espressoTEEVerifier. No supported deployment yields one,
+// but accepting it would have the batcher sign every authentication against the
+// zero address as EIP-712 verifying contract, which the real verifier rejects.
+// Startup must fail instead.
 func TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected(t *testing.T) {
 	backend := newMockAuthBackend(t)
-	backend.teeVerifier = common.Address{} // not initialized yet
+	backend.teeVerifier = common.Address{}
 	r := newTestReader(t, backend)
 
 	_, err := r.EspressoTEEVerifier(context.Background())
@@ -229,15 +229,14 @@ func TestBatchAuthenticatorReader_FallbackBatcher(t *testing.T) {
 	require.Equal(t, 3, backend.callCalls, "the SystemConfig address is resolved once")
 }
 
-// TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched covers a
-// BatchAuthenticator whose proxy holds code but has not been initialized: it
-// reports a zero SystemConfig address. Binding that address would pin the
-// reader to a contract that never answers, so the reader must reject it and
-// resolve again once the contract is initialized.
+// TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched covers the reader's
+// guard against a zero SystemConfig address. No supported deployment yields
+// one, but binding it would pin the reader to a contract that never answers, so
+// the reader must reject it and resolve again on the next read.
 func TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.fallbackBatcher = common.HexToAddress("0x00000000000000000000000000000000000000dd")
-	backend.systemConfigAddr = common.Address{} // not initialized yet
+	backend.systemConfigAddr = common.Address{}
 	r := newTestReader(t, backend)
 
 	_, err := r.FallbackBatcher(context.Background())
