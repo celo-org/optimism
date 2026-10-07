@@ -313,7 +313,8 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 
 // checkEspressoBatchAuthenticator refuses to start an Espresso (TEE) batcher
 // on a chain with no BatchAuthenticator: without one it would sign and send
-// every authentication to the zero address, failing silently on each batch.
+// every authentication to the zero address, where it succeeds as a no-op, so
+// each batch pays gas for an authentication that does nothing.
 //
 // The fallback batcher is exempt. Pre-fork it runs as a vanilla upstream
 // batcher, so a zero address there is legitimate.

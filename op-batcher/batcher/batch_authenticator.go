@@ -29,19 +29,20 @@ import (
 // after the first success so steady-state publishes do not pay for it. The
 // SystemConfig address is cached the same way.
 //
-// A zero address is an error for the SystemConfig and TEE verifier addresses
-// but not for the two batcher addresses. A deployed contract that has not been
-// initialized yet returns zero from every getter. The first two are read once
-// and cached, so a cached zero would stay wrong forever. The batcher addresses
-// are compared with the batcher's own address on every check, so a zero just
-// skips the publish until the contract is initialized.
+// A zero SystemConfig or TEE verifier address is rejected, although no
+// supported deployment yields one: the proxy reverts until its implementation
+// is set, the deploy scripts set it and call initialize in one upgradeToAndCall,
+// and initialize rejects both zeros. The checks are kept as a cheap guard
+// because both addresses are read once and kept, so a bad value would never be
+// re-read. The batcher addresses need no such guard: they are re-read and
+// compared with the batcher's own address on every check.
 type batchAuthenticatorReader struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
 	backend bind.ContractCaller
 	timeout time.Duration
 
-	// mu guards the two cached fields below; callers are serialized today, but a shared reader should not depend on that.
+	// mu guards the cached fields below, so the reader is safe to share.
 	mu           sync.Mutex
 	haveCode     bool
 	systemConfig *systemconfig.SystemConfigCaller
