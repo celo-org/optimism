@@ -22,12 +22,11 @@ import (
 // Reading it from anywhere else could make this gate and the on-chain check
 // disagree.
 //
-// The deployment check is lazy: it runs on each call until it first sees code
-// at the address, then never again. It is deferred so the fallback batcher,
-// which never registers with the contract, can start before the
-// BatchAuthenticator is deployed and skip publishes until it appears. It stops
-// after the first success so steady-state publishes do not pay for it. The
-// SystemConfig address is cached the same way.
+// Reads do not check for code first: when an eth_call returns no data, the
+// bindings look for code at the address and fail with bind.ErrNoCode. So the
+// fallback batcher, which never registers with the contract, can start before
+// the BatchAuthenticator is deployed and skip publishes until it appears. The
+// SystemConfig address is read once and cached.
 //
 // A zero SystemConfig or TEE verifier address is rejected, although no
 // supported deployment yields one: the proxy reverts until its implementation
@@ -42,9 +41,8 @@ type batchAuthenticatorReader struct {
 	backend bind.ContractCaller
 	timeout time.Duration
 
-	// mu guards the cached fields below, so the reader is safe to share.
+	// mu guards systemConfig, so the reader is safe to share.
 	mu           sync.Mutex
-	haveCode     bool
 	systemConfig *systemconfig.SystemConfigCaller
 }
 
@@ -67,15 +65,10 @@ func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCalle
 	}, nil
 }
 
-// ensureDeployed verifies that code exists at the bound address, skipping the
-// check once it has succeeded. Failures are not latched, so a transient RPC
-// error or a not-yet-deployed contract is retried on the next call.
+// ensureDeployed verifies that code exists at the bound address. Reads do not
+// need it, see batchAuthenticatorReader. registerBatcher does: it sends a
+// transaction, and one sent to an address with no code succeeds as a no-op.
 func (r *batchAuthenticatorReader) ensureDeployed(ctx context.Context) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.haveCode {
-		return nil
-	}
 	cCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	code, err := r.backend.CodeAt(cCtx, r.addr, nil)
@@ -85,17 +78,13 @@ func (r *batchAuthenticatorReader) ensureDeployed(ctx context.Context) error {
 	if len(code) == 0 {
 		return fmt.Errorf("no contract code at BatchAuthenticator address %s", r.addr)
 	}
-	r.haveCode = true
 	return nil
 }
 
-// readContract performs one read against a deployed BatchAuthenticator, bounded
-// by the network timeout. getter names the Solidity getter, for the error.
+// readContract performs one contract read, bounded by the network timeout.
+// getter names the Solidity getter, for the error.
 func readContract[T any](ctx context.Context, r *batchAuthenticatorReader, getter string, call func(*bind.CallOpts) (T, error)) (T, error) {
 	var zero T
-	if err := r.ensureDeployed(ctx); err != nil {
-		return zero, err
-	}
 	cCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	value, err := call(&bind.CallOpts{Context: cCtx})
@@ -120,9 +109,6 @@ func (r *batchAuthenticatorReader) EspressoBatcher(ctx context.Context) (common.
 // FallbackBatcher returns the address authorized to authenticate batches while
 // activeIsEspresso is false, read from the SystemConfig's batcherHash.
 func (r *batchAuthenticatorReader) FallbackBatcher(ctx context.Context) (common.Address, error) {
-	if err := r.ensureDeployed(ctx); err != nil {
-		return common.Address{}, err
-	}
 	systemConfig, err := r.systemConfigCaller(ctx)
 	if err != nil {
 		return common.Address{}, err
@@ -144,11 +130,9 @@ func (r *batchAuthenticatorReader) systemConfigCaller(ctx context.Context) (*sys
 	if r.systemConfig != nil {
 		return r.systemConfig, nil
 	}
-	cCtx, cancel := context.WithTimeout(ctx, r.timeout)
-	defer cancel()
-	addr, err := r.auth.SystemConfig(&bind.CallOpts{Context: cCtx})
+	addr, err := readContract(ctx, r, "systemConfig", r.auth.SystemConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read systemConfig: %w", err)
+		return nil, err
 	}
 	if addr == (common.Address{}) {
 		return nil, fmt.Errorf("BatchAuthenticator at %s has a zero systemConfig address", r.addr)

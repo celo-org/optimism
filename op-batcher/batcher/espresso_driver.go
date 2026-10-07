@@ -295,7 +295,7 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 // Fails closed: if either gate cannot be evaluated, publishing is skipped for
 // this tick and retried on the next. Those failures are throttled like the skip
 // branches in isBatcherActive: a fallback batcher started before the
-// BatchAuthenticator is deployed fails the reader's deployment probe on every
+// BatchAuthenticator is deployed fails its reads with bind.ErrNoCode on every
 // publish until the contract appears.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
 	if l.batchAuth == nil {

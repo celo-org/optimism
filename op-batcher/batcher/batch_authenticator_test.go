@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
@@ -33,10 +34,13 @@ type mockAuthBackend struct {
 	authABI         *abi.ABI
 	systemConfigABI *abi.ABI
 
-	// code is returned by CodeAt. Empty means "not deployed yet".
+	// code is returned by CodeAt. Empty means "not deployed yet": like a real
+	// node, CallContract then returns no data.
 	code []byte
 	// codeErr, when set, fails CodeAt instead of returning code.
 	codeErr error
+	// callErr, when set, fails CallContract.
+	callErr error
 
 	activeIsEspresso bool
 	espressoBatcher  common.Address
@@ -78,6 +82,12 @@ func (m *mockAuthBackend) CodeAt(ctx context.Context, contract common.Address, b
 func (m *mockAuthBackend) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	m.callCalls++
 	_, m.lastCallHadDeadline = ctx.Deadline()
+	if m.callErr != nil {
+		return nil, m.callErr
+	}
+	if len(m.code) == 0 {
+		return nil, nil
+	}
 	if call.To == nil {
 		return nil, errors.New("call without a recipient")
 	}
@@ -125,11 +135,12 @@ func TestNewBatchAuthenticatorReader_ZeroAddressIsNilReader(t *testing.T) {
 	require.Nil(t, r)
 }
 
-// TestBatchAuthenticatorReader_ProbeLatches is the core claim of the shared
-// reader: the deployment probe is paid once, not once per publish tick. It also
-// checks that the reader applies the network timeout itself, so no call site
-// can forget it.
-func TestBatchAuthenticatorReader_ProbeLatches(t *testing.T) {
+// TestBatchAuthenticatorReader_ReadsDoNotProbe pins the steady-state cost of a
+// read: one eth_call and no CodeAt, since a deployed contract always returns
+// data and the bindings only look for code when it does not. It also checks
+// that the reader applies the network timeout itself, so no call site can
+// forget it.
+func TestBatchAuthenticatorReader_ReadsDoNotProbe(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.activeIsEspresso = true
 	r := newTestReader(t, backend)
@@ -140,24 +151,22 @@ func TestBatchAuthenticatorReader_ProbeLatches(t *testing.T) {
 		require.True(t, active)
 	}
 
-	require.Equal(t, 1, backend.codeAtCalls, "deployment probe should be paid once, not per read")
+	require.Zero(t, backend.codeAtCalls, "reads of a deployed contract should not check for code")
 	require.Equal(t, 5, backend.callCalls, "each read is still one eth_call")
 	require.True(t, backend.lastCallHadDeadline, "reader must bound reads by NetworkTimeout")
 }
 
-// TestBatchAuthenticatorReader_ProbeFailureIsNotLatched covers the reason the
-// probe stays lazy: a batcher may legitimately start before the
-// BatchAuthenticator is deployed. Such a batcher must keep retrying and recover
-// once the contract appears, rather than caching the failure for the life of
-// the process.
-func TestBatchAuthenticatorReader_ProbeFailureIsNotLatched(t *testing.T) {
+// TestBatchAuthenticatorReader_NotDeployedIsRetried covers a batcher that
+// starts before the BatchAuthenticator is deployed, which is legitimate for the
+// fallback batcher. Its reads must fail with bind.ErrNoCode and recover once the
+// contract appears, rather than caching the failure for the life of the process.
+func TestBatchAuthenticatorReader_NotDeployedIsRetried(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.code = nil // not deployed yet
 	r := newTestReader(t, backend)
 
 	_, err := r.ActiveIsEspresso(context.Background())
-	require.ErrorContains(t, err, "no contract code at BatchAuthenticator address")
-	require.Zero(t, backend.callCalls, "should not read from an undeployed address")
+	require.ErrorIs(t, err, bind.ErrNoCode)
 
 	backend.codeErr = errors.New("rpc boom")
 	_, err = r.ActiveIsEspresso(context.Background())
@@ -171,8 +180,8 @@ func TestBatchAuthenticatorReader_ProbeFailureIsNotLatched(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, active)
 
-	require.Equal(t, 3, backend.codeAtCalls)
-	require.Equal(t, 1, backend.callCalls)
+	require.Equal(t, 2, backend.codeAtCalls, "only the reads that got no data checked for code")
+	require.Equal(t, 3, backend.callCalls)
 }
 
 // TestBatchAuthenticatorReader_EspressoTEEVerifier pins the address the batcher
@@ -412,7 +421,7 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 		espressoEnabled  bool
 		tipTime          uint64
 		tipErr           error
-		codeErr          error
+		callErr          error
 		activeIsEspresso bool
 		from             common.Address
 		wantSkip         bool
@@ -426,13 +435,13 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 		// The Espresso batcher consults the flag without reading the L1 tip.
 		{name: "espresso batcher, espresso active", espressoEnabled: true, tipErr: errors.New("unused"), activeIsEspresso: true, from: espressoAddr, wantSkip: false},
 		{name: "espresso batcher, fallback active", espressoEnabled: true, from: espressoAddr, wantSkip: true, wantWarn: warnModeInactive},
-		{name: "espresso batcher, active check fails", espressoEnabled: true, codeErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true, wantWarn: warnActiveCheckErr},
+		{name: "espresso batcher, active check fails", espressoEnabled: true, callErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true, wantWarn: warnActiveCheckErr},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			backend := newMockAuthBackend(t)
-			backend.codeErr = test.codeErr
+			backend.callErr = test.callErr
 			backend.activeIsEspresso = test.activeIsEspresso
 			backend.espressoBatcher = espressoAddr
 			backend.fallbackBatcher = fallbackAddr
