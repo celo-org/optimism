@@ -164,6 +164,12 @@ type BatchSubmitter struct {
 
 	teeVerifierAddress common.Address
 
+	// batchAuth is the read-only binding to the BatchAuthenticator contract,
+	// shared by registerBatcher, resolveTEEVerifierAddress and the
+	// isBatcherActive gate. Nil when RollupConfig has a zero
+	// BatchAuthenticatorAddress.
+	batchAuth *batchAuthenticatorReader
+
 	// degradedLog throttles repeated warnings from tick-driven loops so the
 	// log debouncer doesn't see the same message every poll interval.
 	degradedLog *oplog.RepeatStateLogger
@@ -186,6 +192,15 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 	if err != nil {
 		panic(err)
 	}
+
+	// Bind the BatchAuthenticator reader once, here, rather than per call site.
+	// This does no network I/O - only ABI parsing, which can fail solely on a
+	// malformed generated binding, so a failure here is a build-time defect.
+	reader, err := newBatchAuthenticatorReader(setup.RollupConfig.BatchAuthenticatorAddress, setup.L1Client, setup.Config.NetworkTimeout)
+	if err != nil {
+		panic(err)
+	}
+	batcher.batchAuth = reader
 
 	return batcher
 }
