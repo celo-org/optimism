@@ -287,6 +287,33 @@ func TestIsBatcherActive(t *testing.T) {
 	}
 }
 
+// TestIsBatcherActive_SharedKeyWrongMode pins the mode check on its own. With
+// one key authorized for both roles the identity check passes in either mode,
+// so only the mode check can keep a batcher idle while the other mode is active.
+func TestIsBatcherActive_SharedKeyWrongMode(t *testing.T) {
+	sharedAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
+
+	for _, espressoEnabled := range []bool{true, false} {
+		t.Run(fmt.Sprintf("espressoEnabled=%v", espressoEnabled), func(t *testing.T) {
+			backend := newMockAuthBackend(t)
+			backend.activeIsEspresso = !espressoEnabled
+			backend.espressoBatcher = sharedAddr
+			backend.fallbackBatcher = sharedAddr
+
+			l := &BatchSubmitter{}
+			l.Log = testlog.Logger(t, log.LevelDebug)
+			l.degradedLog = oplog.NewRepeatStateLogger()
+			l.Txmgr = &testutils.FakeTxMgr{FromAddr: sharedAddr}
+			l.Config.Espresso.Enabled = espressoEnabled
+			l.batchAuth = newTestReader(t, backend)
+
+			got, err := l.isBatcherActive(context.Background())
+			require.NoError(t, err)
+			require.False(t, got)
+		})
+	}
+}
+
 // TestIsBatcherActive_NoAuthenticator guards the nil reader case: without a
 // configured BatchAuthenticator the gate must report an error rather than
 // silently treating this batcher as active.
