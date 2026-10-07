@@ -96,6 +96,8 @@ where
             receipts_root,
             withdrawals_root,
             requests_hash,
+            block_access_list_hash: None,
+            slot_number: None,
             logs_bloom,
             difficulty: U256::ZERO,
             number: block_env.number.saturating_to::<u64>(),
