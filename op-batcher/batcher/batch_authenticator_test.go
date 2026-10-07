@@ -314,6 +314,48 @@ func TestIsBatcherActive_SharedKeyWrongMode(t *testing.T) {
 	}
 }
 
+// TestIsBatcherActive_KeyWarningResetsOnModeSwitch checks that leaving our mode
+// resets the throttled wrong-key warning: when the mode comes back with the key
+// still wrong, the operator gets a fresh Warn instead of silence.
+func TestIsBatcherActive_KeyWarningResetsOnModeSwitch(t *testing.T) {
+	const keyWarn = "Configured batcher key is not the authorized batcher"
+	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
+	otherAddr := common.HexToAddress("0x00000000000000000000000000000000000000e3")
+
+	backend := newMockAuthBackend(t)
+	backend.activeIsEspresso = true
+	backend.espressoBatcher = espressoAddr
+
+	logger, logs := testlog.CaptureLogger(t, log.LevelDebug)
+	l := &BatchSubmitter{}
+	l.Log = logger
+	l.degradedLog = oplog.NewRepeatStateLogger()
+	l.Txmgr = &testutils.FakeTxMgr{FromAddr: otherAddr}
+	l.Config.Espresso.Enabled = true
+	l.batchAuth = newTestReader(t, backend)
+
+	check := func() {
+		t.Helper()
+		active, err := l.isBatcherActive(context.Background())
+		require.NoError(t, err)
+		require.False(t, active)
+	}
+
+	// Wrong key in our mode: warn once, then stay quiet.
+	check()
+	check()
+	logs.RequireMessageContainedOnce(t, keyWarn)
+
+	// The other mode takes over, then ours comes back with the key still wrong.
+	backend.activeIsEspresso = false
+	check()
+	backend.activeIsEspresso = true
+	check()
+	logs.RequireMessageContainedNTimes(t, keyWarn, 2)
+	require.Nil(t, logs.FindLog(testlog.NewMessageContainsFilter("authorized again")),
+		"the key was never authorized, so nothing may report it recovered")
+}
+
 // TestIsBatcherActive_NoAuthenticator guards the nil reader case: without a
 // configured BatchAuthenticator the gate must report an error rather than
 // silently treating this batcher as active.

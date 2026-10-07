@@ -42,6 +42,10 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 			"activeIsEspresso", activeIsEspresso,
 			"EspressoEnabled", l.Config.Espresso.Enabled,
 		)
+		// The key is only checked while our mode is active. Reset its state so a
+		// still-wrong key warns afresh when the mode comes back, rather than staying
+		// throttled and later reporting a duration that spans the inactive period.
+		l.degradedLog.Clear(l.Log, "batcherKeyUnauthorized", "Batcher mode is inactive, suspending the batcher key check")
 		return false, nil
 	}
 	l.degradedLog.Clear(l.Log, "batcherModeInactive", "Batcher mode is active again")
