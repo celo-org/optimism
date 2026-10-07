@@ -23,9 +23,14 @@ import (
 type mockFixedTimeL1Client struct {
 	bind.ContractBackend
 	time uint64
+	// err, when set, fails HeaderByNumber instead of returning the tip.
+	err error
 }
 
 func (f *mockFixedTimeL1Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
+	if f.err != nil {
+		return nil, f.err
+	}
 	return &types.Header{Number: big.NewInt(0), Time: f.time}, nil
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
@@ -296,4 +297,68 @@ func TestIsBatcherActive_NoAuthenticator(t *testing.T) {
 
 	_, err := l.isBatcherActive(context.Background())
 	require.ErrorContains(t, err, "no BatchAuthenticator configured")
+}
+
+// TestShouldSkipPublishForActiveSeq covers the publish loop's gate in front of
+// isBatcherActive: the Espresso batcher always consults the active flag, the
+// fallback batcher only once fallback auth is required, and either gate failing
+// to evaluate skips the publish (fails closed).
+func TestShouldSkipPublishForActiveSeq(t *testing.T) {
+	const espressoTime = 1000
+	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
+	fallbackAddr := common.HexToAddress("0x00000000000000000000000000000000000000e2")
+
+	tests := []struct {
+		name             string
+		espressoEnabled  bool
+		tipTime          uint64
+		tipErr           error
+		codeErr          error
+		activeIsEspresso bool
+		from             common.Address
+		wantSkip         bool
+	}{
+		// Pre-fork the fallback batcher ignores the flag, even when it names the Espresso batcher.
+		{name: "fallback batcher before the fork ignores the flag", tipTime: espressoTime - 1, activeIsEspresso: true, from: fallbackAddr, wantSkip: false},
+		{name: "fallback batcher, fallback-auth gate fails", tipErr: errors.New("l1 down"), from: fallbackAddr, wantSkip: true},
+		{name: "fallback batcher after the fork, fallback active", tipTime: espressoTime, from: fallbackAddr, wantSkip: false},
+		{name: "fallback batcher after the fork, espresso active", tipTime: espressoTime, activeIsEspresso: true, from: fallbackAddr, wantSkip: true},
+		// The Espresso batcher consults the flag without reading the L1 tip.
+		{name: "espresso batcher, espresso active", espressoEnabled: true, tipErr: errors.New("unused"), activeIsEspresso: true, from: espressoAddr, wantSkip: false},
+		{name: "espresso batcher, fallback active", espressoEnabled: true, from: espressoAddr, wantSkip: true},
+		{name: "espresso batcher, active check fails", espressoEnabled: true, codeErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			backend := newMockAuthBackend(t)
+			backend.codeErr = test.codeErr
+			backend.activeIsEspresso = test.activeIsEspresso
+			backend.espressoBatcher = espressoAddr
+			backend.fallbackBatcher = fallbackAddr
+
+			l := &BatchSubmitter{}
+			l.Log = testlog.Logger(t, log.LevelDebug)
+			l.degradedLog = oplog.NewRepeatStateLogger()
+			l.RollupConfig = &rollup.Config{EspressoTime: u64(espressoTime)}
+			l.Config.NetworkTimeout = time.Second
+			l.Config.Espresso.Enabled = test.espressoEnabled
+			l.L1Client = &mockFixedTimeL1Client{time: test.tipTime, err: test.tipErr}
+			l.Txmgr = &testutils.FakeTxMgr{FromAddr: test.from}
+			l.batchAuth = newTestReader(t, backend)
+
+			require.Equal(t, test.wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+		})
+	}
+}
+
+// TestShouldSkipPublishForActiveSeq_NoAuthenticator guards the nil reader case:
+// a chain without a BatchAuthenticator runs a plain upstream batcher, which
+// never skips a publish.
+func TestShouldSkipPublishForActiveSeq_NoAuthenticator(t *testing.T) {
+	l := &BatchSubmitter{}
+	l.Log = testlog.Logger(t, log.LevelDebug)
+	l.degradedLog = oplog.NewRepeatStateLogger()
+
+	require.False(t, l.shouldSkipPublishForActiveSeq(context.Background()))
 }
