@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -41,6 +43,8 @@ type mockAuthBackend struct {
 	codeErr error
 	// callErr, when set, fails CallContract.
 	callErr error
+	// failGetter, when set, fails only the call to that getter.
+	failGetter string
 
 	activeIsEspresso bool
 	espressoBatcher  common.Address
@@ -100,6 +104,9 @@ func (m *mockAuthBackend) CallContract(ctx context.Context, call ethereum.CallMs
 	method, err := contractABI.MethodById(call.Data)
 	if err != nil {
 		return nil, err
+	}
+	if method.Name == m.failGetter {
+		return nil, fmt.Errorf("rpc boom on %s", method.Name)
 	}
 	switch method.Name {
 	case "activeIsEspresso":
@@ -475,4 +482,134 @@ func TestShouldSkipPublishForActiveSeq_NoAuthenticator(t *testing.T) {
 	l.degradedLog = oplog.NewRepeatStateLogger()
 
 	require.False(t, l.shouldSkipPublishForActiveSeq(context.Background()))
+}
+
+// TestIsBatcherActive_ReadErrors fails each contract read the gate makes, one
+// per row. isBatcherActive must return the error rather than swallow it, and
+// the error must name the getter that failed.
+func TestIsBatcherActive_ReadErrors(t *testing.T) {
+	tests := []struct {
+		failGetter      string
+		espressoEnabled bool
+	}{
+		{"activeIsEspresso", true},
+		{"espressoBatcher", true},
+		{"systemConfig", false},
+		{"batcherHash", false},
+	}
+
+	for _, test := range tests {
+		t.Run(test.failGetter, func(t *testing.T) {
+			backend := newMockAuthBackend(t)
+			backend.activeIsEspresso = test.espressoEnabled
+			backend.failGetter = test.failGetter
+
+			l := &BatchSubmitter{}
+			l.Log = testlog.Logger(t, log.LevelDebug)
+			l.degradedLog = oplog.NewRepeatStateLogger()
+			l.Txmgr = &testutils.FakeTxMgr{}
+			l.Config.Espresso.Enabled = test.espressoEnabled
+			l.batchAuth = newTestReader(t, backend)
+
+			_, err := l.isBatcherActive(context.Background())
+			require.ErrorContains(t, err, "failed to read "+test.failGetter)
+		})
+	}
+}
+
+// TestResolveTEEVerifierAddress covers the startup step that fixes the EIP-712
+// verifying contract: any failure must surface and leave the address unset,
+// rather than letting the batcher sign against a zero verifier.
+func TestResolveTEEVerifierAddress(t *testing.T) {
+	teeVerifier := common.HexToAddress("0x00000000000000000000000000000000000000bb")
+
+	tests := []struct {
+		name        string
+		teeVerifier common.Address
+		failGetter  string
+		wantErr     string
+	}{
+		{name: "resolved", teeVerifier: teeVerifier},
+		{name: "read fails", teeVerifier: teeVerifier, failGetter: "espressoTEEVerifier", wantErr: "failed to read espressoTEEVerifier"},
+		{name: "zero verifier", teeVerifier: common.Address{}, wantErr: "zero espressoTEEVerifier address"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			backend := newMockAuthBackend(t)
+			backend.teeVerifier = test.teeVerifier
+			backend.failGetter = test.failGetter
+
+			l := &BatchSubmitter{}
+			l.Log = testlog.Logger(t, log.LevelDebug)
+			l.batchAuth = newTestReader(t, backend)
+
+			err := l.resolveTEEVerifierAddress(context.Background())
+			if test.wantErr != "" {
+				require.ErrorContains(t, err, test.wantErr)
+				require.Zero(t, l.teeVerifierAddress)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, teeVerifier, l.teeVerifierAddress)
+		})
+	}
+}
+
+// TestRegisterBatcher_DeploymentCheck covers registerBatcher's checks on the
+// BatchAuthenticator before it asks for a proof and sends the registration: a
+// registration sent to an address with no code would succeed as a no-op, so
+// each failure must stop it before the attestation service is called.
+func TestRegisterBatcher_DeploymentCheck(t *testing.T) {
+	tests := []struct {
+		name    string
+		codeErr error
+		wantErr string
+	}{
+		{name: "code check fails", codeErr: errors.New("rpc boom"), wantErr: "failed to check code at BatchAuthenticator address"},
+		{name: "not deployed", wantErr: "no contract code at BatchAuthenticator address"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			backend := newMockAuthBackend(t)
+			backend.code = nil // not deployed, or the check fails before it can tell
+			backend.codeErr = test.codeErr
+
+			l := newRegisteringBatchSubmitter(t)
+			l.batchAuth = newTestReader(t, backend)
+
+			require.ErrorContains(t, l.registerBatcher(context.Background()), test.wantErr)
+		})
+	}
+}
+
+// TestBatchAuthenticatorCallers_NoAuthenticator guards the nil reader case for
+// the two startup steps: without a configured BatchAuthenticator both must
+// fail, and registerBatcher must not ask the attestation service for a proof.
+func TestBatchAuthenticatorCallers_NoAuthenticator(t *testing.T) {
+	l := newRegisteringBatchSubmitter(t)
+
+	require.ErrorContains(t, l.resolveTEEVerifierAddress(context.Background()), "no BatchAuthenticator configured")
+	require.ErrorContains(t, l.registerBatcher(context.Background()), "no BatchAuthenticator configured")
+}
+
+// newRegisteringBatchSubmitter returns a BatchSubmitter with no reader that is
+// set up to register: it has an attestation and an attestation service, which
+// fails the test if called, since each caller must stop before asking for a
+// proof.
+func newRegisteringBatchSubmitter(t *testing.T) *BatchSubmitter {
+	t.Helper()
+	attestationService := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("attestation service called despite a failed BatchAuthenticator check")
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(attestationService.Close)
+
+	l := &BatchSubmitter{}
+	l.Log = testlog.Logger(t, log.LevelDebug)
+	l.RollupConfig = &rollup.Config{BatchAuthenticatorAddress: testAuthAddr}
+	l.Espresso.Attestation = []byte{0x01}
+	l.Config.Espresso.AttestationService = attestationService.URL
+	return l
 }
