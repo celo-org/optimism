@@ -231,8 +231,11 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Combine all arguments
-all_args=("${filtered_args[@]}" "${url_args[@]}")
+# Appending metric args last so they win: metrics must bind 0.0.0.0:7300 to match the ingress.
+all_args=(
+    "${filtered_args[@]}" "${url_args[@]}"
+    --metrics.enabled --metrics.addr=0.0.0.0 --metrics.port=7300
+)
 
 echo ""
 echo "=== Final op-batcher arguments ==="
