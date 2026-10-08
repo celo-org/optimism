@@ -186,6 +186,8 @@ func NewEngineController(ctx context.Context, engine ExecEngine, log log.Logger,
 	}
 }
 func (e *EngineController) UnsafeL2Head() eth.L2BlockRef {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.unsafeHead
 }
 

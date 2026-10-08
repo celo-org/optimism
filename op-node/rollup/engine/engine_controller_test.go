@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/big"
 	mrand "math/rand"
+	gosync "sync"
 	"testing"
 	"time"
 
@@ -151,6 +152,38 @@ func TestProcessPayloadRejectsStaleParent(t *testing.T) {
 	require.Equal(t, movedOn, ec.UnsafeL2Head(), "the head must not be reorged backwards")
 	require.Len(t, emitted, 1)
 	require.IsType(t, ForkchoiceUpdateEvent{}, emitted[0])
+}
+
+func TestUnsafeL2HeadConcurrentAccess(t *testing.T) {
+	ec := NewEngineController(context.Background(), nil, testlog.Logger(t, 0), metrics.NoopMetrics, &rollup.Config{}, &sync.Config{}, &testutils.MockL1Source{}, &testutils.MockEmitter{})
+	refs := [2]eth.L2BlockRef{
+		{Hash: common.Hash{0x01}, Number: 1, Time: 2},
+		{Hash: common.Hash{0x02}, Number: 2, Time: 4},
+	}
+	ec.SetUnsafeHead(refs[0])
+
+	start := make(chan struct{})
+	var wg gosync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 10_000; i++ {
+			ec.mu.Lock()
+			ec.SetUnsafeHead(refs[i%len(refs)])
+			ec.mu.Unlock()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		<-start
+		for i := 0; i < 10_000; i++ {
+			_ = ec.UnsafeL2Head()
+		}
+	}()
+
+	close(start)
+	wg.Wait()
 }
 
 // buildSimpleCfgAndPayload creates a minimal rollup config and a valid payload (A1) on top of A0.
