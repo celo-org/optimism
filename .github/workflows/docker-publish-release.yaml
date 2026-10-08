@@ -37,6 +37,9 @@ jobs:
       PLATFORMS: linux/amd64,linux/arm64
     steps:
       - uses: actions/checkout@v4
+      # The image build regenerates op-core/superchain/superchain-configs.zip from this submodule.
+      - name: Init superchain-registry submodule
+        run: git submodule update --init --depth 1 -- superchain-registry
       - name: Login at GCP Artifact Registry
         uses: celo-org/reusable-workflows/.github/actions/auth-gcp-artifact-registry@v2.0
         with:
