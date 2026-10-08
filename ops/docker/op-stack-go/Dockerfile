@@ -7,7 +7,9 @@
 
 # All target images use this as base image, and add the final build results.
 # It will default to the target platform.
-ARG TARGET_BASE_IMAGE=chainguard/static:latest
+# celo: alpine instead of upstream's chainguard/static — Celo's Helm charts and the
+# node docker-compose start these images through /bin/sh scripts (sed, cat, nc).
+ARG TARGET_BASE_IMAGE=alpine:3.23@sha256:85fe1e81d6758c208f3e1eed4338a1997e19d4be002d4dd32d3100c9a8c010a0
 
 # op-challenger runs on Wolfi: glibc for kona-host, busybox for the chart's
 # /bin/sh entrypoint, plus a bundled musl loader for the musl-linked cannon embeds.
