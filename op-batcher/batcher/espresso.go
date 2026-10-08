@@ -914,7 +914,12 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				batch := l.espressoStreamer.Peek(ctx)
+				// Peek may read the batcher address from L1 for an undecided batch.
+				// Bound it so a stalled endpoint can't hold the lock: on timeout the
+				// batch stays undecided, Peek returns nil and the next tick retries.
+				peekCtx, cancelPeek := l.networkTimeoutCtx(ctx)
+				batch := l.espressoStreamer.Peek(peekCtx)
+				cancelPeek()
 				if batch == nil {
 					l.espressoStreamerMutex.Unlock()
 					break
