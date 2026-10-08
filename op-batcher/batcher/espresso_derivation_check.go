@@ -53,10 +53,10 @@ type l1HeaderFetcher interface {
 }
 
 // checkDerivationRules runs the same batch checks as op-node's derivation
-// pipeline on batch, treating parent as the safe head and the current L1 head
-// as the L1 inclusion block. It returns nil if the batch would be accepted,
-// errBatchUndecided if it can't be decided yet, ErrBatchRejected if it
-// violates a rule, or a fetch error.
+// pipeline on batch, treating parent as the safe head and the block after the
+// current L1 head as the L1 inclusion block. It returns nil if the batch would
+// be accepted, errBatchUndecided if it can't be decided yet, ErrBatchRejected
+// if it violates a rule, or a fetch error.
 func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logger, l1 l1HeaderFetcher,
 	timeout time.Duration, parent eth.L2BlockRef, batch *derive.SingularBatch,
 ) error {
@@ -99,10 +99,15 @@ func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logge
 		l1Blocks = append(l1Blocks, eth.InfoToL1BlockRef(eth.HeaderBlockInfo(nextHeader)))
 	}
 
+	// The batch can't land in the already-mined L1 head, so its earliest possible
+	// inclusion is the next block.
+	inclusion := eth.InfoToL1BlockRef(eth.HeaderBlockInfo(l1Head))
+	inclusion.Number++
+
 	// Singular batches never need the L2 fetcher, which is only used for span batches.
 	validity := derive.CheckBatch(ctx, cfg, lgr, l1Blocks, parent, &derive.BatchWithL1InclusionBlock{
 		Batch:            batch,
-		L1InclusionBlock: eth.InfoToL1BlockRef(eth.HeaderBlockInfo(l1Head)),
+		L1InclusionBlock: inclusion,
 	}, nil)
 	switch validity {
 	case derive.BatchAccept:
