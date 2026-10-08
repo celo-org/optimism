@@ -174,6 +174,19 @@ func TestCheckDerivationRules(t *testing.T) {
 			check:  requireRejected,
 		},
 		{
+			name:   "L1 head one before sequencing window boundary",
+			l1:     newFakeL1(int(origin.Number+cfg.SeqWindowSize), l1BlockTime),
+			mutate: func(b *derive.SingularBatch) {},
+			check:  func(t *testing.T, err error) { require.NoError(t, err) },
+		},
+		{
+			// The earliest possible inclusion is the next L1 block, where the window has expired.
+			name:   "L1 head at sequencing window boundary",
+			l1:     newFakeL1(int(origin.Number+cfg.SeqWindowSize+1), l1BlockTime),
+			mutate: func(b *derive.SingularBatch) {},
+			check:  requireRejected,
+		},
+		{
 			name:   "sequencing window expired",
 			l1:     newFakeL1(int(origin.Number+cfg.SeqWindowSize+2), l1BlockTime),
 			mutate: func(b *derive.SingularBatch) {},
