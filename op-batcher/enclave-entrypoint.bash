@@ -231,12 +231,7 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Combine all arguments, then force the metrics endpoint onto the fixed enclaver ingress.
-# op-batcher's metrics MUST bind to 0.0.0.0:7300 to match MetricsPort in
-# enclave-tools/enclaver.go — any other port, or a loopback addr, leaves the parent-side
-# 7300 bridge with no listener and scrapes fail silently. urfave/cli takes the LAST value
-# for a repeated flag, so appending these last makes them win over any caller-supplied
-# --metrics.* without needing to detect or strip them.
+# Appending metric args last so they win: metrics must bind 0.0.0.0:7300 to match the ingress.
 all_args=(
     "${filtered_args[@]}" "${url_args[@]}"
     --metrics.enabled --metrics.addr=0.0.0.0 --metrics.port=7300
