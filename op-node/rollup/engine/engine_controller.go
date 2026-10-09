@@ -431,6 +431,8 @@ func (e *EngineController) applyFinalizedHeadCacheChecks(br eth.L2BlockRef, sour
 }
 
 func (e *EngineController) UnsafeL2Head() eth.L2BlockRef {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return e.unsafeHead
 }
 
