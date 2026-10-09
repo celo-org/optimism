@@ -832,6 +832,10 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 // reversed CurrentL1). The streamer no longer needs pumping here: it refreshes L1
 // finality and fetches HotShot blocks from its own poll loops.
 func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus) (outOfSync bool) {
+	// Lock order: streamer before channelMgr so the clear + re-anchor below stay atomic
+	// without deadlocking.
+	l.espressoStreamerMutex.Lock()
+	defer l.espressoStreamerMutex.Unlock()
 	l.channelMgrMutex.Lock()
 	defer l.channelMgrMutex.Unlock()
 	syncActions, outOfSync := computeSyncActions(*newSyncStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
@@ -854,22 +858,6 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 	return false
 }
 
-// requestClearState asks the batch loading loop to perform `l.clearState`.
-func (l *BatchSubmitter) requestClearState() {
-	l.clearStateRequested.Store(true)
-}
-
-// performClearState runs clearState if it was requested via requestClearState,
-// reporting whether a clear was performed.
-func (l *BatchSubmitter) performClearState(ctx context.Context) bool {
-	if !l.clearStateRequested.CompareAndSwap(true, false) {
-		return false
-	}
-	l.Log.Info("Clearing state as requested by the block queueing loop")
-	l.clearState(ctx)
-	return true
-}
-
 // Periodically refreshes the sync status and drains the Espresso streamer of any
 // batches that extend the tip it is tracking.
 // Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the loops
@@ -886,8 +874,11 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 	for {
 		select {
 		case <-ticker.C:
-			// Check if block loader requested to clear state
-			l.performClearState(ctx)
+			// Read before the sync status: a clearState landing anywhere in this
+			// tick makes the snapshot's LocalSafeL2 untrustworthy as the drain floor.
+			l.espressoStreamerMutex.Lock()
+			epoch := l.espressoClearEpoch
+			l.espressoStreamerMutex.Unlock()
 
 			newSyncStatus, err := l.getSyncStatus(ctx)
 			if err != nil {
@@ -908,13 +899,27 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 			blocksAdded := 0
 
 			for {
-				// Check if block loader requested to clear state
-				if l.performClearState(ctx) {
+				// Hold the streamer lock across the whole Peek -> AddL2Block ->
+				// AdvancePosition sequence so clearState cannot interleave mid-batch
+				// and desync the streamer position from the channel manager.
+				l.espressoStreamerMutex.Lock()
+
+				// Another goroutine cleared state since this tick's snapshot was
+				// taken. Stop and refresh the next tick.
+				if l.espressoClearEpoch != epoch {
+					l.espressoStreamerMutex.Unlock()
+					l.Log.Info("State cleared during the drain, refreshing sync status next tick")
 					break
 				}
 
-				batch := l.espressoStreamer.Peek(ctx)
+				// Peek may read the batcher address from L1 for an undecided batch.
+				// Bound it so a stalled endpoint can't hold the lock: on timeout the
+				// batch stays undecided, Peek returns nil and the next tick retries.
+				peekCtx, cancelPeek := l.networkTimeoutCtx(ctx)
+				batch := l.espressoStreamer.Peek(peekCtx)
+				cancelPeek()
 				if batch == nil {
+					l.espressoStreamerMutex.Unlock()
 					break
 				}
 
@@ -930,6 +935,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
 						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
 					l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+					l.espressoStreamerMutex.Unlock()
 					break
 				}
 
@@ -939,6 +945,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				// instead of skipping.
 				block, err := batch.ToBlock(l.RollupConfig)
 				if err != nil {
+					l.espressoStreamerMutex.Unlock()
 					l.Log.Error("failed to convert singular batch to block", "err", err)
 					l.clearState(ctx)
 					break
@@ -956,6 +963,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				l.channelMgrMutex.Unlock()
 
 				if err != nil {
+					l.espressoStreamerMutex.Unlock()
 					l.Log.Error("failed to add L2 block to channel manager", "err", err)
 					// clearState re-anchors the streamer to the safe head.
 					l.clearState(ctx)
@@ -963,6 +971,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				}
 
 				l.espressoStreamer.AdvancePosition()
+				l.espressoStreamerMutex.Unlock()
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
 
 				// During a large drain, signal periodically so throttling can engage
@@ -989,10 +998,12 @@ type BlockLoader struct {
 	batcher        *BatchSubmitter
 }
 
-func (l *BlockLoader) reset() {
+// reset drops the loader's queued-block state and clears the channel manager,
+// re-anchoring the streamer to the safe head.
+func (l *BlockLoader) reset(ctx context.Context) {
 	l.prevSyncStatus = nil
 	l.queuedBlocks = nil
-	l.batcher.requestClearState()
+	l.batcher.clearState(ctx)
 }
 
 func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusiveBlockRange) {
@@ -1011,7 +1022,7 @@ func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusive
 
 		if len(l.queuedBlocks) > 0 && block.ParentHash() != l.queuedBlocks[len(l.queuedBlocks)-1].Hash {
 			l.batcher.Log.Warn("Found L2 reorg", "block_number", i)
-			l.reset()
+			l.reset(ctx)
 			break
 		}
 
@@ -1199,7 +1210,7 @@ func (l *BatchSubmitter) espressoBatchQueueingLoop(ctx context.Context, wg *sync
 					l.Log.Debug("Could not enqueue all blocks to Espresso", "enqueued", enqueued, "attempted", blocksToQueue.numBlocks())
 				}
 			} else if action == ActionReset {
-				loader.reset()
+				loader.reset(ctx)
 			}
 
 		case <-ctx.Done():
