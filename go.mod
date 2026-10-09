@@ -1,6 +1,6 @@
 module github.com/ethereum-optimism/optimism
 
-go 1.26.0
+go 1.26.5
 
 toolchain go1.26.6
 
