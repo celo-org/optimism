@@ -86,7 +86,14 @@ type ProgramRunner func(t helpers.Testing, workDir string, rollupCfgs []*rollup.
 
 // RunFaultProofProgram runs the native fault proof program (kona-host super, i.e. the interop
 // client program) for the transition to the given L2 block number from the preceding one.
+//
+// Without KONA_HOST_PATH the program step is skipped, so the L2-side assertions still run in
+// go-tests, which has no Rust binaries.
 func RunFaultProofProgram(t helpers.Testing, logger log.Logger, l1 *helpers.L1Miner, checkResult CheckResult, fixtureInputParams ...FixtureInputParam) {
+	if konaHostPath == "" {
+		t.Logf("KONA_HOST_PATH not set; skipping the kona-host fault-proof run")
+		return
+	}
 	runProgram(t, logger, l1, RunKonaSuperNative, false, checkResult, fixtureInputParams...)
 }
 
