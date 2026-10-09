@@ -53,7 +53,7 @@ func mockAuthEvents(l1F *testutils.MockL1Source, rng *rand.Rand, ref eth.L1Block
 		authLogs = append(authLogs, &types.Log{
 			Address: authenticatorAddr,
 			Topics: []common.Hash{
-				BatchInfoAuthenticatedABIHash,
+				batchInfoAuthenticatedTopic,
 				common.BytesToHash(caller.Bytes()),
 			},
 			Data: bh.Bytes(),

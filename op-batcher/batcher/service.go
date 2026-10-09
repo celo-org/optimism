@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -22,6 +24,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
+	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/httputil"
@@ -52,6 +55,11 @@ type BatcherConfig struct {
 
 	// For throttling DA. See CLIConfig in config.go for details on these parameters.
 	ThrottleParams config.ThrottleParams
+
+	// Espresso groups all TEE-batcher-specific configuration. Defined in
+	// espresso_service.go to keep the upstream Optimism field block compact.
+	// Zero-valued when --espresso.enabled=false.
+	Espresso EspressoBatcherConfig
 }
 
 // BatcherService represents a full batch-submitter instance and its resources,
@@ -82,6 +90,17 @@ type BatcherService struct {
 	stopped         atomic.Bool
 
 	NotSubmittingOnStart bool
+
+	// Espresso runtime state. Defined in espresso_service.go to keep the
+	// upstream Optimism field block compact. EspressoClient and
+	// EspressoLightClient are nil when --espresso.enabled=false.
+	EspressoClient      *espressoClient.MultipleNodesClient
+	EspressoLightClient *espressoLightClient.LightclientCaller
+	// EspressoL1Client backs the light-client reads; non-nil only when
+	// --espresso.l1-url points at a different RPC than --l1-eth-rpc.
+	EspressoL1Client *ethclient.Client
+	opcrypto.ChainSigner
+	Attestation []byte
 }
 
 type DriverSetupOption func(setup *DriverSetup)
@@ -174,6 +193,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
 		return err
 	}
+	if err := bs.checkEspressoBatchAuthenticator(cfg); err != nil {
+		return err
+	}
 	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
 		return err
 	}
@@ -193,6 +215,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	}
 	if err := bs.initPProf(cfg); err != nil {
 		return fmt.Errorf("failed to init profiling: %w", err)
+	}
+	if err := bs.initEspresso(ctx, cfg); err != nil {
+		return fmt.Errorf("failed to init Espresso: %w", err)
 	}
 	bs.initDriver(opts...)
 	if err := bs.initRPCServer(cfg); err != nil {
@@ -282,6 +307,24 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 		return fmt.Errorf("data availability type %q is not supported on chains with Espresso scheduled: "+
 			"batch data must be posted as calldata only (blob DA is dropped by post-Espresso derivation)",
 			cfg.DataAvailabilityType)
+	}
+	return nil
+}
+
+// checkEspressoBatchAuthenticator refuses to start an Espresso (TEE) batcher
+// on a chain with no BatchAuthenticator: without one it would sign and send
+// every authentication to the zero address, where it succeeds as a no-op, so
+// each batch pays gas for an authentication that does nothing.
+//
+// The fallback batcher is exempt. Pre-fork it runs as a vanilla upstream
+// batcher, so a zero address there is legitimate.
+func (bs *BatcherService) checkEspressoBatchAuthenticator(cfg *CLIConfig) error {
+	if !cfg.Espresso.Enabled {
+		return nil
+	}
+	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+		return errors.New("--espresso.enabled requires a BatchAuthenticator, but the rollup config has none " +
+			"(BatchAuthenticatorAddress is zero)")
 	}
 	return nil
 }
@@ -479,6 +522,7 @@ func (bs *BatcherService) initDriver(opts ...DriverSetupOption) {
 		ChannelConfig:    bs.ChannelConfig,
 		AltDA:            bs.AltDA,
 	}
+	bs.applyEspressoDriverSetup(&ds)
 	for _, opt := range opts {
 		opt(&ds)
 	}
@@ -589,6 +633,9 @@ func (bs *BatcherService) Stop(ctx context.Context) error {
 
 	if bs.L1Client != nil {
 		bs.L1Client.Close()
+	}
+	if bs.EspressoL1Client != nil {
+		bs.EspressoL1Client.Close()
 	}
 	if bs.EndpointProvider != nil {
 		bs.EndpointProvider.Close()

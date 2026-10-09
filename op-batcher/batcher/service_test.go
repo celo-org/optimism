@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
+	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-batcher/flags"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
@@ -94,6 +95,37 @@ func TestCheckFallbackAuthConfirmations(t *testing.T) {
 			err := bs.checkFallbackAuthConfirmations(cfg)
 			if test.wantErr {
 				require.ErrorContains(t, err, "NumConfirmations")
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestCheckEspressoBatchAuthenticator(t *testing.T) {
+	authAddr := common.Address{0x01}
+
+	tests := []struct {
+		name          string
+		enabled       bool
+		authenticator common.Address
+		wantErr       bool
+	}{
+		{"fallback batcher, no authenticator", false, common.Address{}, false},
+		{"fallback batcher, authenticator", false, authAddr, false},
+		{"espresso batcher, authenticator", true, authAddr, false},
+		{"espresso batcher, no authenticator", true, common.Address{}, true},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			bs := &BatcherService{RollupConfig: &rollup.Config{
+				BatchAuthenticatorAddress: test.authenticator,
+			}}
+			cfg := &CLIConfig{Espresso: espresso.CLIConfig{Enabled: test.enabled}}
+			err := bs.checkEspressoBatchAuthenticator(cfg)
+			if test.wantErr {
+				require.ErrorContains(t, err, "BatchAuthenticator")
 			} else {
 				require.NoError(t, err)
 			}
