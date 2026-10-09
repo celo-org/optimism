@@ -140,7 +140,7 @@ parameters:
     default: false
 
 orbs:
-  utils: ethereum-optimism/circleci-utils@1.0.32
+  utils: celo-org/circleci-utils@1.0.32
   go: circleci/go@1.8.0
   gcp-cli: circleci/gcp-cli@3.0.1
   slack: circleci/slack@6.0.0
@@ -877,7 +877,7 @@ jobs:
   cannon-go-lint-and-test:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: xlarge.gen2
+    resource_class: celo-org/xlarge
     parameters:
       skip_slow_tests:
         type: boolean
@@ -938,7 +938,7 @@ jobs:
   contracts-bedrock-build:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: large.gen2
+    resource_class: celo-org/xlarge
     parameters:
       build_args:
         description: Forge build arguments
@@ -1070,7 +1070,7 @@ jobs:
   contracts-bedrock-tests:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -1078,7 +1078,8 @@ jobs:
       test_timeout:
         description: Timeout for running tests
         type: string
-        default: 20m
+        # celo: 30m instead of 20m, celo-org/xlarge is smaller than upstream's 2xlarge.gen2
+        default: 30m
       test_profile:
         description: Profile to use for testing
         type: string
@@ -1159,7 +1160,7 @@ jobs:
   contracts-bedrock-heavy-fuzz-nightly:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: full
@@ -1213,7 +1214,7 @@ jobs:
   contracts-bedrock-coverage:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     parameters:
       test_timeout:
         description: Timeout for running tests
@@ -1255,6 +1256,7 @@ jobs:
       - run:
           name: Write pinned block number for cache key
           command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
             just print-pinned-block-number > ./pinnedBlockNumber.txt
             cat pinnedBlockNumber.txt
           working_directory: packages/contracts-bedrock
@@ -1276,14 +1278,18 @@ jobs:
           working_directory: packages/contracts-bedrock
       - run:
           name: Run coverage tests
-          command: just coverage-lcov-all
+          command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
+            just coverage-lcov
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
           working_directory: packages/contracts-bedrock
           no_output_timeout: <<parameters.test_timeout>>
       - run:
           name: Print failed test traces
-          command: just test-rerun | tee failed-test-traces.log
+          command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
+            just test-rerun | tee failed-test-traces.log
           environment:
             FOUNDRY_PROFILE: <<parameters.test_profile>>
           working_directory: packages/contracts-bedrock
@@ -1328,7 +1334,7 @@ jobs:
         default: ""
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           enable-mise-cache: true
@@ -1353,6 +1359,7 @@ jobs:
       - run:
           name: Write pinned block number for cache key
           command: |
+            export ETH_RPC_URL="$MAINNET_RPC_URL"
             just print-pinned-block-number > ./pinnedBlockNumber.txt
             cat pinnedBlockNumber.txt
           environment:
@@ -1577,7 +1584,7 @@ jobs:
   contracts-bedrock-checks-fast:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           enable-mise-cache: true
@@ -1846,9 +1853,7 @@ jobs:
         default: 1
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    # Trial one tier down; nproc-based test parallelism falls from 16 to 8 while -p=4
-    # stays fixed. Monitor the 16 GiB limit after a 24.1 GiB cross-branch peak.
-    resource_class: xlarge.gen2
+    resource_class: celo-org/2xlarge
     parallelism: <<parameters.parallelism>>
     steps:
       - utils/checkout-with-mise:
@@ -1861,6 +1866,11 @@ jobs:
           command: |
             ROOT_DIR="$(pwd)"
             echo "export RUST_BINARY_PATH_OP_RETH=$ROOT_DIR/rust/target/release/op-reth" >> "$BASH_ENV"
+      # Pin the solc set to match contracts-bedrock-build. op-deployer tests run
+      # `forge script` against the embedded artifact bundle; if forge auto-detects a
+      # newer solc than the bundle was built with (floating ^0.8.0 pragmas), it
+      # recompiles and breaks the "must not recompile" assertions.
+      - install-solc-compilers
       - go-restore-cache:
           namespace: go-tests
       - run:
@@ -1905,7 +1915,7 @@ jobs:
       resource_class:
         description: Machine resource class
         type: string
-        default: 2xlarge.gen2
+        default: celo-org/2xlarge
       no_output_timeout:
         description: Timeout for when CircleCI kills the job if there's no output
         type: string
@@ -1993,8 +2003,7 @@ jobs:
         default: ""
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: <<parameters.resource_class>>
-    parallelism: <<parameters.parallelism>>
+    resource_class: celo-org/2xlarge
     steps:
       # apt-install needs the working tree, so it runs after checkout.
       - utils/checkout-with-mise:
@@ -2165,7 +2174,7 @@ jobs:
     parameters:
       diff_branch:
         type: string
-        default: develop
+        default: celo-rebase-18
       scan_command:
         type: string
         default: semgrep ci --timeout=100
@@ -2176,7 +2185,7 @@ jobs:
       SEMGREP_COMMIT: << pipeline.git.revision >>
     docker:
       - image: returntocorp/semgrep
-    resource_class: xlarge.gen2
+    resource_class: celo-org/xlarge
     steps:
       - checkout # no need to use mise here since the docker image contains the only dependency
       - unless:
@@ -2296,7 +2305,7 @@ jobs:
   publish-contract-artifacts:
     docker:
       - image: <<pipeline.parameters.c-default_docker_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - gcp-cli/install
       - gcp-oidc-authenticate:
@@ -2504,6 +2513,11 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
             - slack
       - check-kontrol-build:
+          # celo disable unwanted jobs/workflows
+          filters:
+            branches:
+              only:
+                - celo-disabled-circleci-jobs-branch
           requires:
             - contracts-bedrock-build
           context:
@@ -2516,11 +2530,13 @@ workflows:
       - l2-chains-sync-check:
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-upload:
-          requires:
-            - contracts-bedrock-build
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable contracts-bedrock-upload — publishes contract selectors to the public
+      # Openchain signature DB (forge selectors up); a publish-only step Celo doesn't need.
+      # - contracts-bedrock-upload:
+      #     requires:
+      #       - contracts-bedrock-build
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       - diff-fetcher-forge-artifacts:
           context:
             - circleci-repo-readonly-authenticated-github-token
@@ -2547,32 +2563,35 @@ workflows:
             - prep-go-modules
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - check-op-geth-version:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable check-op-geth-version — it asserts the go-ethereum replace points at
+      # ethereum-optimism/op-geth, but celo uses celo-org/op-geth.
+      # - check-op-geth-version:
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       - prep-superchain:
           context:
             - circleci-repo-readonly-authenticated-github-token
       - prep-go-modules:
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - check-nut-locks:
-          requires:
-            - prep-go-modules
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - check-nut-prefork-states:
-          requires:
-            - contracts-bedrock-build
-            - prep-superchain
-            - prep-go-modules
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - nut-provenance-verify:
-          requires:
-            - prep-go-modules
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # celo: disable NUT bundle provenance/lock/prefork checks (verify against upstream NUT locks).
+      # - check-nut-locks:
+      #     requires:
+      #       - prep-go-modules
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - check-nut-prefork-states:
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - prep-superchain
+      #       - prep-go-modules
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      # - nut-provenance-verify:
+      #     requires:
+      #       - prep-go-modules
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
       # One job on every branch: -short gates only a handful of tests, and a
       # single job name lets CircleCI reuse timing data across branches (develop
       # runs keep the store fresh). Slack notify fires on develop only
@@ -2606,14 +2625,15 @@ workflows:
       - check-generated-mocks-op-service:
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - cannon-go-lint-and-test:
-          requires:
-            - contracts-bedrock-build
-          skip_slow_tests: true
-          notify: true
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
+      # celo: disable cannon-go-lint-and-test — cannon (fault-proof); Celo uses no fault proofs.
+      # - cannon-go-lint-and-test:
+      #     requires:
+      #       - contracts-bedrock-build
+      #     skip_slow_tests: true
+      #     notify: true
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
       - todo-issues:
           name: todo-issues-check
           check_closed: false
@@ -2638,78 +2658,84 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
             - sccache-gcs-optimism
-      - rust-build-sp1-super-range-executor:
-          name: rust-sp1-super-range-executor
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - sccache-gcs-optimism
+      # celo: disable rust-sp1-super-range-executor and rust-binaries-for-sysgo —
+      # their only consumers are the acceptance-test variants disabled below.
+      # - rust-build-sp1-super-range-executor:
+      #     name: rust-sp1-super-range-executor
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - sccache-gcs-optimism
       # Gates that the SP1 guest ELFs build reproducibly. The acceptance tests
       # no longer consume this job's workspace (they run with stub prestate
       # artifacts against the mock verifier), so it is required directly by
       # ci-gate rather than through them.
-      - kona-build-sp1-elfs:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - sccache-gcs-optimism
-      - rust-binaries-for-sysgo:
-          requires:
-            - rust-kona-binaries
-            - rust-op-reth-binary
-            - rust-sp1-super-range-executor
+      # celo: disable kona-build-sp1-elfs — Celo proves with op-succinct from celo-kona,
+      # not upstream's SP1 programs.
+      # - kona-build-sp1-elfs:
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - sccache-gcs-optimism
+      # - rust-binaries-for-sysgo:
+      #     requires:
+      #       - rust-kona-binaries
+      #       - rust-op-reth-binary
+      #       - rust-sp1-super-range-executor
       - go-binaries-for-sysgo:
           requires:
             - prep-go-modules
           context:
             - circleci-repo-readonly-authenticated-github-token
-      # OP Node retains 20 vCPU / 40 GiB after a 38.5 GiB observed peak; Kona trials
-      # 16 vCPU / 32 GiB after a 21.3 GiB observed peak.
-      # IN-MEMORY - op-node/op-reth
-      - op-acceptance-tests:
-          name: memory-all-opn-op-reth-<<matrix.l1_fork>>
-          matrix:
-            parameters:
-              l1_fork: &acceptance_l1_forks
-                - fusaka
-          l2_el_kind: op-reth
-          parallelism: 8
-          acceptance_test_jobs: "8"
-          no_output_timeout: 120m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - rust-binaries-for-sysgo
-            - go-binaries-for-sysgo
-            - prep-go-modules
-            # for the gitignored superchain-configs.zip op-acceptance-tests //go:embeds
-            - prep-superchain
-      # IN-MEMORY - kona/op-reth
-      - op-acceptance-tests:
-          name: memory-all-kona-op-reth-<<matrix.l1_fork>>
-          matrix:
-            parameters:
-              l1_fork: *acceptance_l1_forks
-          l2_cl_kind: kona-node
-          l2_el_kind: op-reth
-          resource_class: 2xlarge.gen2
-          parallelism: 8
-          acceptance_test_jobs: "8"
-          no_output_timeout: 120m
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
-            - discord
-          requires:
-            - contracts-bedrock-build
-            - cannon-prestate
-            - rust-binaries-for-sysgo
-            - go-binaries-for-sysgo
-            - prep-go-modules
-            # for the gitignored superchain-configs.zip op-acceptance-tests //go:embeds
-            - prep-superchain
+      # celo: op-reth and kona-node carry no Celo changes in this repo — they live
+      # in a separate repo — so these EL/CL variants run non-Celo binaries and fail
+      # Celo-specific tests (e.g. base-fee routing to the FeeHandler). Upstream removed
+      # the op-geth variant; restoring Celo acceptance coverage is deferred to the CI
+      # reconciliation follow-up.
+      # # IN-MEMORY - op-node/op-reth
+      # - op-acceptance-tests:
+      #     name: memory-all-opn-op-reth-<<matrix.l1_fork>>
+      #     matrix:
+      #       parameters:
+      #         l1_fork: &acceptance_l1_forks
+      #           - fusaka
+      #     l2_el_kind: op-reth
+      #     parallelism: 8
+      #     acceptance_test_jobs: "8"
+      #     no_output_timeout: 120m
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
+      #       - discord
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - rust-binaries-for-sysgo
+      #       - go-binaries-for-sysgo
+      #       - prep-go-modules
+      #       # for the gitignored superchain-configs.zip op-acceptance-tests //go:embeds
+      #       - prep-superchain
+      # # IN-MEMORY - kona/op-reth
+      # - op-acceptance-tests:
+      #     name: memory-all-kona-op-reth-<<matrix.l1_fork>>
+      #     matrix:
+      #       parameters:
+      #         l1_fork: *acceptance_l1_forks
+      #     l2_cl_kind: kona-node
+      #     l2_el_kind: op-reth
+      #     parallelism: 8
+      #     acceptance_test_jobs: "8"
+      #     no_output_timeout: 120m
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
+      #       - discord
+      #     requires:
+      #       - contracts-bedrock-build
+      #       - cannon-prestate
+      #       - rust-binaries-for-sysgo
+      #       - go-binaries-for-sysgo
+      #       - prep-go-modules
+      #       # for the gitignored superchain-configs.zip op-acceptance-tests //go:embeds
+      #       - prep-superchain
       # Gate job - single stable job used as GitHub required status check for develop.
       # Uses terminal requires so it always runs (even when deps fail), giving the
       # merge queue an immediate failure signal instead of a timeout.
@@ -2722,20 +2748,24 @@ workflows:
             - semgrep-scan-local: terminal
             - semgrep-test: terminal
             - go-tests: terminal
-            - memory-all-opn-op-reth-fusaka: terminal
-            - memory-all-kona-op-reth-fusaka: terminal
-            - kona-build-sp1-elfs: terminal
+            # celo: op-reth/kona acceptance variants removed (no Celo changes in this repo)
+            # - memory-all-opn-op-reth-fusaka: terminal
+            # - memory-all-kona-op-reth-fusaka: terminal
+            # celo: disable kona-build-sp1-elfs — job removed above.
+            # - kona-build-sp1-elfs: terminal
             # Go test/lint jobs previously fanned in via the bedrock-go-tests helper.
-            - cannon-go-lint-and-test: terminal
+            # celo: disable cannon-go-lint-and-test — job removed above.
+            # - cannon-go-lint-and-test: terminal
             - check-generated-mocks-op-node: terminal
             - check-generated-mocks-op-service: terminal
             # Misc checks that run on the merge queue.
-            - check-nut-locks: terminal
-            - check-nut-prefork-states: terminal
-            - check-op-geth-version: terminal
+            # celo: NUT lock/provenance + op-geth-version checks removed above.
+            # - check-nut-locks: terminal
+            # - check-nut-prefork-states: terminal
+            # - check-op-geth-version: terminal
             - op-deployer-forge-version: terminal
             - l2-chains-sync-check: terminal
-            - nut-provenance-verify: terminal
+            # - nut-provenance-verify: terminal
             - diff-fetcher-forge-artifacts: terminal
           context:
             - circleci-api-token
@@ -2750,6 +2780,8 @@ workflows:
             - circleci-api-token
 
   go-release-op-deployer:
+    # celo disable unwanted jobs/workflows
+    when: false
     jobs:
       - contracts-bedrock-build:
           name: build-contracts-go-release-op-deployer
@@ -2777,6 +2809,8 @@ workflows:
             - build-contracts-go-release-op-deployer
 
   go-release-op-up:
+    # celo disable unwanted jobs/workflows
+    when: false
     jobs:
       - contracts-bedrock-build:
           name: build-contracts-go-release-op-up
@@ -2802,7 +2836,9 @@ workflows:
             - build-contracts-go-release-op-up
 
   release:
-    when: << pipeline.parameters.c-run_release >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_release >>
     jobs:
       - initialize:
           context:
@@ -2814,7 +2850,9 @@ workflows:
               ignore: /.*/
 
   scheduled-todo-issues:
-    when: << pipeline.parameters.c-run_scheduled_todo_issues >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_todo_issues >>
     jobs:
       - todo-issues:
           name: todo-issue-checks
@@ -2832,6 +2870,25 @@ workflows:
               ignore: /.*/
           context:
             - circleci-repo-readonly-authenticated-github-token
+  develop-publish-contract-artifacts:
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when:
+    # or:
+    # - and:
+    # - equal: ["develop", <<pipeline.git.branch>>]
+    # - equal: ["webhook", << pipeline.trigger_source >>]
+    # - and:
+    # - equal:
+    # [
+    # true,
+    # <<pipeline.parameters.c-publish_contract_artifacts_dispatch>>,
+    # ]
+    # - equal: ["api", << pipeline.trigger_source >>]
+    jobs:
+      - publish-contract-artifacts:
+          context:
+            - circleci-repo-readonly-authenticated-github-token
 
   publish-contract-artifacts-auto-or-manual:
     when: << pipeline.parameters.c-run_publish_contract_artifacts >>
@@ -2841,7 +2898,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   develop-fault-proofs:
-    when: << pipeline.parameters.c-run_develop_fault_proofs >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_develop_fault_proofs >>
     jobs:
       - prep-go-modules:
           context:
@@ -2889,7 +2948,9 @@ workflows:
             - prep-go-modules
 
   develop-kontrol-tests:
-    when: << pipeline.parameters.c-run_develop_kontrol_tests >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_develop_kontrol_tests >>
     jobs:
       - kontrol-tests:
           context:
@@ -2897,7 +2958,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   scheduled-cannon-full-tests:
-    when: << pipeline.parameters.c-run_scheduled_cannon_full_tests >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_cannon_full_tests >>
     jobs:
       - contracts-bedrock-build:
           build_args: --deny-warnings --skip test
@@ -2914,7 +2977,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   scheduled-preimage-reproducibility:
-    when: << pipeline.parameters.c-run_scheduled_preimage_reproducibility >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_preimage_reproducibility >>
     jobs:
       - preimage-reproducibility:
           context:
@@ -2922,14 +2987,18 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   scheduled-stale-check:
-    when: << pipeline.parameters.c-run_scheduled_stale_check >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_stale_check >>
     jobs:
       - stale-check:
           context:
             - circleci-repo-optimism
 
   scheduled-heavy-fuzz-tests:
-    when: << pipeline.parameters.c-run_scheduled_heavy_fuzz_tests >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_scheduled_heavy_fuzz_tests >>
     jobs:
       - prep-go-modules:
           context:
@@ -2942,7 +3011,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   circleci-schedule-trigger-check-workflow:
-    when: << pipeline.parameters.c-run_circleci_schedule_trigger_check >>
+    # celo disable unwanted jobs/workflows: celo-org/optimism has no scheduled pipelines
+    when: false
+    # when: << pipeline.parameters.c-run_circleci_schedule_trigger_check >>
     jobs:
       - circleci-schedule-trigger-check:
           context:
@@ -2950,7 +3021,9 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
 
   close-issue-workflow:
-    when: << pipeline.parameters.c-run_close_issue >>
+    # celo disable unwanted jobs/workflows
+    when: false
+    # when: << pipeline.parameters.c-run_close_issue >>
     jobs:
       - close-issue:
           label_name: "auto-close-trivial-contribution"
@@ -3015,26 +3088,28 @@ workflows:
       - prep-go-modules:
           context:
             - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-tests:
-          # Heavily fuzz any fuzz tests within added or modified test files.
-          name: contracts-bedrock-tests-heavy-fuzz-modified <<matrix.features>>
-          requires:
-            - prep-go-modules
-          test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM --
-            './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
-          test_timeout: 1h
-          test_profile: ciheavy
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: &features_matrix
-                - main
-                - CUSTOM_GAS_TOKEN
-                - OPTIMISM_PORTAL_INTEROP
-                - ZK_DISPUTE_GAME
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
+      # celo: disable contracts-bedrock-tests-heavy-fuzz-modified — heavy fuzzing of changed
+      # contract test files; not needed for celo's CI. (features anchor relocated to the job below.)
+      # - contracts-bedrock-tests:
+      #     # Heavily fuzz any fuzz tests within added or modified test files.
+      #     name: contracts-bedrock-tests-heavy-fuzz-modified <<matrix.features>>
+      #     requires:
+      #       - prep-go-modules
+      #     test_list: git diff origin/develop...HEAD --name-only --diff-filter=AM --
+      #       './test/**/*.t.sol' | sed 's|packages/contracts-bedrock/||'
+      #     test_timeout: 1h
+      #     test_profile: ciheavy
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features:
+      #           - main
+      #           - CUSTOM_GAS_TOKEN
+      #           - OPTIMISM_PORTAL_INTEROP
+      #           - ZK_DISPUTE_GAME
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
       # On PRs, run tests with lite profile for better build times.
       - contracts-bedrock-tests:
           name: contracts-bedrock-tests <<matrix.features>>
@@ -3045,7 +3120,13 @@ workflows:
           features: <<matrix.features>>
           matrix:
             parameters:
-              features: *features_matrix
+              features: &features_matrix
+                - main
+                - CUSTOM_GAS_TOKEN
+                # celo: disable the interop portal and upstream ZK dispute game
+                # variants — Celo uses neither.
+                # - OPTIMISM_PORTAL_INTEROP
+                # - ZK_DISPUTE_GAME
           context:
             - circleci-repo-readonly-authenticated-github-token
             - slack
@@ -3069,114 +3150,109 @@ workflows:
           filters:
             branches:
               only: develop
-      - contracts-bedrock-coverage:
-          # Generate coverage reports.
-          name: contracts-bedrock-coverage <<matrix.features>>
-          requires:
-            - prep-go-modules
-          test_timeout: 1h
-          test_profile: cicoverage
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-rpc-secrets
-            - slack
-      # On PRs, run upgrade tests with lite profile for better build times.
-      - contracts-bedrock-tests-upgrade:
-          name: contracts-bedrock-tests-upgrade op-mainnet <<matrix.features>>
-          requires:
-            - prep-go-modules
-          fork_op_chain: op
-          fork_base_chain: mainnet
-          test_profile: liteci
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-rpc-secrets
-            - slack
-          filters:
-            branches:
-              ignore: develop
-      # On develop, run upgrade tests with ci profile to mirror production.
-      - contracts-bedrock-tests-upgrade:
-          name: contracts-bedrock-tests-upgrade-develop op-mainnet <<matrix.features>>
-          requires:
-            - prep-go-modules
-          fork_op_chain: op
-          fork_base_chain: mainnet
-          test_profile: ci
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-rpc-secrets
-            - slack
-          filters:
-            branches:
-              only: develop
-      # On PRs, run chain-specific upgrade tests with lite profile for better build times.
-      - contracts-bedrock-tests-upgrade:
-          name: contracts-bedrock-tests-upgrade <<matrix.fork_op_chain>>-mainnet
-          requires:
-            - prep-go-modules
-          fork_op_chain: <<matrix.fork_op_chain>>
-          fork_base_chain: mainnet
-          test_profile: liteci
-          matrix:
-            parameters:
-              fork_op_chain: ["op", "ink", "unichain"]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-rpc-secrets
-            - slack
-          filters:
-            branches:
-              ignore: develop
-      # On develop, run chain-specific upgrade tests with ci profile to mirror production.
-      - contracts-bedrock-tests-upgrade:
-          name: contracts-bedrock-tests-upgrade-develop <<matrix.fork_op_chain>>-mainnet
-          requires:
-            - prep-go-modules
-          fork_op_chain: <<matrix.fork_op_chain>>
-          fork_base_chain: mainnet
-          test_profile: ci
-          matrix:
-            parameters:
-              fork_op_chain: ["op", "ink", "unichain"]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-rpc-secrets
-            - slack
-          filters:
-            branches:
-              only: develop
-      # Always run L2 fork tests with ci profile
-      - contracts-bedrock-tests-l2-fork:
-          name: contracts-bedrock-tests-l2-fork op-mainnet
-          requires:
-            - prep-go-modules
-          fork_op_chain: op-mainnet
-          l2_fork_block_number: latest
-          test_profile: ci
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - circleci-repo-rpc-secrets
-            - slack
-      - contracts-bedrock-checks-fast:
-          name: contracts-bedrock-checks-fast-feature-tests
-          requires:
-            - prep-go-modules
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - slack
+      # celo: disable contracts-bedrock-coverage — coverage reports (uploaded to codecov, disabled for celo).
+      # - contracts-bedrock-coverage:
+      #     # Generate coverage reports.
+      #     name: contracts-bedrock-coverage <<matrix.features>>
+      #     test_timeout: 1h
+      #     test_profile: cicoverage
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features: *features_matrix
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - circleci-repo-rpc-secrets
+      #       - slack
+      # celo: disable contracts-bedrock-tests-upgrade — fork-based upgrade tests against
+      # OP mainnet/chain state (op/ink/unichain), not relevant to Celo.
+      # # On PRs, run upgrade tests with lite profile for better build times.
+      # - contracts-bedrock-tests-upgrade:
+      #     name: contracts-bedrock-tests-upgrade op-mainnet <<matrix.features>>
+      #     fork_op_chain: op
+      #     fork_base_chain: mainnet
+      #     test_profile: liteci
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features: *features_matrix
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - circleci-repo-rpc-secrets
+      #       - slack
+      #     filters:
+      #       branches:
+      #         ignore: develop
+      # # On develop, run upgrade tests with ci profile to mirror production.
+      # - contracts-bedrock-tests-upgrade:
+      #     name: contracts-bedrock-tests-upgrade-develop op-mainnet <<matrix.features>>
+      #     fork_op_chain: op
+      #     fork_base_chain: mainnet
+      #     test_profile: ci
+      #     features: <<matrix.features>>
+      #     matrix:
+      #       parameters:
+      #         features: *features_matrix
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - circleci-repo-rpc-secrets
+      #       - slack
+      #     filters:
+      #       branches:
+      #         only: develop
+      # # On PRs, run chain-specific upgrade tests with lite profile for better build times.
+      # - contracts-bedrock-tests-upgrade:
+      #     name: contracts-bedrock-tests-upgrade <<matrix.fork_op_chain>>-mainnet
+      #     fork_op_chain: <<matrix.fork_op_chain>>
+      #     fork_base_chain: mainnet
+      #     test_profile: liteci
+      #     matrix:
+      #       parameters:
+      #         fork_op_chain: ["op", "ink", "unichain"]
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - circleci-repo-rpc-secrets
+      #       - slack
+      #     filters:
+      #       branches:
+      #         ignore: develop
+      # # On develop, run chain-specific upgrade tests with ci profile to mirror production.
+      # - contracts-bedrock-tests-upgrade:
+      #     name: contracts-bedrock-tests-upgrade-develop <<matrix.fork_op_chain>>-mainnet
+      #     fork_op_chain: <<matrix.fork_op_chain>>
+      #     fork_base_chain: mainnet
+      #     test_profile: ci
+      #     matrix:
+      #       parameters:
+      #         fork_op_chain: ["op", "ink", "unichain"]
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - circleci-repo-rpc-secrets
+      #       - slack
+      #     filters:
+      #       branches:
+      #         only: develop
+      # celo: disable contracts-bedrock-tests-l2-fork op-mainnet — forks OP mainnet L2 state, not relevant to Celo.
+      # - contracts-bedrock-tests-l2-fork:
+      #     name: contracts-bedrock-tests-l2-fork op-mainnet
+      #     fork_op_chain: op-mainnet
+      #     l2_fork_block_number: latest
+      #     test_profile: ci
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - circleci-repo-rpc-secrets
+      #       - slack
+      # celo: disable contracts-bedrock-checks-fast. Contracts are managed on a
+      # separate branch; celo-rebase-18 is the no-contracts node/rust branch and
+      # already disables the other contracts jobs above. The op-node/v1.18.2
+      # rebase reshaped this job (new -feature-tests name + fail-closed
+      # semver-diff that needs a GitHub token from a context celo-org's CircleCI
+      # does not define), so it slipped past the disable list and 403s on PRs.
+      # - contracts-bedrock-checks-fast:
+      #     name: contracts-bedrock-checks-fast-feature-tests
+      #     context:
+      #       - circleci-repo-readonly-authenticated-github-token
+      #       - slack
       # -----------------------------------------------------------------------
       # required-contracts-ci: GitHub required status for this workflow. Terminal requires
       # keep this job scheduled even when upstream jobs fail; ci-gate then checks they passed.
@@ -3185,25 +3261,31 @@ workflows:
           requires:
             - contracts-bedrock-tests main: terminal
             - contracts-bedrock-tests CUSTOM_GAS_TOKEN: terminal
-            - contracts-bedrock-tests OPTIMISM_PORTAL_INTEROP: terminal
-            - contracts-bedrock-tests ZK_DISPUTE_GAME: terminal
-            - contracts-bedrock-tests-heavy-fuzz-modified main: terminal
-            - contracts-bedrock-tests-heavy-fuzz-modified CUSTOM_GAS_TOKEN: terminal
-            - contracts-bedrock-tests-heavy-fuzz-modified OPTIMISM_PORTAL_INTEROP: terminal
-            - contracts-bedrock-tests-heavy-fuzz-modified ZK_DISPUTE_GAME: terminal
-            - contracts-bedrock-coverage main: terminal
-            - contracts-bedrock-coverage CUSTOM_GAS_TOKEN: terminal
-            - contracts-bedrock-coverage OPTIMISM_PORTAL_INTEROP: terminal
-            - contracts-bedrock-coverage ZK_DISPUTE_GAME: terminal
-            - contracts-bedrock-tests-upgrade op-mainnet main: terminal
-            - contracts-bedrock-tests-upgrade op-mainnet CUSTOM_GAS_TOKEN: terminal
-            - contracts-bedrock-tests-upgrade op-mainnet OPTIMISM_PORTAL_INTEROP: terminal
-            - contracts-bedrock-tests-upgrade op-mainnet ZK_DISPUTE_GAME: terminal
-            - contracts-bedrock-tests-upgrade op-mainnet: terminal
-            - contracts-bedrock-tests-upgrade ink-mainnet: terminal
-            - contracts-bedrock-tests-upgrade unichain-mainnet: terminal
-            - contracts-bedrock-tests-l2-fork op-mainnet: terminal
-            - contracts-bedrock-checks-fast-feature-tests: terminal
+            # celo: disable the interop portal and ZK dispute game variants — removed above.
+            # - contracts-bedrock-tests OPTIMISM_PORTAL_INTEROP: terminal
+            # - contracts-bedrock-tests ZK_DISPUTE_GAME: terminal
+            # celo: disable contracts-bedrock-tests-heavy-fuzz-modified — job removed above.
+            # - contracts-bedrock-tests-heavy-fuzz-modified main: terminal
+            # - contracts-bedrock-tests-heavy-fuzz-modified CUSTOM_GAS_TOKEN: terminal
+            # - contracts-bedrock-tests-heavy-fuzz-modified OPTIMISM_PORTAL_INTEROP: terminal
+            # - contracts-bedrock-tests-heavy-fuzz-modified ZK_DISPUTE_GAME: terminal
+            # celo: disable contracts-bedrock-coverage — job removed above.
+            # - contracts-bedrock-coverage main: terminal
+            # - contracts-bedrock-coverage CUSTOM_GAS_TOKEN: terminal
+            # - contracts-bedrock-coverage OPTIMISM_PORTAL_INTEROP: terminal
+            # - contracts-bedrock-coverage ZK_DISPUTE_GAME: terminal
+            # celo: disable contracts-bedrock-tests-upgrade — jobs removed above.
+            # - contracts-bedrock-tests-upgrade op-mainnet main: terminal
+            # - contracts-bedrock-tests-upgrade op-mainnet CUSTOM_GAS_TOKEN: terminal
+            # - contracts-bedrock-tests-upgrade op-mainnet OPTIMISM_PORTAL_INTEROP: terminal
+            # - contracts-bedrock-tests-upgrade op-mainnet ZK_DISPUTE_GAME: terminal
+            # - contracts-bedrock-tests-upgrade op-mainnet: terminal
+            # - contracts-bedrock-tests-upgrade ink-mainnet: terminal
+            # - contracts-bedrock-tests-upgrade unichain-mainnet: terminal
+            # celo: disable contracts-bedrock-tests-l2-fork — job removed above.
+            # - contracts-bedrock-tests-l2-fork op-mainnet: terminal
+            # celo: disable contracts-bedrock-checks-fast-feature-tests; see job above.
+            # - contracts-bedrock-checks-fast-feature-tests: terminal
           context:
             - circleci-api-token
 

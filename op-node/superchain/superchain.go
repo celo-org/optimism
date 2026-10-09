@@ -98,6 +98,9 @@ func rollupConfigFromRegistry(chConfig *registry.ChainConfig, superConfig regist
 		AltDAConfig:            altDA,
 		ChainOpConfig:          chOpConfig,
 	}
+	if addrs.BatchAuthenticator != nil {
+		cfg.BatchAuthenticatorAddress = *addrs.BatchAuthenticator
+	}
 	applyHardforks(cfg, chConfig.Hardforks)
 
 	return cfg
@@ -118,4 +121,6 @@ func applyHardforks(cfg *rollup.Config, hardforks registry.HardforkConfig) {
 	cfg.JovianTime = hardforks.JovianTime
 	cfg.KarstTime = hardforks.KarstTime
 	cfg.KeepKarstUpgradeGas = hardforks.KeepKarstUpgradeGas
+	cfg.Cel2Time = hardforks.Cel2Time
+	cfg.EspressoTime = hardforks.EspressoTime
 }

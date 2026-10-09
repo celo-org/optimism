@@ -4,7 +4,7 @@ version: 2.1
 # This file contains all Rust CI commands, parameterized jobs, crate-specific jobs, and workflows.
 
 orbs:
-  utils: ethereum-optimism/circleci-utils@1.0.32
+  utils: celo-org/circleci-utils@1.0.32
   gcp-cli: circleci/gcp-cli@3.0.1
 
 parameters:
@@ -228,7 +228,7 @@ jobs:
         default: "just test-docs"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -261,7 +261,7 @@ jobs:
         default: "release"
     docker:
       - image: <<pipeline.parameters.c-rust_base_image>>
-    resource_class: 2xlarge.gen2
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: blobless
@@ -479,8 +479,8 @@ jobs:
       - run:
           name: Generate compact vectors from base
           command: |
-            # Use develop as the base branch
-            BASE_BRANCH="develop"
+            # Use the main branch as the base
+            BASE_BRANCH="palango/celo-rebase-19-base"
             SUPERCHAIN_TAR="rust/op-reth/crates/chainspec/res/superchain-configs.tar"
 
             # `git checkout` switches between base and PR without touching the superchain-registry
@@ -995,9 +995,10 @@ workflows:
           # Adds the `slack` context for the flaky-retry alert step (anchor on rust-deny).
           context: *rust-ci-context-slack
 
-      - interop-deposits-go-rust-diff:
-          name: interop-deposits-diff
-          context: *rust-ci-context
+      # celo: disable interop-deposits-diff — Celo doesn't use interop.
+      # - interop-deposits-go-rust-diff:
+      #     name: interop-deposits-diff
+      #     context: *rust-ci-context
 
       - rust-ci-doctest:
           name: rust-doctest
@@ -1072,19 +1073,21 @@ workflows:
       # -----------------------------------------------------------------------
       # Kona crate-specific jobs (lint, FPVM builds, host-client offline)
       # -----------------------------------------------------------------------
-      - kona-cargo-lint:
-          name: kona-lint-cannon
-          target: "cannon"
-          context: *rust-ci-context
-
-      - kona-build-fpvm:
-          name: kona-build-fpvm-cannon-client
-          target: "cannon-client"
-          context: *rust-ci-context
-
-      - kona-host-client-offline:
-          name: kona-host-client-offline-cannon
-          context: *rust-ci-context
+      # celo: disable the cannon lint, FPVM client build and offline host-client
+      # jobs — Celo doesn't use cannon fault proofs.
+      # - kona-cargo-lint:
+      #     name: kona-lint-cannon
+      #     target: "cannon"
+      #     context: *rust-ci-context
+      #
+      # - kona-build-fpvm:
+      #     name: kona-build-fpvm-cannon-client
+      #     target: "cannon-client"
+      #     context: *rust-ci-context
+      #
+      # - kona-host-client-offline:
+      #     name: kona-host-client-offline-cannon
+      #     context: *rust-ci-context
 
       - kona-registry-snapshot-check:
           context: *rust-ci-context
@@ -1102,7 +1105,8 @@ workflows:
             - rust-typos: terminal
             - rust-zepter: terminal
             - rust-tests: terminal
-            - interop-deposits-diff: terminal
+            # celo: disable interop-deposits-diff — job removed above.
+            # - interop-deposits-diff: terminal
             - rust-doctest: terminal
             - rust-docs: terminal
             - rust-udeps: terminal
@@ -1113,9 +1117,10 @@ workflows:
             - rust-wasm-wasi: terminal
             - op-reth-compact-codec: terminal
             - op-reth-integration-tests: terminal
-            - kona-lint-cannon: terminal
-            - kona-build-fpvm-cannon-client: terminal
-            - kona-host-client-offline-cannon: terminal
+            # celo: disable the cannon jobs — removed above.
+            # - kona-lint-cannon: terminal
+            # - kona-build-fpvm-cannon-client: terminal
+            # - kona-host-client-offline-cannon: terminal
             - kona-registry-snapshot-check: terminal
             - op-reth-superchain-snapshot-check: terminal
           context:

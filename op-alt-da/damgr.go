@@ -45,7 +45,10 @@ type L1Fetcher interface {
 
 // DAStorage interface for calling the DA storage server.
 type DAStorage interface {
-	GetInput(ctx context.Context, key CommitmentData) ([]byte, error)
+	// L1InclusionBlockNumber is the block number at which the commitment was included in the batcher inbox.
+	// It is used to check if the commitment is expired, and should be sent as a query parameter
+	// to the DA server. It is optional, and passing a 0 value will tell the DA server to skip the check.
+	GetInput(ctx context.Context, key CommitmentData, L1InclusionBlockNumber uint64) ([]byte, error)
 	SetInput(ctx context.Context, img []byte) (CommitmentData, error)
 }
 
@@ -83,8 +86,12 @@ type DA struct {
 }
 
 // NewAltDA creates a new AltDA instance with the given log and CLIConfig.
-func NewAltDA(log log.Logger, cli CLIConfig, cfg Config, metrics Metricer) *DA {
-	return NewAltDAWithStorage(log, cfg, cli.NewDAClient(), metrics)
+func NewAltDA(log log.Logger, cli CLIConfig, cfg Config, metrics Metricer) (*DA, error) {
+	daClient, err := cli.NewDAClient()
+	if err != nil {
+		return nil, fmt.Errorf("new DAClient: %w", err)
+	}
+	return NewAltDAWithStorage(log, cfg, daClient, metrics), nil
 }
 
 // NewAltDAWithStorage creates a new AltDA instance with the given log and DAStorage interface.
@@ -130,8 +137,15 @@ func (d *DA) updateFinalizedHead(l1Finalized eth.L1BlockRef) {
 	}
 
 	// Prune the state to the finalized head
-	d.state.Prune(l1Finalized.ID())
-	d.finalizedHead = d.state.lastPrunedCommitment
+	lastPrunedCommIncBlock := d.state.Prune(l1Finalized.ID())
+	d.log.Debug("updateFinalizedHead", "currFinalizedHead", d.finalizedHead.Number, "lastPrunedCommIncBlock", lastPrunedCommIncBlock.Number, "l1Finalized", l1Finalized.Number)
+	// If a commitment was pruned, set the finalized head to that commitment's inclusion block
+	// When no commitments are left to be pruned (one example is if we have failed over to ethda)
+	// then updateFinalizedFromL1 becomes the main driver of the finalized head.
+	// Note that updateFinalizedFromL1 is only called when d.state.NoCommitments() is true.
+	if lastPrunedCommIncBlock != (eth.L1BlockRef{}) {
+		d.finalizedHead = lastPrunedCommIncBlock
+	}
 }
 
 // updateFinalizedFromL1 updates the finalized head based on the challenge window.
@@ -146,6 +160,7 @@ func (d *DA) updateFinalizedFromL1(ctx context.Context, l1 L1Fetcher) error {
 	if err != nil {
 		return err
 	}
+	d.log.Debug("updateFinalizedFromL1", "currFinalizedHead", d.finalizedHead.Number, "newFinalizedHead", ref.Number, "l1FinalizedHead", d.l1FinalizedHead.Number, "challengeWindow", d.cfg.ChallengeWindow)
 	d.finalizedHead = ref
 	return nil
 }
@@ -221,12 +236,11 @@ func (d *DA) GetInput(ctx context.Context, l1 L1Fetcher, comm CommitmentData, bl
 	d.log.Info("getting input", "comm", comm, "status", status)
 
 	// Fetch the input from the DA storage.
-	data, err := d.storage.GetInput(ctx, comm)
+	data, err := d.storage.GetInput(ctx, comm, blockId.Number)
 	notFound := errors.Is(ErrNotFound, err)
 	if err != nil && !notFound {
 		d.log.Error("failed to get preimage", "err", err)
 		// the storage client request failed for some other reason
-		// in which case derivation pipeline should be retried
 		return nil, err
 	}
 
@@ -426,6 +440,7 @@ func (d *DA) fetchChallengeLogs(ctx context.Context, l1 L1Fetcher, block eth.Blo
 		}
 		for _, log := range rec.Logs {
 			if log.Address == d.cfg.DAChallengeContractAddress && len(log.Topics) > 0 && log.Topics[0] == ChallengeStatusEventABIHash {
+				d.log.Info("found challenge event", "block", block.Number, "log", log.Index)
 				logs = append(logs, log)
 			}
 		}

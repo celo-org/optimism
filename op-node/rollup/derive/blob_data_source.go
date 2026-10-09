@@ -27,13 +27,13 @@ type BlobDataSource struct {
 	ref          eth.L1BlockRef
 	batcherAddr  common.Address
 	dsCfg        DataSourceConfig
-	fetcher      L1TransactionFetcher
+	fetcher      L1Fetcher
 	blobsFetcher L1BlobsFetcher
 	log          log.Logger
 }
 
 // NewBlobDataSource creates a new blob data source.
-func NewBlobDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1TransactionFetcher, blobsFetcher L1BlobsFetcher, ref eth.L1BlockRef, batcherAddr common.Address) DataIter {
+func NewBlobDataSource(ctx context.Context, log log.Logger, dsCfg DataSourceConfig, fetcher L1Fetcher, blobsFetcher L1BlobsFetcher, ref eth.L1BlockRef, batcherAddr common.Address) DataIter {
 	return &BlobDataSource{
 		ref:          ref,
 		dsCfg:        dsCfg,
@@ -86,7 +86,10 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 		return nil, NewTemporaryError(fmt.Errorf("failed to open blob data source: %w", err))
 	}
 
-	data, hashes := dataAndHashesFromTxs(txs, &ds.dsCfg, ds.batcherAddr, ds.log)
+	data, hashes, err := dataAndHashesFromTxs(ctx, txs, &ds.dsCfg, ds.batcherAddr, ds.fetcher, ds.ref, ds.log)
+	if err != nil {
+		return nil, err
+	}
 
 	if len(hashes) == 0 {
 		// there are no blobs to fetch so we can return immediately
@@ -115,14 +118,79 @@ func (ds *BlobDataSource) open(ctx context.Context) ([]blobOrCalldata, error) {
 // dataAndHashesFromTxs extracts calldata and datahashes from the input transactions and returns them. It
 // creates a placeholder blobOrCalldata element for each returned blob hash that must be populated
 // by fillBlobPointers after blob bodies are retrieved.
-func dataAndHashesFromTxs(txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, logger log.Logger) ([]blobOrCalldata, []common.Hash) {
+//
+// Every transaction is filtered by the batch inbox address first. Two further rules then
+// apply, both keyed on the L1 origin time of `ref`.
+//
+// From Espresso activation onward (including the enforcement grace window), batch
+// data is calldata-only: blob-carrying inbox transactions are dropped entirely,
+// authenticated or not. The Celo fault-proof host (celo-kona) does not implement
+// the L1Blob preimage hint, so a blob batch accepted here would stall fault-proof
+// execution at its L1 block.
+//
+// That only covers L1 blocks at or after espresso_time. A proof also walks back
+// channel_timeout blocks into pre-fork territory; those are kept blob-free by the
+// batcher (checkEspressoDataAvailability), not by consensus.
+//
+// The transactions that survive that rule are authorized by upstream Optimism semantics
+// (sender == batcher) until Espresso event-auth is enforced, which happens once Espresso
+// has been active for BatchAuthEnforcementDelaySecs. Once enforced, it collects all
+// authenticated batch hashes from a lookback window once and rejects any batch whose
+// commitment hash is not in the authenticated set.
+func dataAndHashesFromTxs(ctx context.Context, txs types.Transactions, config *DataSourceConfig, batcherAddr common.Address, fetcher L1Fetcher, ref eth.L1BlockRef, logger log.Logger) ([]blobOrCalldata, []common.Hash, error) {
+	// Espresso activation and event-auth enforcement are both properties of the L1 origin
+	// time of the block we're scanning, so they hold for every transaction in it.
+	espressoActive := config.rollupCfg.IsEspresso(ref.Time)
+
+	// Only collect authenticated batch commitments once event-based authentication is
+	// enforced (Espresso active plus the enforcement grace period). Before that, the
+	// upstream sender-based authorization path is used and authenticatedHashes is unused.
+	var authenticatedHashes map[common.Hash]common.Address
+	if isEspressoAuthEnforced(config.rollupCfg, ref.Time) {
+		var err error
+		authenticatedHashes, err = CollectAuthenticatedBatches(
+			ctx, fetcher, ref, config.rollupCfg.BatchAuthenticatorAddress, config.batchAuthCaches, logger,
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
 	data := []blobOrCalldata{}
 	var hashes []common.Hash
 	for _, tx := range txs {
-		// skip any non-batcher transactions
-		if !isValidBatchTx(tx, config.l1Signer, config.batchInboxAddress, batcherAddr, logger) {
+		// skip any non-batcher transactions (wrong type or wrong To address)
+		if !isBatchTxToInbox(tx, config.batchInboxAddress) {
 			continue
 		}
+
+		// Post-Espresso, blob DA is unsupported (calldata-only): drop blob
+		// batch transactions before any authorization check so derivation never
+		// requires blob preimages the Celo fault-proof host cannot supply.
+		if tx.Type() == types.BlobTxType && espressoActive {
+			logger.Warn("ignoring blob batch tx: blob DA is unsupported post-Espresso",
+				"txHash", tx.Hash())
+			continue
+		}
+
+		// Compute batch hash depending on tx type. The blob arm computes a value nothing
+		// reads: a blob tx only gets past the drop above pre-Espresso, and pre-Espresso
+		// isBatchTxAuthorized takes the sender-based path, which ignores batchHash. Keep it
+		// anyway. Folding it into the calldata arm would hash a blob tx over its
+		// usually-empty calldata, so if the drop above were ever narrowed, every blob batch
+		// would fail authentication for a reason the logs would not explain.
+		var batchHash common.Hash
+		if tx.Type() == types.BlobTxType {
+			batchHash = ComputeBlobBatchHash(tx.BlobHashes())
+		} else {
+			batchHash = ComputeCalldataBatchHash(tx.Data())
+		}
+
+		// Check authorization (sender-based before enforcement; event-based once enforced).
+		if !isBatchTxAuthorized(tx, *config, batcherAddr, batchHash, authenticatedHashes, ref.Time, logger) {
+			continue
+		}
+
 		// handle non-blob batcher transactions by extracting their calldata
 		if tx.Type() != types.BlobTxType {
 			calldata := eth.Data(tx.Data())
@@ -130,6 +198,7 @@ func dataAndHashesFromTxs(txs types.Transactions, config *DataSourceConfig, batc
 			continue
 		}
 		// handle blob batcher transactions by extracting their blob hashes, ignoring any calldata.
+		// Pre-Espresso only, for the reason given at the batch hash above.
 		if len(tx.Data()) > 0 {
 			log.Warn("blob tx has calldata, which will be ignored", "txhash", tx.Hash())
 		}
@@ -138,7 +207,7 @@ func dataAndHashesFromTxs(txs types.Transactions, config *DataSourceConfig, batc
 			data = append(data, blobOrCalldata{nil, nil}) // will fill in blob pointers after we download them below
 		}
 	}
-	return data, hashes
+	return data, hashes, nil
 }
 
 // fillBlobPointers goes back through the data array and fills in the pointers to the fetched blob

@@ -67,6 +67,31 @@ func TestScript(t *testing.T) {
 	require.NoError(t, h.cheatcodes.Precompile.DumpState("noop"))
 }
 
+func TestGetCodeArtifactResolution(t *testing.T) {
+	logger := testlog.Logger(t, log.LevelInfo)
+	af := foundry.OpenArtifactsDir("./testdata/test-artifacts")
+	h := NewHost(logger, af, nil, DefaultContext)
+	require.NoError(t, h.EnableCheats())
+
+	// The artifacts FS is keyed by the source-file basename. Foundry's getCode
+	// cheatcode accepts a "File.sol:Contract" identifier and a directory-qualified
+	// "path/to/File.sol:Contract" identifier. Both must resolve to the same
+	// artifact in the Go host.
+	want, err := af.ReadArtifact("ScriptExample.s.sol", "FooBar")
+	require.NoError(t, err)
+
+	for _, input := range []string{
+		"ScriptExample.s.sol:FooBar",
+		"some/nested/dir/ScriptExample.s.sol:FooBar",
+	} {
+		t.Run(input, func(t *testing.T) {
+			got, err := h.cheatcodes.Precompile.GetCode(input)
+			require.NoError(t, err)
+			require.Equal(t, []byte(want.Bytecode.Object), got)
+		})
+	}
+}
+
 func mustEncodeStringCalldata(t *testing.T, method, input string) []byte {
 	packer, err := abi.JSON(strings.NewReader(fmt.Sprintf(`[{"type":"function","name":"%s","inputs":[{"type":"string","name":"input"}]}]`, method)))
 	require.NoError(t, err)
@@ -479,22 +504,22 @@ func TestWithNoMaxCodeSize(t *testing.T) {
 	scriptContext := DefaultContext
 	deployer := scriptContext.Sender
 
-	// Create init code that deploys a contract with >24KB runtime code
+	// Create init code that deploys a contract with >64KB runtime code
 	// Init code structure:
-	// PUSH2 0x6400 (25600 bytes = 25KB)
-	// PUSH1 0x0c (offset where runtime code starts)
+	// PUSH3 0x010400 (66560 bytes = 65KB)
+	// PUSH1 0x10 (offset where runtime code starts = 16 bytes)
 	// PUSH1 0x00 (memory destination)
 	// CODECOPY
-	// PUSH2 0x6400 (size to return)
+	// PUSH3 0x010400 (size to return)
 	// PUSH1 0x00 (memory offset)
 	// RETURN
-	runtimeSize := 25 * 1024 // 25KB runtime code
+	runtimeSize := 65 * 1024 // 65KB runtime code
 	initCode := []byte{
-		0x61, 0x64, 0x00, // PUSH2 0x6400
-		0x60, 0x0c, // PUSH1 0x0c (12 bytes - length of this init code)
+		0x62, 0x01, 0x04, 0x00, // PUSH3 0x010400
+		0x60, 0x10, // PUSH1 0x10 (16 bytes - length of this init code)
 		0x60, 0x00, // PUSH1 0x00
-		0x39,             // CODECOPY
-		0x61, 0x64, 0x00, // PUSH2 0x6400
+		0x39,                   // CODECOPY
+		0x62, 0x01, 0x04, 0x00, // PUSH3 0x010400
 		0x60, 0x00, // PUSH1 0x00
 		0xf3, // RETURN
 	}

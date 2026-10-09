@@ -10,10 +10,12 @@ TEST_TIMEOUT := env('TEST_TIMEOUT', '10m')
 # dedicated CI jobs or can't run in the standard go-tests environment:
 #   op-acceptance-tests             dedicated acceptance-test job (needs a running devnet)
 #   cannon                          dedicated cannon job (slow MIPS emulation tests)
-#   rust                            rust-e2e pipeline (needs prebuilt Rust binaries)
+#   rust/kona/tests/node, rust/op-reth  rust-e2e pipeline (needs prebuilt Rust binaries)
 #   op-deployer/pkg/deployer/forge  fails when forge is on PATH (ethereum-optimism/optimism#21200)
+# rust/kona/tests/proofs stays in: its L2 assertions (including Celo's) run without kona-host,
+# which the tests skip when KONA_HOST_PATH is unset.
 # See the list-test-packages recipe, which expands `go list ./...` minus these.
-EXCLUDED_TEST_PKGS := "op-acceptance-tests cannon rust op-deployer/pkg/deployer/forge"
+EXCLUDED_TEST_PKGS := "op-acceptance-tests cannon rust/kona/tests/node rust/op-reth op-deployer/pkg/deployer/forge"
 
 # Fault-proof packages run in the default go-tests job and again in a dedicated
 # job with Cannon enabled, so they keep a separate list.

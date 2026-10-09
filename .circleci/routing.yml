@@ -13,13 +13,15 @@
 # The schedule names must match the triggers configured in the CircleCI UI
 # (verified live by test-schedule-triggers.js).
 schedules:
-  build_four_hours:
-    - scheduled_todo_issues
-    - scheduled_cannon_full_tests
+  # celo disable unwanted jobs/workflows: these scheduled workflows are
+  # disabled (when: false) in .circleci/continue/main.yml
+  # build_four_hours:
+  #   - scheduled_todo_issues
+  #   - scheduled_cannon_full_tests
   build_daily:
-    - scheduled_preimage_reproducibility
-    - scheduled_stale_check
-    - scheduled_heavy_fuzz_tests
+    # - scheduled_preimage_reproducibility
+    # - scheduled_stale_check
+    # - scheduled_heavy_fuzz_tests
     - scheduled_daily_tests
     - scheduled_sp1_elf_smoke
     - circleci_schedule_trigger_check

@@ -4,10 +4,36 @@ import (
 	"fmt"
 	"strings"
 
+	altda "github.com/ethereum-optimism/optimism/op-alt-da"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive/params"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
+
+// DaType determines how txData is submitted to L1.
+type DaType int
+
+const (
+	// DaTypeCalldata means that the (single) frame in the txData is submitted as calldata.
+	DaTypeCalldata DaType = iota
+	// DaTypeBlob means that the frame(s) in the txData are submitted as ethereum 4844 blobs.
+	DaTypeBlob
+	// DaTypeAltDA means that the frame(s) in the txData are submitted to an altda da-server.
+	DaTypeAltDA
+)
+
+func (t DaType) Name() string {
+	switch t {
+	case DaTypeCalldata:
+		return "calldata"
+	case DaTypeBlob:
+		return "blob"
+	case DaTypeAltDA:
+		return "altda"
+	default:
+		return "unknown"
+	}
+}
 
 // txData represents the data for a single transaction.
 //
@@ -16,7 +42,12 @@ import (
 // different channels.
 type txData struct {
 	frames []frameData
-	asBlob bool // indicates whether this should be sent as blob
+	// daType represents the DA type which the frames data will be submitted to.
+	daType DaType
+	// altDACommitment is non-nil when the frames have been sent to the alt-da server,
+	// and the received commitment needs to be sent to the L1.
+	// Should only be present when daType is DaTypeAltDA.
+	altDACommitment altda.CommitmentData
 }
 
 func singleFrameTxData(frame frameData) txData {

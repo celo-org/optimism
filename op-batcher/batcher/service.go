@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 
 	altda "github.com/ethereum-optimism/optimism/op-alt-da"
@@ -17,6 +18,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-batcher/rpc"
 	"github.com/ethereum-optimism/optimism/op-node/params"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -168,6 +170,12 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.initRollupConfig(ctx); err != nil {
 		return fmt.Errorf("failed to load rollup config: %w", err)
 	}
+	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
+		return err
+	}
+	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
+		return err
+	}
 	if err := bs.initTxManager(ctx, cfg); err != nil {
 		return fmt.Errorf("failed to init Tx manager: %w", err)
 	}
@@ -256,6 +264,67 @@ func (bs *BatcherService) initRollupConfig(ctx context.Context) error {
 	return nil
 }
 
+// checkEspressoDataAvailability enforces the calldata-only DA restriction of the
+// Espresso integration: from Espresso activation the derivation
+// pipeline drops blob batch transactions because the Celo fault-proof host cannot
+// retrieve blob contents. A blob- or auto-configured batcher would have every blob
+// batch silently ignored by verifiers once the fork activates: the safe head stalls
+// for one sequence window, then verifiers force empty batches and reorg away the
+// unsafe chain, discarding the transactions in it. Refuse to start instead.
+//
+// Deliberately broader than derivation's gate, which drops blobs only once Espresso
+// is active: a proof walks back channel_timeout L1 blocks into pre-fork territory, and
+// this check is the only thing keeping blob batches out of that window. Do not narrow
+// it to IsEspresso.
+func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
+	if bs.RollupConfig.EspressoTime == nil {
+		return nil
+	}
+	if cfg.DataAvailabilityType != flags.CalldataType {
+		return fmt.Errorf("data availability type %q is not supported on chains with Espresso scheduled: "+
+			"batch data must be posted as calldata only (blob DA is dropped by post-Espresso derivation)",
+			cfg.DataAvailabilityType)
+	}
+	return nil
+}
+
+// checkFallbackAuthConfirmations validates that the configured number of L1
+// confirmations leaves enough headroom inside BatchAuthLookbackWindow for the
+// batch tx to land after its auth tx (see sendTxWithFallbackAuth). The bound
+// only applies when the BatchAuthenticator is configured on the chain, which
+// is only known once the rollup config is loaded.
+//
+// While calldata-only DA is enforced this cannot return an error: it runs after
+// checkEspressoDataAvailability, which rejects the one configuration the bound
+// applies to, a scheduled EspressoTime with a non-calldata DA type. It is kept as a
+// second line of defence and applies again if the restriction is ever lifted.
+func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
+	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+		return nil
+	}
+	// Fallback auth is gated behind the EspressoTime hardfork
+	// (dispatchAuthenticatedSendTx): with no activation scheduled no
+	// auth→batch pair can be emitted, so the bound does not apply. A scheduled
+	// activation counts the same as an active one, since it switches the send
+	// path mid-run.
+	if bs.RollupConfig.EspressoTime == nil {
+		return nil
+	}
+	// Only blob pairs serialize auth→batch on NumConfirmations
+	// (sendFallbackAuthSerialized); calldata pairs broadcast back-to-back.
+	if cfg.DataAvailabilityType == flags.CalldataType {
+		return nil
+	}
+	// The auth→batch distance (num-confirmations + inclusion delay) must fit within
+	// BatchAuthLookbackWindow, so reserve room for the batch to land or the safe head stalls.
+	const fallbackAuthInclusionReserve = 75 // blocks (~15 min at 12s L1 slots)
+	if authLookback := derive.BatchAuthLookbackWindow; authLookback < cfg.TxMgrConfig.NumConfirmations+fallbackAuthInclusionReserve {
+		return fmt.Errorf("NumConfirmations (%d) too high for BatchAuthLookbackWindow (%d): need %d blocks of inclusion headroom",
+			cfg.TxMgrConfig.NumConfirmations, authLookback, fallbackAuthInclusionReserve)
+	}
+	return nil
+}
+
 func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 	channelTimeout := bs.RollupConfig.ChannelTimeoutBedrock
 	// Use lower channel timeout if granite is scheduled.
@@ -272,35 +341,41 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 		TargetNumFrames:       cfg.TargetNumFrames,
 		SubSafetyMargin:       cfg.SubSafetyMargin,
 		BatchType:             cfg.BatchType,
+		// DaType: set below
 	}
 
-	switch cfg.DataAvailabilityType {
-	case flags.BlobsType, flags.AutoType:
-		if !cfg.TestUseMaxTxSizeForBlobs {
-			// account for version byte prefix
-			cc.MaxFrameSize = eth.MaxBlobDataSize - 1
+	if bs.UseAltDA {
+		if cfg.DataAvailabilityType == flags.CalldataType {
+			cc.DaType = DaTypeAltDA
+		} else {
+			return fmt.Errorf("altDA is currently only supported with calldata DA Type")
 		}
-		cc.UseBlobs = true
-	case flags.CalldataType: // do nothing
-	default:
-		return fmt.Errorf("unknown data availability type: %v", cfg.DataAvailabilityType)
-	}
 
-	if bs.UseAltDA && cc.UseBlobs {
-		return fmt.Errorf("cannot use data availability type blobs or auto with Alt-DA")
-	}
-
-	maxInputSize := bs.RollupConfig.AltDAConfig.MaxInputSizeOrDefault()
-	if bs.UseAltDA && !bs.GenericDA && cc.MaxFrameSize > maxInputSize {
-		return fmt.Errorf("max frame size %d exceeds altDA max input size %d", cc.MaxFrameSize, maxInputSize)
+		maxInputSize := bs.RollupConfig.AltDAConfig.MaxInputSizeOrDefault()
+		if !bs.GenericDA && cc.MaxFrameSize > maxInputSize {
+			return fmt.Errorf("max frame size %d exceeds altDA max input size %d", cc.MaxFrameSize, maxInputSize)
+		}
+	} else {
+		switch cfg.DataAvailabilityType {
+		case flags.BlobsType, flags.AutoType:
+			if !cfg.TestUseMaxTxSizeForBlobs {
+				// account for version byte prefix
+				cc.MaxFrameSize = eth.MaxBlobDataSize - 1
+			}
+			cc.DaType = DaTypeBlob
+		case flags.CalldataType: // do nothing
+			cc.DaType = DaTypeCalldata
+		default:
+			return fmt.Errorf("unknown data availability type: %v", cfg.DataAvailabilityType)
+		}
 	}
 
 	cc.InitCompressorConfig(cfg.ApproxComprRatio, cfg.Compressor, cfg.CompressionAlgo)
 
-	if cc.UseBlobs && !bs.RollupConfig.IsEcotone(uint64(time.Now().Unix())) {
+	if cc.UseBlobs() && !bs.RollupConfig.IsEcotone(uint64(time.Now().Unix())) {
 		return errors.New("cannot use Blobs before Ecotone")
 	}
-	if !cc.UseBlobs && bs.RollupConfig.IsEcotone(uint64(time.Now().Unix())) {
+	if !cc.UseBlobs() && bs.RollupConfig.IsEcotone(uint64(time.Now().Unix())) {
 		bs.Log.Warn("Ecotone upgrade is active, but batcher is not configured to use Blobs!")
 	}
 
@@ -332,7 +407,7 @@ func (bs *BatcherService) initChannelConfig(cfg *CLIConfig) error {
 		calldataCC := cc
 		calldataCC.TargetNumFrames = 1
 		calldataCC.MaxFrameSize = 120_000
-		calldataCC.UseBlobs = false
+		calldataCC.DaType = DaTypeCalldata
 		calldataCC.ReinitCompressorConfig()
 
 		bs.ChannelConfig = NewDynamicEthChannelConfig(bs.Log, 10*time.Second, bs.TxManager, cc, calldataCC)
@@ -436,10 +511,11 @@ func (bs *BatcherService) initRPCServer(cfg *CLIConfig) error {
 
 func (bs *BatcherService) initAltDA(cfg *CLIConfig) error {
 	config := cfg.AltDA
-	if err := config.Check(); err != nil {
+	daClient, err := config.NewDAClient()
+	if err != nil {
 		return err
 	}
-	bs.AltDA = config.NewDAClient()
+	bs.AltDA = daClient
 	bs.UseAltDA = config.Enabled
 	bs.GenericDA = config.GenericDA
 	return nil
