@@ -49,7 +49,7 @@ jobs:
           tags: |
             type=ref,event=branch
             type=ref,event=pr
-            type=sha,prefix={{branch}}-,enable=${{ github.event_name == 'push' }}
+            type=sha,prefix={{branch}}-
 
       - name: Build and push ${{ matrix.image }}
         uses: docker/build-push-action@v5
