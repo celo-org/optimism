@@ -187,6 +187,12 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 		channelMgr:  state,
 		degradedLog: oplog.NewRepeatStateLogger(),
 	}
+	if batcher.Espresso.Client != nil {
+		batcher.Espresso.Client = &espressoTimeoutClient{
+			client:            batcher.Espresso.Client,
+			networkTimeoutCtx: batcher.networkTimeoutCtx,
+		}
+	}
 
 	err := batcher.SetThrottleController(setup.Config.ThrottleParams.ControllerType, setup.Config.ThrottleParams.PIDConfig)
 	if err != nil {
@@ -334,9 +340,7 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.wg.Wait()
 	l.cancelKillCtx()
 
-	if l.espressoStreamer != nil {
-		l.espressoStreamer.Stop()
-	}
+	l.stopEspressoStreamer()
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil

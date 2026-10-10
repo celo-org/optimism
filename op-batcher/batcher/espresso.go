@@ -118,7 +118,7 @@ type espressoTransactionSubmitter struct {
 	verifyReceiptJobQueue      chan espressoVerifyReceiptJob
 	verifyReceiptRespQueue     chan espressoVerifyReceiptJobResponse
 	verifyReceiptWorkerQueue   chan chan espressoVerifyReceiptJobAttempt
-	espresso                   espressoClient.EspressoClient
+	espresso                   espressoSubmissionClient
 	latestBlockHeight          atomic.Uint64 // shared HotShot block height, updated by trackBlockHeight
 	verifyReceiptMaxBlocks     uint64
 	verifyReceiptSafetyTimeout time.Duration
@@ -127,12 +127,18 @@ type espressoTransactionSubmitter struct {
 	numMaxInFlightJobs         int
 }
 
+type espressoSubmissionClient interface {
+	SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error)
+	FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error)
+	FetchLatestBlockHeight(ctx context.Context) (uint64, error)
+}
+
 // EspressoTransactionSubmitterConfig is a configuration struct for the
 // EspressoTransactionSubmitter. It contains the configurable details for
 // creating the EspressoTransactionSubmitter.
 type EspressoTransactionSubmitterConfig struct {
 	Ctx                                context.Context
-	EspressoClient                     espressoClient.EspressoClient
+	EspressoSubmissionClient           espressoSubmissionClient
 	Wg                                 *sync.WaitGroup
 	SubmitJobQueueCapacity             int
 	SubmitResponseQueueCapacity        int
@@ -158,9 +164,9 @@ func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 
 // WithEspressoClient is an option that can be used to set the Espresso client
 // for the EspressoTransactionSubmitterConfig.
-func WithEspressoClient(client espressoClient.EspressoClient) EspressoTransactionSubmitterOption {
+func WithEspressoClient(client espressoSubmissionClient) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
-		config.EspressoClient = client
+		config.EspressoSubmissionClient = client
 	}
 }
 
@@ -233,7 +239,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		option(&config)
 	}
 
-	if config.EspressoClient == nil {
+	if config.EspressoSubmissionClient == nil {
 		panic("Espresso client is required")
 	}
 
@@ -246,7 +252,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		verifyReceiptJobQueue:      make(chan espressoVerifyReceiptJob, config.VerifyReceiptJobQueueCapacity),
 		verifyReceiptRespQueue:     make(chan espressoVerifyReceiptJobResponse, config.VerifyReceiptResponseQueueCapacity),
 		verifyReceiptWorkerQueue:   make(chan chan espressoVerifyReceiptJobAttempt),
-		espresso:                   config.EspressoClient,
+		espresso:                   config.EspressoSubmissionClient,
 		verifyReceiptMaxBlocks:     config.VerifyReceiptMaxBlocks,
 		verifyReceiptSafetyTimeout: config.VerifyReceiptSafetyTimeout,
 		verifyReceiptRetryDelay:    config.VerifyReceiptRetryDelay,
@@ -629,7 +635,7 @@ func (s *espressoTransactionSubmitter) scheduleVerifyReceiptsJobs() {
 func espressoSubmitTransactionWorker(
 	ctx context.Context,
 	wg *sync.WaitGroup,
-	cli espressoClient.EspressoClient,
+	cli espressoSubmissionClient,
 	workerQueue chan<- chan espressoTransactionJobAttempt,
 ) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -686,7 +692,7 @@ func espressoSubmitTransactionWorker(
 func espressoVerifyTransactionWorker(
 	ctx context.Context,
 	wg *sync.WaitGroup,
-	cli espressoClient.EspressoClient,
+	cli espressoSubmissionClient,
 	workerQueue chan<- chan espressoVerifyReceiptJobAttempt,
 	latestHeight *atomic.Uint64,
 	retryDelay time.Duration,
