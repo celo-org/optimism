@@ -19,6 +19,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/espresso"
 	gameTypes "github.com/ethereum-optimism/optimism/op-challenger/game/types"
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
@@ -124,6 +126,12 @@ func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 		opt(sco)
 	}
 
+	// espresso: Espresso alloc types require mock TEE contracts compiled only in full builds
+	// (without --skip test). Skip gracefully instead of panicking.
+	if !config.IsAllocTypeAvailable(sco.AllocType) {
+		t.Skipf("alloc type %q not available (mock TEE contracts not built); run `just compile-contracts` to enable", sco.AllocType)
+	}
+
 	secrets := secrets.DefaultSecrets
 	deployConfig := config.DeployConfig(sco.AllocType)
 	require.Nil(t, deployConfig.L2GenesisKarstTimeOffset, "karst not supported yet")
@@ -147,6 +155,7 @@ func DefaultSystemConfig(t testing.TB, opts ...SystemConfigOpt) SystemConfig {
 	return SystemConfig{
 		Secrets:                secrets,
 		Premine:                premine,
+		L1Allocs:               make(map[common.Address]types.Account),
 		DeployConfig:           deployConfig,
 		L1Deployments:          l1Deployments,
 		L1InfoPredeployAddress: predeploys.L1BlockAddr,
@@ -312,6 +321,7 @@ type SystemConfig struct {
 	L1FinalizedDistance uint64
 
 	Premine     map[common.Address]*big.Int
+	L1Allocs    map[common.Address]types.Account
 	Nodes       map[string]*config2.Config // Per node config. Don't use populate rollup.Config
 	Loggers     map[string]log.Logger
 	GethOptions map[string][]geth.GethOption
@@ -380,12 +390,19 @@ type System struct {
 	L2GenesisCfg *core.Genesis
 
 	// Connections to running nodes
-	EthInstances      map[string]services.EthInstance
-	RollupNodes       map[string]services.RollupNode
-	L2OutputSubmitter *l2os.ProposerService
-	BatchSubmitter    *bss.BatcherService
-	Mocknet           mocknet.Mocknet
-	FakeAltDAServer   *altda.FakeDAServer
+	EthInstances           map[string]services.EthInstance
+	RollupNodes            map[string]services.RollupNode
+	L2OutputSubmitter      *l2os.ProposerService
+	BatchSubmitter         *bss.BatcherService
+	FallbackBatchSubmitter *bss.BatcherService
+	Mocknet                mocknet.Mocknet
+	FakeAltDAServer        *altda.FakeDAServer
+
+	// EspressoClient is the shared in-memory mock Espresso client used by Espresso
+	// e2e systems in place of a real espresso-dev-node. It is nil for non-Espresso
+	// alloc types. All batchers (primary, fallback, and any started by tests) and the
+	// tests themselves share this single instance so they observe the same Espresso chain.
+	EspressoClient *espresso.MockEspressoClient
 
 	L1BeaconAPIAddr endpoint.RestHTTP
 
@@ -406,6 +423,8 @@ type System struct {
 	// clients caches lazily created L1/L2 ethclient.Client
 	// instances so they can be reused and closed
 	clients map[string]*ethclient.Client
+
+	L1 *geth.GethInstance
 }
 
 func (sys *System) PrestateVariant() shared.PrestateVariant {
@@ -512,6 +531,11 @@ func (sys *System) L1Slot(l1Timestamp uint64) uint64 {
 		sys.Cfg.DeployConfig.L1BlockTime
 }
 
+// ForkL1 reorganizes the L1 chain so the block with parentHash becomes the canonical head.
+func (sys *System) ForkL1(parentHash common.Hash) error {
+	return sys.L1.Fork(parentHash)
+}
+
 func (sys *System) Close() {
 	sys.t.Log("CLOSING")
 	if !sys.closed.CompareAndSwap(false, true) {
@@ -530,6 +554,11 @@ func (sys *System) Close() {
 	if sys.BatchSubmitter != nil {
 		if err := sys.BatchSubmitter.Kill(); err != nil && !errors.Is(err, bss.ErrAlreadyStopped) {
 			combinedErr = errors.Join(combinedErr, fmt.Errorf("stop BatchSubmitter: %w", err))
+		}
+	}
+	if sys.FallbackBatchSubmitter != nil {
+		if err := sys.FallbackBatchSubmitter.Kill(); err != nil && !errors.Is(err, bss.ErrAlreadyStopped) {
+			combinedErr = errors.Join(combinedErr, fmt.Errorf("stop FallbackBatchSubmitter: %w", err))
 		}
 	}
 
@@ -554,6 +583,14 @@ func (sys *System) Close() {
 			combinedErr = errors.Join(combinedErr, fmt.Errorf("stop Mocknet: %w", err))
 		}
 	}
+	if sys.FakeAltDAServer != nil {
+		if err := sys.FakeAltDAServer.Stop(); err != nil {
+			combinedErr = errors.Join(combinedErr, fmt.Errorf("stop FakeAltDAServer: %w", err))
+		}
+	}
+	if sys.EspressoClient != nil {
+		sys.EspressoClient.Close()
+	}
 	require.NoError(sys.t, combinedErr, "Failed to stop system")
 }
 
@@ -565,7 +602,7 @@ type StartOption struct {
 	Action SystemConfigHook
 
 	// Batcher CLIConfig modifications to apply before starting the batcher.
-	BatcherMod func(*bss.CLIConfig)
+	BatcherMod func(*bss.CLIConfig, *System)
 }
 
 type startOptions struct {
@@ -588,7 +625,7 @@ func parseStartOptions(_opts []StartOption) (startOptions, error) {
 
 func WithBatcherCompressionAlgo(ca derive.CompressionAlgo) StartOption {
 	return StartOption{
-		BatcherMod: func(cfg *bss.CLIConfig) {
+		BatcherMod: func(cfg *bss.CLIConfig, _ *System) {
 			cfg.CompressionAlgo = ca
 		},
 	}
@@ -596,7 +633,7 @@ func WithBatcherCompressionAlgo(ca derive.CompressionAlgo) StartOption {
 
 func WithBatcherThrottling(interval time.Duration, threshold, txSize, blockSize uint64) StartOption {
 	return StartOption{
-		BatcherMod: func(cfg *bss.CLIConfig) {
+		BatcherMod: func(cfg *bss.CLIConfig, _ *System) {
 			cfg.ThrottleConfig.LowerThreshold = threshold
 			cfg.ThrottleConfig.ControllerType = batcherCfg.StepControllerType
 			cfg.ThrottleConfig.TxSizeLowerLimit = txSize
@@ -665,6 +702,13 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		}
 	}
 
+	for addr, account := range cfg.L1Allocs {
+		if _, ok := l1Genesis.Alloc[addr]; ok {
+			t.Logf("Additional L1 alloc conflicts with existing account: %v", addr)
+		}
+		l1Genesis.Alloc[addr] = account
+	}
+
 	l1Block := l1Genesis.ToBlock()
 	allocsMode := cfg.DeployConfig.AllocMode(l1Block.Time())
 
@@ -715,29 +759,31 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 				L2Time:       uint64(cfg.DeployConfig.L1GenesisBlockTimestamp),
 				SystemConfig: e2eutils.SystemConfigFromDeployConfig(cfg.DeployConfig),
 			},
-			BlockTime:              cfg.DeployConfig.L2BlockTime,
-			MaxSequencerDrift:      cfg.DeployConfig.MaxSequencerDrift,
-			SeqWindowSize:          cfg.DeployConfig.SequencerWindowSize,
-			ChannelTimeoutBedrock:  cfg.DeployConfig.ChannelTimeoutBedrock,
-			L1ChainID:              cfg.L1ChainIDBig(),
-			L2ChainID:              cfg.L2ChainIDBig(),
-			BatchInboxAddress:      cfg.DeployConfig.BatchInboxAddress,
-			DepositContractAddress: cfg.DeployConfig.OptimismPortalProxy,
-			L1SystemConfigAddress:  cfg.DeployConfig.SystemConfigProxy,
-			RegolithTime:           cfg.DeployConfig.RegolithTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			CanyonTime:             cfg.DeployConfig.CanyonTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			DeltaTime:              cfg.DeployConfig.DeltaTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			EcotoneTime:            cfg.DeployConfig.EcotoneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			FjordTime:              cfg.DeployConfig.FjordTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			GraniteTime:            cfg.DeployConfig.GraniteTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			HoloceneTime:           cfg.DeployConfig.HoloceneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			PectraBlobScheduleTime: cfg.DeployConfig.PectraBlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			IsthmusTime:            cfg.DeployConfig.IsthmusTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			JovianTime:             cfg.DeployConfig.JovianTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			KarstTime:              cfg.DeployConfig.KarstTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			InteropTime:            cfg.DeployConfig.InteropTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
-			Cel2Time:               func() *uint64 { v := uint64(0); return &v }(),
-			AltDAConfig:            rollupAltDAConfig,
+			BlockTime:                 cfg.DeployConfig.L2BlockTime,
+			MaxSequencerDrift:         cfg.DeployConfig.MaxSequencerDrift,
+			SeqWindowSize:             cfg.DeployConfig.SequencerWindowSize,
+			ChannelTimeoutBedrock:     cfg.DeployConfig.ChannelTimeoutBedrock,
+			L1ChainID:                 cfg.L1ChainIDBig(),
+			L2ChainID:                 cfg.L2ChainIDBig(),
+			BatchInboxAddress:         cfg.DeployConfig.BatchInboxAddress,
+			BatchAuthenticatorAddress: cfg.DeployConfig.BatchAuthenticatorAddress,
+			DepositContractAddress:    cfg.DeployConfig.OptimismPortalProxy,
+			L1SystemConfigAddress:     cfg.DeployConfig.SystemConfigProxy,
+			RegolithTime:              cfg.DeployConfig.RegolithTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			CanyonTime:                cfg.DeployConfig.CanyonTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			DeltaTime:                 cfg.DeployConfig.DeltaTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			EcotoneTime:               cfg.DeployConfig.EcotoneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			FjordTime:                 cfg.DeployConfig.FjordTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			GraniteTime:               cfg.DeployConfig.GraniteTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			HoloceneTime:              cfg.DeployConfig.HoloceneTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			PectraBlobScheduleTime:    cfg.DeployConfig.PectraBlobScheduleTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			IsthmusTime:               cfg.DeployConfig.IsthmusTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			JovianTime:                cfg.DeployConfig.JovianTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			KarstTime:                 cfg.DeployConfig.KarstTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			InteropTime:               cfg.DeployConfig.InteropTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			EspressoTime:              cfg.DeployConfig.EspressoTime(uint64(cfg.DeployConfig.L1GenesisBlockTimestamp)),
+			Cel2Time:                  func() *uint64 { v := uint64(0); return &v }(),
+			AltDAConfig:               rollupAltDAConfig,
 			ChainOpConfig: &params.OptimismConfig{
 				EIP1559Elasticity:        cfg.DeployConfig.EIP1559Elasticity,
 				EIP1559Denominator:       cfg.DeployConfig.EIP1559Denominator,
@@ -770,6 +816,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		return nil, err
 	}
 	sys.EthInstances[RoleL1] = l1Geth
+	sys.L1 = l1Geth
 	err = l1Geth.Node.Start()
 	if err != nil {
 		return nil, err
@@ -1001,6 +1048,39 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		batcherTargetNumFrames = 1
 	}
 
+	testingBatcherPk, err := crypto.HexToECDSA(config.ESPRESSO_TESTING_BATCHER_EPHEMERAL_KEY)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse pre-approved batcher private key: %w", err)
+	}
+	espressoCfg := espresso.CLIConfig{
+		Enabled:                    cfg.AllocType.IsEspresso(),
+		PollInterval:               250 * time.Millisecond,
+		L1URL:                      sys.EthInstances[RoleL1].UserRPC().RPC(),
+		TestingBatcherPrivateKey:   testingBatcherPk,
+		VerifyReceiptMaxBlocks:     espresso.DefaultVerifyReceiptMaxBlocks,
+		VerifyReceiptSafetyTimeout: espresso.DefaultVerifyReceiptSafetyTimeout,
+		VerifyReceiptRetryDelay:    espresso.DefaultVerifyReceiptRetryDelay,
+	}
+
+	// Espresso e2e systems use an in-memory mock Espresso client (shared across all
+	// batchers and the tests) in place of a real espresso-dev-node. The mock is
+	// injected into the batcher via WithEspressoClientOverride; the placeholder query
+	// service URLs only satisfy the SDK client's ">=2 URLs" validation and are never
+	// dialed.
+	var espressoOverrideOpts []bss.DriverSetupOption
+	if cfg.AllocType.IsEspresso() {
+		sys.EspressoClient = espresso.NewMockEspressoClient(250 * time.Millisecond)
+		espressoCfg.QueryServiceURLs = []string{"http://espresso-mock.invalid", "http://espresso-mock.invalid"}
+		espressoOverrideOpts = append(espressoOverrideOpts, bss.WithEspressoClientOverride(sys.EspressoClient))
+	}
+
+	// When Espresso is enabled, the primary batcher is the Espresso batcher which uses
+	// a dedicated key (HD index 6) distinct from the SystemConfig batcher (HD index 2).
+	batcherKey := cfg.Secrets.Batcher
+	if cfg.AllocType.IsEspresso() {
+		batcherKey = cfg.Secrets.AccountAtIdx(6)
+	}
+
 	batcherCLIConfig := &bss.CLIConfig{
 		L1EthRpc:                 sys.EthInstances[RoleL1].UserRPC().RPC(),
 		L2EthRpc:                 []string{sys.EthInstances[RoleSeq].UserRPC().RPC()},
@@ -1013,7 +1093,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		ApproxComprRatio:         0.4,
 		SubSafetyMargin:          4,
 		PollInterval:             50 * time.Millisecond,
-		TxMgrConfig:              setuputils.NewTxMgrConfig(sys.EthInstances[RoleL1].UserRPC(), cfg.Secrets.Batcher),
+		TxMgrConfig:              setuputils.NewTxMgrConfig(sys.EthInstances[RoleL1].UserRPC(), batcherKey),
 		LogConfig: oplog.CLIConfig{
 			Level:  log.LevelInfo,
 			Format: oplog.FormatText,
@@ -1024,12 +1104,14 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		DataAvailabilityType:  sys.Cfg.DataAvailabilityType,
 		CompressionAlgo:       derive.Zlib,
 		AltDA:                 altDACLIConfig,
+
+		Espresso: espressoCfg,
 	}
 
 	// Apply batcher cli modifications
 	for _, opt := range startOpts {
 		if opt.BatcherMod != nil {
-			opt.BatcherMod(batcherCLIConfig)
+			opt.BatcherMod(batcherCLIConfig, sys)
 		}
 	}
 
@@ -1039,7 +1121,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		t.Fatalf("closeAppFn called, batcher hit a critical error: %v", cause)
 		batcherCancel()
 	}
-	batcher, err := bss.BatcherServiceFromCLIConfig(batcherContext, closeAppFn, "0.0.1", batcherCLIConfig, sys.Cfg.Loggers["batcher"])
+	batcher, err := bss.BatcherServiceFromCLIConfig(batcherContext, closeAppFn, "0.0.1", batcherCLIConfig, sys.Cfg.Loggers["batcher"], espressoOverrideOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup batch submitter: %w", err)
 	}
@@ -1050,6 +1132,28 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 	if err := batcher.Start(context.Background()); err != nil {
 		return nil, errors.Join(fmt.Errorf("failed to start batch submitter: %w", err), batcher.Stop(context.Background()))
 	}
+
+	if cfg.AllocType.IsEspresso() {
+		fallbackBatcherCliConfigVal := *batcherCLIConfig
+		fallbackBatcherCliConfig := &fallbackBatcherCliConfigVal
+		fallbackBatcherCliConfig.Stopped = true
+		fallbackBatcherCliConfig.Espresso.Enabled = false
+		fallbackBatcherCliConfig.TxMgrConfig = setuputils.NewTxMgrConfig(sys.EthInstances[RoleL1].UserRPC(), cfg.Secrets.Batcher)
+		fallbackBatcherCtx, fallbackBatcherCancel := context.WithCancel(context.Background())
+		fallbackCloseAppFn := func(cause error) {
+			t.Fatalf("fallback closeAppFn called: %v", cause)
+			fallbackBatcherCancel()
+		}
+		fallbackBatcher, err := bss.BatcherServiceFromCLIConfig(fallbackBatcherCtx, fallbackCloseAppFn, "0.0.1", fallbackBatcherCliConfig, sys.Cfg.Loggers["batcher"], espressoOverrideOpts...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to setup fallback batch submitter: %w", err)
+		}
+		sys.FallbackBatchSubmitter = fallbackBatcher
+		if err := sys.FallbackBatchSubmitter.Start(context.Background()); err != nil {
+			return nil, fmt.Errorf("failed to start fallback batch submitter: %w", err)
+		}
+	}
+
 	return sys, nil
 }
 
