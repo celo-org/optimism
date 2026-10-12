@@ -2,6 +2,8 @@ package altda
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"testing"
@@ -443,4 +445,55 @@ func TestAdvanceChallengeOrigin(t *testing.T) {
 
 	_, has = state.GetChallenge(comm, 14)
 	require.False(t, has)
+}
+
+// storageErrorCounter counts the storage errors a DA manager records.
+type storageErrorCounter struct {
+	NoopMetrics
+	storageErrors int
+}
+
+func (m *storageErrorCounter) RecordStorageError() {
+	m.storageErrors++
+}
+
+// TestGetInputStorageErrors checks how DA.GetInput classifies the errors of the DA storage:
+// a not found error enters the challenge handling, even when the storage wraps it,
+// and only a failed fetch is recorded as a storage error.
+func TestGetInputStorageErrors(t *testing.T) {
+	storageFailure := errors.New("storage unreachable")
+	dropErr := DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}
+
+	tests := []struct {
+		name                  string
+		storageErr            error
+		expectedErr           error
+		expectedStorageErrors int
+	}{
+		{name: "failed fetch", storageErr: storageFailure, expectedErr: storageFailure, expectedStorageErrors: 1},
+		{name: "dropped commitment", storageErr: dropErr, expectedErr: dropErr, expectedStorageErrors: 0},
+		{name: "not found", storageErr: ErrNotFound, expectedErr: ErrMissingPastWindow, expectedStorageErrors: 0},
+		{name: "wrapped not found", storageErr: fmt.Errorf("storage: %w", ErrNotFound), expectedErr: ErrMissingPastWindow, expectedStorageErrors: 0},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			logger := testlog.Logger(t, log.LevelCrit)
+			cfg := Config{
+				ResolveWindow:   6,
+				ChallengeWindow: 6,
+			}
+			metrics := &storageErrorCounter{}
+			storage := &DAErrFaker{Client: NewMockDAClient(logger), getInputErr: tc.storageErr}
+			da := NewAltDAWithState(logger, cfg, storage, metrics, NewState(logger, metrics, cfg))
+			// The commitment was never challenged and its challenge window has passed,
+			// so data that is not found is missing for good.
+			da.challengeOrigin = bID(100)
+
+			comm := NewKeccak256Commitment([]byte("input"))
+			_, err := da.GetInput(context.Background(), nil, comm, l1Ref(1))
+			require.ErrorIs(t, err, tc.expectedErr)
+			require.Equal(t, tc.expectedStorageErrors, metrics.storageErrors)
+		})
+	}
 }
