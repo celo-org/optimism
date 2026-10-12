@@ -53,13 +53,16 @@ func (e DropEigenDACommitmentError) Error() string {
 	return fmt.Sprintf("Invalid AltDA Commitment: cert verification failed with status code %v: %v", e.StatusCode, e.Msg)
 }
 
-// Validate that the status code is an integer between 1 and 4, and panics if it is not.
-func (e DropEigenDACommitmentError) Validate() {
+// Validate that the status code is an integer between 1 and 4, and returns an error if it is not.
+// The returned error is not a DropEigenDACommitmentError and does not wrap one,
+// so that a malformed 418 TEAPOT body can never cause a cert to be dropped from the derivation pipeline.
+func (e DropEigenDACommitmentError) Validate() error {
 	if e.StatusCode < 1 || e.StatusCode > 4 {
-		panic(fmt.Sprintf("DropEigenDACommitmentError: invalid status code %d, must be between 1 and 4", e.StatusCode))
+		return fmt.Errorf("DropEigenDACommitmentError: invalid status code %d, must be between 1 and 4", e.StatusCode)
 	}
 	// The Msg field should ideally be a human-readable string that explains the error,
 	// but we don't enforce it.
+	return nil
 }
 
 // DAClient is an HTTP client to communicate with a DA storage service.
@@ -114,7 +117,9 @@ func (c *DAClient) GetInput(ctx context.Context, comm CommitmentData, l1Inclusio
 				"Consider updating proxy to a more recent version that contains https://github.com/Layr-Labs/eigenda/pull/1736: "+
 				"%w", err)
 		}
-		invalidCommitmentErr.Validate()
+		if err := invalidCommitmentErr.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid 418 TEAPOT HTTP error body: %w", err)
+		}
 		return nil, invalidCommitmentErr
 	}
 	if resp.StatusCode != http.StatusOK {

@@ -2,7 +2,10 @@ package altda
 
 import (
 	"context"
+	"errors"
 	"math/rand"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/ethereum-optimism/optimism/op-service/log"
@@ -126,4 +129,49 @@ func TestDAClientService(t *testing.T) {
 
 	_, err = client.GetInput(ctx, NewKeccak256Commitment(input), 0)
 	require.Error(t, err)
+}
+
+// TestDAClientGetInputTeapot checks that a 418 TEAPOT response only yields a DropEigenDACommitmentError,
+// the error that makes derivation drop the commitment, when its body carries a status code between 1 and 4.
+// Any other body must yield an ordinary error, which derivation retries.
+func TestDAClientGetInputTeapot(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		// expectedDrop is the DropEigenDACommitmentError expected from GetInput, or nil if an ordinary error is expected.
+		expectedDrop *DropEigenDACommitmentError
+	}{
+		{name: "status code 1", body: `{"StatusCode": 1, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: "invalid cert"}},
+		{name: "status code 2", body: `{"StatusCode": 2, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 2, Msg: "invalid cert"}},
+		{name: "status code 3", body: `{"StatusCode": 3, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}},
+		{name: "status code 4 without msg", body: `{"StatusCode": 4}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 4}},
+		{name: "status code missing", body: `{"Msg": "invalid cert"}`},
+		{name: "empty object", body: `{}`},
+		{name: "status code 0", body: `{"StatusCode": 0, "Msg": "invalid cert"}`},
+		{name: "status code 5", body: `{"StatusCode": 5, "Msg": "invalid cert"}`},
+		{name: "status code negative", body: `{"StatusCode": -1, "Msg": "invalid cert"}`},
+		{name: "body is not json", body: `I'm a teapot`},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusTeapot)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			client := NewDAClient(server.URL, false, false)
+			_, err := client.GetInput(context.Background(), NewGenericCommitment([]byte("cert")), 0)
+			require.Error(t, err)
+
+			var dropErr DropEigenDACommitmentError
+			if tc.expectedDrop == nil {
+				require.False(t, errors.As(err, &dropErr), "must not drop the commitment, got: %v", err)
+				return
+			}
+			require.ErrorAs(t, err, &dropErr)
+			require.Equal(t, *tc.expectedDrop, dropErr)
+		})
+	}
 }
