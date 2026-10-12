@@ -4,9 +4,12 @@ import (
 	"context"
 	"errors"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -172,6 +175,43 @@ func TestDAClientGetInputTeapot(t *testing.T) {
 			}
 			require.ErrorAs(t, err, &dropErr)
 			require.Equal(t, *tc.expectedDrop, dropErr)
+		})
+	}
+}
+
+// TestDAClientGetInputClosesErrorBody checks that GetInput releases the connection of a response
+// it rejects by its status code, even though it does not read that response's body.
+func TestDAClientGetInputClosesErrorBody(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusInternalServerError} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var mu sync.Mutex
+			openConns := make(map[net.Conn]struct{})
+
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte("error details that the client does not read"))
+			}))
+			server.Config.ConnState = func(conn net.Conn, state http.ConnState) {
+				mu.Lock()
+				defer mu.Unlock()
+				if state == http.StateClosed {
+					delete(openConns, conn)
+				} else {
+					openConns[conn] = struct{}{}
+				}
+			}
+			server.Start()
+			defer server.Close()
+
+			client := NewDAClient(server.URL, false, false)
+			_, err := client.GetInput(context.Background(), NewGenericCommitment([]byte("cert")), 0)
+			require.Error(t, err)
+
+			require.Eventually(t, func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				return len(openConns) == 0
+			}, 10*time.Second, 10*time.Millisecond, "connection of the rejected response was left open")
 		})
 	}
 }

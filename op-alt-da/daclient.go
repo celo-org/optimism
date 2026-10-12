@@ -102,11 +102,11 @@ func (c *DAClient) GetInput(ctx context.Context, comm CommitmentData, l1Inclusio
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
 	}
 	if resp.StatusCode == http.StatusTeapot {
-		defer resp.Body.Close()
 		// Limit the body to 5000 bytes to prevent being DDoSed with a large error message.
 		bytesLimitedBody := io.LimitReader(resp.Body, 5000)
 		bodyBytes, _ := io.ReadAll(bytesLimitedBody)
@@ -125,7 +125,6 @@ func (c *DAClient) GetInput(ctx context.Context, comm CommitmentData, l1Inclusio
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get preimage: %v", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	input, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
