@@ -49,8 +49,16 @@ type DropEigenDACommitmentError struct {
 	Msg string
 }
 
+// maxErrorMsgSize is the number of bytes of a DropEigenDACommitmentError's Msg that its error text shows.
+// The Msg can hold a whole cert in hex, which is too long to log.
+const maxErrorMsgSize = 1000
+
 func (e DropEigenDACommitmentError) Error() string {
-	return fmt.Sprintf("Invalid AltDA Commitment: cert verification failed with status code %v: %v", e.StatusCode, e.Msg)
+	msg := e.Msg
+	if len(msg) > maxErrorMsgSize {
+		msg = fmt.Sprintf("%s... (%d more bytes)", msg[:maxErrorMsgSize], len(msg)-maxErrorMsgSize)
+	}
+	return fmt.Sprintf("Invalid AltDA Commitment: cert verification failed with status code %v: %v", e.StatusCode, msg)
 }
 
 // Validate that the status code is an integer between 1 and 4, and returns an error if it is not.

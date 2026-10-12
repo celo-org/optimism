@@ -141,6 +141,8 @@ func TestDAClientService(t *testing.T) {
 func TestDAClientGetInputTeapot(t *testing.T) {
 	// The proxy's message for a cert it fails to parse carries the cert in hex.
 	longMsg := "cert parsing failed for cert " + strings.Repeat("ab", 100_000)
+	// limitMsg pads the body it is put into to exactly maxTeapotBodySize bytes.
+	limitMsg := strings.Repeat("a", maxTeapotBodySize-len(`{"StatusCode": 1, "Msg": ""}`))
 
 	tests := []struct {
 		name string
@@ -155,6 +157,7 @@ func TestDAClientGetInputTeapot(t *testing.T) {
 		{name: "status code 3", body: `{"StatusCode": 3, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}},
 		{name: "status code 4 without msg", body: `{"StatusCode": 4}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 4}},
 		{name: "msg longer than a cert in hex", body: `{"StatusCode": 1, "Msg": "` + longMsg + `"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: longMsg}},
+		{name: "body of exactly the size limit", body: `{"StatusCode": 1, "Msg": "` + limitMsg + `"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: limitMsg}},
 		{name: "status code missing", body: `{"Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 0"},
 		{name: "empty object", body: `{}`, expectedErrMsg: "invalid status code 0"},
 		{name: "status code 0", body: `{"StatusCode": 0, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 0"},
@@ -190,6 +193,9 @@ func TestDAClientGetInputTeapot(t *testing.T) {
 
 // TestDAClientGetInputClosesErrorBody checks that GetInput releases the connection of a response
 // it rejects by its status code, even though it does not read that response's body.
+// Closing an unread body makes the HTTP transport close the connection, which is what the test observes.
+// If GetInput is changed to read the body before closing it, the connection is kept for reuse instead,
+// and this test has to observe the close some other way.
 func TestDAClientGetInputClosesErrorBody(t *testing.T) {
 	for _, status := range []int{http.StatusNotFound, http.StatusInternalServerError} {
 		t.Run(http.StatusText(status), func(t *testing.T) {
@@ -223,4 +229,19 @@ func TestDAClientGetInputClosesErrorBody(t *testing.T) {
 			}, 10*time.Second, 10*time.Millisecond, "connection of the rejected response was left open")
 		})
 	}
+}
+
+// TestDropEigenDACommitmentErrorMessage checks that the error text, which ends up in the logs,
+// shortens a long Msg and keeps a short one whole.
+func TestDropEigenDACommitmentErrorMessage(t *testing.T) {
+	short := DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}
+	require.Equal(t, "Invalid AltDA Commitment: cert verification failed with status code 3: invalid cert", short.Error())
+
+	atLimit := DropEigenDACommitmentError{StatusCode: 3, Msg: strings.Repeat("a", maxErrorMsgSize)}
+	require.Contains(t, atLimit.Error(), atLimit.Msg)
+
+	long := DropEigenDACommitmentError{StatusCode: 1, Msg: strings.Repeat("a", maxErrorMsgSize) + "bbb"}
+	require.Equal(t,
+		"Invalid AltDA Commitment: cert verification failed with status code 1: "+strings.Repeat("a", maxErrorMsgSize)+"... (3 more bytes)",
+		long.Error())
 }
