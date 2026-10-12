@@ -904,16 +904,18 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 	l.Log.Info("Clearing state")
 	defer l.Log.Info("State cleared")
 
+	// Held for the whole clear, retries included, so the loading loop stops at
+	// its next batch as soon as a clear is pending rather than once it lands.
+	// Locked before the channelMgr everywhere both are held, so no deadlock.
+	l.espressoStreamerMutex.Lock()
+	defer l.espressoStreamerMutex.Unlock()
+
 	clearStateWithL1Origin := func() bool {
 		l1SafeOrigin, err := l.safeL1Origin(ctx)
 		if err != nil {
 			l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
 			return false
 		}
-		// Streamer is locked before the channelMgr, everywhere both are held
-		// so they can't deadlock. The lock is for SetBatchPosition below.
-		l.espressoStreamerMutex.Lock()
-		defer l.espressoStreamerMutex.Unlock()
 		// Fetch the re-anchor target before mutating anything so the clear and
 		// the re-anchor happen together or not at all; see espressoReanchorTarget.
 		reanchorTarget, ok := l.espressoReanchorTarget(ctx)
@@ -950,6 +952,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 			l.channelMgrMutex.Lock()
 			defer l.channelMgrMutex.Unlock()
 			l.channelMgr.Clear(eth.BlockID{})
+			l.espressoClearEpoch++
 			return
 		}
 	}
