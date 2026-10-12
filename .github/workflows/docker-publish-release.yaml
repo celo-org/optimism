@@ -10,14 +10,23 @@ jobs:
     steps:
       - name: Set tags
         id: set_tags
+        env:
+          # A release event carries its tag; a manual run has one only when started from a tag ref.
+          RELEASE_TAG: ${{ github.event.release.tag_name || (github.ref_type == 'tag' && github.ref_name) || '' }}
         run: |
-          if [[ "${{ github.event.release.tag_name }}" == *"rc"* || "${{ github.event.release.tag_name }}" == *"beta"* || "${{ github.event.release.tag_name }}" == *"alpha"* ]]; then
-            echo "::set-output name=tags::${{ github.event.release.tag_name }}"
-          else
-            echo "::set-output name=tags::${{ github.event.release.tag_name }},stable,latest"
+          if [[ -z "$RELEASE_TAG" ]]; then
+            echo "::error::No release tag: run this workflow from a tag ref."
+            exit 1
           fi
+          if [[ "$RELEASE_TAG" == *"rc"* || "$RELEASE_TAG" == *"beta"* || "$RELEASE_TAG" == *"alpha"* ]]; then
+            echo "tags=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          else
+            echo "tags=$RELEASE_TAG,stable,latest" >> "$GITHUB_OUTPUT"
+          fi
+          echo "version=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
     outputs:
       tags: ${{ steps.set_tags.outputs.tags }}
+      version: ${{ steps.set_tags.outputs.version }}
 
   # Build op-node and op-batcher using docker-bake and push to devopsre/celo-blockchain-public registry
   build-op-stack:
@@ -31,6 +40,7 @@ jobs:
     env:
       GIT_COMMIT: ${{ github.sha }}
       GIT_DATE: ${{ github.event.release.created_at }}
+      GIT_VERSION: ${{ needs.Set-Tags.outputs.version }}
       IMAGE_TAGS: ${{ needs.Set-Tags.outputs.tags }}
       REGISTRY: us-west1-docker.pkg.dev
       REPOSITORY: devopsre/celo-blockchain-public
@@ -56,6 +66,9 @@ jobs:
           source: .
           files: docker-bake.hcl
           targets: op-node,op-batcher
+          set: |
+            *.labels.org.opencontainers.image.version=${{ env.GIT_VERSION }}
+            *.labels.org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
 
   # Attest images
   attest-op-stack:

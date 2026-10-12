@@ -51,7 +51,10 @@ jobs:
       REGISTRY: us-west1-docker.pkg.dev
       REPOSITORY: blockchaintestsglobaltestnet/dev-images
     steps:
+      # Build the commit the image is tagged and labelled with; on pull requests the default is the merge commit.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.GIT_COMMIT }}
       # The image build regenerates op-core/superchain/superchain-configs.zip from this submodule.
       - name: Init superchain-registry submodule
         run: git submodule update --init --depth 1 -- superchain-registry
@@ -61,6 +64,9 @@ jobs:
           workload-id-provider: 'projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos'
           service-account: 'celo-optimism-gh@devopsre.iam.gserviceaccount.com'
           docker-gcp-registries: us-west1-docker.pkg.dev
+      # Branch and PR builds have no release tag, so the version carries the short commit instead.
+      - name: Set version
+        run: echo "GIT_VERSION=v0.0.0-${GIT_COMMIT:0:8}" >> "$GITHUB_ENV"
       # We need a custom steps as it's using docker bake
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -71,6 +77,11 @@ jobs:
           source: .
           files: docker-bake.hcl
           targets: op-node,op-batcher,op-proposer,op-conductor,op-dispute-mon
+          # The version already carries the commit, so the binaries must not append it again.
+          set: |
+            *.args.GIT_COMMIT=
+            *.labels.org.opencontainers.image.version=${{ env.GIT_VERSION }}
+            *.labels.org.opencontainers.image.revision=${{ env.GIT_COMMIT }}
 
   # Attest images
   attest-op-stack:
