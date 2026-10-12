@@ -10,6 +10,14 @@ echo "Working directory: $(pwd)"
 echo "Proxy: ${http_proxy:-not set}"
 echo "======================================"
 
+# Re-populate the arguments passed through the environment
+if [ -n "$ENCLAVE_BATCHER_ARGS" ]; then
+  eval set -- "$ENCLAVE_BATCHER_ARGS"
+fi
+
+# Store the original arguments from ENCLAVE_BATCHER_ARGS
+original_args=("$@")
+
 # ---------------------------------------------------------------------------
 # Start nc listener in background IMMEDIATELY — before Odyn setup.
 #
@@ -143,11 +151,9 @@ launch_socat() {
 echo "Waiting for batcher arguments (nc PID $NC_BG_PID)..."
 wait "$NC_BG_PID" 2>/dev/null || true
 
-terminated=false
 if [ -s "$NC_TMPFILE" ]; then
     while IFS= read -r -d '' arg; do
         if [[ -z "$arg" ]]; then
-            terminated=true
             break
         fi
         received_args+=("$arg")
@@ -155,15 +161,13 @@ if [ -s "$NC_TMPFILE" ]; then
 fi
 rm -f "$NC_TMPFILE"
 
-if ! $terminated; then
-    echo "[ERROR] batcher arg stream ended without terminator on port $NC_PORT (incomplete delivery)" >&2
-    exit 1
-fi
 if [ ${#received_args[@]} -eq 0 ]; then
-    echo "[ERROR] no batcher arguments received on port $NC_PORT" >&2
-    exit 1
+    echo "Warning: No arguments received via nc listener within 60 seconds, using original arguments"
+    set -- "${original_args[@]}"
+else
+    echo "Received ${#received_args[@]} arguments via nc, merging with original arguments"
+    set -- "${original_args[@]}" "${received_args[@]}"
 fi
-set -- "${received_args[@]}"
 
 # Batcher flags whose values are URLs
 URL_ARG_RE='^(--altda\.da-server|--espresso\.espresso-attestation-service|--espresso\.urls|--espresso\.l1-url|--l1-eth-rpc|--l2-eth-rpc|--rollup-rpc|--signer\.endpoint|--throttle\.additional-endpoints)(=|$)'
@@ -227,8 +231,11 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# Combine all arguments
-all_args=("${filtered_args[@]}" "${url_args[@]}")
+# Appending metric args last so they win: metrics must bind 0.0.0.0:7300 to match the ingress.
+all_args=(
+    "${filtered_args[@]}" "${url_args[@]}"
+    --metrics.enabled --metrics.addr=0.0.0.0 --metrics.port=7300
+)
 
 echo ""
 echo "=== Final op-batcher arguments ==="
