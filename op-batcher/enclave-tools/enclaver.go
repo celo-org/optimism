@@ -17,6 +17,9 @@ const (
 	ArgDeliveryPort uint16 = 8337
 	// ReadinessPort is the vsock port for the readiness handshake. Must match READY_PORT in enclave-entrypoint.bash.
 	ReadinessPort uint16 = 8338
+	// MetricsPort is the vsock port exposing op-batcher's Prometheus metrics. Must match the
+	// --metrics.port op-batcher is launched with in enclave-entrypoint.bash.
+	MetricsPort uint16 = 7300
 )
 
 type EnclaveMeasurements struct {
@@ -73,6 +76,7 @@ func DefaultManifest(name string, target string, source string, cpuCount uint, m
 		Ingress: []EnclaverManifestIngress{
 			{ListenPort: ArgDeliveryPort}, // batcher arg delivery
 			{ListenPort: ReadinessPort},   // readiness handshake
+			{ListenPort: MetricsPort},     // Prometheus metrics
 		},
 	}
 }
