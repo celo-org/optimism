@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -138,22 +139,29 @@ func TestDAClientService(t *testing.T) {
 // the error that makes derivation drop the commitment, when its body carries a status code between 1 and 4.
 // Any other body must yield an ordinary error, which derivation retries.
 func TestDAClientGetInputTeapot(t *testing.T) {
+	// The proxy's message for a cert it fails to parse carries the cert in hex.
+	longMsg := "cert parsing failed for cert " + strings.Repeat("ab", 100_000)
+
 	tests := []struct {
 		name string
 		body string
 		// expectedDrop is the DropEigenDACommitmentError expected from GetInput, or nil if an ordinary error is expected.
 		expectedDrop *DropEigenDACommitmentError
+		// expectedErrMsg is a part of the ordinary error's message, checked if set.
+		expectedErrMsg string
 	}{
 		{name: "status code 1", body: `{"StatusCode": 1, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: "invalid cert"}},
 		{name: "status code 2", body: `{"StatusCode": 2, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 2, Msg: "invalid cert"}},
 		{name: "status code 3", body: `{"StatusCode": 3, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}},
 		{name: "status code 4 without msg", body: `{"StatusCode": 4}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 4}},
-		{name: "status code missing", body: `{"Msg": "invalid cert"}`},
-		{name: "empty object", body: `{}`},
-		{name: "status code 0", body: `{"StatusCode": 0, "Msg": "invalid cert"}`},
-		{name: "status code 5", body: `{"StatusCode": 5, "Msg": "invalid cert"}`},
-		{name: "status code negative", body: `{"StatusCode": -1, "Msg": "invalid cert"}`},
-		{name: "body is not json", body: `I'm a teapot`},
+		{name: "msg longer than a cert in hex", body: `{"StatusCode": 1, "Msg": "` + longMsg + `"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: longMsg}},
+		{name: "status code missing", body: `{"Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 0"},
+		{name: "empty object", body: `{}`, expectedErrMsg: "invalid status code 0"},
+		{name: "status code 0", body: `{"StatusCode": 0, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 0"},
+		{name: "status code 5", body: `{"StatusCode": 5, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 5"},
+		{name: "status code negative", body: `{"StatusCode": -1, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code -1"},
+		{name: "body is not json", body: `I'm a teapot`, expectedErrMsg: "failed to decode"},
+		{name: "body over the size limit", body: `{"StatusCode": 1, "Msg": "` + strings.Repeat("a", maxTeapotBodySize) + `"}`, expectedErrMsg: "body exceeds"},
 	}
 
 	for _, tc := range tests {
@@ -171,6 +179,7 @@ func TestDAClientGetInputTeapot(t *testing.T) {
 			var dropErr DropEigenDACommitmentError
 			if tc.expectedDrop == nil {
 				require.False(t, errors.As(err, &dropErr), "must not drop the commitment, got: %v", err)
+				require.ErrorContains(t, err, tc.expectedErrMsg)
 				return
 			}
 			require.ErrorAs(t, err, &dropErr)

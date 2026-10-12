@@ -65,6 +65,11 @@ func (e DropEigenDACommitmentError) Validate() error {
 	return nil
 }
 
+// maxTeapotBodySize is the largest 418 TEAPOT body that GetInput reads, to bound the memory an error response can take.
+// The proxy's message for a cert it fails to parse contains that cert in hex,
+// so the body can be more than twice as long as the commitment.
+const maxTeapotBodySize = 2 << 20
+
 // DAClient is an HTTP client to communicate with a DA storage service.
 // It creates commitments and retrieves input data + verifies if needed.
 type DAClient struct {
@@ -107,9 +112,14 @@ func (c *DAClient) GetInput(ctx context.Context, comm CommitmentData, l1Inclusio
 		return nil, ErrNotFound
 	}
 	if resp.StatusCode == http.StatusTeapot {
-		// Limit the body to 5000 bytes to prevent being DDoSed with a large error message.
-		bytesLimitedBody := io.LimitReader(resp.Body, 5000)
-		bodyBytes, _ := io.ReadAll(bytesLimitedBody)
+		// Read one byte past the limit to tell a body of exactly the limit from a longer one.
+		bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxTeapotBodySize+1))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read 418 TEAPOT HTTP error body: %w", err)
+		}
+		if len(bodyBytes) > maxTeapotBodySize {
+			return nil, fmt.Errorf("418 TEAPOT HTTP error body exceeds %d bytes", maxTeapotBodySize)
+		}
 
 		var invalidCommitmentErr DropEigenDACommitmentError
 		if err := json.Unmarshal(bodyBytes, &invalidCommitmentErr); err != nil {
