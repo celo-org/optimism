@@ -243,6 +243,11 @@
             "internalType": "address",
             "name": "celoTokenL1Impl",
             "type": "address"
+          },
+          {
+            "internalType": "address",
+            "name": "storageSetterImpl",
+            "type": "address"
           }
         ],
         "internalType": "struct OPContractsManager.Implementations",

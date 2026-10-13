@@ -235,7 +235,9 @@ contract DeployOPChain is Script {
             _contracts: proxies,
             _superchainConfig: ISuperchainConfig(address(_o.celoSuperchainConfigProxy)),
             _opChainProxyAdminOwner: _i.opChainProxyAdminOwner,
-            _isProxy: true
+            _isProxy: true,
+            // Celo: OPCM seeds the portal `_balance` with the CELO it escrows; no CELO token without CGT.
+            _expectedBalance: _i.useCeloGasToken ? _o.celoTokenProxy.balanceOf(address(_o.optimismPortalProxy)) : 0
         });
         ChainAssertions.checkSystemConfigProxies(proxies, _i);
 

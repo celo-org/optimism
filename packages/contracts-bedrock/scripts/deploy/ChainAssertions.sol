@@ -263,7 +263,8 @@ library ChainAssertions {
         Types.ContractSet memory _contracts,
         ISuperchainConfig _superchainConfig,
         address _opChainProxyAdminOwner,
-        bool _isProxy
+        bool _isProxy,
+        uint256 _expectedBalance
     )
         internal
         view
@@ -296,9 +297,11 @@ library ChainAssertions {
             require(portal.l2Sender() == address(0), "CHECK-OP2-110");
             require(address(portal.ethLockbox()) == address(0), "CHECK-OP2-120");
         }
-        // This slot is the custom gas token _balance and this check ensures
+        // OP: This slot is the custom gas token _balance and this check ensures
         // that it stays unset for forwards compatibility with custom gas token.
-        require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(0), "CHECK-OP2-130");
+        // require(vm.load(address(portal), bytes32(uint256(61))) == bytes32(0), "CHECK-OP2-130");
+        // Celo: Slot 61 is `_balance`. OPCM seeds it with the CELO escrowed in the portal.
+        require(uint256(vm.load(address(portal), bytes32(uint256(61)))) == _expectedBalance, "CHECK-OP2-130");
     }
 
     /// @notice Asserts that the ETHLockbox is setup correctly

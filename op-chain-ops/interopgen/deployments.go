@@ -36,6 +36,7 @@ type Implementations struct {
 	FaultDisputeGameV2Impl           common.Address `json:"FaultDisputeGameV2Impl"`
 	PermissionedDisputeGameV2Impl    common.Address `json:"PermissionedDisputeGameV2Impl"`
 	CeloTokenL1Impl                  common.Address `json:"CeloTokenL1Impl"`
+	StorageSetterImpl                common.Address `json:"StorageSetterImpl"`
 }
 
 type SuperchainDeployment struct {
