@@ -29,7 +29,7 @@ import (
 // fallback batcher's ChainSigner/SequencerAddress, which are always populated
 // by applyEspressoDriverSetup.
 type EspressoDriverSetup struct {
-	Client           *espressoClient.MultipleNodesClient
+	Client           espressoClient.EspressoClient
 	LightClient      *espressoLightClient.LightclientCaller
 	ChainSigner      opcrypto.ChainSigner
 	SequencerAddress common.Address
