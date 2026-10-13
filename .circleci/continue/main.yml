@@ -2174,7 +2174,7 @@ jobs:
     parameters:
       diff_branch:
         type: string
-        default: celo-rebase-18
+        default: origin/celo-rebase-18
       scan_command:
         type: string
         default: semgrep ci --timeout=100
