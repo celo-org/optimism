@@ -1016,7 +1016,6 @@ fn root_outcome(state_root: B256) -> StateRootComputeOutcome {
         state_root,
         trie_updates: Arc::new(Default::default()),
         hashed_state: Arc::new(Default::default()),
-        changed_paths: None,
     }
 }
 
