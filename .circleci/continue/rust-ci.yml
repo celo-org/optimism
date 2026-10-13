@@ -851,6 +851,8 @@ workflows:
   # ==========================================================================
   rust-ci:
     when: << pipeline.parameters.c-run_rust_ci >>
+    # celo: Spot-preemption retries, see the main workflow in main.yml.
+    max_auto_reruns: 2
     jobs:
       # -----------------------------------------------------------------------
       # Workspace-level jobs (replacing per-crate duplicates)
