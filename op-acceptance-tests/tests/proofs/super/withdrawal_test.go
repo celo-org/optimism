@@ -16,5 +16,6 @@ func TestSuperCannonKonaWithdrawal(gt *testing.T) {
 }
 
 func TestZKDisputeGameWithdrawal(gt *testing.T) {
+	gt.Skip("Skipped: kona-sp1-proposer has no Celo support (re-executes the withdrawal block to a different output root)")
 	withdrawal.TestWithdrawal(gt, gameTypes.ZKDisputeGameType)
 }
