@@ -224,6 +224,8 @@ workflows:
   # Rust E2E CI — runs on rust path changes or manual dispatch
   rust-e2e-ci:
     when: << pipeline.parameters.c-run_rust_e2e_ci >>
+    # celo: Spot-preemption retries, see the main workflow in main.yml.
+    max_auto_reruns: 2
     jobs:
       - contracts-bedrock-build:
           build_args: --skip test
@@ -295,6 +297,8 @@ workflows:
   # Just runs action tests
   rust-e2e-gate-skip:
     when: << pipeline.parameters.c-run_rust_e2e_gate_skip >>
+    # celo: Spot-preemption retries, see the main workflow in main.yml.
+    max_auto_reruns: 2
     jobs:
       - contracts-bedrock-build:
           build_args: --skip test
