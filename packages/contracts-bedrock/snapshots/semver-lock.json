@@ -24,8 +24,8 @@
     "sourceCodeHash": "0xfca613b5d055ffc4c3cbccb0773ddb9030abedc1aa6508c9e2e7727cc0cd617b"
   },
   "src/L1/OPContractsManager.sol:OPContractsManager": {
-    "initCodeHash": "0xc7dedd09d7b67d46a64457e7d2df363d392637ac96fcc46c71dd233ca467d8db",
-    "sourceCodeHash": "0xd567398c79f1c56ec4ee84275b785a323ac565f4c7fcdf9e6b03ba8b5f473c88"
+    "initCodeHash": "0x43860372e8fb8d2db23cf949567f62ecd946e3b14e0ed147ff5a343c78802e9c",
+    "sourceCodeHash": "0x14fb2028dee68ea73228a903d289856fab338d9a066c4654019232ef45f8a7b6"
   },
   "src/L1/OPContractsManagerStandardValidator.sol:OPContractsManagerStandardValidator": {
     "initCodeHash": "0x57d6a6729d887ead009d518e8f17fa0d26bfc97b8efe1494ab4ef8dbb000d109",

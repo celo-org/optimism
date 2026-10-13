@@ -41,6 +41,7 @@ import { IOptimismMintableERC20Factory } from "interfaces/universal/IOptimismMin
 import { IETHLockbox } from "interfaces/L1/IETHLockbox.sol";
 import { ICeloTokenL1 } from "interfaces/L1/ICeloTokenL1.sol";
 import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
+import { IStorageSetter } from "interfaces/universal/IStorageSetter.sol";
 
 contract OPContractsManagerContractsContainer {
     /// @notice Addresses of the Blueprint contracts.
@@ -1180,6 +1181,7 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
             upgradeToAndCall(
                 output.opChainProxyAdmin, address(output.celoTokenProxy), implementation.celoTokenL1Impl, data
             );
+            seedPortalBalanceAccounting(output, implementation.storageSetterImpl);
         }
 
         if (_input.superchainConfigOverride == address(0)) {
@@ -1396,6 +1398,34 @@ contract OPContractsManagerDeployer is OPContractsManagerBase {
         returns (bytes memory)
     {
         return abi.encodeCall(ICeloTokenL1.initialize, (address(_output.optimismPortalProxy)));
+    }
+
+    /// @notice Storage slot of `OptimismPortal2._balance`.
+    bytes32 internal constant PORTAL_BALANCE_SLOT = bytes32(uint256(61));
+
+    /// @notice Sets `OptimismPortal2._balance` to the CELO held in escrow, which the mint in
+    ///         `CeloTokenL1.initialize` does not do. Left at zero, withdrawals underflow.
+    ///         Needs ProxyAdmin rights, so must run before ownership is handed off.
+    /// @param _output The deploy output holding the portal, CELO token and ProxyAdmin.
+    /// @param _storageSetterImpl The StorageSetter implementation to route the write through.
+    function seedPortalBalanceAccounting(
+        OPContractsManager.DeployOutput memory _output,
+        address _storageSetterImpl
+    )
+        internal
+        virtual
+    {
+        address payable portal = payable(address(_output.optimismPortalProxy));
+        address portalImpl = _output.opChainProxyAdmin.getProxyImplementation(portal);
+        uint256 escrowed = _output.celoTokenProxy.balanceOf(portal);
+
+        upgradeToAndCall(
+            _output.opChainProxyAdmin,
+            portal,
+            _storageSetterImpl,
+            abi.encodeCall(IStorageSetter.setUint, (PORTAL_BALANCE_SLOT, escrowed))
+        );
+        _output.opChainProxyAdmin.upgrade(portal, portalImpl);
     }
 
     /// @notice Helper method for encoding the CeloSuperchainConfig initializer data.
@@ -1956,6 +1986,7 @@ contract OPContractsManager is ISemver {
         address permissionedDisputeGameV2Impl;
         address celoSuperchainConfigImpl;
         address celoTokenL1Impl;
+        address storageSetterImpl;
     }
 
     /// @notice The input required to identify a chain for upgrading, along with new prestate hashes
@@ -1995,9 +2026,9 @@ contract OPContractsManager is ISemver {
 
     // -------- Constants and Variables --------
 
-    /// @custom:semver 4.2.0
+    /// @custom:semver 4.3.0
     function version() public pure virtual returns (string memory) {
-        return "4.2.0";
+        return "4.3.0";
     }
 
     OPContractsManagerGameTypeAdder public immutable opcmGameTypeAdder;

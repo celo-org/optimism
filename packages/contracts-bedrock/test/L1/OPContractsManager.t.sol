@@ -2044,6 +2044,40 @@ contract OPContractsManager_Deploy_Test is DeployOPChain_TestBase {
         );
     }
 
+    /// @notice Tests that deploy leaves `_balance` equal to the CELO held in escrow.
+    function test_deploy_portalBalanceAccountingMatchesEscrow_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        input.useCeloGasToken = true;
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        uint256 escrowed = ICeloTokenL1(address(output.celoTokenProxy)).balanceOf(
+            address(output.optimismPortalProxy)
+        );
+        assertEq(output.optimismPortalProxy.balance(), escrowed, "_balance should equal escrowed CELO");
+        assertEq(output.optimismPortalProxy.balance(), 1e27, "_balance should equal the full minted supply");
+    }
+
+    /// @notice Tests that slot 61 is still where `OptimismPortal2._balance` lives.
+    function test_deploy_portalBalanceSlotIsCorrect_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        input.useCeloGasToken = true;
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        bytes32 raw = vm.load(address(output.optimismPortalProxy), bytes32(uint256(61)));
+        assertEq(uint256(raw), output.optimismPortalProxy.balance(), "slot 61 should hold _balance");
+    }
+
+    /// @notice Tests that the portal impl is restored after the StorageSetter round-trip.
+    function test_deploy_portalImplRestoredAfterBalanceSeed_succeeds() public {
+        IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);
+        input.useCeloGasToken = true;
+        IOPContractsManager.DeployOutput memory output = opcm.deploy(input);
+
+        address impl = output.opChainProxyAdmin.getProxyImplementation(address(output.optimismPortalProxy));
+        assertEq(impl, opcm.implementations().optimismPortalImpl, "portal impl should be restored");
+        assertNotEq(impl, opcm.implementations().storageSetterImpl, "portal must not be left as StorageSetter");
+    }
+
     /// @notice Tests that deploy wires the CELO token as the SystemConfig gas paying token.
     function test_deploy_celoTokenIsGasPayingToken_succeeds() public {
         IOPContractsManager.DeployInput memory input = toOPCMDeployInput(deployOPChainInput);

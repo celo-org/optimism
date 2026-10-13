@@ -54,6 +54,7 @@ type DeployImplementationsOutput struct {
 	FaultDisputeGameV2Impl           common.Address `json:"faultDisputeGameV2ImplAddress"`
 	PermissionedDisputeGameV2Impl    common.Address `json:"permissionedDisputeGameV2ImplAddress"`
 	CeloTokenL1Impl                  common.Address `json:"celoTokenL1ImplAddress"`
+	StorageSetterImpl                common.Address `json:"storageSetterImplAddress"`
 }
 
 type DeployImplementationsScript script.DeployScriptWithOutput[DeployImplementationsInput, DeployImplementationsOutput]

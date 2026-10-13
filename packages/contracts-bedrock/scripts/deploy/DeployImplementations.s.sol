@@ -9,6 +9,7 @@ import { Types } from "scripts/libraries/Types.sol";
 
 // Interfaces
 import { ICeloTokenL1 } from "interfaces/L1/ICeloTokenL1.sol";
+import { IStorageSetter } from "interfaces/universal/IStorageSetter.sol";
 import { ICeloSuperchainConfig } from "interfaces/L1/ICeloSuperchainConfig.sol";
 import { ISuperchainConfig } from "interfaces/L1/ISuperchainConfig.sol";
 import { IProtocolVersions } from "interfaces/L1/IProtocolVersions.sol";
@@ -93,6 +94,7 @@ contract DeployImplementations is Script {
         IFaultDisputeGameV2 faultDisputeGameV2Impl;
         IPermissionedDisputeGameV2 permissionedDisputeGameV2Impl;
         ICeloTokenL1 celoTokenL1Impl;
+        IStorageSetter storageSetterImpl;
     }
 
     bytes32 internal _salt = DeployUtils.DEFAULT_SALT;
@@ -130,6 +132,7 @@ contract DeployImplementations is Script {
             deployPermissionedDisputeGameV2Impl(_input, output_);
         }
         deployCeloTokenL1Impl(output_);
+        deployStorageSetterImpl(output_);
 
         // Deploy the OP Contracts Manager with the new implementations set.
         deployOPContractsManager(_input, output_);
@@ -167,7 +170,8 @@ contract DeployImplementations is Script {
             faultDisputeGameV2Impl: address(_output.faultDisputeGameV2Impl),
             permissionedDisputeGameV2Impl: address(_output.permissionedDisputeGameV2Impl),
             celoSuperchainConfigImpl: address(_output.celoSuperchainConfigImpl),
-            celoTokenL1Impl: address(_output.celoTokenL1Impl)
+            celoTokenL1Impl: address(_output.celoTokenL1Impl),
+            storageSetterImpl: address(_output.storageSetterImpl)
         });
 
         deployOPCMBPImplsContainer(_input, _output, _blueprints, implementations);
@@ -263,6 +267,14 @@ contract DeployImplementations is Script {
         );
         vm.label(address(impl), "CeloTokenL1Impl");
         _output.celoTokenL1Impl = impl;
+    }
+
+    function deployStorageSetterImpl(Output memory _output) private {
+        IStorageSetter impl = IStorageSetter(
+            DeployUtils.createDeterministic({ _name: "StorageSetter", _args: "", _salt: _salt })
+        );
+        vm.label(address(impl), "StorageSetterImpl");
+        _output.storageSetterImpl = impl;
     }
 
     function deployCeloSuperchainConfigImpl(Output memory _output) private {
@@ -755,7 +767,8 @@ contract DeployImplementations is Script {
             address(_output.disputeGameFactoryImpl),
             address(_output.anchorStateRegistryImpl),
             address(_output.ethLockboxImpl),
-            address(_output.celoTokenL1Impl)
+            address(_output.celoTokenL1Impl),
+            address(_output.storageSetterImpl)
         );
 
         // Only include V2 contracts in validation if they were deployed

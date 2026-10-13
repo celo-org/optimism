@@ -228,6 +228,7 @@ interface IOPContractsManager {
         address permissionedDisputeGameV2Impl;
         address celoSuperchainConfigImpl;
         address celoTokenL1Impl;
+        address storageSetterImpl;
     }
 
     /// @notice The input required to identify a chain for upgrading.
