@@ -111,7 +111,8 @@ jobs:
     docker:
       - image: << pipeline.parameters.default_docker_image >>
     environment:
-      BASE_REVISION: develop
+      # celo: PRs target the current celo-rebase-XX branch; origin/develop is a stale mirror here.
+      BASE_REVISION: celo-rebase-19
     steps:
       - checkout
       # Front-loads the mise toolset for the whole pipeline: this job always

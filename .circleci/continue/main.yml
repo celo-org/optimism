@@ -2174,7 +2174,9 @@ jobs:
     parameters:
       diff_branch:
         type: string
-        default: celo-rebase-18
+        # celo: the remote-tracking ref, because a clone only creates a local branch for the
+        # repository's default branch and semgrep fails on a baseline it cannot resolve.
+        default: origin/celo-rebase-19
       scan_command:
         type: string
         default: semgrep ci --timeout=100
