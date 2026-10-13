@@ -2685,11 +2685,34 @@ workflows:
             - prep-go-modules
           context:
             - circleci-repo-readonly-authenticated-github-token
+      # celo: run the acceptance tests on op-node + op-geth. celo-org/op-geth is the only
+      # L2 EL this repo builds with Celo's changes, so this variant is the one that
+      # exercises them (e.g. base-fee routing to the FeeHandler). The devstack skips
+      # every chain that schedules Karst when the EL is op-geth, so only tests that pin
+      # a fork up to Jovian run here; the rest report as skipped.
+      # It requires the two Rust build jobs directly because rust-binaries-for-sysgo is
+      # disabled, and the job fails early unless op-reth and op-reth-sdm-fixture exist.
+      # IN-MEMORY - op-node/op-geth
+      - op-acceptance-tests:
+          name: memory-all-opn-op-geth
+          l2_el_kind: op-geth
+          acceptance_test_jobs: "8"
+          no_output_timeout: 120m
+          context:
+            - circleci-repo-readonly-authenticated-github-token
+            - slack
+          requires:
+            - contracts-bedrock-build
+            - cannon-prestate
+            - rust-kona-binaries
+            - rust-op-reth-binary
+            - go-binaries-for-sysgo
+            - prep-go-modules
+            # for the gitignored superchain-configs.zip op-acceptance-tests //go:embeds
+            - prep-superchain
       # celo: op-reth and kona-node carry no Celo changes in this repo — they live
       # in a separate repo — so these EL/CL variants run non-Celo binaries and fail
-      # Celo-specific tests (e.g. base-fee routing to the FeeHandler). Upstream removed
-      # the op-geth variant; restoring Celo acceptance coverage is deferred to the CI
-      # reconciliation follow-up.
+      # Celo-specific tests (e.g. base-fee routing to the FeeHandler).
       # # IN-MEMORY - op-node/op-reth
       # - op-acceptance-tests:
       #     name: memory-all-opn-op-reth-<<matrix.l1_fork>>
@@ -2748,6 +2771,7 @@ workflows:
             - semgrep-scan-local: terminal
             - semgrep-test: terminal
             - go-tests: terminal
+            - memory-all-opn-op-geth: terminal
             # celo: op-reth/kona acceptance variants removed (no Celo changes in this repo)
             # - memory-all-opn-op-reth-fusaka: terminal
             # - memory-all-kona-op-reth-fusaka: terminal
