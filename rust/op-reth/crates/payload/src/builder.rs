@@ -1274,9 +1274,10 @@ where
             // Compute the miner fee on the pool tx so downstream pool wrappers can
             // override `effective_tip_per_gas` (e.g. to convert non-native fee
             // denominations into a native-wei tip) before the consensus tx is exposed.
-            let miner_fee = tx
-                .effective_tip_per_gas(base_fee)
-                .expect("selected pool transaction must have a valid effective miner tip at the block base fee");
+            let Some(miner_fee) = tx.effective_tip_per_gas(base_fee) else {
+                best_txs.mark_invalid(tx.sender(), tx.nonce());
+                continue;
+            };
             let tx = tx.into_consensus();
             let tx_uncompressed_size = tx.encode_2718_len() as u64;
 

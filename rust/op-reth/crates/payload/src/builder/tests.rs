@@ -13,7 +13,7 @@ use alloy_eips::{
     eip2930::{AccessList, AccessListItem},
     eip7702::SignedAuthorization,
 };
-use alloy_evm::RecoveredTx;
+use alloy_evm::{Evm, RecoveredTx};
 use alloy_primitives::{Address, B64, B256, Bytes, Signature, TxHash, TxKind, U256};
 use alloy_rpc_types_eth::erc4337::TransactionConditional;
 use metrics_util::debugging::{DebugValue, DebuggingRecorder, Snapshot};
@@ -43,6 +43,7 @@ use reth_trie_parallel::{
     error::StateRootTaskError,
     state_root_task::{PayloadStateRootHandle, StateRootComputeOutcome},
 };
+use revm::context::Block;
 use std::{
     borrow::Cow,
     cell::Cell,
@@ -458,6 +459,125 @@ fn execute_best_transactions_committed_txs_preserves_execution() {
     assert_eq!(committed_info.cumulative_gas_used, none_info.cumulative_gas_used);
     assert_eq!(committed_info.cumulative_da_bytes_used, none_info.cumulative_da_bytes_used);
     assert_eq!(committed_info.total_fees, none_info.total_fees);
+}
+
+/// An underpriced native tx must invalidate its sender/nonce without preventing another sender's
+/// tx from committing. A max fee equal to the base fee is valid and contributes zero miner fees.
+#[rstest::rstest]
+#[case::positive_tip(13, 42_000)]
+#[case::zero_tip(10, 0)]
+fn execute_best_transactions_skips_underpriced_native_tx(
+    #[case] valid_max_fee: u128,
+    #[case] expected_fees: u64,
+) {
+    use reth_payload_util::PayloadTransactions;
+    use std::{cell::RefCell, rc::Rc};
+
+    #[derive(Debug, PartialEq, Eq)]
+    struct InvalidTransaction {
+        sender: Address,
+        nonce: u64,
+    }
+
+    struct InvalidTxProbe {
+        inner: PayloadTransactionsFixed<OpPooledTransaction>,
+        invalid: Rc<RefCell<Vec<InvalidTransaction>>>,
+    }
+
+    impl PayloadTransactions for InvalidTxProbe {
+        type Transaction = OpPooledTransaction;
+
+        fn next(&mut self, ctx: ()) -> Option<Self::Transaction> {
+            self.inner.next(ctx)
+        }
+
+        fn mark_invalid(&mut self, sender: Address, nonce: u64) {
+            self.invalid.borrow_mut().push(InvalidTransaction { sender, nonce });
+            self.inner.mark_invalid(sender, nonce);
+        }
+    }
+
+    let gas_limit = 1_200_000;
+    let chain_spec = Arc::new(OpChainSpecBuilder::optimism_mainnet().regolith_activated().build());
+    let mut ctx = payload_builder_ctx(chain_spec, gas_limit);
+    // Optimism's elasticity is 6, so this parent keeps the next block's base fee at 10.
+    ctx.config.parent_header = Arc::new(SealedHeader::seal_slow(Header {
+        gas_limit,
+        gas_used: gas_limit / 6,
+        base_fee_per_gas: Some(10),
+        ..Default::default()
+    }));
+
+    let underpriced_sender = Address::repeat_byte(0x11);
+    let valid_sender = Address::repeat_byte(0x22);
+    let recipient = Address::repeat_byte(0x33);
+    let underpriced = op_pooled_tx_from(
+        underpriced_sender,
+        TxEip1559 { max_fee_per_gas: 9, ..base_pooled_tx(7, recipient, MIN_TRANSACTION_GAS) },
+    );
+    let valid = op_pooled_tx_from(
+        valid_sender,
+        TxEip1559 {
+            max_fee_per_gas: valid_max_fee,
+            max_priority_fee_per_gas: 2,
+            ..base_pooled_tx(0, recipient, MIN_TRANSACTION_GAS)
+        },
+    );
+    let expected_hashes = vec![*valid.hash()];
+    let mut state_provider = StateProviderTest::default();
+    for (sender, nonce) in [(underpriced_sender, 7), (valid_sender, 0)] {
+        state_provider.insert_account(
+            sender,
+            Account { balance: U256::MAX, nonce, ..Default::default() },
+            None,
+            Default::default(),
+        );
+    }
+    let mut db = State::builder()
+        .with_database(StateProviderDatabase::new(&state_provider))
+        .with_bundle_update()
+        .build();
+    let mut builder = ctx.block_builder(&mut db).expect("block builder can be created");
+    assert_eq!(builder.evm_mut().block().basefee(), 10);
+    let mut info = ExecutionInfo::new();
+    let mut committed_txs = Vec::new();
+    let invalid = Rc::new(RefCell::new(Vec::new()));
+    let best_txs = InvalidTxProbe {
+        inner: PayloadTransactionsFixed::new(vec![underpriced, valid]),
+        invalid: invalid.clone(),
+    };
+
+    assert!(
+        ctx.execute_best_transactions(
+            &mut info,
+            &mut builder,
+            RethPayloadTransactions(best_txs),
+            None,
+            Some(&mut committed_txs),
+        )
+        .expect("best transactions execute")
+        .is_none()
+    );
+
+    assert_eq!(
+        *invalid.borrow(),
+        vec![InvalidTransaction { sender: underpriced_sender, nonce: 7 }]
+    );
+    assert_eq!(tx_hashes(&committed_txs), expected_hashes);
+    assert_eq!(info.cumulative_gas_used, 21_000);
+    assert_eq!(info.total_fees, U256::from(expected_fees));
+    let outcome = builder
+        .finish(state_provider.clone(), Some((B256::ZERO, Default::default())))
+        .expect("builder finishes");
+    let included: Vec<_> = outcome
+        .block
+        .into_block()
+        .body
+        .transactions
+        .iter()
+        .map(|tx| *TxHashRef::tx_hash(tx))
+        .collect();
+    assert_eq!(included, expected_hashes);
 }
 
 /// `on_commit(gas)` fires once per committed tx, in commit order, with that tx's canonical and
