@@ -6,8 +6,8 @@ import (
 	"math/big"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
+	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum"
@@ -29,21 +29,65 @@ import (
 // fallback batcher's ChainSigner/SequencerAddress, which are always populated
 // by applyEspressoDriverSetup.
 type EspressoDriverSetup struct {
-	Client           *espressoClient.MultipleNodesClient
+	Client           espressoRuntimeClient
 	LightClient      *espressoLightClient.LightclientCaller
 	ChainSigner      opcrypto.ChainSigner
 	SequencerAddress common.Address
 	Attestation      []byte
 }
 
+type espressoRuntimeClient interface {
+	espressoSubmissionClient
+	FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error)
+	FetchHeadersByRange(ctx context.Context, fromHeight uint64, toHeight uint64) ([]espressoCommon.HeaderImpl, error)
+}
+
+type espressoTimeoutClient struct {
+	client            espressoRuntimeClient
+	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
+}
+
+func (c *espressoTimeoutClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+	callCtx, cancel := c.networkTimeoutCtx(ctx)
+	defer cancel()
+	return c.client.SubmitTransaction(callCtx, tx)
+}
+
+func (c *espressoTimeoutClient) FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
+	callCtx, cancel := c.networkTimeoutCtx(ctx)
+	defer cancel()
+	return c.client.FetchTransactionByHash(callCtx, hash)
+}
+
+func (c *espressoTimeoutClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
+	callCtx, cancel := c.networkTimeoutCtx(ctx)
+	defer cancel()
+	return c.client.FetchLatestBlockHeight(callCtx)
+}
+
+func (c *espressoTimeoutClient) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error) {
+	callCtx, cancel := c.networkTimeoutCtx(ctx)
+	defer cancel()
+	return c.client.FetchNamespaceTransactionsInRange(callCtx, fromHeight, toHeight, namespace)
+}
+
+func (c *espressoTimeoutClient) FetchHeadersByRange(ctx context.Context, fromHeight uint64, toHeight uint64) ([]espressoCommon.HeaderImpl, error) {
+	callCtx, cancel := c.networkTimeoutCtx(ctx)
+	defer cancel()
+	return c.client.FetchHeadersByRange(callCtx, fromHeight, toHeight)
+}
+
 // batcherL1Adapter wraps the batcher's L1Client to implement espresso.L1Client
 // (HeaderHashByNumber + HeaderByNumber + bind.ContractCaller).
 type batcherL1Adapter struct {
-	L1Client L1Client
+	L1Client          L1Client
+	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
 }
 
 func (a *batcherL1Adapter) HeaderHashByNumber(ctx context.Context, number *big.Int) (common.Hash, error) {
-	h, err := a.L1Client.HeaderByNumber(ctx, number)
+	callCtx, cancel := a.networkTimeoutCtx(ctx)
+	defer cancel()
+	h, err := a.L1Client.HeaderByNumber(callCtx, number)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -51,15 +95,21 @@ func (a *batcherL1Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 }
 
 func (a *batcherL1Adapter) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
-	return a.L1Client.HeaderByNumber(ctx, number)
+	callCtx, cancel := a.networkTimeoutCtx(ctx)
+	defer cancel()
+	return a.L1Client.HeaderByNumber(callCtx, number)
 }
 
 func (a *batcherL1Adapter) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
-	return a.L1Client.CodeAt(ctx, contract, blockNumber)
+	callCtx, cancel := a.networkTimeoutCtx(ctx)
+	defer cancel()
+	return a.L1Client.CodeAt(callCtx, contract, blockNumber)
 }
 
 func (a *batcherL1Adapter) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-	return a.L1Client.CallContract(ctx, call, blockNumber)
+	callCtx, cancel := a.networkTimeoutCtx(ctx)
+	defer cancel()
+	return a.L1Client.CallContract(callCtx, call, blockNumber)
 }
 
 // batcherL2Adapter wraps the batcher's L2 eth client to implement espresso.L2Client.
@@ -67,11 +117,14 @@ func (a *batcherL1Adapter) CallContract(ctx context.Context, call ethereum.CallM
 // batch position it is anchored to. dial.EthClientInterface exposes no
 // header-only accessor, so this fetches the full block and takes its hash.
 type batcherL2Adapter struct {
-	EthClient dial.EthClientInterface
+	EthClient         dial.EthClientInterface
+	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
 }
 
 func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.Int) (common.Hash, error) {
-	block, err := a.EthClient.BlockByNumber(ctx, number)
+	callCtx, cancel := a.networkTimeoutCtx(ctx)
+	defer cancel()
+	block, err := a.EthClient.BlockByNumber(callCtx, number)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -137,8 +190,8 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 	streamer, err := espressoStreamers.NewStreamer(
 		streamerCtx,
 		l.Espresso.Client,
-		&batcherL1Adapter{L1Client: l.L1Client},
-		&batcherL2Adapter{EthClient: ethClient},
+		&batcherL1Adapter{L1Client: l.L1Client, networkTimeoutCtx: l.networkTimeoutCtx},
+		&batcherL2Adapter{EthClient: ethClient, networkTimeoutCtx: l.networkTimeoutCtx},
 		lightClientIface,
 		l.RollupConfig.BatchAuthenticatorAddress,
 		bigs.Uint64Strict(l.RollupConfig.L2ChainID),
@@ -235,10 +288,25 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 func (l *BatchSubmitter) rollbackFailedStart() {
 	l.cancelShutdownCtx()
 	l.cancelKillCtx()
-	if l.espressoStreamer != nil {
-		l.espressoStreamer.Stop()
-	}
+	l.stopEspressoStreamer()
 	l.running = false
+}
+
+// startEspressoStreamer starts the streamer's poll loops, bound to shutdownCtx
+// so it stops fetching before the publish path winds down.
+func (l *BatchSubmitter) startEspressoStreamer() error {
+	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
+		return fmt.Errorf("could not start the Espresso streamer: %w", err)
+	}
+	return nil
+}
+
+func (l *BatchSubmitter) stopEspressoStreamer() {
+	if l.espressoStreamer == nil {
+		return
+	}
+	l.espressoStreamer.Stop()
+	l.espressoStreamer = nil
 }
 
 // startEspressoLoops registers the batcher with the BatchAuthenticator
@@ -263,8 +331,8 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	// fetching before the publish path winds down. Kept as the last setup step that
 	// can fail, so a setup error never has running poll loops to unwind
 	// (rollbackFailedStart would stop them anyway).
-	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
-		return fmt.Errorf("could not start the Espresso streamer: %w", err)
+	if err := l.startEspressoStreamer(); err != nil {
+		return err
 	}
 
 	l.espressoSubmitter = NewEspressoTransactionSubmitter(
