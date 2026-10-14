@@ -28,6 +28,12 @@ jobs:
       label: ${{ steps.runner.outputs.label }}
       instance-id: ${{ steps.runner.outputs.ec2-instance-id }}
     steps:
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.TEE_RUNNER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TEE_RUNNER_APP_PRIVATE_KEY }}
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
@@ -37,7 +43,7 @@ jobs:
         uses: EspressoSystems/ec2-github-runner@v2-enclave
         with:
           mode: start
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           # Set the AWS_EC2_IMAGE_ID repository variable alongside the AWS credentials
           # once available: an AL2023 AMI in us-east-2 with Nix, Docker and nitro-cli.
           ec2-image-id: ${{ vars.AWS_EC2_IMAGE_ID }}
@@ -102,6 +108,12 @@ jobs:
     if: always()
     runs-on: ubuntu-latest
     steps:
+      - id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.TEE_RUNNER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.TEE_RUNNER_APP_PRIVATE_KEY }}
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
@@ -110,6 +122,6 @@ jobs:
       - uses: EspressoSystems/ec2-github-runner@v2-enclave
         with:
           mode: stop
-          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
           label: ${{ needs.start-runner.outputs.label }}
           ec2-instance-id: ${{ needs.start-runner.outputs.instance-id }}
