@@ -17,7 +17,9 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
@@ -259,7 +261,7 @@ func TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched(t *testing.T) {
 const (
 	warnModeInactive    = "Batcher is not the active batcher"
 	warnKeyUnauthorized = "Configured batcher key is not the authorized batcher"
-	warnFallbackGateErr = "Failed to evaluate fallback-auth gate"
+	warnTipErr          = "Failed to evaluate the batch-auth enforcement boundary"
 	warnActiveCheckErr  = "Failed to check if batcher is active"
 )
 
@@ -413,12 +415,15 @@ func TestIsBatcherActive_NoAuthenticator(t *testing.T) {
 }
 
 // TestShouldSkipPublishForActiveSeq covers the publish loop's gate in front of
-// isBatcherActive: the Espresso batcher always consults the active flag, the
-// fallback batcher only once fallback auth is required, and either gate failing
-// to evaluate skips the publish (fails closed). Each skip warns once and is
-// throttled on the next check.
+// isBatcherActive: before event-based batch auth is enforced at the L1 tip the
+// fallback batcher publishes regardless of the flag and the Espresso batcher
+// stands down; once enforced both consult the active flag. Failing to evaluate
+// any input skips the publish (fails closed). Each skip warns once and is
+// throttled on the next check. TestShouldSkipPublish_EnforcementBoundary pins
+// the full ownership matrix.
 func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 	const espressoTime = 1000
+	const enforcementTime = espressoTime + derive.BatchAuthEnforcementDelaySecs
 	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 	fallbackAddr := common.HexToAddress("0x00000000000000000000000000000000000000e2")
 
@@ -433,15 +438,18 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 		wantSkip         bool
 		wantWarn         string
 	}{
-		// Pre-fork the fallback batcher ignores the flag, even when it names the Espresso batcher.
+		// Pre-enforcement the fallback batcher ignores the flag, even when it names the Espresso batcher.
 		{name: "fallback batcher before the fork ignores the flag", tipTime: espressoTime - 1, activeIsEspresso: true, from: fallbackAddr, wantSkip: false},
-		{name: "fallback batcher, fallback-auth gate fails", tipErr: errors.New("l1 down"), from: fallbackAddr, wantSkip: true, wantWarn: warnFallbackGateErr},
-		{name: "fallback batcher after the fork, fallback active", tipTime: espressoTime, from: fallbackAddr, wantSkip: false},
-		{name: "fallback batcher after the fork, espresso active", tipTime: espressoTime, activeIsEspresso: true, from: fallbackAddr, wantSkip: true, wantWarn: warnModeInactive},
-		// The Espresso batcher consults the flag without reading the L1 tip.
-		{name: "espresso batcher, espresso active", espressoEnabled: true, tipErr: errors.New("unused"), activeIsEspresso: true, from: espressoAddr, wantSkip: false},
-		{name: "espresso batcher, fallback active", espressoEnabled: true, from: espressoAddr, wantSkip: true, wantWarn: warnModeInactive},
-		{name: "espresso batcher, active check fails", espressoEnabled: true, callErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true, wantWarn: warnActiveCheckErr},
+		{name: "fallback batcher in the grace window ignores the flag", tipTime: espressoTime, activeIsEspresso: true, from: fallbackAddr, wantSkip: false},
+		{name: "fallback batcher, tip fetch fails", tipErr: errors.New("l1 down"), from: fallbackAddr, wantSkip: true, wantWarn: warnTipErr},
+		{name: "fallback batcher once enforced, fallback active", tipTime: enforcementTime, from: fallbackAddr, wantSkip: false},
+		{name: "fallback batcher once enforced, espresso active", tipTime: enforcementTime, activeIsEspresso: true, from: fallbackAddr, wantSkip: true, wantWarn: warnModeInactive},
+		// Pre-enforcement the Espresso batcher stands down without consulting the flag.
+		{name: "espresso batcher in the grace window stands down", espressoEnabled: true, tipTime: espressoTime, activeIsEspresso: true, from: espressoAddr, wantSkip: true},
+		{name: "espresso batcher, tip fetch fails", espressoEnabled: true, tipErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true, wantWarn: warnTipErr},
+		{name: "espresso batcher once enforced, espresso active", espressoEnabled: true, tipTime: enforcementTime, activeIsEspresso: true, from: espressoAddr, wantSkip: false},
+		{name: "espresso batcher once enforced, fallback active", espressoEnabled: true, tipTime: enforcementTime, from: espressoAddr, wantSkip: true, wantWarn: warnModeInactive},
+		{name: "espresso batcher once enforced, active check fails", espressoEnabled: true, tipTime: enforcementTime, callErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true, wantWarn: warnActiveCheckErr},
 	}
 
 	for _, test := range tests {
@@ -456,6 +464,7 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			l := &BatchSubmitter{}
 			l.Log = logger
 			l.degradedLog = oplog.NewRepeatStateLogger()
+			l.Metr = metrics.NoopMetrics
 			l.RollupConfig = &rollup.Config{EspressoTime: u64(espressoTime)}
 			l.Config.NetworkTimeout = time.Second
 			l.Config.Espresso.Enabled = test.espressoEnabled
