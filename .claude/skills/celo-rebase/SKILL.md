@@ -268,6 +268,17 @@ workflow** and port the intent where feasible:
 Validate after editing: `circleci config validate` and `actionlint`/`yamllint` if installed,
 otherwise at least parse the YAML (`ruby -ryaml -e 'YAML.load_file(ARGV[0])' FILE`).
 
+**Bump the base-branch references on every rebase.** Three places name the branch PRs are compared
+against. They can only point at `celo-rebase-XX` once that branch exists, so change them in the
+first PR after publishing:
+
+- `BASE_REVISION` in `.circleci/config.yml` (change detection: which workflows a PR runs).
+- `diff_branch` of `semgrep-scan` in `.circleci/continue/main.yml` (semgrep's baseline). Keep the
+  `origin/` prefix: the bare branch name only resolves in CI while it is the default branch.
+- `BASE_BRANCH` of `op-reth-compact-codec` in `.circleci/continue/rust-ci.yml` (the branch whose
+  compact-codec vectors the PR must still read). While the rebase itself is under review, point it
+  at a branch holding the bare upstream tag, or an upstream codec change fails the check.
+
 ## Avoiding and fixing breakage when editing history
 
 Editing history easily breaks things. Detect and fix problems fast — it is easy to fix one
