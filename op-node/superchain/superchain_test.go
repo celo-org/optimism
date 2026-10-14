@@ -71,6 +71,7 @@ func fullyPopulatedChainConfig() *registry.ChainConfig {
 			PectraBlobScheduleTime: ptr.New(uint64(11)),
 			Cel2Time:               ptr.New(uint64(12)),
 			EspressoTime:           ptr.New(uint64(13)),
+			Upgrade18Time:          ptr.New(uint64(14)),
 		},
 	}
 }
