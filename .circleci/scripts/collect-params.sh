@@ -44,8 +44,14 @@ case "${MODE}" in
   detect|detect_all)
     [[ "${MODE}" == "detect_all" ]] && section=".change_patterns.all" || section=".change_patterns.any"
 
-    CHANGED=$(git diff --name-only "origin/${BASE_REVISION}...HEAD" 2>/dev/null \
-      || git diff --name-only HEAD~1 HEAD || true)
+    if [[ "${CIRCLE_BRANCH:-}" == "${BASE_REVISION}" ]]; then
+      # celo: a push to the base branch has nothing to diff against itself, so every pattern would
+      # read as unchanged. PRs are squash-merged, so the pushed commit's own diff is the merged change.
+      CHANGED=$(git diff --name-only HEAD~1 HEAD || true)
+    else
+      CHANGED=$(git diff --name-only "origin/${BASE_REVISION}...HEAD" 2>/dev/null \
+        || git diff --name-only HEAD~1 HEAD || true)
+    fi
     echo "=== Changed files ==="
     echo "${CHANGED:-<none>}"
     echo "====================="
