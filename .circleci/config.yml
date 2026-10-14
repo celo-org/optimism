@@ -142,6 +142,10 @@ jobs:
       - run:
           name: Test decision tree
           command: .circleci/scripts/test-decision-tree.sh
+      # celo: checks the routing.yml change-detection patterns against known paths.
+      - run:
+          name: Test change patterns
+          command: .circleci/scripts/test-change-patterns.sh
       # Forward string pipeline parameters to /tmp/pipeline-parameters.json.
       # collect-params.sh picks up all env vars starting with "c-" and writes them as JSON strings.
       # Add a line here when a new string value needs to reach continuation config jobs
