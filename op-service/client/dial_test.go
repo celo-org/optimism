@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -124,6 +125,43 @@ func TestIsURLAvailableProxy(t *testing.T) {
 			require.False(t, IsURLAvailable(context.Background(), reachable, defaultConnectTimeout))
 		})
 	}
+
+	t.Run("portless socks5 proxy", func(t *testing.T) {
+		proxyURL, err := url.Parse("socks5://proxy")
+		require.NoError(t, err)
+		swapProxyResolver(t, func(*http.Request) (*url.URL, error) { return proxyURL, nil })
+
+		// Unknown proxy ports fail open even when the target is unreachable.
+		require.True(t, IsURLAvailable(context.Background(), "http://"+unreachable, defaultConnectTimeout))
+	})
+
+	t.Run("empty http proxy port", func(t *testing.T) {
+		proxyURL, err := url.Parse("http://proxy:")
+		require.NoError(t, err)
+		swapProxyResolver(t, func(*http.Request) (*url.URL, error) { return proxyURL, nil })
+
+		target := "http://" + proxyAddr
+		// Both IsURLAvailable and proxyAddrFor use hostPort. Check the proxy
+		// address directly: a successful probe would require DNS and a listener
+		// on port 80. The empty port must become proxy:80, not proxy::80.
+		require.Equal(t, "proxy:80", proxyAddrFor(target))
+	})
+}
+
+func TestCheckAndDialProxyUnavailable(t *testing.T) {
+	target, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer target.Close()
+	targetURL := "http://" + target.Addr().String() + "/rpc"
+
+	// Reject the dead proxy even though the target's port is listening.
+	proxyURL, err := url.Parse("http://127.0.0.1:0")
+	require.NoError(t, err)
+	swapProxyResolver(t, func(*http.Request) (*url.URL, error) { return proxyURL, nil })
+
+	conn, err := CheckAndDial(context.Background(), log.New(), targetURL, defaultConnectTimeout)
+	require.Nil(t, conn)
+	require.EqualError(t, err, "proxy unavailable (127.0.0.1:0) for "+targetURL)
 }
 
 // noProxy is a proxy resolver that never returns a proxy.
