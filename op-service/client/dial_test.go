@@ -4,10 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 )
 
@@ -32,6 +35,9 @@ func TestIsURLAvailableLocal(t *testing.T) {
 }
 
 func TestIsURLAvailableNonLocal(t *testing.T) {
+	// Probe the targets directly: through a proxy the fake domains look reachable.
+	swapProxyResolver(t, noProxy)
+
 	if !IsURLAvailable(context.Background(), "http://example.com", defaultConnectTimeout) {
 		t.Skip("No internet connection found, skipping this test")
 	}
@@ -57,4 +63,115 @@ func TestIsURLAvailableNonLocal(t *testing.T) {
 	require.False(t, IsURLAvailable(context.Background(), "ws://fakedomainnamethatdoesnotexistandshouldneverexist.com/hello", defaultConnectTimeout))
 	require.False(t, IsURLAvailable(context.Background(), "wss://fakedomainnamethatdoesnotexistandshouldneverexist.com", defaultConnectTimeout))
 	require.False(t, IsURLAvailable(context.Background(), "wss://fakedomainnamethatdoesnotexistandshouldneverexist.com/hello", defaultConnectTimeout))
+}
+
+// TestIsURLAvailableProxy checks that the probe dials the proxy, not the
+// target, when one is configured. The proxy is a live listener and the target
+// is a closed port, so a probe that ignores the proxy fails.
+func TestIsURLAvailableProxy(t *testing.T) {
+	proxy, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer proxy.Close()
+	proxyAddr := proxy.Addr().String()
+
+	// Port 0 can't be dialed, so this refuses deterministically.
+	unreachable := "127.0.0.1:0"
+
+	// proxyAt acts like http.ProxyFromEnvironment with HTTP_PROXY and
+	// HTTPS_PROXY set to addr: it returns the proxy for http and https URLs
+	// and nil for anything else. It also records the URL it was asked about.
+	// The real resolver is not used because it never proxies localhost, and
+	// this test runs everything on localhost.
+	proxyAt := func(addr string, asked **url.URL) func(*http.Request) (*url.URL, error) {
+		return func(req *http.Request) (*url.URL, error) {
+			*asked = req.URL
+			switch req.URL.Scheme {
+			case "http", "https":
+				return &url.URL{Scheme: "http", Host: addr}, nil
+			default:
+				return nil, nil
+			}
+		}
+	}
+
+	for _, tc := range []struct {
+		scheme string
+		// Scheme the proxy resolver must be asked about.
+		lookupScheme string
+	}{
+		{scheme: "http", lookupScheme: "http"},
+		{scheme: "https", lookupScheme: "https"},
+		{scheme: "ws", lookupScheme: "http"},
+		{scheme: "wss", lookupScheme: "https"},
+	} {
+		t.Run(tc.scheme, func(t *testing.T) {
+			target := tc.scheme + "://" + unreachable + "/rpc"
+
+			// No proxy: the probe reaches the closed target and fails.
+			swapProxyResolver(t, noProxy)
+			require.False(t, IsURLAvailable(context.Background(), target, defaultConnectTimeout))
+
+			// Proxy configured: only the proxy is dialed, so the probe succeeds.
+			var asked *url.URL
+			swapProxyResolver(t, proxyAt(proxyAddr, &asked))
+			require.True(t, IsURLAvailable(context.Background(), target, defaultConnectTimeout))
+			require.NotNil(t, asked, "proxy resolver was not consulted")
+			require.Equal(t, tc.lookupScheme, asked.Scheme)
+			require.Equal(t, unreachable, asked.Host, "resolver must see the original host")
+
+			// Dead proxy: the probe fails even though the target is reachable.
+			swapProxyResolver(t, proxyAt(unreachable, &asked))
+			reachable := tc.scheme + "://" + proxyAddr + "/rpc"
+			require.False(t, IsURLAvailable(context.Background(), reachable, defaultConnectTimeout))
+		})
+	}
+
+	t.Run("portless socks5 proxy", func(t *testing.T) {
+		proxyURL, err := url.Parse("socks5://proxy")
+		require.NoError(t, err)
+		swapProxyResolver(t, func(*http.Request) (*url.URL, error) { return proxyURL, nil })
+
+		// Unknown proxy ports fail open even when the target is unreachable.
+		require.True(t, IsURLAvailable(context.Background(), "http://"+unreachable, defaultConnectTimeout))
+	})
+
+	t.Run("empty http proxy port", func(t *testing.T) {
+		proxyURL, err := url.Parse("http://proxy:")
+		require.NoError(t, err)
+		swapProxyResolver(t, func(*http.Request) (*url.URL, error) { return proxyURL, nil })
+
+		target := "http://" + proxyAddr
+		// Both IsURLAvailable and proxyAddrFor use hostPort. Check the proxy
+		// address directly: a successful probe would require DNS and a listener
+		// on port 80. The empty port must become proxy:80, not proxy::80.
+		require.Equal(t, "proxy:80", proxyAddrFor(target))
+	})
+}
+
+func TestCheckAndDialProxyUnavailable(t *testing.T) {
+	target, err := net.Listen("tcp4", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer target.Close()
+	targetURL := "http://" + target.Addr().String() + "/rpc"
+
+	// Reject the dead proxy even though the target's port is listening.
+	proxyURL, err := url.Parse("http://127.0.0.1:0")
+	require.NoError(t, err)
+	swapProxyResolver(t, func(*http.Request) (*url.URL, error) { return proxyURL, nil })
+
+	conn, err := CheckAndDial(context.Background(), log.New(), targetURL, defaultConnectTimeout)
+	require.Nil(t, conn)
+	require.EqualError(t, err, "proxy unavailable (127.0.0.1:0) for "+targetURL)
+}
+
+// noProxy is a proxy resolver that never returns a proxy.
+func noProxy(*http.Request) (*url.URL, error) { return nil, nil }
+
+// swapProxyResolver replaces proxyForRequest until the test ends. Tests using
+// it must not run in parallel.
+func swapProxyResolver(t *testing.T, fn func(*http.Request) (*url.URL, error)) {
+	t.Helper()
+	prev := proxyForRequest
+	proxyForRequest = fn
+	t.Cleanup(func() { proxyForRequest = prev })
 }
