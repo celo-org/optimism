@@ -2192,7 +2192,11 @@ jobs:
       - checkout # no need to use mise here since the docker image contains the only dependency
       - unless:
           condition:
-            equal: ["develop", << pipeline.git.branch >>]
+            # celo: pushes to a celo-rebase-XX base branch have no diff against their baseline, so
+            # they get the full scan upstream runs on develop.
+            matches:
+              pattern: "^(develop|celo-rebase-[0-9]+)$"
+              value: << pipeline.git.branch >>
           steps:
             - run:
                 # Scan changed files in PRs, block on new issues only (existing issues ignored)
