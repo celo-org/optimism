@@ -66,11 +66,6 @@ func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logge
 		return l1.HeaderByNumber(cCtx, number)
 	}
 
-	l1Head, err := fetch(nil)
-	if err != nil {
-		return fmt.Errorf("fetching L1 head: %w", err)
-	}
-
 	// The parent's L1 origin is the current epoch. It must be canonical on our
 	// L1 endpoint, otherwise we can't tell which successor the batch may adopt.
 	originHeader, err := fetch(new(big.Int).SetUint64(parent.L1Origin.Number))
@@ -99,8 +94,13 @@ func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logge
 		l1Blocks = append(l1Blocks, eth.InfoToL1BlockRef(eth.HeaderBlockInfo(nextHeader)))
 	}
 
+	// Fetched after the supporting headers so the head is as fresh as possible.
 	// The batch can't land in the already-mined L1 head, so its earliest possible
 	// inclusion is the next block.
+	l1Head, err := fetch(nil)
+	if err != nil {
+		return fmt.Errorf("fetching L1 head: %w", err)
+	}
 	inclusion := eth.InfoToL1BlockRef(eth.HeaderBlockInfo(l1Head))
 	inclusion.Number++
 
