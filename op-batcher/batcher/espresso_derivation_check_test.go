@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
@@ -222,4 +223,30 @@ func TestCheckDerivationRules(t *testing.T) {
 func requireRejected(t *testing.T, err error) {
 	var rejected *ErrBatchRejected
 	require.ErrorAs(t, err, &rejected)
+}
+
+// A streamed batch is checked on top of the last block in the channel manager,
+// or the local-safe head when the channel manager holds none.
+func TestEspressoBatchParent(t *testing.T) {
+	lgr := testlog.Logger(t, log.LevelDebug)
+	l := &BatchSubmitter{
+		DriverSetup: DriverSetup{Log: lgr, RollupConfig: defaultTestRollupConfig},
+		channelMgr:  NewChannelManager(lgr, metrics.NoopMetrics, ChannelConfig{}, defaultTestRollupConfig),
+	}
+	status := &eth.SyncStatus{LocalSafeL2: eth.L2BlockRef{Number: 9, Hash: common.Hash{0x09}}}
+
+	parent, err := l.espressoBatchParent(status)
+	require.NoError(t, err)
+	require.Equal(t, status.LocalSafeL2, parent)
+
+	b10 := newMiniL2BlockWithNumberParent(1, big.NewInt(10), status.LocalSafeL2.Hash)
+	b11 := newMiniL2BlockWithNumberParent(1, big.NewInt(11), b10.Hash())
+	require.NoError(t, l.channelMgr.AddL2Block(b10))
+	require.NoError(t, l.channelMgr.AddL2Block(b11))
+
+	parent, err = l.espressoBatchParent(status)
+	require.NoError(t, err)
+	want, err := derive.L2BlockToBlockRef(defaultTestRollupConfig, b11)
+	require.NoError(t, err)
+	require.Equal(t, want, parent)
 }
