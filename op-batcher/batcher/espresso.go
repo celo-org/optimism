@@ -884,6 +884,19 @@ func (l *BatchSubmitter) performClearState(ctx context.Context) bool {
 	return true
 }
 
+// espressoBatchParent returns the block a streamed batch must build on: the last
+// block in the channel manager, or the local-safe head if it holds none.
+func (l *BatchSubmitter) espressoBatchParent(syncStatus *eth.SyncStatus) (eth.L2BlockRef, error) {
+	l.channelMgrMutex.Lock()
+	defer l.channelMgrMutex.Unlock()
+	n := l.channelMgr.blocks.Len()
+	if n == 0 {
+		return syncStatus.LocalSafeL2, nil
+	}
+	last, _ := l.channelMgr.blocks.PeekN(n - 1)
+	return derive.L2BlockToBlockRef(l.RollupConfig, last.Block)
+}
+
 // Periodically refreshes the sync status and drains the Espresso streamer of any
 // batches that extend the tip it is tracking.
 // Owns publishSignal and unsafeBytesUpdated: it is their only closer, so the loops
@@ -964,6 +977,37 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					"blockHash", block.Hash(),
 					"parentHash", block.ParentHash(),
 				)
+
+				// Anyone holding the authorized batcher key can post to Espresso directly,
+				// bypassing the check in queueBlockToEspresso, so re-check before the enclave
+				// commits to the batch on L1.
+				parent, err := l.espressoBatchParent(newSyncStatus)
+				if err != nil {
+					l.Log.Error("failed to get parent of streamed batch", "err", err)
+					l.clearState(ctx)
+					break
+				}
+				if block.ParentHash() != parent.Hash {
+					l.Log.Warn("Streamed batch does not extend the channel manager tip, re-anchoring",
+						"blockNr", block.NumberU64(), "parentHash", block.ParentHash(), "tip", parent.ID())
+					l.clearState(ctx)
+					break
+				}
+				if err := checkDerivationRules(ctx, l.RollupConfig, l.Log.New("block", eth.ToBlockID(block)), l.L1Client,
+					l.Config.NetworkTimeout, parent, &batch.Batch); err != nil {
+					var rejected *ErrBatchRejected
+					if errors.As(err, &rejected) {
+						l.degradedLog.Warn(l.Log, "invalidStreamedBatch", "Refusing to commit to streamed batch that violates derivation rules",
+							"block", eth.ToBlockID(block), "parent", parent.ID(), "signer", batch.SignerAddress, "err", err)
+					} else {
+						// Undecided or a fetch error: retry on the next tick.
+						l.degradedLog.Warn(l.Log, "streamedBatchCheckRetry", "Cannot check streamed batch yet, retrying",
+							"block", eth.ToBlockID(block), "err", err)
+					}
+					break
+				}
+				l.degradedLog.Clear(l.Log, "invalidStreamedBatch", "Streamed batches passing the derivation check again")
+				l.degradedLog.Clear(l.Log, "streamedBatchCheckRetry", "Streamed batch check recovered")
 
 				l.channelMgrMutex.Lock()
 				err = l.channelMgr.AddL2Block(block)
