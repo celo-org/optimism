@@ -8,7 +8,6 @@ import (
 
 	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/hf/nitrite"
@@ -54,11 +53,6 @@ type EspressoBatcherConfig struct {
 	// configured TestingBatcherPrivateKey overrides them in initEspresso.
 	BatcherPublicKey  *ecdsa.PublicKey
 	BatcherPrivateKey *ecdsa.PrivateKey
-}
-
-// EspressoStreamer returns the Espresso batch streamer driven by this batcher.
-func (bs *BatcherService) EspressoStreamer() *espressoStreamers.Streamer {
-	return bs.driver.espressoStreamer
 }
 
 // initChainSigner builds the ChainSigner that signs the Espresso transaction
@@ -146,7 +140,13 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	if err != nil {
 		return fmt.Errorf("failed to create Espresso client: %w", err)
 	}
-	bs.EspressoClient = client
+	networkTimeout := cfg.TxMgrConfig.NetworkTimeout
+	bs.EspressoClient = &espressoTimeoutClient{
+		client: client,
+		networkTimeoutCtx: func(ctx context.Context) (context.Context, context.CancelFunc) {
+			return context.WithTimeout(ctx, networkTimeout)
+		},
+	}
 
 	// Light-client reads go through the batcher's L1 client unless
 	// --espresso.l1-url points at a different RPC endpoint, in which case a

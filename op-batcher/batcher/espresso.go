@@ -127,6 +127,7 @@ type espressoTransactionSubmitter struct {
 	numMaxInFlightJobs         int
 }
 
+// espressoSubmissionClient provides the client methods used by submission and receipt workers.
 type espressoSubmissionClient interface {
 	SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error)
 	FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error)
@@ -162,9 +163,9 @@ func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 	}
 }
 
-// WithEspressoClient is an option that can be used to set the Espresso client
-// for the EspressoTransactionSubmitterConfig.
-func WithEspressoClient(client espressoSubmissionClient) EspressoTransactionSubmitterOption {
+// WithEspressoSubmissionClient sets the submission and receipt client for
+// EspressoTransactionSubmitterConfig.
+func WithEspressoSubmissionClient(client espressoSubmissionClient) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
 		config.EspressoSubmissionClient = client
 	}
@@ -240,7 +241,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 	}
 
 	if config.EspressoSubmissionClient == nil {
-		panic("Espresso client is required")
+		panic("Espresso submission client is required")
 	}
 
 	return &espressoTransactionSubmitter{

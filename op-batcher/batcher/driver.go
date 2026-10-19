@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -157,7 +156,7 @@ type BatchSubmitter struct {
 	authGroup sync.WaitGroup
 
 	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  *espressoStreamers.Streamer
+	espressoStreamer  espressoStreamer
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
@@ -186,12 +185,6 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 		DriverSetup: setup,
 		channelMgr:  state,
 		degradedLog: oplog.NewRepeatStateLogger(),
-	}
-	if batcher.Espresso.Client != nil {
-		batcher.Espresso.Client = &espressoTimeoutClient{
-			client:            batcher.Espresso.Client,
-			networkTimeoutCtx: batcher.networkTimeoutCtx,
-		}
 	}
 
 	err := batcher.SetThrottleController(setup.Config.ThrottleParams.ControllerType, setup.Config.ThrottleParams.PIDConfig)
