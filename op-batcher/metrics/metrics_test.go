@@ -52,20 +52,21 @@ func TestThrottleMetrics(t *testing.T) {
 	require.Equal(t, 37.4, record.Gauge.GetValue())
 }
 
-// TestPublishGateMetric checks that recording a state sets its series to 1 and
-// the others to 0, including the previously recorded state.
+// TestPublishGateMetric records each state in turn and checks that its series
+// is 1 and the others, including the previously recorded state, are 0.
 func TestPublishGateMetric(t *testing.T) {
 	metrics := NewMetrics("test")
-	metrics.RecordPublishGateState(PublishGateError)
-	metrics.RecordPublishGateState(PublishGateActive)
+	for _, current := range PublishGateStates {
+		metrics.RecordPublishGateState(current)
 
-	gate := opmetrics.NewMetricChecker(t, metrics.Registry()).FindByName("op_batcher_test_publish_gate")
-	for _, state := range PublishGateStates {
-		record := gate.FindByLabels(map[string]string{"state": string(state)})
-		want := 0.0
-		if state == PublishGateActive {
-			want = 1.0
+		gate := opmetrics.NewMetricChecker(t, metrics.Registry()).FindByName("op_batcher_test_publish_gate")
+		for _, state := range PublishGateStates {
+			record := gate.FindByLabels(map[string]string{"state": string(state)})
+			want := 0.0
+			if state == current {
+				want = 1.0
+			}
+			require.Equal(t, want, record.Gauge.GetValue(), "recorded %s, state %s", current, state)
 		}
-		require.Equal(t, want, record.Gauge.GetValue(), "state %s", state)
 	}
 }
