@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
-	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -1285,14 +1284,9 @@ func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
 	if l.batchAuth == nil {
 		return errors.New("no BatchAuthenticator configured")
 	}
-	l.Log.Info("Batch authenticator address", "value", l.RollupConfig.BatchAuthenticatorAddress)
+	l.Log.Info("Batch authenticator address", "value", l.batchAuth.addr)
 	if err := l.batchAuth.ensureDeployed(ctx); err != nil {
 		return err
-	}
-
-	abi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
-	if err != nil {
-		return fmt.Errorf("failed to get Batch Authenticator ABI: %w", err)
 	}
 
 	onchainProof, err := l.GenerateZKProof(ctx, l.Espresso.Attestation)
@@ -1313,14 +1307,9 @@ func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
 	}
 	log.Info("successfully generated zk proof from nitro attestation")
 
-	txData, err := abi.Pack("registerSigner", journalBytes, onchainProofBytes)
+	candidate, err := l.batchAuth.RegisterSignerTx(journalBytes, onchainProofBytes)
 	if err != nil {
 		return fmt.Errorf("failed to create registerSigner transaction: %w", err)
-	}
-
-	candidate := txmgr.TxCandidate{
-		TxData: txData,
-		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
 	l.Log.Info("Registering batcher with the BatchAuthenticator contract")
@@ -1403,27 +1392,13 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 
 	l.Log.Debug("Signed transaction", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]), "sig", hexutil.Encode(signature))
 
-	batchAuthenticatorAbi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
+	verifyCandidate, err := l.authenticateBatchInfoTx(commitment, signature)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: fmt.Errorf("failed to get batch authenticator ABI: %w", err),
+			Err: err,
 		}
 		return
-	}
-
-	authenticateBatchCalldata, err := batchAuthenticatorAbi.Pack("authenticateBatchInfo", commitment, signature)
-	if err != nil {
-		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
-			Err: fmt.Errorf("failed to pack authenticateBatch calldata: %w", err),
-		}
-		return
-	}
-
-	verifyCandidate := txmgr.TxCandidate{
-		TxData: authenticateBatchCalldata,
-		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
 	l.submitAuthenticatedBatch(transactionReference, verifyCandidate, candidate, queue, receiptsCh)
