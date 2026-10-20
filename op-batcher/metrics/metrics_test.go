@@ -51,3 +51,21 @@ func TestThrottleMetrics(t *testing.T) {
 	})
 	require.Equal(t, 37.4, record.Gauge.GetValue())
 }
+
+// TestPublishGateMetric checks that recording a state sets its series to 1 and
+// the others to 0.
+func TestPublishGateMetric(t *testing.T) {
+	metrics := NewMetrics("test")
+	metrics.RecordPublishGateState(PublishGateError)
+	metrics.RecordPublishGateState(PublishGateActive)
+
+	c := opmetrics.NewMetricChecker(t, metrics.Registry())
+	for _, state := range PublishGateStates {
+		record := c.FindByName("op_batcher_test_publish_gate").FindByLabels(map[string]string{"state": string(state)})
+		want := 0.0
+		if state == PublishGateActive {
+			want = 1.0
+		}
+		require.Equal(t, want, record.Gauge.GetValue(), "state %s", state)
+	}
+}
