@@ -53,15 +53,15 @@ func TestThrottleMetrics(t *testing.T) {
 }
 
 // TestPublishGateMetric checks that recording a state sets its series to 1 and
-// the others to 0.
+// the others to 0, including the previously recorded state.
 func TestPublishGateMetric(t *testing.T) {
 	metrics := NewMetrics("test")
 	metrics.RecordPublishGateState(PublishGateError)
 	metrics.RecordPublishGateState(PublishGateActive)
 
-	c := opmetrics.NewMetricChecker(t, metrics.Registry())
+	gate := opmetrics.NewMetricChecker(t, metrics.Registry()).FindByName("op_batcher_test_publish_gate")
 	for _, state := range PublishGateStates {
-		record := c.FindByName("op_batcher_test_publish_gate").FindByLabels(map[string]string{"state": string(state)})
+		record := gate.FindByLabels(map[string]string{"state": string(state)})
 		want := 0.0
 		if state == PublishGateActive {
 			want = 1.0
