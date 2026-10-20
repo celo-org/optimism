@@ -119,6 +119,7 @@ type espressoTransactionSubmitter struct {
 	verifyReceiptRespQueue     chan espressoVerifyReceiptJobResponse
 	verifyReceiptWorkerQueue   chan chan espressoVerifyReceiptJobAttempt
 	espresso                   espressoSubmissionClient
+	networkTimeout             time.Duration
 	latestBlockHeight          atomic.Uint64 // shared HotShot block height, updated by trackBlockHeight
 	verifyReceiptMaxBlocks     uint64
 	verifyReceiptSafetyTimeout time.Duration
@@ -140,6 +141,7 @@ type espressoSubmissionClient interface {
 type EspressoTransactionSubmitterConfig struct {
 	Ctx                                context.Context
 	EspressoSubmissionClient           espressoSubmissionClient
+	NetworkTimeout                     time.Duration
 	Wg                                 *sync.WaitGroup
 	SubmitJobQueueCapacity             int
 	SubmitResponseQueueCapacity        int
@@ -168,6 +170,14 @@ func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 func WithEspressoSubmissionClient(client espressoSubmissionClient) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
 		config.EspressoSubmissionClient = client
+	}
+}
+
+// WithEspressoNetworkTimeout sets the deadline budget for each submission,
+// receipt lookup, and block-height query.
+func WithEspressoNetworkTimeout(timeout time.Duration) EspressoTransactionSubmitterOption {
+	return func(config *EspressoTransactionSubmitterConfig) {
+		config.NetworkTimeout = timeout
 	}
 }
 
@@ -225,6 +235,7 @@ func WithMaxInFlightJobs(n int) EspressoTransactionSubmitterOption {
 func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOption) *espressoTransactionSubmitter {
 	config := EspressoTransactionSubmitterConfig{
 		Ctx:                                context.Background(),
+		NetworkTimeout:                     10 * time.Second,
 		Wg:                                 new(sync.WaitGroup),
 		SubmitJobQueueCapacity:             espresso.DefaultMaxInFlightRequestsToEspresso,
 		SubmitResponseQueueCapacity:        10,
@@ -254,6 +265,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		verifyReceiptRespQueue:     make(chan espressoVerifyReceiptJobResponse, config.VerifyReceiptResponseQueueCapacity),
 		verifyReceiptWorkerQueue:   make(chan chan espressoVerifyReceiptJobAttempt),
 		espresso:                   config.EspressoSubmissionClient,
+		networkTimeout:             config.NetworkTimeout,
 		verifyReceiptMaxBlocks:     config.VerifyReceiptMaxBlocks,
 		verifyReceiptSafetyTimeout: config.VerifyReceiptSafetyTimeout,
 		verifyReceiptRetryDelay:    config.VerifyReceiptRetryDelay,
@@ -637,6 +649,7 @@ func espressoSubmitTransactionWorker(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	cli espressoSubmissionClient,
+	networkTimeout time.Duration,
 	workerQueue chan<- chan espressoTransactionJobAttempt,
 ) {
 	ctx, cancel := context.WithCancel(ctx)
@@ -662,7 +675,9 @@ func espressoSubmitTransactionWorker(
 		}
 
 		// Submit the transaction to Espresso
-		hash, err := cli.SubmitTransaction(ctx, *jobAttempt.job.transaction)
+		callCtx, cancelCall := context.WithTimeout(ctx, networkTimeout)
+		hash, err := cli.SubmitTransaction(callCtx, *jobAttempt.job.transaction)
+		cancelCall()
 		if err == nil {
 			log.Info("Submitted transaction to Espresso", "hash", hash)
 		}
@@ -694,6 +709,7 @@ func espressoVerifyTransactionWorker(
 	ctx context.Context,
 	wg *sync.WaitGroup,
 	cli espressoSubmissionClient,
+	networkTimeout time.Duration,
 	workerQueue chan<- chan espressoVerifyReceiptJobAttempt,
 	latestHeight *atomic.Uint64,
 	retryDelay time.Duration,
@@ -739,7 +755,9 @@ func espressoVerifyTransactionWorker(
 			}
 		}
 
-		_, err := cli.FetchTransactionByHash(ctx, jobAttempt.job.hash)
+		callCtx, cancelCall := context.WithTimeout(ctx, networkTimeout)
+		_, err := cli.FetchTransactionByHash(callCtx, jobAttempt.job.hash)
+		cancelCall()
 
 		jobAttempt.job.attempts++
 		resp := espressoVerifyReceiptJobResponse{
@@ -764,12 +782,12 @@ func (s *espressoTransactionSubmitter) SpawnWorkers(numSubmitTransactionWorkers,
 
 	for i := 0; i < numSubmitTransactionWorkers; i++ {
 		s.wg.Add(1)
-		go espressoSubmitTransactionWorker(workersCtx, s.wg, s.espresso, s.submitWorkerQueue)
+		go espressoSubmitTransactionWorker(workersCtx, s.wg, s.espresso, s.networkTimeout, s.submitWorkerQueue)
 	}
 
 	for i := 0; i < numVerifyReceiptWorkers; i++ {
 		s.wg.Add(1)
-		go espressoVerifyTransactionWorker(workersCtx, s.wg, s.espresso, s.verifyReceiptWorkerQueue, &s.latestBlockHeight, s.verifyReceiptRetryDelay)
+		go espressoVerifyTransactionWorker(workersCtx, s.wg, s.espresso, s.networkTimeout, s.verifyReceiptWorkerQueue, &s.latestBlockHeight, s.verifyReceiptRetryDelay)
 	}
 }
 
@@ -778,7 +796,9 @@ func (s *espressoTransactionSubmitter) SpawnWorkers(numSubmitTransactionWorkers,
 // This avoids redundant height queries from individual verify workers.
 func (s *espressoTransactionSubmitter) trackBlockHeight() {
 	for {
-		height, err := s.espresso.FetchLatestBlockHeight(s.ctx)
+		callCtx, cancel := context.WithTimeout(s.ctx, s.networkTimeout)
+		height, err := s.espresso.FetchLatestBlockHeight(callCtx)
+		cancel()
 		if err == nil {
 			s.latestBlockHeight.Store(height)
 		} else if s.ctx.Err() == nil {
@@ -920,7 +940,9 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				batch := l.espressoStreamer.Peek(ctx)
+				peekCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
+				batch := l.espressoStreamer.Peek(peekCtx)
+				cancel()
 				if batch == nil {
 					break
 				}

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum"
@@ -51,54 +50,14 @@ type espressoStreamer interface {
 	SetBatchPosition(eth.L2BlockRef)
 }
 
-// espressoTimeoutClient applies the network timeout to each SDK operation.
-type espressoTimeoutClient struct {
-	client            espressoRuntimeClient
-	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
-}
-
-func (c *espressoTimeoutClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
-	callCtx, cancel := c.networkTimeoutCtx(ctx)
-	defer cancel()
-	return c.client.SubmitTransaction(callCtx, tx)
-}
-
-func (c *espressoTimeoutClient) FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
-	callCtx, cancel := c.networkTimeoutCtx(ctx)
-	defer cancel()
-	return c.client.FetchTransactionByHash(callCtx, hash)
-}
-
-func (c *espressoTimeoutClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
-	callCtx, cancel := c.networkTimeoutCtx(ctx)
-	defer cancel()
-	return c.client.FetchLatestBlockHeight(callCtx)
-}
-
-func (c *espressoTimeoutClient) FetchNamespaceTransactionsInRange(ctx context.Context, fromHeight uint64, toHeight uint64, namespace uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error) {
-	callCtx, cancel := c.networkTimeoutCtx(ctx)
-	defer cancel()
-	return c.client.FetchNamespaceTransactionsInRange(callCtx, fromHeight, toHeight, namespace)
-}
-
-func (c *espressoTimeoutClient) FetchHeadersByRange(ctx context.Context, fromHeight uint64, toHeight uint64) ([]espressoCommon.HeaderImpl, error) {
-	callCtx, cancel := c.networkTimeoutCtx(ctx)
-	defer cancel()
-	return c.client.FetchHeadersByRange(callCtx, fromHeight, toHeight)
-}
-
 // batcherL1Adapter wraps the batcher's L1Client to implement espresso.L1Client
 // (HeaderHashByNumber + HeaderByNumber + bind.ContractCaller).
-// Each RPC call uses the batcher's network timeout.
 type batcherL1Adapter struct {
-	L1Client          L1Client
-	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
+	L1Client L1Client
 }
 
 func (a *batcherL1Adapter) HeaderHashByNumber(ctx context.Context, number *big.Int) (common.Hash, error) {
-	callCtx, cancel := a.networkTimeoutCtx(ctx)
-	defer cancel()
-	h, err := a.L1Client.HeaderByNumber(callCtx, number)
+	h, err := a.L1Client.HeaderByNumber(ctx, number)
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -106,21 +65,15 @@ func (a *batcherL1Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 }
 
 func (a *batcherL1Adapter) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
-	callCtx, cancel := a.networkTimeoutCtx(ctx)
-	defer cancel()
-	return a.L1Client.HeaderByNumber(callCtx, number)
+	return a.L1Client.HeaderByNumber(ctx, number)
 }
 
 func (a *batcherL1Adapter) CodeAt(ctx context.Context, contract common.Address, blockNumber *big.Int) ([]byte, error) {
-	callCtx, cancel := a.networkTimeoutCtx(ctx)
-	defer cancel()
-	return a.L1Client.CodeAt(callCtx, contract, blockNumber)
+	return a.L1Client.CodeAt(ctx, contract, blockNumber)
 }
 
 func (a *batcherL1Adapter) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
-	callCtx, cancel := a.networkTimeoutCtx(ctx)
-	defer cancel()
-	return a.L1Client.CallContract(callCtx, call, blockNumber)
+	return a.L1Client.CallContract(ctx, call, blockNumber)
 }
 
 // batcherL2Adapter wraps the batcher's L2 eth client to implement espresso.L2Client.
@@ -128,29 +81,15 @@ func (a *batcherL1Adapter) CallContract(ctx context.Context, call ethereum.CallM
 // batch position it is anchored to. dial.EthClientInterface exposes no
 // header-only accessor, so this fetches the full block and takes its hash.
 type batcherL2Adapter struct {
-	EthClient         dial.EthClientInterface
-	networkTimeoutCtx func(context.Context) (context.Context, context.CancelFunc)
+	EthClient dial.EthClientInterface
 }
 
 func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.Int) (common.Hash, error) {
-	callCtx, cancel := a.networkTimeoutCtx(ctx)
-	defer cancel()
-	block, err := a.EthClient.BlockByNumber(callCtx, number)
+	block, err := a.EthClient.BlockByNumber(ctx, number)
 	if err != nil {
 		return common.Hash{}, err
 	}
 	return block.Hash(), nil
-}
-
-// networkTimeoutCtx bounds a single external call with the configured network
-// timeout. Every raw RPC read on the Espresso startup path must go through it:
-// StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
-// mutex before it can cancel anything, so an unbounded call on a stalled endpoint
-// would wedge the batcher beyond even a graceful shutdown. Calls with their own
-// timeout regime (the attestation service client, Txmgr.Send, batchAuthenticatorReader)
-// are exempt.
-func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }
 
 // setupEspressoStreamer constructs the Espresso streamer for a BatchSubmitter that
@@ -196,13 +135,13 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 
 	// NewStreamer performs one L2 lookup (its anchor block's hash), so it gets the
 	// same per-call bound as every other startup RPC.
-	streamerCtx, cancel := l.networkTimeoutCtx(ctx)
+	streamerCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
 	defer cancel()
 	streamer, err := espressoStreamers.NewStreamer(
 		streamerCtx,
 		l.Espresso.Client,
-		&batcherL1Adapter{L1Client: l.L1Client, networkTimeoutCtx: l.networkTimeoutCtx},
-		&batcherL2Adapter{EthClient: ethClient, networkTimeoutCtx: l.networkTimeoutCtx},
+		&batcherL1Adapter{L1Client: l.L1Client},
+		&batcherL2Adapter{EthClient: ethClient},
 		lightClientIface,
 		l.RollupConfig.BatchAuthenticatorAddress,
 		bigs.Uint64Strict(l.RollupConfig.L2ChainID),
@@ -348,6 +287,7 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 		WithContext(l.shutdownCtx),
 		WithWaitGroup(l.wg),
 		WithEspressoSubmissionClient(l.Espresso.Client),
+		WithEspressoNetworkTimeout(l.Config.NetworkTimeout),
 		WithVerifyReceiptMaxBlocks(l.Config.Espresso.VerifyReceiptMaxBlocks),
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),

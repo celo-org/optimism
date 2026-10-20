@@ -3,7 +3,7 @@ package batcher
 import (
 	"context"
 	"encoding/hex"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +11,7 @@ import (
 	"time"
 
 	sdkclient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	taggedbase64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -24,20 +25,18 @@ import (
 	txmgrmocks "github.com/ethereum-optimism/optimism/op-service/txmgr/mocks"
 )
 
-// contextError fails the fake call if it receives an active context.
-func contextError(ctx context.Context) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	return errors.New("expected a canceled or expired call context")
-}
-
-type contextErrorEspressoClient struct{}
+// contextErrorEspressoClient optionally blocks so tests can inspect the context
+// supplied by the real call site. Without calls it fails immediately for lifecycle tests.
+type contextErrorEspressoClient struct{ calls chan context.Context }
 
 func (c *contextErrorEspressoClient) sdkContextError(ctx context.Context) error {
-	return fmt.Errorf("%w: %v", sdkclient.ErrEphemeral, contextError(ctx)) //nolint:errorlint // Match the SDK: the context error is formatted, not wrapped.
+	if c.calls == nil {
+		return sdkclient.ErrEphemeral
+	}
+	c.calls <- ctx
+	<-ctx.Done()
+	return fmt.Errorf("%w: %v", sdkclient.ErrEphemeral, ctx.Err()) //nolint:errorlint // Match the SDK's formatted context error.
 }
-
 func (c *contextErrorEspressoClient) SubmitTransaction(ctx context.Context, _ espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
 	return nil, c.sdkContextError(ctx)
 }
@@ -45,7 +44,6 @@ func (c *contextErrorEspressoClient) FetchTransactionByHash(ctx context.Context,
 	return espressoCommon.TransactionQueryData{}, c.sdkContextError(ctx)
 }
 func (c *contextErrorEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
-	// MultipleNodesClient loses the sentinel when it formats its collected errors.
 	return 0, fmt.Errorf("fetch latest block height failed with all nodes, Errors: %v", []error{c.sdkContextError(ctx)})
 }
 func (c *contextErrorEspressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, _, _, _ uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error) {
@@ -55,84 +53,86 @@ func (c *contextErrorEspressoClient) FetchHeadersByRange(ctx context.Context, _,
 	return nil, c.sdkContextError(ctx)
 }
 
-var espressoClientMethods = []struct {
-	name string
-	call func(context.Context, espressoRuntimeClient) error
-}{
-	{"SubmitTransaction", func(ctx context.Context, c espressoRuntimeClient) error {
-		_, err := c.SubmitTransaction(ctx, espressoCommon.Transaction{})
-		return err
-	}},
-	{"FetchTransactionByHash", func(ctx context.Context, c espressoRuntimeClient) error {
-		_, err := c.FetchTransactionByHash(ctx, new(espressoCommon.TaggedBase64))
-		return err
-	}},
-	{"FetchLatestBlockHeight", func(ctx context.Context, c espressoRuntimeClient) error {
-		_, err := c.FetchLatestBlockHeight(ctx)
-		return err
-	}},
-	{"FetchNamespaceTransactionsInRange", func(ctx context.Context, c espressoRuntimeClient) error {
-		_, err := c.FetchNamespaceTransactionsInRange(ctx, 0, 1, 2)
-		return err
-	}},
-	{"FetchHeadersByRange", func(ctx context.Context, c espressoRuntimeClient) error {
-		_, err := c.FetchHeadersByRange(ctx, 0, 1)
-		return err
-	}},
-}
-
-func newExpiredDeadlineTestClient() *espressoTimeoutClient {
-	return &espressoTimeoutClient{
-		client: &contextErrorEspressoClient{},
-		networkTimeoutCtx: func(ctx context.Context) (context.Context, context.CancelFunc) {
-			// An expired deadline checks context propagation without waiting for a timer.
-			return context.WithDeadline(ctx, time.Unix(1, 0))
-		},
-	}
-}
-
-func newFutureTimeoutTestClient() *espressoTimeoutClient {
-	return &espressoTimeoutClient{
-		client: &contextErrorEspressoClient{},
-		networkTimeoutCtx: func(ctx context.Context) (context.Context, context.CancelFunc) {
-			return context.WithTimeout(ctx, time.Minute)
-		},
-	}
-}
-
-func requireEspressoTimeout(t *testing.T, method string, err error) {
+func receiveTestValue[T any](t *testing.T, ch <-chan T) T {
 	t.Helper()
-	require.ErrorContains(t, err, context.DeadlineExceeded.Error())
-	require.NotErrorIs(t, err, context.DeadlineExceeded, "SDK formats the underlying context error with %%v")
-	if method == "FetchLatestBlockHeight" {
-		require.NotErrorIs(t, err, sdkclient.ErrEphemeral)
-	} else {
-		require.ErrorIs(t, err, sdkclient.ErrEphemeral)
+	select {
+	case value := <-ch:
+		return value
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out waiting for test value")
+		var zero T
+		return zero
 	}
 }
 
-func TestEspressoTimeoutClientBoundsCalls(t *testing.T) {
-	for _, method := range espressoClientMethods {
-		t.Run(method.name, func(t *testing.T) {
-			client := newExpiredDeadlineTestClient()
-			err := method.call(t.Context(), client)
-			requireEspressoTimeout(t, method.name, err)
-		})
-	}
-}
-
-func TestEspressoTimeoutClientHonorsCallerContext(t *testing.T) {
-	for _, method := range espressoClientMethods {
-		t.Run(method.name, func(t *testing.T) {
-			client := newFutureTimeoutTestClient()
+// Only starting the call differs between the three tests. The assertions cover
+// the configured budget, an earlier caller deadline, and caller cancellation.
+func testEspressoCallContexts(t *testing.T, start func(*testing.T, *espressoTransactionSubmitter)) {
+	t.Helper()
+	for _, scenario := range []string{"timeout", "caller deadline", "caller cancellation"} {
+		t.Run(scenario, func(t *testing.T) {
+			timeout := 20 * time.Millisecond
 			ctx, cancel := context.WithCancel(t.Context())
-			cancel()
-			require.ErrorContains(t, method.call(ctx, client), context.Canceled.Error())
-			ctx, cancel = context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
-			defer cancel()
-			require.ErrorContains(t, method.call(ctx, client), context.DeadlineExceeded.Error())
+			if scenario == "caller deadline" {
+				cancel()
+				ctx, cancel = context.WithTimeout(t.Context(), 100*time.Millisecond)
+			}
+			if scenario != "timeout" {
+				timeout = time.Minute
+			}
+			client := &contextErrorEspressoClient{calls: make(chan context.Context, 1)}
+			s := NewEspressoTransactionSubmitter(WithContext(ctx), WithEspressoSubmissionClient(client),
+				WithEspressoNetworkTimeout(timeout), WithVerifyReceiptRetryDelay(time.Hour))
+			t.Cleanup(func() { cancel(); s.wg.Wait() })
+			started := time.Now()
+			start(t, s)
+			callCtx := receiveTestValue(t, client.calls)
+			deadline, ok := callCtx.Deadline()
+			require.True(t, ok)
+			if scenario == "caller deadline" {
+				parentDeadline, _ := ctx.Deadline()
+				require.Equal(t, parentDeadline, deadline)
+			} else {
+				require.False(t, deadline.Before(started.Add(timeout)), "call must receive the full configured budget")
+				require.LessOrEqual(t, time.Until(deadline), timeout)
+			}
+			if scenario == "caller cancellation" {
+				cancel()
+			}
+			receiveTestValue(t, callCtx.Done())
+			if scenario == "caller cancellation" {
+				require.ErrorIs(t, callCtx.Err(), context.Canceled)
+			} else {
+				require.ErrorIs(t, callCtx.Err(), context.DeadlineExceeded)
+			}
+			if scenario == "timeout" {
+				require.NoError(t, ctx.Err(), "request timeout must not cancel the parent context")
+			}
 		})
 	}
+}
+
+func TestEspressoSubmitWorkerContexts(t *testing.T) {
+	testEspressoCallContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
+		s.SpawnWorkers(1, 0)
+		worker := receiveTestValue(t, s.submitWorkerQueue)
+		worker <- espressoTransactionJobAttempt{job: espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}, resp: make(chan espressoSubmitTransactionJobResponse, 1)}
+	})
+}
+
+func TestEspressoVerifyWorkerContexts(t *testing.T) {
+	testEspressoCallContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
+		s.SpawnWorkers(0, 1)
+		worker := receiveTestValue(t, s.verifyReceiptWorkerQueue)
+		worker <- espressoVerifyReceiptJobAttempt{job: espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}, resp: make(chan espressoVerifyReceiptJobResponse, 1)}
+	})
+}
+
+func TestEspressoHeightTrackerContexts(t *testing.T) {
+	testEspressoCallContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); s.trackBlockHeight() }()
+	})
 }
 
 // espressoServiceTestSetup supplies valid signing and configuration for client
@@ -168,24 +168,59 @@ func espressoServiceTestSetup(t *testing.T, queryURL string) (*BatcherService, *
 	return service, cfg
 }
 
-func TestInitEspressoBoundsSubmission(t *testing.T) {
+func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
+	expectedHash, err := taggedbase64.New("TX", []byte("second job"))
+	require.NoError(t, err)
+	serverRecovered := make(chan struct{})
+	requestReceived := make(chan struct{}, 2)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Bound cleanup even if the client timeout is removed.
+		requestReceived <- struct{}{}
+		select {
+		case <-serverRecovered:
+			if err := json.NewEncoder(w).Encode(expectedHash); err != nil {
+				t.Error(err)
+			}
+			return
+		default:
+		}
+		// Give cleanup a backstop if a client bound regresses.
 		select {
 		case <-r.Context().Done():
 		case <-time.After(time.Second):
 		}
 	}))
 	t.Cleanup(server.Close)
-
 	service, cfg := espressoServiceTestSetup(t, server.URL)
+	cfg.TxMgrConfig.NetworkTimeout = 100 * time.Millisecond
 	require.NoError(t, service.initEspresso(t.Context(), cfg))
 	setup := &DriverSetup{}
 	service.applyEspressoDriverSetup(setup)
+	ctx, cancel := context.WithCancel(t.Context())
+	submitter := NewEspressoTransactionSubmitter(WithContext(ctx),
+		WithEspressoSubmissionClient(setup.Espresso.Client), WithEspressoNetworkTimeout(cfg.TxMgrConfig.NetworkTimeout))
+	submitter.SpawnWorkers(1, 0)
+	t.Cleanup(func() { cancel(); submitter.wg.Wait() })
+	responses := make(chan espressoSubmitTransactionJobResponse, 1)
+	job := espressoTransactionJobAttempt{
+		job:  espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}},
+		resp: responses,
+	}
+	worker := receiveTestValue(t, submitter.submitWorkerQueue)
+	worker <- job
+	receiveTestValue(t, requestReceived) // Proves initialization and propagation reached the real SDK/server.
+	response := receiveTestValue(t, responses)
+	require.ErrorIs(t, response.err, sdkclient.ErrEphemeral)
+	require.ErrorContains(t, response.err, context.DeadlineExceeded.Error())
+	require.NoError(t, ctx.Err(), "request timeout must not cancel the parent context")
 
-	_, err := setup.Espresso.Client.SubmitTransaction(t.Context(), espressoCommon.Transaction{})
-	require.ErrorIs(t, err, sdkclient.ErrEphemeral)
-	require.ErrorContains(t, err, context.DeadlineExceeded.Error())
+	// A timed-out request must not prevent the same worker from processing another job.
+	close(serverRecovered)
+	nextWorker := receiveTestValue(t, submitter.submitWorkerQueue)
+	require.Equal(t, worker, nextWorker)
+	nextWorker <- job
+	response = receiveTestValue(t, responses)
+	require.NoError(t, response.err)
+	require.Equal(t, expectedHash, response.hash)
 }
 
 func TestInitEspressoDisabledClientIsNil(t *testing.T) {

@@ -3,11 +3,12 @@ package batcher
 import (
 	"context"
 	"math/big"
+	"sync"
 	"testing"
 	"time"
 
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-	"github.com/ethereum/go-ethereum"
+	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -18,48 +19,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
-
-type contextErrorL1Client struct{ L1Client }
-
-func (*contextErrorL1Client) HeaderByNumber(ctx context.Context, _ *big.Int) (*types.Header, error) {
-	return nil, contextError(ctx)
-}
-func (*contextErrorL1Client) CodeAt(ctx context.Context, _ common.Address, _ *big.Int) ([]byte, error) {
-	return nil, contextError(ctx)
-}
-func (*contextErrorL1Client) CallContract(ctx context.Context, _ ethereum.CallMsg, _ *big.Int) ([]byte, error) {
-	return nil, contextError(ctx)
-}
-
-type contextErrorL2Client struct{ dial.EthClientInterface }
-
-func (*contextErrorL2Client) BlockByNumber(ctx context.Context, _ *big.Int) (*types.Block, error) {
-	return nil, contextError(ctx)
-}
-
-func TestBatcherRPCAdaptersBoundCalls(t *testing.T) {
-	networkTimeoutCtx := func(ctx context.Context) (context.Context, context.CancelFunc) {
-		return context.WithDeadline(ctx, time.Unix(1, 0))
-	}
-	l1 := &batcherL1Adapter{L1Client: &contextErrorL1Client{}, networkTimeoutCtx: networkTimeoutCtx}
-	l2 := &batcherL2Adapter{EthClient: &contextErrorL2Client{}, networkTimeoutCtx: networkTimeoutCtx}
-	methods := []struct {
-		name string
-		call func(context.Context) error
-	}{
-		{"L1.HeaderHashByNumber", func(ctx context.Context) error { _, err := l1.HeaderHashByNumber(ctx, nil); return err }},
-		{"L1.HeaderByNumber", func(ctx context.Context) error { _, err := l1.HeaderByNumber(ctx, nil); return err }},
-		{"L1.CodeAt", func(ctx context.Context) error { _, err := l1.CodeAt(ctx, common.Address{}, nil); return err }},
-		{"L1.CallContract", func(ctx context.Context) error { _, err := l1.CallContract(ctx, ethereum.CallMsg{}, nil); return err }},
-		{"L2.HeaderHashByNumber", func(ctx context.Context) error { _, err := l2.HeaderHashByNumber(ctx, nil); return err }},
-	}
-	for _, method := range methods {
-		t.Run(method.name, func(t *testing.T) {
-			err := method.call(t.Context())
-			require.ErrorIs(t, err, context.DeadlineExceeded)
-		})
-	}
-}
 
 // stopRecordingStreamer records calls while delegating to the wrapped streamer.
 type stopRecordingStreamer struct {
@@ -119,6 +78,7 @@ func TestBatchSubmitterEspressoStopStart(t *testing.T) {
 	var previous espressoStreamer
 	for range 2 {
 		require.NoError(t, batcher.StartBatchSubmitting())
+		require.Equal(t, batcher.Config.NetworkTimeout, batcher.espressoSubmitter.networkTimeout)
 		current := batcher.espressoStreamer
 		require.NotNil(t, current)
 		if previous != nil {
@@ -157,4 +117,104 @@ func TestBatchSubmitterFailedStartStopsAndClearsEspressoStreamer(t *testing.T) {
 	require.Equal(t, 1, streamer.stopCalls)
 	require.Nil(t, batcher.espressoStreamer)
 	require.False(t, batcher.running)
+}
+
+// stalledPeekStreamer waits for the caller to cancel or time out each Peek.
+type stalledPeekStreamer struct {
+	espressoStreamer
+	calls chan context.Context
+}
+
+func (s *stalledPeekStreamer) Peek(ctx context.Context) *derivation.EspressoBatch {
+	s.calls <- ctx
+	<-ctx.Done()
+	return nil
+}
+func (*stalledPeekStreamer) SetBatchPosition(eth.L2BlockRef) {}
+
+func TestEspressoLoadingLoopBoundsPeekAndRetries(t *testing.T) {
+	batcher, endpoints := setup(t, nil)
+	batcher.Config.NetworkTimeout = 20 * time.Millisecond
+	batcher.Config.Espresso.PollInterval = time.Millisecond
+	endpoints.rollupClient.Mock.On("SyncStatus").Return(&eth.SyncStatus{
+		HeadL1:      eth.L1BlockRef{Number: genesisL1Origin},
+		CurrentL1:   eth.L1BlockRef{Number: genesisL1Origin},
+		LocalSafeL2: eth.L2BlockRef{Number: 1},
+		SafeL2:      eth.L2BlockRef{Number: 1},
+		UnsafeL2:    eth.L2BlockRef{Number: 1},
+	}, nil)
+	streamer := &stalledPeekStreamer{calls: make(chan context.Context, 4)}
+	batcher.espressoStreamer = streamer
+	ctx, cancel := context.WithCancel(t.Context())
+	var wg sync.WaitGroup
+	wg.Add(1)
+	started := time.Now()
+	go batcher.espressoBatchLoadingLoop(ctx, &wg, make(chan pubInfo, 1), make(chan int64, 1))
+	t.Cleanup(func() { cancel(); wg.Wait() })
+	var previous context.Context
+	for range 2 {
+		callCtx := receiveTestValue(t, streamer.calls)
+		deadline, ok := callCtx.Deadline()
+		require.True(t, ok)
+		if previous == nil {
+			require.False(t, deadline.Before(started.Add(batcher.Config.NetworkTimeout)), "Peek must receive the full configured budget")
+		} else {
+			previousDeadline, _ := previous.Deadline()
+			require.True(t, deadline.After(previousDeadline), "each Peek needs a fresh deadline")
+		}
+		require.LessOrEqual(t, time.Until(deadline), batcher.Config.NetworkTimeout, "deadline must not exceed the configured timeout")
+		if previous != nil {
+			require.ErrorIs(t, previous.Err(), context.DeadlineExceeded)
+		}
+		require.NoError(t, ctx.Err())
+		previous = callCtx
+	}
+	cancel()
+}
+
+// stalledAnchorClient exposes the context that NewStreamer passes through the
+// L2 adapter, then stalls until that context expires or its parent is canceled.
+type stalledAnchorClient struct {
+	dial.EthClientInterface
+	calls chan context.Context
+}
+
+func (c *stalledAnchorClient) BlockByNumber(ctx context.Context, _ *big.Int) (*types.Block, error) {
+	c.calls <- ctx
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+type anchorEndpointProvider struct {
+	dial.L2EndpointProvider
+	client dial.EthClientInterface
+}
+
+func (p *anchorEndpointProvider) EthClient(context.Context) (dial.EthClientInterface, error) {
+	return p.client, nil
+}
+
+func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
+	batcher := newEspressoLifecycleTestBatcher(t)
+	batcher.Config.NetworkTimeout = 20 * time.Millisecond
+	calls := make(chan context.Context, 1)
+	batcher.EndpointProvider = &anchorEndpointProvider{
+		L2EndpointProvider: batcher.EndpointProvider,
+		client:             &stalledAnchorClient{calls: calls},
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	results := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	started := time.Now()
+	go func() { defer wg.Done(); results <- batcher.setupEspressoStreamer(ctx) }()
+	t.Cleanup(func() { cancel(); wg.Wait() })
+	callCtx := receiveTestValue(t, calls)
+	deadline, ok := callCtx.Deadline()
+	require.True(t, ok, "the anchor lookup must have a deadline")
+	require.False(t, deadline.Before(started.Add(batcher.Config.NetworkTimeout)))
+	require.LessOrEqual(t, time.Until(deadline), batcher.Config.NetworkTimeout, "deadline must not exceed the configured timeout")
+	require.ErrorIs(t, receiveTestValue(t, results), context.DeadlineExceeded)
+	require.NoError(t, ctx.Err(), "the lookup timeout must not cancel its caller")
+	require.Nil(t, batcher.espressoStreamer, "a failed lookup must not install a streamer")
 }

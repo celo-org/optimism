@@ -140,13 +140,7 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	if err != nil {
 		return fmt.Errorf("failed to create Espresso client: %w", err)
 	}
-	networkTimeout := cfg.TxMgrConfig.NetworkTimeout
-	bs.EspressoClient = &espressoTimeoutClient{
-		client: client,
-		networkTimeoutCtx: func(ctx context.Context) (context.Context, context.CancelFunc) {
-			return context.WithTimeout(ctx, networkTimeout)
-		},
-	}
+	bs.EspressoClient = client
 
 	// Light-client reads go through the batcher's L1 client unless
 	// --espresso.l1-url points at a different RPC endpoint, in which case a
