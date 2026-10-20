@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
-	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -55,31 +55,26 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	}
 	l.Log.Debug("Computed fallback batch commitment", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]))
 
-	batchAuthenticatorAbi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
-	if err != nil {
-		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
-			Err: fmt.Errorf("failed to get batch authenticator ABI: %w", err),
-		}
-		return
-	}
-
 	// Pass an empty signature — the contract checks msg.sender for the fallback path.
-	authenticateBatchCalldata, err := batchAuthenticatorAbi.Pack("authenticateBatchInfo", commitment, []byte{})
+	verifyCandidate, err := l.authenticateBatchInfoTx(commitment, []byte{})
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: fmt.Errorf("failed to pack authenticateBatchInfo calldata: %w", err),
+			Err: err,
 		}
 		return
-	}
-
-	verifyCandidate := txmgr.TxCandidate{
-		TxData: authenticateBatchCalldata,
-		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
 	l.submitAuthenticatedBatch(transactionReference, verifyCandidate, candidate, queue, receiptsCh)
+}
+
+// authenticateBatchInfoTx builds the authenticateBatchInfo transaction through
+// the BatchAuthenticator reader.
+func (l *BatchSubmitter) authenticateBatchInfoTx(commitment [32]byte, signature []byte) (txmgr.TxCandidate, error) {
+	if l.batchAuth == nil {
+		return txmgr.TxCandidate{}, errors.New("no BatchAuthenticator configured")
+	}
+	return l.batchAuth.AuthenticateBatchInfoTx(commitment, signature)
 }
 
 // submitAuthenticatedBatch submits an authenticateBatchInfo tx (verifyCandidate) followed by the

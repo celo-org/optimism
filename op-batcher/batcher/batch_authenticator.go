@@ -6,16 +6,20 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
+	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
-// batchAuthenticatorReader is the batcher's read-only view of the
+// batchAuthenticatorReader is the batcher's single view of the
 // BatchAuthenticator contract. It is bound once at construction and shared by
-// registerBatcher, resolveTEEVerifierAddress and checkBatcherActive.
+// registerBatcher, resolveTEEVerifierAddress and checkBatcherActive. It also
+// builds the transactions sent to the contract (registerSigner and
+// authenticateBatchInfo), with the ABI parsed once.
 //
 // The SystemConfig address is read from BatchAuthenticator.systemConfig(),
 // because that is where the contract itself looks up the fallback batcher.
@@ -38,6 +42,7 @@ import (
 type batchAuthenticatorReader struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
+	abi     *abi.ABI
 	backend bind.ContractCaller
 	timeout time.Duration
 
@@ -57,9 +62,14 @@ func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCalle
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind BatchAuthenticator at %s: %w", addr, err)
 	}
+	authABI, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get BatchAuthenticator ABI: %w", err)
+	}
 	return &batchAuthenticatorReader{
 		addr:    addr,
 		auth:    auth,
+		abi:     authABI,
 		backend: backend,
 		timeout: timeout,
 	}, nil
@@ -157,4 +167,24 @@ func (r *batchAuthenticatorReader) EspressoTEEVerifier(ctx context.Context) (com
 		return common.Address{}, fmt.Errorf("BatchAuthenticator at %s has a zero espressoTEEVerifier address", r.addr)
 	}
 	return addr, nil
+}
+
+// RegisterSignerTx builds a registerSigner(journal, proof) transaction.
+func (r *batchAuthenticatorReader) RegisterSignerTx(journal, proof []byte) (txmgr.TxCandidate, error) {
+	return r.txCandidate("registerSigner", journal, proof)
+}
+
+// AuthenticateBatchInfoTx builds an authenticateBatchInfo(commitment,
+// signature) transaction. The fallback path passes an empty signature.
+func (r *batchAuthenticatorReader) AuthenticateBatchInfoTx(commitment [32]byte, signature []byte) (txmgr.TxCandidate, error) {
+	return r.txCandidate("authenticateBatchInfo", commitment, signature)
+}
+
+// txCandidate packs a call to method and addresses it to the contract.
+func (r *batchAuthenticatorReader) txCandidate(method string, args ...any) (txmgr.TxCandidate, error) {
+	data, err := r.abi.Pack(method, args...)
+	if err != nil {
+		return txmgr.TxCandidate{}, fmt.Errorf("failed to pack %s calldata: %w", method, err)
+	}
+	return txmgr.TxCandidate{TxData: data, To: &r.addr}, nil
 }
