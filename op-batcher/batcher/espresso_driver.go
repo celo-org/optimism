@@ -314,13 +314,11 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 }
 
 // evaluatePublishGate decides whether this batcher may publish. The Espresso
-// TEE batcher always honors the active flag; the fallback batcher only once
-// fallback auth is required, as pre-fork it runs as a vanilla upstream batcher.
-// Where the flag is not consulted the gate reports PublishGateActive. It fails
-// closed: a check that cannot be evaluated reports PublishGateError, and the
-// publish is retried on the next tick. Those failures are throttled, since a
-// fallback batcher started before the BatchAuthenticator is deployed fails
-// every read until the contract appears.
+// batcher always checks the active flag; the fallback batcher only after the
+// fork. When the flag is not checked, it reports PublishGateActive. A failed
+// check reports PublishGateError and the publish is retried on the next tick.
+// Error logs are throttled, as a fallback batcher started before the
+// BatchAuthenticator is deployed fails on every tick.
 func (l *BatchSubmitter) evaluatePublishGate(ctx context.Context) metrics.PublishGateState {
 	if l.batchAuth == nil {
 		return metrics.PublishGateActive

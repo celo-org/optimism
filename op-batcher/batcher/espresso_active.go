@@ -22,12 +22,12 @@ import (
 // active one takes a skip branch every time, so both warnings are throttled.
 func (l *BatchSubmitter) checkBatcherActive(ctx context.Context) (metrics.PublishGateState, error) {
 	if l.batchAuth == nil {
-		return "", errors.New("no BatchAuthenticator configured")
+		return metrics.PublishGateError, errors.New("no BatchAuthenticator configured")
 	}
 
 	activeIsEspresso, err := l.batchAuth.ActiveIsEspresso(ctx)
 	if err != nil {
-		return "", err
+		return metrics.PublishGateError, err
 	}
 
 	batcherAddr := l.Txmgr.From()
@@ -55,7 +55,7 @@ func (l *BatchSubmitter) checkBatcherActive(ctx context.Context) (metrics.Publis
 		expected, err = l.batchAuth.FallbackBatcher(ctx)
 	}
 	if err != nil {
-		return "", err
+		return metrics.PublishGateError, err
 	}
 
 	if batcherAddr != expected {
