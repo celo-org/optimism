@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/espresso"
+	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
@@ -65,9 +66,9 @@ func receiveTestValue[T any](t *testing.T, ch <-chan T) T {
 	}
 }
 
-// Only starting the call differs between the three tests. The assertions cover
-// the configured budget, an earlier caller deadline, and caller cancellation.
-func testEspressoCallContexts(t *testing.T, start func(*testing.T, *espressoTransactionSubmitter)) {
+// testEspressoCallContexts checks the configured budget, earlier caller deadlines,
+// and caller cancellation. start returns a function that waits for the call to finish.
+func testEspressoCallContexts(t *testing.T, start func(*testing.T, context.Context, time.Duration, chan context.Context) func(error)) {
 	t.Helper()
 	for _, scenario := range []string{"timeout", "caller deadline", "caller cancellation"} {
 		t.Run(scenario, func(t *testing.T) {
@@ -80,13 +81,21 @@ func testEspressoCallContexts(t *testing.T, start func(*testing.T, *espressoTran
 			if scenario != "timeout" {
 				timeout = time.Minute
 			}
-			client := &contextErrorEspressoClient{calls: make(chan context.Context, 1)}
-			s := NewEspressoTransactionSubmitter(WithContext(ctx), WithEspressoSubmissionClient(client),
-				WithEspressoNetworkTimeout(timeout), WithVerifyReceiptRetryDelay(time.Hour))
-			t.Cleanup(func() { cancel(); s.wg.Wait() })
+			expectedErr := context.DeadlineExceeded
+			if scenario == "caller cancellation" {
+				expectedErr = context.Canceled
+			}
+			calls := make(chan context.Context, 1)
+			var wait func(error)
+			t.Cleanup(func() {
+				cancel()
+				if wait != nil {
+					wait(expectedErr)
+				}
+			})
 			started := time.Now()
-			start(t, s)
-			callCtx := receiveTestValue(t, client.calls)
+			wait = start(t, ctx, timeout, calls)
+			callCtx := receiveTestValue(t, calls)
 			deadline, ok := callCtx.Deadline()
 			require.True(t, ok)
 			if scenario == "caller deadline" {
@@ -100,11 +109,7 @@ func testEspressoCallContexts(t *testing.T, start func(*testing.T, *espressoTran
 				cancel()
 			}
 			receiveTestValue(t, callCtx.Done())
-			if scenario == "caller cancellation" {
-				require.ErrorIs(t, callCtx.Err(), context.Canceled)
-			} else {
-				require.ErrorIs(t, callCtx.Err(), context.DeadlineExceeded)
-			}
+			require.ErrorIs(t, callCtx.Err(), expectedErr)
 			if scenario == "timeout" {
 				require.NoError(t, ctx.Err(), "request timeout must not cancel the parent context")
 			}
@@ -112,8 +117,19 @@ func testEspressoCallContexts(t *testing.T, start func(*testing.T, *espressoTran
 	}
 }
 
+func testEspressoWorkerContexts(t *testing.T, start func(*testing.T, *espressoTransactionSubmitter)) {
+	t.Helper()
+	testEspressoCallContexts(t, func(t *testing.T, ctx context.Context, timeout time.Duration, calls chan context.Context) func(error) {
+		s := NewEspressoTransactionSubmitter(WithContext(ctx),
+			WithEspressoSubmissionClient(&contextErrorEspressoClient{calls: calls}),
+			WithEspressoNetworkTimeout(timeout), WithVerifyReceiptRetryDelay(time.Hour))
+		start(t, s)
+		return func(error) { s.wg.Wait() }
+	})
+}
+
 func TestEspressoSubmitWorkerContexts(t *testing.T) {
-	testEspressoCallContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
+	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.SpawnWorkers(1, 0)
 		worker := receiveTestValue(t, s.submitWorkerQueue)
 		worker <- espressoTransactionJobAttempt{job: espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}, resp: make(chan espressoSubmitTransactionJobResponse, 1)}
@@ -121,7 +137,7 @@ func TestEspressoSubmitWorkerContexts(t *testing.T) {
 }
 
 func TestEspressoVerifyWorkerContexts(t *testing.T) {
-	testEspressoCallContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
+	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.SpawnWorkers(0, 1)
 		worker := receiveTestValue(t, s.verifyReceiptWorkerQueue)
 		worker <- espressoVerifyReceiptJobAttempt{job: espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}, resp: make(chan espressoVerifyReceiptJobResponse, 1)}
@@ -129,7 +145,7 @@ func TestEspressoVerifyWorkerContexts(t *testing.T) {
 }
 
 func TestEspressoHeightTrackerContexts(t *testing.T) {
-	testEspressoCallContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
+	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.wg.Add(1)
 		go func() { defer s.wg.Done(); s.trackBlockHeight() }()
 	})
@@ -233,4 +249,30 @@ func TestInitEspressoDisabledClientIsNil(t *testing.T) {
 	setup := &DriverSetup{}
 	service.applyEspressoDriverSetup(setup)
 	require.Nil(t, setup.Espresso.Client)
+}
+
+// stalledChainSigner records the request context and waits for cancellation.
+type stalledChainSigner struct {
+	opcrypto.ChainSigner
+	calls chan context.Context
+}
+
+func (s *stalledChainSigner) Sign(ctx context.Context, _ []byte) ([]byte, error) {
+	s.calls <- ctx
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func TestQueueBlockToEspressoSigningContext(t *testing.T) {
+	testEspressoCallContexts(t, func(t *testing.T, ctx context.Context, timeout time.Duration, calls chan context.Context) func(error) {
+		batcher, _ := setup(t, nil)
+		batcher.Config.NetworkTimeout = timeout
+		batcher.Espresso.ChainSigner = &stalledChainSigner{calls: calls}
+		block := newMiniL2BlockWithChainID(0, batcher.RollupConfig.L2ChainID)
+		result := make(chan error, 1)
+		go func() { result <- batcher.queueBlockToEspresso(ctx, block) }()
+		return func(expectedErr error) {
+			require.ErrorIs(t, receiveTestValue(t, result), expectedErr)
+		}
+	})
 }

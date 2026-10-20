@@ -827,9 +827,8 @@ func (s *espressoTransactionSubmitter) Start() {
 	go s.handleVerifyReceiptJobResponse()
 }
 
-// Converts a block to an EspressoBatch and starts a goroutine that publishes it to Espresso
-// Returns error only if batch conversion fails, otherwise it is infallible, as the goroutine
-// will retry publishing until successful.
+// queueBlockToEspresso converts, signs, and queues a block for submission.
+// On error, the block loader leaves the block unqueued so it can retry.
 func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.Block) error {
 	espressoBatch, err := derivation.BlockToEspressoBatch(l.RollupConfig, block)
 	if err != nil {
@@ -837,7 +836,9 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 		return fmt.Errorf("failed to derive batch from block: %w", err)
 	}
 
-	transaction, err := espressoBatch.ToEspressoTransaction(ctx, bigs.Uint64Strict(l.RollupConfig.L2ChainID), l.Espresso.ChainSigner)
+	signCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
+	transaction, err := espressoBatch.ToEspressoTransaction(signCtx, bigs.Uint64Strict(l.RollupConfig.L2ChainID), l.Espresso.ChainSigner)
+	cancel()
 	if err != nil {
 		l.Log.Warn("Failed to create Espresso transaction from a batch", "err", err)
 		return fmt.Errorf("failed to create Espresso transaction from a batch: %w", err)
