@@ -104,6 +104,18 @@ func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logge
 	inclusion := eth.InfoToL1BlockRef(eth.HeaderBlockInfo(l1Head))
 	inclusion.Number++
 
+	// L1 may have reorged since the supporting headers were read, so make sure they
+	// are still canonical as of the head just sampled.
+	last := l1Blocks[len(l1Blocks)-1]
+	lastHeader, err := fetch(new(big.Int).SetUint64(last.Number))
+	if errors.Is(err, ethereum.NotFound) || (err == nil && lastHeader.Hash() != last.Hash) {
+		lgr.Warn("L1 reorg while checking batch", "l1Block", last.ID())
+		return errBatchUndecided
+	}
+	if err != nil {
+		return fmt.Errorf("re-fetching L1 block %d: %w", last.Number, err)
+	}
+
 	// Singular batches never need the L2 fetcher, which is only used for span batches.
 	validity := derive.CheckBatch(ctx, cfg, lgr, l1Blocks, parent, &derive.BatchWithL1InclusionBlock{
 		Batch:            batch,

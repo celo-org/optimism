@@ -23,6 +23,22 @@ import (
 // fakeL1 serves a linear chain of L1 headers; HeaderByNumber(nil) returns the last one.
 type fakeL1 struct {
 	headers []*types.Header
+	// reorgOnHead, if set, replaces headers when the head is next read, simulating
+	// an L1 reorg between the supporting header reads and the head read.
+	reorgOnHead []*types.Header
+}
+
+// fork returns a copy of f whose headers from block at onwards are replaced by a
+// competing branch of the same length.
+func (f *fakeL1) fork(at int) *fakeL1 {
+	forked := &fakeL1{headers: append([]*types.Header{}, f.headers[:at]...)}
+	for i := at; i < len(f.headers); i++ {
+		h := types.CopyHeader(f.headers[i])
+		h.ParentHash = forked.headers[i-1].Hash()
+		h.Extra = []byte("fork")
+		forked.headers = append(forked.headers, h)
+	}
+	return forked
 }
 
 func newFakeL1(n int, blockTime uint64) *fakeL1 {
@@ -38,6 +54,9 @@ func newFakeL1(n int, blockTime uint64) *fakeL1 {
 
 func (f *fakeL1) HeaderByNumber(_ context.Context, number *big.Int) (*types.Header, error) {
 	if number == nil {
+		if f.reorgOnHead != nil {
+			f.headers, f.reorgOnHead = f.reorgOnHead, nil
+		}
 		return f.headers[len(f.headers)-1], nil
 	}
 	n := bigs.Uint64Strict(number)
@@ -192,6 +211,22 @@ func TestCheckDerivationRules(t *testing.T) {
 			l1:     newFakeL1(int(origin.Number+cfg.SeqWindowSize+2), l1BlockTime),
 			mutate: func(b *derive.SingularBatch) {},
 			check:  requireRejected,
+		},
+		{
+			name:   "origin reorged out before head read",
+			l1:     &fakeL1{headers: l1.headers, reorgOnHead: l1.fork(3).headers},
+			mutate: func(b *derive.SingularBatch) {},
+			check:  func(t *testing.T, err error) { require.ErrorIs(t, err, errBatchUndecided) },
+		},
+		{
+			name: "successor reorged out before head read",
+			l1:   &fakeL1{headers: l1.headers, reorgOnHead: l1.fork(4).headers},
+			mutate: func(b *derive.SingularBatch) {
+				next := l1.ref(4)
+				b.EpochNum, b.EpochHash = rollup.Epoch(next.Number), next.Hash
+			},
+			parent: eth.L2BlockRef{Hash: parent.Hash, Number: parent.Number, Time: l1.ref(4).Time - cfg.BlockTime, L1Origin: origin.ID()},
+			check:  func(t *testing.T, err error) { require.ErrorIs(t, err, errBatchUndecided) },
 		},
 		{
 			name:   "parent L1 origin not canonical",
