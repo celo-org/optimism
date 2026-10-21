@@ -290,8 +290,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,targe
 # celo: the digest pin on TARGET_BASE_IMAGE freezes its CA bundle, so a root CA
 # removal (e.g. eMudhra's emSign ECC Root CA - G3, Oct 2026) never reaches the
 # images. Upgrade the bundle at build time; the Go binaries read it for TLS.
+# The version floor fails the build rather than ship an older bundle, and it
+# changes this layer's cache key; raise it for the next removal.
 FROM $TARGET_BASE_IMAGE AS target-base
-RUN n=0; until apk upgrade --no-cache ca-certificates-bundle; do n=$((n+1)); [ "$n" -ge 15 ] && exit 1; echo "apk upgrade retry $n/15 in 20s" >&2; sleep 20; done
+RUN n=0; until apk add --no-cache --upgrade 'ca-certificates-bundle>=20261020'; do n=$((n+1)); [ "$n" -ge 15 ] && exit 1; echo "apk add retry $n/15 in 20s" >&2; sleep 20; done
 
 FROM dhi.io/alpine-base:3.23 AS cannon-target
 USER 0
