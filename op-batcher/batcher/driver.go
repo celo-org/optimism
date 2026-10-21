@@ -13,7 +13,6 @@ import (
 
 	"golang.org/x/sync/errgroup"
 
-	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -157,7 +156,7 @@ type BatchSubmitter struct {
 	authGroup sync.WaitGroup
 
 	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  *espressoStreamers.Streamer
+	espressoStreamer  espressoStreamer
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
@@ -334,9 +333,7 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.wg.Wait()
 	l.cancelKillCtx()
 
-	if l.espressoStreamer != nil {
-		l.espressoStreamer.Stop()
-	}
+	l.stopEspressoStreamer()
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil

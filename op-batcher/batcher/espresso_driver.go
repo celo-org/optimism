@@ -6,7 +6,6 @@ import (
 	"math/big"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
@@ -29,11 +28,26 @@ import (
 // fallback batcher's ChainSigner/SequencerAddress, which are always populated
 // by applyEspressoDriverSetup.
 type EspressoDriverSetup struct {
-	Client           *espressoClient.MultipleNodesClient
+	Client           espressoRuntimeClient
 	LightClient      *espressoLightClient.LightclientCaller
 	ChainSigner      opcrypto.ChainSigner
 	SequencerAddress common.Address
 	Attestation      []byte
+}
+
+// espressoRuntimeClient provides the client methods used by submission workers and the streamer.
+type espressoRuntimeClient interface {
+	espressoSubmissionClient
+	espressoStreamers.EspressoClient
+}
+
+// espressoStreamer provides the streamer methods used by the batcher.
+type espressoStreamer interface {
+	Start(context.Context) error
+	Stop()
+	Peek(context.Context) *derivation.EspressoBatch
+	AdvancePosition()
+	SetBatchPosition(eth.L2BlockRef)
 }
 
 // batcherL1Adapter wraps the batcher's L1Client to implement espresso.L1Client
@@ -76,17 +90,6 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 		return common.Hash{}, err
 	}
 	return block.Hash(), nil
-}
-
-// networkTimeoutCtx bounds a single external call with the configured network
-// timeout. Every raw RPC read on the Espresso startup path must go through it:
-// StartBatchSubmitting holds the start mutex, and StopBatchSubmitting needs that
-// mutex before it can cancel anything, so an unbounded call on a stalled endpoint
-// would wedge the batcher beyond even a graceful shutdown. Calls with their own
-// timeout regime (the attestation service client, Txmgr.Send, batchAuthenticatorReader)
-// are exempt.
-func (l *BatchSubmitter) networkTimeoutCtx(ctx context.Context) (context.Context, context.CancelFunc) {
-	return context.WithTimeout(ctx, l.Config.NetworkTimeout)
 }
 
 // setupEspressoStreamer constructs the Espresso streamer for a BatchSubmitter that
@@ -132,7 +135,7 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) error {
 
 	// NewStreamer performs one L2 lookup (its anchor block's hash), so it gets the
 	// same per-call bound as every other startup RPC.
-	streamerCtx, cancel := l.networkTimeoutCtx(ctx)
+	streamerCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
 	defer cancel()
 	streamer, err := espressoStreamers.NewStreamer(
 		streamerCtx,
@@ -225,20 +228,33 @@ func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context) (eth.L2BlockR
 	}
 }
 
-// rollbackFailedStart undoes the startup state set at the top of StartBatchSubmitting
-// (running flag, shutdown/kill contexts) so a failed start does not wedge later
-// attempts behind "batcher is already running". Cancelling shutdownCtx also winds down
-// the streamer's poll loops if they were started, and Stop waits for them; a streamer
-// that was constructed but never started makes Stop a no-op. Only the Espresso setup
-// error paths roll back: the upstream error paths (waitForL2Genesis, waitNodeSync)
-// deliberately keep upstream's behavior. Caller must hold l.mutex.
+// rollbackFailedStart cancels the run and clears its streamer and running flag
+// so startup can be retried. StartBatchSubmitting calls it with l.mutex held
+// to serialize these changes with other start and stop requests.
 func (l *BatchSubmitter) rollbackFailedStart() {
 	l.cancelShutdownCtx()
 	l.cancelKillCtx()
-	if l.espressoStreamer != nil {
-		l.espressoStreamer.Stop()
-	}
+	l.stopEspressoStreamer()
 	l.running = false
+}
+
+// startEspressoStreamer starts the streamer with the run's shutdown context.
+func (l *BatchSubmitter) startEspressoStreamer() error {
+	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
+		return fmt.Errorf("could not start the Espresso streamer: %w", err)
+	}
+	return nil
+}
+
+// stopEspressoStreamer stops the streamer and clears its reference so the next
+// start creates a new one. Callers must hold l.mutex to serialize streamer
+// teardown with other start and stop requests.
+func (l *BatchSubmitter) stopEspressoStreamer() {
+	if l.espressoStreamer == nil {
+		return
+	}
+	l.espressoStreamer.Stop()
+	l.espressoStreamer = nil
 }
 
 // startEspressoLoops registers the batcher with the BatchAuthenticator
@@ -263,14 +279,15 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 	// fetching before the publish path winds down. Kept as the last setup step that
 	// can fail, so a setup error never has running poll loops to unwind
 	// (rollbackFailedStart would stop them anyway).
-	if err := l.espressoStreamer.Start(l.shutdownCtx); err != nil {
-		return fmt.Errorf("could not start the Espresso streamer: %w", err)
+	if err := l.startEspressoStreamer(); err != nil {
+		return err
 	}
 
 	l.espressoSubmitter = NewEspressoTransactionSubmitter(
 		WithContext(l.shutdownCtx),
 		WithWaitGroup(l.wg),
-		WithEspressoClient(l.Espresso.Client),
+		WithEspressoSubmissionClient(l.Espresso.Client),
+		WithEspressoNetworkTimeout(l.Config.NetworkTimeout),
 		WithVerifyReceiptMaxBlocks(l.Config.Espresso.VerifyReceiptMaxBlocks),
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),
