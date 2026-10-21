@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -147,13 +148,20 @@ func stopEnclaveBatcher(name string) error {
 }
 
 func buildEif(t *testing.T, appImage, eif string) {
+	memoryMiB, err := strconv.Atoi(os.Getenv("TEE_ENCLAVE_MEMORY_MIB"))
+	require.NoError(t, err, "TEE_ENCLAVE_MEMORY_MIB must be a positive integer")
+	require.Positive(t, memoryMiB, "TEE_ENCLAVE_MEMORY_MIB must be a positive integer")
+	cpuCount, err := strconv.Atoi(os.Getenv("TEE_ENCLAVE_CPU_COUNT"))
+	require.NoError(t, err, "TEE_ENCLAVE_CPU_COUNT must be a positive integer")
+	require.Positive(t, cpuCount, "TEE_ENCLAVE_CPU_COUNT must be a positive integer")
+
 	// enclaver reads YAML, which accepts JSON.
 	manifest, err := json.Marshal(map[string]any{
 		"version":  "v1",
 		"name":     "op-batcher",
 		"target":   eif,
 		"sources":  map[string]any{"app": appImage},
-		"defaults": map[string]any{"cpu_count": 2, "memory_mb": 4096},
+		"defaults": map[string]any{"cpu_count": cpuCount, "memory_mb": memoryMiB},
 		"egress":   map[string]any{"proxy_port": 10000, "allow": []string{"0.0.0.0/0", "**", "::/0"}},
 		"ingress":  []map[string]any{{"listen_port": enclaveArgsPort}, {"listen_port": enclaveReadyPort}},
 	})

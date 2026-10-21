@@ -77,11 +77,20 @@ jobs:
     env:
       TEE_BATCHER_APP_IMAGE: op-batcher-enclave-app:base
       TEE_BATCHER_UPGRADE_IMAGE: op-batcher-enclave-app:candidate
+      TEE_ENCLAVE_MEMORY_MIB: "4096"
+      TEE_ENCLAVE_CPU_COUNT: "2"
     steps:
       - name: Set up Docker, Nitro enclaves and enclaver
         run: |
-          printf 'memory_mib: 4096\ncpu_count: 2\n' | sudo tee /etc/nitro_enclaves/allocator.yaml
-          sudo systemctl restart nitro-enclaves-allocator.service
+          # The allocator's parser requires the YAML document-start marker.
+          printf '%s\n' '---' \
+            "memory_mib: ${TEE_ENCLAVE_MEMORY_MIB}" "cpu_count: ${TEE_ENCLAVE_CPU_COUNT}" \
+            | sudo tee /etc/nitro_enclaves/allocator.yaml > /dev/null
+          if ! sudo systemctl restart nitro-enclaves-allocator.service; then
+            sudo systemctl status nitro-enclaves-allocator.service --no-pager --full || true
+            sudo journalctl -u nitro-enclaves-allocator.service --no-pager -n 100
+            exit 1
+          fi
           sudo systemctl enable --now docker
           sudo chown ec2-user /var/run/docker.sock
           curl -sSfL https://github.com/enclaver-io/enclaver/releases/download/v0.6.1/enclaver-linux-x86_64-v0.6.1.tar.gz \
