@@ -114,7 +114,7 @@ func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 // the caller retry the whole clear instead of performing it partially, which
 // would leave an emptied channel manager with the streamer at its old cursor.
 func TestEspressoReanchorTarget(t *testing.T) {
-	newReanchorSubmitter := func(t *testing.T, enabled bool, streamer *espressoStreamers.Streamer) (*BatchSubmitter, *mockL2EndpointProvider) {
+	newReanchorSubmitter := func(t *testing.T, enabled bool, streamer espressoStreamer) (*BatchSubmitter, *mockL2EndpointProvider) {
 		ep := newEndpointProvider()
 		return &BatchSubmitter{
 			DriverSetup: DriverSetup{

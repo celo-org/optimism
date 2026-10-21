@@ -42,7 +42,7 @@ func TestEspressoTransactionSubmitterDeadlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	submitter := batcher.NewEspressoTransactionSubmitter(
-		batcher.WithEspressoClient(new(AlwaysFailingEspressoClient)),
+		batcher.WithEspressoSubmissionClient(new(AlwaysFailingEspressoClient)),
 		batcher.WithContext(ctx),
 	)
 
@@ -115,7 +115,7 @@ func TestEspressoTransactionSubmitterProgress(t *testing.T) {
 	espClient := new(EspressoClientSwappableImplementation)
 	espClient.SetEspressoClient(failingClient)
 	submitter := batcher.NewEspressoTransactionSubmitter(
-		batcher.WithEspressoClient(espClient),
+		batcher.WithEspressoSubmissionClient(espClient),
 		batcher.WithContext(ctx),
 	)
 
