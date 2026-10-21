@@ -165,7 +165,7 @@ type BatchSubmitter struct {
 
 	// batchAuth is the read-only binding to the BatchAuthenticator contract,
 	// shared by registerBatcher, resolveTEEVerifierAddress and the
-	// isBatcherActive gate. Nil when RollupConfig has a zero
+	// checkBatcherActive gate. Nil when RollupConfig has a zero
 	// BatchAuthenticatorAddress.
 	batchAuth *batchAuthenticatorReader
 

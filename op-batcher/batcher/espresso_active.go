@@ -5,33 +5,29 @@ import (
 	"errors"
 
 	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 )
 
-// isBatcherActive checks if the current batcher is the active one by querying
-// the BatchAuthenticator contract. Returns true if this batcher instance should
-// be publishing batches, false if it should stay idle.
-//
-// It applies two gates:
+// checkBatcherActive queries the BatchAuthenticator contract to decide whether
+// this batcher should be publishing. It applies two checks:
 //  1. Mode: the contract's activeIsEspresso flag must match this node's role
-//     (Config.Espresso.Enabled). activeIsEspresso==true means the Espresso batcher
-//     is active; false means the fallback batcher is active.
-//  2. Identity: once the mode matches, the configured sender key (Txmgr.From) must
-//     be the authorized batcher for that mode, otherwise every authenticateBatchInfo
-//     call reverts (Unauthorized{Espresso,Fallback}Batcher) and the batcher loops.
+//     (Config.Espresso.Enabled). A mismatch reports PublishGateModeInactive.
+//  2. Identity: the sender key (Txmgr.From) must be the authorized batcher for
+//     that mode, otherwise every authenticateBatchInfo call reverts. A wrong
+//     key reports PublishGateKeyUnauthorized.
 //
-// publishStateToL1 evaluates this before every publishTxToL1 call, including
-// the final one of each pass that finds nothing to send. A mode mismatch costs
-// one eth_call and a matching mode at most two in steady state; the first check
-// pays extra to fill the reader's caches. A batcher that is not the active one
-// takes a skip branch every time, so both warnings are throttled.
-func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
+// It runs before every publishTxToL1 call. A mode mismatch costs one eth_call
+// and a matching mode at most two in steady state. A batcher that is not the
+// active one takes a skip branch every time, so both warnings are throttled.
+func (l *BatchSubmitter) checkBatcherActive(ctx context.Context) (metrics.PublishGateState, error) {
 	if l.batchAuth == nil {
-		return false, errors.New("no BatchAuthenticator configured")
+		return metrics.PublishGateError, errors.New("no BatchAuthenticator configured")
 	}
 
 	activeIsEspresso, err := l.batchAuth.ActiveIsEspresso(ctx)
 	if err != nil {
-		return false, err
+		return metrics.PublishGateError, err
 	}
 
 	batcherAddr := l.Txmgr.From()
@@ -46,7 +42,7 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 		// still-wrong key warns afresh when the mode comes back, rather than staying
 		// throttled and later reporting a duration that spans the inactive period.
 		l.degradedLog.Clear(l.Log, "batcherKeyUnauthorized", "Batcher mode is inactive, suspending the batcher key check")
-		return false, nil
+		return metrics.PublishGateModeInactive, nil
 	}
 	l.degradedLog.Clear(l.Log, "batcherModeInactive", "Batcher mode is active again")
 
@@ -59,7 +55,7 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 		expected, err = l.batchAuth.FallbackBatcher(ctx)
 	}
 	if err != nil {
-		return false, err
+		return metrics.PublishGateError, err
 	}
 
 	if batcherAddr != expected {
@@ -68,9 +64,9 @@ func (l *BatchSubmitter) isBatcherActive(ctx context.Context) (bool, error) {
 			"expected", expected,
 			"activeIsEspresso", activeIsEspresso,
 		)
-		return false, nil
+		return metrics.PublishGateKeyUnauthorized, nil
 	}
 	l.degradedLog.Clear(l.Log, "batcherKeyUnauthorized", "Configured batcher key is authorized again")
 
-	return true, nil
+	return metrics.PublishGateActive, nil
 }
