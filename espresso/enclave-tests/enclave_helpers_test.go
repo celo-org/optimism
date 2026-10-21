@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	espressoTypes "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ethereum-optimism/optimism/espresso"
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
@@ -38,7 +40,7 @@ const (
 // enclaveBatcherArgs starts the services the enclave batcher depends on and returns its flags.
 func enclaveBatcherArgs(t *testing.T, sys *e2esys.System) []string {
 	l1 := sys.NodeEndpoint(e2esys.RoleL1).(endpoint.HttpRPC).HttpRPC()
-	espressoURL, lightClient := startEspressoDevNode(t, l1)
+	espressoURL, lightClient, originHeight := startEspressoDevNode(t, l1)
 
 	// The e2e allocs use mock TEE contracts, which accept any journal of at least 20 bytes.
 	attestation := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -60,6 +62,7 @@ func enclaveBatcherArgs(t *testing.T, sys *e2esys.System) []string {
 		"--" + espresso.QueryServiceUrlsFlagName + "=" + espressoURL,
 		"--" + espresso.QueryServiceUrlsFlagName + "=" + espressoURL,
 		"--" + espresso.L1UrlFlagName + "=" + l1,
+		"--" + espresso.CaffeinationHeightEspresso + "=" + strconv.FormatUint(originHeight, 10),
 		"--" + espresso.LightClientAddrFlagName + "=" + lightClient,
 		"--" + espresso.AttestationServiceFlagName + "=" + attestation.URL,
 	}
@@ -67,8 +70,8 @@ func enclaveBatcherArgs(t *testing.T, sys *e2esys.System) []string {
 
 // startEspressoDevNode runs an espresso-dev-node against l1, using the Espresso contracts
 // that the e2e system predeploys from espresso/environment/allocs.json. It returns the
-// query service URL and the light client address.
-func startEspressoDevNode(t *testing.T, l1 string) (string, string) {
+// query service URL, light client address and a usable Espresso starting height.
+func startEspressoDevNode(t *testing.T, l1 string) (string, string, uint64) {
 	envVars := map[string]string{
 		"ESPRESSO_DEV_NODE_L1_DEPLOYMENT": "skip",
 		"ESPRESSO_SEQUENCER_L1_PROVIDER":  l1,
@@ -101,8 +104,75 @@ func startEspressoDevNode(t *testing.T, l1 string) (string, string) {
 	url := fmt.Sprintf("http://127.0.0.1:%d", espressoAPIPort)
 	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Minute)
 	defer cancel()
-	require.NoError(t, env.WaitForEspressoBlockHeightToBePositive(ctx, url+"/status/block-height"))
-	return url, envVars["ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS"]
+	// No batcher has started yet, so the earlier blocks contain no batches to replay.
+	// Start from a header with an L1 finality reference: the streamer rejects the
+	// dev node's genesis header and cannot advance past it on retries.
+	originHeight, err := waitForEspressoStartHeight(ctx, espressoClient.NewClient(url))
+	require.NoError(t, err)
+	t.Logf("Espresso dev node ready at starting height %d", originHeight)
+	return url, envVars["ESPRESSO_SEQUENCER_LIGHT_CLIENT_PROXY_ADDRESS"], originHeight
+}
+
+type espressoStartHeightSource interface {
+	FetchLatestBlockHeight(context.Context) (uint64, error)
+	FetchHeaderByHeight(context.Context, uint64) (espressoTypes.HeaderImpl, error)
+}
+
+// waitForEspressoStartHeight waits for the local dev node's latest header to have L1 finality.
+func waitForEspressoStartHeight(ctx context.Context, client espressoStartHeightSource) (uint64, error) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		height, err := client.FetchLatestBlockHeight(ctx)
+		if err == nil && height > 0 {
+			// The status endpoint returns a block count, so the latest header is one below it.
+			origin := height - 1
+			header, err := client.FetchHeaderByHeight(ctx, origin)
+			if err == nil {
+				if header.Header == nil || header.Header.GetBlockHeight() != origin {
+					return 0, fmt.Errorf("unexpected Espresso header at height %d", origin)
+				}
+				if header.Header.GetL1Finalized() != nil {
+					return origin, nil
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return 0, fmt.Errorf("waiting for an Espresso header with L1 finality: %w", ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+type espressoStartHeightStub struct {
+	requested []uint64
+}
+
+func (s *espressoStartHeightStub) FetchLatestBlockHeight(context.Context) (uint64, error) {
+	if len(s.requested) == 0 {
+		return 1, nil // Only the genesis header is available initially.
+	}
+	return 8, nil
+}
+
+func (s *espressoStartHeightStub) FetchHeaderByHeight(_ context.Context, height uint64) (espressoTypes.HeaderImpl, error) {
+	s.requested = append(s.requested, height)
+	header := &espressoTypes.Header0_3{Height: height}
+	if height > 0 {
+		header.L1Finalized = &espressoTypes.L1BlockInfo{}
+	}
+	return espressoTypes.HeaderImpl{Header: header}, nil
+}
+
+func TestEspressoStartHeightWaitsForUsableLatestHeader(t *testing.T) {
+	source := new(espressoStartHeightStub)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	height, err := waitForEspressoStartHeight(ctx, source)
+	require.NoError(t, err)
+	require.Equal(t, uint64(7), height)
+	require.Equal(t, []uint64{0, 7}, source.requested)
 }
 
 // runEnclaveBatcher wraps appImage into an EIF, boots it in a Nitro enclave, sends it the
