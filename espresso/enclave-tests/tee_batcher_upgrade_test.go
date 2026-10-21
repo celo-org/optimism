@@ -42,9 +42,13 @@ func TestTEEBatcherUpgrade(t *testing.T) {
 	l2Seq := sys.NodeClient(e2esys.RoleSeq)
 	l2Verif := sys.NodeClient(e2esys.RoleVerif)
 	alice := sys.Cfg.Secrets.Alice
-	nonce, err := l2Seq.NonceAt(ctx, crypto.PubkeyToAddress(alice.PublicKey), nil)
+	aliceAddress := crypto.PubkeyToAddress(alice.PublicKey)
+	nonce, err := l2Seq.NonceAt(ctx, aliceAddress, nil)
 	require.NoError(t, err)
-	pending := helpers.SendL2Tx(t, sys.Cfg, l2Seq, alice, env.L2TxWithNonce(nonce))
+	pending := helpers.SendL2Tx(t, sys.Cfg, l2Seq, alice, env.L2TxWithOptions(
+		env.L2TxWithNonce(nonce),
+		env.L2TxWithToAddress(&aliceAddress),
+	))
 	_, err = l2Verif.TransactionReceipt(ctx, pending.TxHash)
 	require.ErrorIs(t, err, ethereum.NotFound)
 
