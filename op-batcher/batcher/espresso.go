@@ -838,10 +838,8 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, parent eth.L2
 		return fmt.Errorf("failed to derive batch from block: %w", err)
 	}
 
-	if err := checkDerivationRules(ctx, l.RollupConfig, l.Log.New("block", eth.ToBlockID(block)), l.L1Client,
-		l.Config.NetworkTimeout, parent, &espressoBatch.Batch); err != nil {
-		var rejected *ErrBatchRejected
-		if errors.As(err, &rejected) {
+	if err := l.checkDerivationRules(ctx, parent, block, &espressoBatch.Batch); err != nil {
+		if errors.Is(err, errBatchRejected) {
 			// The block will be refetched and rejected on every tick until the
 			// sequencer reorgs it away, so throttle the log.
 			l.degradedLog.Warn(l.Log, "invalidBatch", "Refusing to sign block that violates derivation rules",
@@ -1024,10 +1022,8 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					l.clearState(ctx)
 					break
 				}
-				if err := checkDerivationRules(ctx, l.RollupConfig, l.Log.New("block", eth.ToBlockID(block)), l.L1Client,
-					l.Config.NetworkTimeout, parent, &batch.Batch); err != nil {
-					var rejected *ErrBatchRejected
-					if errors.As(err, &rejected) {
+				if err := l.checkDerivationRules(ctx, parent, block, &batch.Batch); err != nil {
+					if errors.Is(err, errBatchRejected) {
 						l.degradedLog.Warn(l.Log, "invalidStreamedBatch", "Refusing to commit to streamed batch that violates derivation rules",
 							"block", eth.ToBlockID(block), "parent", parent.ID(), "signer", batch.SignerAddress, "err", err)
 					} else {

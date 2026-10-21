@@ -20,15 +20,9 @@ import (
 // be retried later, not signed.
 var errBatchUndecided = errors.New("batch validity undecided, retry later")
 
-// ErrBatchRejected means the block violates a derivation batch rule and must
+// errBatchRejected means the block violates a derivation batch rule and must
 // never be signed.
-type ErrBatchRejected struct {
-	Validity derive.BatchValidity
-}
-
-func (e *ErrBatchRejected) Error() string {
-	return fmt.Sprintf("batch violates derivation rules (validity: %s)", batchValidityName(e.Validity))
-}
+var errBatchRejected = errors.New("batch violates derivation rules")
 
 func batchValidityName(v derive.BatchValidity) string {
 	switch v {
@@ -55,7 +49,7 @@ type l1HeaderFetcher interface {
 // checkDerivationRules runs the same batch checks as op-node's derivation
 // pipeline on batch, treating parent as the safe head and the block after the
 // current L1 head as the L1 inclusion block. It returns nil if the batch would
-// be accepted, errBatchUndecided if it can't be decided yet, ErrBatchRejected
+// be accepted, errBatchUndecided if it can't be decided yet, errBatchRejected
 // if it violates a rule, or a fetch error.
 func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logger, l1 l1HeaderFetcher,
 	timeout time.Duration, parent eth.L2BlockRef, batch *derive.SingularBatch,
@@ -108,11 +102,11 @@ func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logge
 	// are still canonical as of the head just sampled.
 	last := l1Blocks[len(l1Blocks)-1]
 	lastHeader, err := fetch(new(big.Int).SetUint64(last.Number))
-	if errors.Is(err, ethereum.NotFound) || (err == nil && lastHeader.Hash() != last.Hash) {
+	switch {
+	case errors.Is(err, ethereum.NotFound), err == nil && lastHeader.Hash() != last.Hash:
 		lgr.Warn("L1 reorg while checking batch", "l1Block", last.ID())
 		return errBatchUndecided
-	}
-	if err != nil {
+	case err != nil:
 		return fmt.Errorf("re-fetching L1 block %d: %w", last.Number, err)
 	}
 
@@ -127,6 +121,13 @@ func checkDerivationRules(ctx context.Context, cfg *rollup.Config, lgr log.Logge
 	case derive.BatchUndecided:
 		return errBatchUndecided
 	default:
-		return &ErrBatchRejected{Validity: validity}
+		return fmt.Errorf("%w (validity: %s)", errBatchRejected, batchValidityName(validity))
 	}
+}
+
+// checkDerivationRules checks batch against the derivation batch rules on top of
+// parent, using the batcher's rollup config, L1 client and network timeout.
+func (l *BatchSubmitter) checkDerivationRules(ctx context.Context, parent eth.L2BlockRef, block *types.Block, batch *derive.SingularBatch) error {
+	return checkDerivationRules(ctx, l.RollupConfig, l.Log.New("block", eth.ToBlockID(block)), l.L1Client,
+		l.Config.NetworkTimeout, parent, batch)
 }

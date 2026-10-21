@@ -256,8 +256,7 @@ func TestCheckDerivationRules(t *testing.T) {
 }
 
 func requireRejected(t *testing.T, err error) {
-	var rejected *ErrBatchRejected
-	require.ErrorAs(t, err, &rejected)
+	require.ErrorIs(t, err, errBatchRejected)
 }
 
 // A streamed batch is checked on top of the last block in the channel manager,
