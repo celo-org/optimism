@@ -15,7 +15,7 @@ import (
 
 // batchAuthenticatorReader is the batcher's read-only view of the
 // BatchAuthenticator contract. It is bound once at construction and shared by
-// registerBatcher, resolveTEEVerifierAddress and isBatcherActive.
+// registerBatcher, resolveTEEVerifierAddress and checkBatcherActive.
 //
 // The SystemConfig address is read from BatchAuthenticator.systemConfig(),
 // because that is where the contract itself looks up the fallback batcher.

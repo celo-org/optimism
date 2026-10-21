@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
@@ -304,40 +305,44 @@ func (l *BatchSubmitter) startEspressoLoops(receiptsCh chan txmgr.TxReceipt[txRe
 }
 
 // shouldSkipPublishForActiveSeq returns true if publishStateToL1 should skip
-// publishing because this batcher is not the on-chain "active" batcher
-// (BatchAuthenticator.activeIsEspresso). The Espresso TEE batcher always
-// honors the flag (it is fundamentally a post-fork actor); the fallback
-// batcher honors it only once fallback auth is required (pre-fork it must run
-// as a vanilla upstream Optimism batcher with no BatchAuthenticator coupling).
-// Fails closed: if either gate cannot be evaluated, publishing is skipped for
-// this tick and retried on the next. Those failures are throttled like the skip
-// branches in isBatcherActive: a fallback batcher started before the
-// BatchAuthenticator is deployed fails its reads with bind.ErrNoCode on every
-// publish until the contract appears.
+// publishing because this batcher is not the on-chain "active" batcher. Every
+// evaluation records the gate's state in the publish_gate metric.
 func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool {
+	state := l.evaluatePublishGate(ctx)
+	l.Metr.RecordPublishGateState(state)
+	return state != metrics.PublishGateActive
+}
+
+// evaluatePublishGate decides whether this batcher may publish. The Espresso
+// batcher always checks the active flag; the fallback batcher only after the
+// fork. When the flag is not checked, it reports PublishGateActive. A failed
+// check reports PublishGateError and the publish is retried on the next tick.
+// Error logs are throttled, as a fallback batcher started before the
+// BatchAuthenticator is deployed fails on every tick.
+func (l *BatchSubmitter) evaluatePublishGate(ctx context.Context) metrics.PublishGateState {
 	if l.batchAuth == nil {
-		return false
+		return metrics.PublishGateActive
 	}
 	consultActiveFlag := l.Config.Espresso.Enabled
 	if !consultActiveFlag {
 		fallbackAuthRequired, err := l.isFallbackAuthRequired(ctx)
 		if err != nil {
 			l.degradedLog.Warn(l.Log, "fallbackAuthGateErr", "Failed to evaluate fallback-auth gate, skipping publish", "err", err)
-			return true
+			return metrics.PublishGateError
 		}
 		l.degradedLog.Clear(l.Log, "fallbackAuthGateErr", "Fallback-auth gate evaluation recovered")
 		consultActiveFlag = fallbackAuthRequired
 	}
 	if !consultActiveFlag {
-		return false
+		return metrics.PublishGateActive
 	}
-	isActive, err := l.isBatcherActive(ctx)
+	state, err := l.checkBatcherActive(ctx)
 	if err != nil {
 		l.degradedLog.Warn(l.Log, "activeCheckErr", "Failed to check if batcher is active, skipping publish", "err", err)
-		return true
+		return metrics.PublishGateError
 	}
 	l.degradedLog.Clear(l.Log, "activeCheckErr", "Active-batcher check recovered")
-	return !isActive
+	return state
 }
 
 // espressoReanchorTarget fetches the local-safe L2 head the Espresso streamer

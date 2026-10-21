@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
@@ -276,11 +277,11 @@ func requireWarnedOnce(t *testing.T, logs *testlog.CapturingHandler, want string
 	require.Contains(t, warns[0].Record.Message, want)
 }
 
-// TestIsBatcherActive covers the publish gate's two checks - mode, then
+// TestCheckBatcherActive covers the publish gate's two checks - mode, then
 // identity - and pins their cost, since the gate runs before every batch
 // transaction. A mode mismatch must not pay for the identity read. Each skip
-// warns once and is throttled on the next check.
-func TestIsBatcherActive(t *testing.T) {
+// reports its own state, warns once and is throttled on the next check.
+func TestCheckBatcherActive(t *testing.T) {
 	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 	fallbackAddr := common.HexToAddress("0x00000000000000000000000000000000000000e2")
 	otherAddr := common.HexToAddress("0x00000000000000000000000000000000000000e3")
@@ -290,17 +291,17 @@ func TestIsBatcherActive(t *testing.T) {
 		activeIsEspresso bool
 		espressoEnabled  bool
 		from             common.Address
-		want             bool
+		want             metrics.PublishGateState
 		wantCalls        int
 		wantWarn         string
 	}{
-		{"espresso batcher, espresso active, authorized", true, true, espressoAddr, true, 2, ""},
-		{"fallback batcher, fallback active, authorized", false, false, fallbackAddr, true, 3, ""},
-		{"espresso batcher, espresso active, wrong key", true, true, otherAddr, false, 2, warnKeyUnauthorized},
-		{"fallback batcher, fallback active, wrong key", false, false, otherAddr, false, 3, warnKeyUnauthorized},
+		{"espresso batcher, espresso active, authorized", true, true, espressoAddr, metrics.PublishGateActive, 2, ""},
+		{"fallback batcher, fallback active, authorized", false, false, fallbackAddr, metrics.PublishGateActive, 3, ""},
+		{"espresso batcher, espresso active, wrong key", true, true, otherAddr, metrics.PublishGateKeyUnauthorized, 2, warnKeyUnauthorized},
+		{"fallback batcher, fallback active, wrong key", false, false, otherAddr, metrics.PublishGateKeyUnauthorized, 3, warnKeyUnauthorized},
 		// Mode mismatch short-circuits before the identity read.
-		{"espresso batcher while fallback active", false, true, espressoAddr, false, 1, warnModeInactive},
-		{"fallback batcher while espresso active", true, false, fallbackAddr, false, 1, warnModeInactive},
+		{"espresso batcher while fallback active", false, true, espressoAddr, metrics.PublishGateModeInactive, 1, warnModeInactive},
+		{"fallback batcher while espresso active", true, false, fallbackAddr, metrics.PublishGateModeInactive, 1, warnModeInactive},
 	}
 
 	for _, test := range tests {
@@ -318,24 +319,25 @@ func TestIsBatcherActive(t *testing.T) {
 			l.Config.Espresso.Enabled = test.espressoEnabled
 			l.batchAuth = newTestReader(t, backend)
 
-			got, err := l.isBatcherActive(context.Background())
+			got, err := l.checkBatcherActive(context.Background())
 			require.NoError(t, err)
 			require.Equal(t, test.want, got)
 			require.Equal(t, test.wantCalls, backend.callCalls)
 			requireWarnedOnce(t, logs, test.wantWarn)
 
 			// The same skip again is throttled.
-			_, err = l.isBatcherActive(context.Background())
+			got, err = l.checkBatcherActive(context.Background())
 			require.NoError(t, err)
+			require.Equal(t, test.want, got)
 			requireWarnedOnce(t, logs, test.wantWarn)
 		})
 	}
 }
 
-// TestIsBatcherActive_SharedKeyWrongMode pins the mode check on its own. With
+// TestCheckBatcherActive_SharedKeyWrongMode pins the mode check on its own. With
 // one key authorized for both roles the identity check passes in either mode,
 // so only the mode check can keep a batcher idle while the other mode is active.
-func TestIsBatcherActive_SharedKeyWrongMode(t *testing.T) {
+func TestCheckBatcherActive_SharedKeyWrongMode(t *testing.T) {
 	sharedAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 
 	for _, espressoEnabled := range []bool{true, false} {
@@ -352,17 +354,17 @@ func TestIsBatcherActive_SharedKeyWrongMode(t *testing.T) {
 			l.Config.Espresso.Enabled = espressoEnabled
 			l.batchAuth = newTestReader(t, backend)
 
-			got, err := l.isBatcherActive(context.Background())
+			got, err := l.checkBatcherActive(context.Background())
 			require.NoError(t, err)
-			require.False(t, got)
+			require.Equal(t, metrics.PublishGateModeInactive, got)
 		})
 	}
 }
 
-// TestIsBatcherActive_KeyWarningResetsOnModeSwitch checks that leaving our mode
+// TestCheckBatcherActive_KeyWarningResetsOnModeSwitch checks that leaving our mode
 // resets the throttled wrong-key warning: when the mode comes back with the key
 // still wrong, the operator gets a fresh Warn instead of silence.
-func TestIsBatcherActive_KeyWarningResetsOnModeSwitch(t *testing.T) {
+func TestCheckBatcherActive_KeyWarningResetsOnModeSwitch(t *testing.T) {
 	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 	otherAddr := common.HexToAddress("0x00000000000000000000000000000000000000e3")
 
@@ -378,49 +380,51 @@ func TestIsBatcherActive_KeyWarningResetsOnModeSwitch(t *testing.T) {
 	l.Config.Espresso.Enabled = true
 	l.batchAuth = newTestReader(t, backend)
 
-	check := func() {
+	check := func(want metrics.PublishGateState) {
 		t.Helper()
-		active, err := l.isBatcherActive(context.Background())
+		got, err := l.checkBatcherActive(context.Background())
 		require.NoError(t, err)
-		require.False(t, active)
+		require.Equal(t, want, got)
 	}
 
 	// Wrong key in our mode: warn once, then stay quiet.
-	check()
-	check()
+	check(metrics.PublishGateKeyUnauthorized)
+	check(metrics.PublishGateKeyUnauthorized)
 	logs.RequireMessageContainedOnce(t, warnKeyUnauthorized)
 
 	// The other mode takes over, then ours comes back with the key still wrong.
 	backend.activeIsEspresso = false
-	check()
+	check(metrics.PublishGateModeInactive)
 	backend.activeIsEspresso = true
-	check()
+	check(metrics.PublishGateKeyUnauthorized)
 	logs.RequireMessageContainedNTimes(t, warnKeyUnauthorized, 2)
 	require.Nil(t, logs.FindLog(testlog.NewMessageContainsFilter("authorized again")),
 		"the key was never authorized, so nothing may report it recovered")
 }
 
-// TestIsBatcherActive_NoAuthenticator guards the nil reader case: without a
+// TestCheckBatcherActive_NoAuthenticator guards the nil reader case: without a
 // configured BatchAuthenticator the gate must report an error rather than
 // silently treating this batcher as active.
-func TestIsBatcherActive_NoAuthenticator(t *testing.T) {
+func TestCheckBatcherActive_NoAuthenticator(t *testing.T) {
 	l := &BatchSubmitter{}
 	l.Log = testlog.Logger(t, log.LevelDebug)
 	l.degradedLog = oplog.NewRepeatStateLogger()
 
-	_, err := l.isBatcherActive(context.Background())
+	_, err := l.checkBatcherActive(context.Background())
 	require.ErrorContains(t, err, "no BatchAuthenticator configured")
 }
 
 // TestShouldSkipPublishForActiveSeq covers the publish loop's gate in front of
-// isBatcherActive: the Espresso batcher always consults the active flag, the
+// checkBatcherActive: the Espresso batcher always consults the active flag, the
 // fallback batcher only once fallback auth is required, and either gate failing
-// to evaluate skips the publish (fails closed). Each skip warns once and is
+// to evaluate skips the publish (fails closed). Every evaluation records its
+// state, and only active lets the publish through. Each skip warns once and is
 // throttled on the next check.
 func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 	const espressoTime = 1000
 	espressoAddr := common.HexToAddress("0x00000000000000000000000000000000000000e1")
 	fallbackAddr := common.HexToAddress("0x00000000000000000000000000000000000000e2")
+	otherAddr := common.HexToAddress("0x00000000000000000000000000000000000000e3")
 
 	tests := []struct {
 		name             string
@@ -430,18 +434,19 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 		callErr          error
 		activeIsEspresso bool
 		from             common.Address
-		wantSkip         bool
+		wantState        metrics.PublishGateState
 		wantWarn         string
 	}{
 		// Pre-fork the fallback batcher ignores the flag, even when it names the Espresso batcher.
-		{name: "fallback batcher before the fork ignores the flag", tipTime: espressoTime - 1, activeIsEspresso: true, from: fallbackAddr, wantSkip: false},
-		{name: "fallback batcher, fallback-auth gate fails", tipErr: errors.New("l1 down"), from: fallbackAddr, wantSkip: true, wantWarn: warnFallbackGateErr},
-		{name: "fallback batcher after the fork, fallback active", tipTime: espressoTime, from: fallbackAddr, wantSkip: false},
-		{name: "fallback batcher after the fork, espresso active", tipTime: espressoTime, activeIsEspresso: true, from: fallbackAddr, wantSkip: true, wantWarn: warnModeInactive},
+		{name: "fallback batcher before the fork ignores the flag", tipTime: espressoTime - 1, activeIsEspresso: true, from: fallbackAddr, wantState: metrics.PublishGateActive},
+		{name: "fallback batcher, fallback-auth gate fails", tipErr: errors.New("l1 down"), from: fallbackAddr, wantState: metrics.PublishGateError, wantWarn: warnFallbackGateErr},
+		{name: "fallback batcher after the fork, fallback active", tipTime: espressoTime, from: fallbackAddr, wantState: metrics.PublishGateActive},
+		{name: "fallback batcher after the fork, espresso active", tipTime: espressoTime, activeIsEspresso: true, from: fallbackAddr, wantState: metrics.PublishGateModeInactive, wantWarn: warnModeInactive},
 		// The Espresso batcher consults the flag without reading the L1 tip.
-		{name: "espresso batcher, espresso active", espressoEnabled: true, tipErr: errors.New("unused"), activeIsEspresso: true, from: espressoAddr, wantSkip: false},
-		{name: "espresso batcher, fallback active", espressoEnabled: true, from: espressoAddr, wantSkip: true, wantWarn: warnModeInactive},
-		{name: "espresso batcher, active check fails", espressoEnabled: true, callErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantSkip: true, wantWarn: warnActiveCheckErr},
+		{name: "espresso batcher, espresso active", espressoEnabled: true, tipErr: errors.New("unused"), activeIsEspresso: true, from: espressoAddr, wantState: metrics.PublishGateActive},
+		{name: "espresso batcher, fallback active", espressoEnabled: true, from: espressoAddr, wantState: metrics.PublishGateModeInactive, wantWarn: warnModeInactive},
+		{name: "espresso batcher, espresso active, wrong key", espressoEnabled: true, activeIsEspresso: true, from: otherAddr, wantState: metrics.PublishGateKeyUnauthorized, wantWarn: warnKeyUnauthorized},
+		{name: "espresso batcher, active check fails", espressoEnabled: true, callErr: errors.New("l1 down"), activeIsEspresso: true, from: espressoAddr, wantState: metrics.PublishGateError, wantWarn: warnActiveCheckErr},
 	}
 
 	for _, test := range tests {
@@ -453,8 +458,10 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			backend.fallbackBatcher = fallbackAddr
 
 			logger, logs := testlog.CaptureLogger(t, log.LevelDebug)
+			metr := new(metrics.TestMetrics)
 			l := &BatchSubmitter{}
 			l.Log = logger
+			l.Metr = metr
 			l.degradedLog = oplog.NewRepeatStateLogger()
 			l.RollupConfig = &rollup.Config{EspressoTime: u64(espressoTime)}
 			l.Config.NetworkTimeout = time.Second
@@ -463,11 +470,14 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			l.Txmgr = &testutils.FakeTxMgr{FromAddr: test.from}
 			l.batchAuth = newTestReader(t, backend)
 
-			require.Equal(t, test.wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+			wantSkip := test.wantState != metrics.PublishGateActive
+			require.Equal(t, wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+			require.Equal(t, test.wantState, metr.PublishGateState)
 			requireWarnedOnce(t, logs, test.wantWarn)
 
 			// The same skip again is throttled.
-			require.Equal(t, test.wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+			require.Equal(t, wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
+			require.Equal(t, test.wantState, metr.PublishGateState)
 			requireWarnedOnce(t, logs, test.wantWarn)
 		})
 	}
@@ -475,19 +485,22 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 
 // TestShouldSkipPublishForActiveSeq_NoAuthenticator guards the nil reader case:
 // a chain without a BatchAuthenticator runs a plain upstream batcher, which
-// never skips a publish.
+// never skips a publish and reports the gate as active.
 func TestShouldSkipPublishForActiveSeq_NoAuthenticator(t *testing.T) {
+	metr := new(metrics.TestMetrics)
 	l := &BatchSubmitter{}
 	l.Log = testlog.Logger(t, log.LevelDebug)
+	l.Metr = metr
 	l.degradedLog = oplog.NewRepeatStateLogger()
 
 	require.False(t, l.shouldSkipPublishForActiveSeq(context.Background()))
+	require.Equal(t, metrics.PublishGateActive, metr.PublishGateState)
 }
 
-// TestIsBatcherActive_ReadErrors fails each contract read the gate makes, one
-// per row. isBatcherActive must return the error rather than swallow it, and
+// TestCheckBatcherActive_ReadErrors fails each contract read the gate makes, one
+// per row. checkBatcherActive must return the error rather than swallow it, and
 // the error must name the getter that failed.
-func TestIsBatcherActive_ReadErrors(t *testing.T) {
+func TestCheckBatcherActive_ReadErrors(t *testing.T) {
 	tests := []struct {
 		failGetter      string
 		espressoEnabled bool
@@ -511,7 +524,7 @@ func TestIsBatcherActive_ReadErrors(t *testing.T) {
 			l.Config.Espresso.Enabled = test.espressoEnabled
 			l.batchAuth = newTestReader(t, backend)
 
-			_, err := l.isBatcherActive(context.Background())
+			_, err := l.checkBatcherActive(context.Background())
 			require.ErrorContains(t, err, "failed to read "+test.failGetter)
 		})
 	}

@@ -4,6 +4,7 @@ type TestMetrics struct {
 	noopMetrics
 	PendingBlocksBytesCurrent float64
 	ChannelQueueLength        int
+	PublishGateState          PublishGateState
 	pendingDABytes            float64
 }
 
@@ -32,4 +33,8 @@ func (m *TestMetrics) ClearAllStateMetrics() {
 func (m *TestMetrics) RecordPendingBlockPruned(rawSize, daSize uint64) {
 	m.PendingBlocksBytesCurrent -= float64(rawSize)
 	m.pendingDABytes -= float64(daSize)
+}
+
+func (m *TestMetrics) RecordPublishGateState(state PublishGateState) {
+	m.PublishGateState = state
 }
