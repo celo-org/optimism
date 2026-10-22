@@ -84,7 +84,7 @@ contract MigrateV1V2 is Script {
     /// @notice EIP-1967 implementation slot.
     bytes32 internal constant EIP1967_IMPL_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
 
-    /// @notice superchain-ops' OPCM batching multicall; it delegatecalls each entry. Env-overridable.
+    /// @notice superchain-ops' OPCM batching multicall
     address internal constant MULTICALL3_DELEGATECALL = 0x93dc480940585D9961bfcEab58124fFD3d60f76a;
 
     /// @notice OP-Succinct fault dispute game type, the respected type on Celo mainnet.
@@ -99,8 +99,9 @@ contract MigrateV1V2 is Script {
 
     /// @notice Env entry: write the migration as one atomic task to BUNDLE_PATH.
     function runBuildBundle() external {
-        address multicall = vm.envOr("MULTICALL3_DELEGATECALL", MULTICALL3_DELEGATECALL);
-        require(multicall.code.length > 0, "MigrateV1V2: Multicall3Delegatecall has no code on this network");
+        require(
+            MULTICALL3_DELEGATECALL.code.length > 0, "MigrateV1V2: Multicall3Delegatecall has no code on this network"
+        );
 
         Task[] memory tasks = buildBundle(_inputFromEnv());
         IMulticall3.Call3[] memory calls = new IMulticall3.Call3[](tasks.length);
@@ -109,8 +110,8 @@ contract MigrateV1V2 is Script {
         }
 
         Task[] memory atomic = new Task[](1);
-        atomic[0] = Task({ target: multicall, calldata_: _encodeAggregate3(calls) });
-        console.log("Atomic bundle via Multicall3Delegatecall:", multicall);
+        atomic[0] = Task({ target: MULTICALL3_DELEGATECALL, calldata_: _encodeAggregate3(calls) });
+        console.log("Atomic bundle via Multicall3Delegatecall:", MULTICALL3_DELEGATECALL);
         _logTask("atomic", atomic[0]);
         _writeBundle(atomic, vm.envOr("BUNDLE_PATH", string("./deployments/cgt-bundle.json")));
     }
