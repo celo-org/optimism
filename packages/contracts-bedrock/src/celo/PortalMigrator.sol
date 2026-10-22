@@ -27,7 +27,11 @@ contract PortalMigrator is OptimismPortal2, IPortalMigrator {
     /// @notice Exact CELO balance expected to be held by the portal when migration executes.
     uint256 public immutable override LEGACY_PORTAL_BALANCE;
 
-    /// @notice EIP-1967 storage slot for migration flag.
+    /// @notice Unstructured slot holding the CELO amount drained from the portal, zero until
+    ///         migrate() runs. Written to PROXY storage, so it survives this implementation being
+    ///         swapped out at the end of the migration transaction.
+    /// @notice Read by the L2 client straight from storage, since no implementation exposing it is
+    ///         live afterwards. Treat the slot and its uint256 encoding as a consumed interface.
     /// @dev keccak256("celo.op.portal.migrated") - 1
     bytes32 internal constant MIGRATED_SLOT = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
 
@@ -60,7 +64,7 @@ contract PortalMigrator is OptimismPortal2, IPortalMigrator {
         }
 
         // Check migration flag.
-        if (StorageSlot.getBooleanSlot(MIGRATED_SLOT).value) {
+        if (StorageSlot.getUint256Slot(MIGRATED_SLOT).value != 0) {
             revert PortalMigrator_AlreadyMigrated();
         }
 
@@ -70,15 +74,20 @@ contract PortalMigrator is OptimismPortal2, IPortalMigrator {
             emit BalanceMismatch(LEGACY_PORTAL_BALANCE, balance);
         }
 
-        // Migrate funds & seed the bridge escrow with the drained amount, set migration flag.
-        StorageSlot.getBooleanSlot(MIGRATED_SLOT).value = true;
+        // A zero amount would leave the slot indistinguishable from un-migrated, so refuse it.
+        if (balance == 0) {
+            revert PortalMigrator_NothingToMigrate();
+        }
+
+        // Migrate funds & seed the bridge escrow with the drained amount, record the amount.
+        StorageSlot.getUint256Slot(MIGRATED_SLOT).value = balance;
         CELO_TOKEN_L1.safeTransfer(CELO_GAS_BRIDGE_L1, balance);
         ICeloGasBridgeL1(payable(CELO_GAS_BRIDGE_L1)).seedEscrow(balance);
         emit CeloMigrated(CELO_GAS_BRIDGE_L1, balance);
     }
 
-    /// @notice Returns whether the migration has executed.
-    function migrated() external view returns (bool migrated_) {
-        migrated_ = StorageSlot.getBooleanSlot(MIGRATED_SLOT).value;
+    /// @notice CELO amount drained from the portal, or zero when the migration has not executed.
+    function migrated() external view returns (uint256 amount_) {
+        amount_ = StorageSlot.getUint256Slot(MIGRATED_SLOT).value;
     }
 }
