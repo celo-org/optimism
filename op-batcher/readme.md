@@ -8,6 +8,32 @@ The `op-batcher` works together with the [sequencer](../op-node/) (which it read
 
 It depends directly on some code shared with the derivation pipeline, namely the [`ChannelOut`](../op-node/rollup/derive/channel_out.go) implementation(s). It also depends directly on the shared [txmgr](../op-service/txmgr/) module.
 
+## Espresso endpoint configuration
+
+When Espresso is enabled, configure exactly one query-service URL pointing to
+its load balancer:
+
+```bash
+--espresso.url=https://espresso-lb.example.com
+# Or:
+OP_BATCHER_ESPRESSO_URL=https://espresso-lb.example.com
+```
+
+The load balancer owns backend selection and failover. The batcher uses the SDK's
+single-endpoint client, without client-side multi-endpoint failover or majority
+reads. Existing request deadlines and caller cancellation remain in effect;
+`--network-timeout` still bounds batcher requests, and streamer polling keeps its
+own deadlines.
+
+Before upgrading, replace `--espresso.urls` / `OP_BATCHER_ESPRESSO_URLS` with
+`--espresso.url` / `OP_BATCHER_ESPRESSO_URL`, supplying one load-balanced URL.
+Remove any comma-separated or repeated URLs, including the previous workaround
+of listing the same URL twice. The old plural flag and environment variable are
+no longer used; Espresso startup requires the new singular setting. Ensure the
+load balancer routes submission and query APIs, including `availability/limits`,
+which the SDK reads before fetching namespace transaction ranges. Deploy the configuration change together
+with this client change: the old multi-node client requires at least two URLs.
+
 ## Testing
 
 The batcher has a suite of unit test which can be triggered by running

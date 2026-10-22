@@ -136,7 +136,11 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	bs.Espresso.VerifyReceiptSafetyTimeout = cfg.Espresso.VerifyReceiptSafetyTimeout
 	bs.Espresso.VerifyReceiptRetryDelay = cfg.Espresso.VerifyReceiptRetryDelay
 
-	client, err := espressoClient.NewMultipleNodesClient(cfg.Espresso.QueryServiceURLs)
+	queryURL := cfg.Espresso.QueryServiceURL
+	client, err := espressoClient.NewClientFromOptions(
+		espressoClient.WithBaseUrl(queryURL),
+		espressoClient.WithTransactionSubmitter(espressoClient.NewQuerySubmitter(queryURL)),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to create Espresso client: %w", err)
 	}

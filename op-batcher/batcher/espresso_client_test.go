@@ -170,7 +170,7 @@ func espressoServiceTestSetup(t *testing.T, queryURL string) (*BatcherService, *
 		},
 		Espresso: espresso.CLIConfig{
 			Enabled:                    true,
-			QueryServiceURLs:           []string{queryURL, queryURL},
+			QueryServiceURL:            queryURL,
 			L1URL:                      "http://unused.invalid",
 			LightClientAddr:            common.Address{1},
 			EspressoAttestationService: "http://unused.invalid",
@@ -237,6 +237,58 @@ func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 	response = receiveTestValue(t, responses)
 	require.NoError(t, response.err)
 	require.Equal(t, expectedHash, response.hash)
+}
+
+func TestInitEspressoSingleEndpointReads(t *testing.T) {
+	hash, err := taggedbase64.New("TX", []byte("test transaction"))
+	require.NoError(t, err)
+	responses := map[string]any{
+		"/status/block-height":                            uint64(42),
+		"/availability/transaction/hash/" + hash.String(): espressoCommon.TransactionQueryData{Hash: hash, BlockHeight: 42},
+		"/availability/header/1/2":                        []espressoCommon.HeaderImpl{},
+		"/availability/limits":                            espressoCommon.LimitsData{LargeObjectRangeLimit: 10},
+		"/availability/block/1/2/namespace/7":             []espressoCommon.NamespaceTransactionsRangeData{{}},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response, ok := responses[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			t.Error(err)
+		}
+	}))
+	t.Cleanup(server.Close)
+	service, cfg := espressoServiceTestSetup(t, server.URL)
+	require.NoError(t, service.initEspresso(t.Context(), cfg))
+	setup := &DriverSetup{}
+	service.applyEspressoDriverSetup(setup)
+	client := setup.Espresso.Client
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	t.Run("height", func(t *testing.T) {
+		height, err := client.FetchLatestBlockHeight(ctx)
+		require.NoError(t, err)
+		require.Equal(t, uint64(42), height)
+	})
+	t.Run("inclusion verification", func(t *testing.T) {
+		tx, err := client.FetchTransactionByHash(ctx, hash)
+		require.NoError(t, err)
+		require.Equal(t, hash, tx.Hash)
+		require.Equal(t, uint64(42), tx.BlockHeight)
+	})
+	t.Run("streamer headers", func(t *testing.T) {
+		headers, err := client.FetchHeadersByRange(ctx, 1, 2)
+		require.NoError(t, err)
+		require.Empty(t, headers)
+	})
+	t.Run("streamer namespace transactions", func(t *testing.T) {
+		blocks, err := client.FetchNamespaceTransactionsInRange(ctx, 1, 2, 7)
+		require.NoError(t, err)
+		require.Len(t, blocks, 1)
+	})
 }
 
 func TestInitEspressoDisabledClientIsNil(t *testing.T) {
