@@ -37,7 +37,7 @@ const (
 var (
 	EnabledFlagName                    = espressoFlags("enabled")
 	PollIntervalFlagName               = espressoFlags("poll-interval")
-	QueryServiceUrlsFlagName           = espressoFlags("urls")
+	QueryServiceURLFlagName            = espressoFlags("url")
 	LightClientAddrFlagName            = espressoFlags("light-client-addr")
 	L1UrlFlagName                      = espressoFlags("l1-url")
 	TestingBatcherPrivateKeyFlagName   = espressoFlags("testing-batcher-private-key")
@@ -65,10 +65,10 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 			EnvVars:  espressoEnvs(envPrefix, "POLL_INTERVAL"),
 			Category: category,
 		},
-		&cli.StringSliceFlag{
-			Name:     QueryServiceUrlsFlagName,
-			Usage:    "Comma-separated list of Espresso query service URLs",
-			EnvVars:  espressoEnvs(envPrefix, "URLS"),
+		&cli.StringFlag{
+			Name:     QueryServiceURLFlagName,
+			Usage:    "Espresso query service URL; use a load balancer for backend failover",
+			EnvVars:  espressoEnvs(envPrefix, "URL"),
 			Category: category,
 		},
 		&cli.StringFlag{
@@ -139,7 +139,7 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 type CLIConfig struct {
 	Enabled                    bool
 	PollInterval               time.Duration
-	QueryServiceURLs           []string
+	QueryServiceURL            string
 	LightClientAddr            common.Address
 	L1URL                      string
 	TestingBatcherPrivateKey   *ecdsa.PrivateKey
@@ -156,8 +156,8 @@ type CLIConfig struct {
 func (c CLIConfig) Check() error {
 	if c.Enabled {
 		// Check required fields when Espresso is enabled
-		if len(c.QueryServiceURLs) == 0 {
-			return fmt.Errorf("query service URLs are required when Espresso is enabled")
+		if strings.TrimSpace(c.QueryServiceURL) == "" {
+			return fmt.Errorf("Espresso query service URL is required when Espresso is enabled")
 		}
 		if c.LightClientAddr == (common.Address{}) {
 			return fmt.Errorf("light client address is required when Espresso is enabled")
@@ -188,6 +188,7 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 	config := CLIConfig{
 		Enabled:                    c.Bool(EnabledFlagName),
 		PollInterval:               c.Duration(PollIntervalFlagName),
+		QueryServiceURL:            c.String(QueryServiceURLFlagName),
 		L1URL:                      c.String(L1UrlFlagName),
 		CaffeinationHeightEspresso: c.Uint64(CaffeinationHeightEspresso),
 		CaffeinationHeightL2:       c.Uint64(CaffeinationHeightL2),
@@ -196,8 +197,6 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 		VerifyReceiptSafetyTimeout: c.Duration(VerifyReceiptSafetyTimeoutFlagName),
 		VerifyReceiptRetryDelay:    c.Duration(VerifyReceiptRetryDelayFlagName),
 	}
-
-	config.QueryServiceURLs = c.StringSlice(QueryServiceUrlsFlagName)
 
 	addrStr := c.String(LightClientAddrFlagName)
 	config.LightClientAddr = common.HexToAddress(addrStr)
