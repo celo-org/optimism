@@ -6,4 +6,4 @@ Tests use a synthetic L1 bridge at `0xcc`, with `migratedAmount` in slot 0 and `
 
 The production L1 bridge proxy address, final snapshot storage layout, final contract revision, and migration total supply remain unresolved. There is no runtime override. Until the bridge address/layout is compiled into the network rules, detecting the enable event returns an explicit configuration error. The provisional SystemConfig feature mapping slot (109) comes from the v6 compiler snapshot at Optimism commit `20bb4480868ce6071d9b4a27bc6b5557755f54b6`; it must be confirmed against the final migration artifact. The executor owns the compiled total supply and checks `S - A`.
 
-Kona's authenticated signal reconstruction and node/prover devnet parity are separate follow-up work. These Go tests do not establish full migration readiness.
+Kona's authenticated signal reconstruction and node/prover devnet parity are separate follow-up work. The `op-e2e` action helpers and `op-test-sequencer` also still need the CGT source connected for activation fixtures; this change wires the production `driver.NewDriver` paths. These Go tests do not establish full migration readiness.

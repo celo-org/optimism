@@ -2,6 +2,7 @@ package derive
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"math/big"
 	"testing"
@@ -9,9 +10,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/stretchr/testify/require"
 
 	optypes "github.com/ethereum-optimism/optimism/op-core/types"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 )
 
@@ -83,4 +86,38 @@ func TestCgtV2AuthenticatedDerivation(t *testing.T) {
 			require.Equal(t, origin.Hash.Bytes(), tx.Data[36:68])
 		})
 	}
+}
+
+func TestCgtV2CachedReceiptsCannotChangeSystemConfig(t *testing.T) {
+	receipts := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{cgtFeatureLog(common.Address{0x33})}}})
+	d, s, parent, origin := cgtTestDeriver(t, receipts)
+	cfg := &rollup.Config{BlockTime: 2, L1ChainID: big.NewInt(1), L2ChainID: big.NewInt(1337), L1SystemConfigAddress: common.Address{0x33}, DepositContractAddress: common.Address{0x44}}
+	l1 := &cgtL1Stub{s.info, receipts}
+	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, l1, cgtL2Stub{}, s)
+	builder.cgt.snapshot = d.snapshot
+	active, err := builder.CgtV2ActivationBlock(context.Background(), parent, origin)
+	require.NoError(t, err)
+	require.True(t, active)
+
+	// A later RPC response supplies a syntactically valid ConfigUpdate with a
+	// different receipt root. A cached signal must not authenticate that data.
+	data := make([]byte, 96)
+	data[31] = 32
+	data[63] = 32
+	binary.BigEndian.PutUint64(data[88:], 9000000)
+	forged := &types.Log{Address: cfg.L1SystemConfigAddress, Topics: []common.Hash{ConfigUpdateEventABIHash, ConfigUpdateEventVersion0, SystemConfigUpdateGasLimit}, Data: data}
+	l1.receipts = optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{cgtFeatureLog(cfg.L1SystemConfigAddress), forged}}})
+	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
+	if err == nil {
+		t.Fatalf("unauthenticated cached-retry receipts changed gas limit to %d", *attrs.GasLimit)
+	}
+	require.ErrorIs(t, err, ErrCritical)
+	require.Nil(t, attrs)
+	require.Equal(t, 1, s.snapshotReads)
+	// Rejection must not poison the authenticated cached signal.
+	l1.receipts = receipts
+	attrs, err = builder.PreparePayloadAttributes(context.Background(), parent, origin)
+	require.NoError(t, err)
+	require.EqualValues(t, 30000000, *attrs.GasLimit)
+	require.Equal(t, 1, s.snapshotReads)
 }

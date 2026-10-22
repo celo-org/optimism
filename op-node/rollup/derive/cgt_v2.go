@@ -135,12 +135,14 @@ func (d *cgtV2Derivation) deposits(ctx context.Context, parent eth.L2BlockRef, o
 		txs, err := DeriveDeposits(receipts.Geth(), d.portal)
 		return txs, false, err
 	}
-	if d.info != nil && d.parent == parent.Hash && d.origin == origin {
-		return d.txs, d.active, nil
-	}
-	info, err := d.source.L1BlockInfo(ctx, origin)
-	if err != nil {
-		return nil, false, err
+	cached := d.info != nil && d.parent == parent.Hash && d.origin == origin
+	info := d.info
+	if !cached {
+		var err error
+		info, err = d.source.L1BlockInfo(ctx, origin)
+		if err != nil {
+			return nil, false, err
+		}
 	}
 	if info == nil || eth.ToBlockID(info) != origin || origin.Number != parent.L1Origin.Number+1 || info.ParentHash() != parent.L1Origin.Hash {
 		return nil, false, NewResetError(fmt.Errorf("CGTv2 origin is not the next authenticated epoch"))
@@ -157,6 +159,12 @@ func (d *cgtV2Derivation) deposits(ctx context.Context, parent eth.L2BlockRef, o
 	}
 	if types.DeriveSha(receipts, trie.NewStackTrie(nil)) != info.ReceiptHash() {
 		return nil, false, NewCriticalError(fmt.Errorf("CGTv2 receipts do not match origin %s", origin))
+	}
+	// Attributes also use these fresh receipts for SystemConfig updates. A
+	// cached signal authenticates neither a replacement receipt list nor its
+	// independently returned RPC header. Always bind that list to this root.
+	if cached {
+		return d.txs, d.active, nil
 	}
 
 	var txs []hexutil.Bytes
