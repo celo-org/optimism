@@ -557,14 +557,14 @@ func TestResolveTEEVerifierAddress(t *testing.T) {
 			l.Log = testlog.Logger(t, log.LevelDebug)
 			l.batchAuth = newTestReader(t, backend)
 
-			err := l.resolveTEEVerifierAddress(context.Background())
+			addr, err := l.resolveTEEVerifierAddress(context.Background())
 			if test.wantErr != "" {
 				require.ErrorContains(t, err, test.wantErr)
-				require.Zero(t, l.teeVerifierAddress)
+				require.Zero(t, addr)
 				return
 			}
 			require.NoError(t, err)
-			require.Equal(t, teeVerifier, l.teeVerifierAddress)
+			require.Equal(t, teeVerifier, addr)
 		})
 	}
 }
@@ -603,7 +603,8 @@ func TestRegisterBatcher_DeploymentCheck(t *testing.T) {
 func TestBatchAuthenticatorCallers_NoAuthenticator(t *testing.T) {
 	l := newRegisteringBatchSubmitter(t)
 
-	require.ErrorContains(t, l.resolveTEEVerifierAddress(context.Background()), "no BatchAuthenticator configured")
+	_, err := l.resolveTEEVerifierAddress(context.Background())
+	require.ErrorContains(t, err, "no BatchAuthenticator configured")
 	require.ErrorContains(t, l.registerBatcher(context.Background()), "no BatchAuthenticator configured")
 }
 
