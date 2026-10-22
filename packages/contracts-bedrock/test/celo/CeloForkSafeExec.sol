@@ -16,7 +16,13 @@ abstract contract CeloForkSafeExec is Test {
     using stdStorage for StdStorage;
 
     /// @notice Executes a Safe delegatecall; reverts if the inner call fails.
-    function _execSafeDelegateCall(Vm _vm, address _safe, address _owner, address _target, bytes memory _data)
+    function _execSafeDelegateCall(
+        Vm _vm,
+        address _safe,
+        address _owner,
+        address _target,
+        bytes memory _data
+    )
         internal
         returns (bool success_)
     {
@@ -27,7 +33,13 @@ abstract contract CeloForkSafeExec is Test {
     /// @notice Executes a Safe delegatecall and returns success without reverting on inner failure.
     /// @dev    With safeTxGas == 0 the Safe reverts (GS013) on inner failure rather than returning false,
     ///         so the execTransaction call is wrapped to surface failure as a boolean.
-    function _execSafeDelegateCallAllowFail(Vm _vm, address _safe, address _owner, address _target, bytes memory _data)
+    function _execSafeDelegateCallAllowFail(
+        Vm _vm,
+        address _safe,
+        address _owner,
+        address _target,
+        bytes memory _data
+    )
         internal
         returns (bool success_)
     {

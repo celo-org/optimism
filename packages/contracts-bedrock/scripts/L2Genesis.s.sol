@@ -331,7 +331,10 @@ contract L2Genesis is Script {
         address payable impl = payable(_setImplementationCode(CeloPredeploys.CELO_GAS_BRIDGE_L2));
         EIP1967Helper.setImplementation(CeloPredeploys.CELO_GAS_BRIDGE_L2, impl);
 
-        ICeloGasBridgeL2(impl).initialize({ _otherBridge: IStandardBridge(payable(address(0))), _celoTokenL1: address(0) });
+        ICeloGasBridgeL2(impl).initialize({
+            _otherBridge: IStandardBridge(payable(address(0))),
+            _celoTokenL1: address(0)
+        });
 
         ICeloGasBridgeL2(payable(CeloPredeploys.CELO_GAS_BRIDGE_L2)).initialize({
             _otherBridge: IStandardBridge(_celoGasBridgeL1Proxy),

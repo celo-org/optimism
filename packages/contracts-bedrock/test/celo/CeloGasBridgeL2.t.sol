@@ -66,7 +66,8 @@ abstract contract CeloGasBridgeL2_TestInit is Test {
 
         vm.prank(proxyAdmin);
         proxy.upgradeToAndCall(
-            address(implementation), abi.encodeCall(ICeloGasBridgeL2.initialize, (IStandardBridge(otherBridge), celoTokenL1))
+            address(implementation),
+            abi.encodeCall(ICeloGasBridgeL2.initialize, (IStandardBridge(otherBridge), celoTokenL1))
         );
     }
 

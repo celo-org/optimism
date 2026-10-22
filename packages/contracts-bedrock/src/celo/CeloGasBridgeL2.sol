@@ -88,10 +88,7 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
     /// @param _amount Amount of CELO to bridge.
     /// @param _minGasLimit Minimum gas limit for the L1 finalization transaction.
     /// @param _extraData Additional data attached to the withdrawal.
-    function withdraw(address _to, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData)
-        external
-        payable
-    {
+    function withdraw(address _to, uint256 _amount, uint32 _minGasLimit, bytes calldata _extraData) external payable {
         if (!IL1Block(Predeploys.L1_BLOCK_ATTRIBUTES).isCustomGasToken()) {
             revert CeloGasBridgeL2_NotCgtMode();
         }
@@ -117,7 +114,12 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
     /// @param _to Recipient on L2.
     /// @param _amount Amount of CELO to mint.
     /// @param _extraData Additional data attached to the deposit.
-    function finalizeDeposit(address _from, address _to, uint256 _amount, bytes calldata _extraData)
+    function finalizeDeposit(
+        address _from,
+        address _to,
+        uint256 _amount,
+        bytes calldata _extraData
+    )
         external
         onlyOtherBridge
     {
@@ -173,7 +175,14 @@ contract CeloGasBridgeL2 is StandardBridge, ISemver {
     /// @dev Disabled — inherited from StandardBridge.
     ///      Blocks inherited `finalizeBridgeERC20`. This bridge does not handle arbitrary ERC20s;
     ///      CELO finalization uses `finalizeDeposit`.
-    function _emitERC20BridgeFinalized(address, address, address, address, uint256, bytes memory)
+    function _emitERC20BridgeFinalized(
+        address,
+        address,
+        address,
+        address,
+        uint256,
+        bytes memory
+    )
         internal
         view
         override

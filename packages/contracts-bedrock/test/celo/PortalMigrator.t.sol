@@ -50,15 +50,16 @@ abstract contract PortalMigrator_TestInit is Test {
         mockBridge.setOptimismPortal(address(portalMigrator));
     }
 
-    function _deployPortalMigrator(IERC20 _celoTokenL1, uint256 _legacyPortalBalance)
+    function _deployPortalMigrator(
+        IERC20 _celoTokenL1,
+        uint256 _legacyPortalBalance
+    )
         internal
         returns (PortalMigrator portalMigrator_)
     {
         portalMigrator_ = new PortalMigrator(PROOF_MATURITY_DELAY_SECONDS, _celoTokenL1, bridge, _legacyPortalBalance);
         vm.store(
-            address(portalMigrator_),
-            Constants.PROXY_OWNER_ADDRESS,
-            bytes32(uint256(uint160(address(proxyAdmin))))
+            address(portalMigrator_), Constants.PROXY_OWNER_ADDRESS, bytes32(uint256(uint160(address(proxyAdmin))))
         );
     }
 

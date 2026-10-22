@@ -618,8 +618,7 @@ contract SystemConfig is ProxyAdminOwnedBase, OwnableUpgradeable, Reinitializabl
             : address(optimismPortal());
 
         // Check if either global or local pause is active.
-        return celoPaused() || superchainConfig.paused(address(0))
-            || superchainConfig.paused(identifier);
+        return celoPaused() || superchainConfig.paused(address(0)) || superchainConfig.paused(identifier);
     }
 
     /// @notice Returns the guardian address of the SuperchainConfig.

@@ -272,9 +272,7 @@ contract DeployEspresso is Script {
         address nitroVerifierAddr;
         {
             bytes memory nitroImplCode = abi.encodePacked(
-                vm.getCode(
-                    "lib/espresso-tee-contracts/out/EspressoNitroTEEVerifier.sol/EspressoNitroTEEVerifier.json"
-                ),
+                vm.getCode("lib/espresso-tee-contracts/out/EspressoNitroTEEVerifier.sol/EspressoNitroTEEVerifier.json"),
                 abi.encode(teeProxyAddr, _nitroEnclaveVerifier)
             );
             vm.broadcast(msg.sender);

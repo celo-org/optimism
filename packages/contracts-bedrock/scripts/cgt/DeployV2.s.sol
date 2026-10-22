@@ -20,6 +20,7 @@ import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { ICeloGasBridgeL1 } from "interfaces/celo/ICeloGasBridgeL1.sol";
 import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { ISystemConfig } from "interfaces/L1/ISystemConfig.sol";
+import { IOptimismPortal2 } from "interfaces/L1/IOptimismPortal2.sol";
 
 /// @title DeployV2Input
 /// @notice Inputs for the `DeployV2` pre-deployment script.
@@ -127,7 +128,39 @@ contract DeployV2Output is BaseDeployIO {
 /// @notice Pre-deployment script for the CGT v1 → v2 migration.
 /// @dev Deploys the CeloGasBridgeL1 proxy and PortalMigrator implementation.
 contract DeployV2 is Script {
-    function run(DeployV2Input _input, DeployV2Output _output) external {
+    /// @notice Env entry: deploys and logs the addresses MigrateV1V2 needs as inputs.
+    /// @notice LEGACY_PORTAL_BALANCE defaults to the live portal balance; pass it explicitly for a real upgrade.
+    function run() external {
+        address celoTokenL1 = vm.envAddress("CELO_TOKEN_L1");
+        address portalProxy = vm.envAddress("PORTAL_PROXY");
+
+        DeployV2Input input = new DeployV2Input();
+        input.set(input.celoTokenL1.selector, celoTokenL1);
+        input.set(input.l1CrossDomainMessenger.selector, vm.envAddress("L1_CROSS_DOMAIN_MESSENGER"));
+        input.set(input.systemConfig.selector, vm.envAddress("SYSTEM_CONFIG"));
+        input.set(input.l1BridgeProxyAdmin.selector, vm.envAddress("L1_BRIDGE_PROXY_ADMIN"));
+        input.set(input.otherBridge.selector, vm.envAddress("OTHER_BRIDGE"));
+        input.set(
+            input.proofMaturityDelaySeconds.selector,
+            vm.envOr("PROOF_MATURITY_DELAY_SECONDS", IOptimismPortal2(payable(portalProxy)).proofMaturityDelaySeconds())
+        );
+        input.set(
+            input.legacyPortalBalance.selector,
+            vm.envOr("LEGACY_PORTAL_BALANCE", IERC20(celoTokenL1).balanceOf(portalProxy))
+        );
+
+        DeployV2Output output = new DeployV2Output();
+        // Internal dispatch: an external this.run(...) would set msg.sender to the script and break broadcast.
+        run(input, output);
+
+        console.log("--- DeployV2 output (feed these into MigrateV1V2) ---");
+        console.log("BRIDGE_L1_PROXY     :", address(output.celoGasBridgeL1Proxy()));
+        console.log("PORTAL_MIGRATOR_IMPL:", address(output.portalMigratorImpl()));
+        console.log("STORAGE_SETTER      :", address(output.storageSetter()));
+        console.log("LEGACY_PORTAL_BALANCE:", input.legacyPortalBalance());
+    }
+
+    function run(DeployV2Input _input, DeployV2Output _output) public {
         // ---- Start broadcasting transactions ----
         vm.startBroadcast(msg.sender);
 
