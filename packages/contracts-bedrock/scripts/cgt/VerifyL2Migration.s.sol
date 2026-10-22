@@ -41,10 +41,7 @@ contract VerifyL2Migration is Script {
     function verify(VerifyL2MigrationInput _input) public view {
         console.log("--- VerifyL2Migration: L2 verification ---");
 
-        require(
-            CeloPredeploys.CELO_GAS_BRIDGE_L2.code.length > 0,
-            "VerifyL2Migration: CeloGasBridgeL2 code missing"
-        );
+        require(CeloPredeploys.CELO_GAS_BRIDGE_L2.code.length > 0, "VerifyL2Migration: CeloGasBridgeL2 code missing");
         console.log("OK  CeloGasBridgeL2 code present");
 
         require(

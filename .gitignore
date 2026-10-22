@@ -23,6 +23,7 @@ cache
 !op-deployer/pkg/deployer/artifacts
 
 packages/contracts-bedrock/deployments/anvil
+packages/contracts-bedrock/deployments/cgt-bundle.json
 
 # vim
 *.sw*
@@ -51,3 +52,7 @@ crytic-export
 
 # ignore local asdf config
 .tool-versions
+
+.omo/
+.omc/
+.opencode/

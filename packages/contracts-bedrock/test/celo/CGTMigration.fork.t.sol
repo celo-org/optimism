@@ -20,7 +20,7 @@ import { StorageSetter } from "src/universal/StorageSetter.sol";
 
 // Libraries
 import { Constants } from "src/libraries/Constants.sol";
-import { GameTypes } from "src/dispute/lib/Types.sol";
+import { GameType, GameTypes, OP_SUCCINCT_FAULT_DISPUTE_GAME_TYPE } from "src/dispute/lib/Types.sol";
 import { Claim } from "src/dispute/lib/LibUDT.sol";
 
 // Interfaces
@@ -46,7 +46,9 @@ import { Safe as GnosisSafe } from "safe-contracts/Safe.sol";
 import { CeloForkSafeExec } from "test/celo/CeloForkSafeExec.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 
-contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
+/// @title CGTMigrationFork_TestInit
+/// @notice Mainnet fork fixture for the CGT v1 -> v2 migration bundle.
+abstract contract CGTMigrationFork_TestInit is Test, CeloForkSafeExec {
     address internal constant SYSTEM_CONFIG_PROXY = 0x89E31965D844a309231B1f17759Ccaf1b7c09861;
     address internal constant PROXY_ADMIN = 0x783A434532Ee94667979213af1711505E8bFE374;
     address internal constant PARENT_SAFE = 0x4092A77bAF58fef0309452cEaCb09221e556E112;
@@ -87,7 +89,7 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
     bytes32 internal cannonPrestate;
     bytes32 internal cannonKonaPrestate;
 
-    function setUp() public {
+    function setUp() public virtual {
         string memory rpcUrl = vm.envOr("CGT_FORK_RPC_URL", string(""));
         if (bytes(rpcUrl).length == 0) {
             console.log("CGTMigration fork test skipped: CGT_FORK_RPC_URL unset");
@@ -122,191 +124,23 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
             new PortalMigrator(portal.proofMaturityDelaySeconds(), celoTokenL1, address(bridge), legacyPortalBalance);
 
         migrator = new MigrateV1V2();
-        input = new MigrateV1V2Input();
-        input.set(input.portalProxy.selector, PORTAL_PROXY);
-        input.set(input.systemConfig.selector, address(systemConfig));
-        input.set(input.proxyAdmin.selector, address(proxyAdmin));
-        input.set(input.opcm.selector, address(opcm));
-        input.set(input.safe.selector, PARENT_SAFE);
-        input.set(input.portalMigratorImpl.selector, address(portalMigrator));
-        input.set(input.originalPortalImpl.selector, ORIGINAL_PORTAL_IMPL);
-        input.set(input.bridgeL1Proxy.selector, address(bridge));
-        input.set(input.storageSetter.selector, address(new StorageSetter()));
-        input.set(input.externalSuperchainConfig.selector, EXTERNAL_SUPERCHAIN_CONFIG);
-        input.set(input.celoTokenL1.selector, address(celoTokenL1));
-        input.set(input.legacyPortalBalance.selector, legacyPortalBalance);
-        input.set(input.cannonPrestate.selector, cannonPrestate);
-        input.set(input.cannonKonaPrestate.selector, cannonKonaPrestate);
-    }
-
-    /// @notice Drives the full 4-tx migration bundle through the real Safe and asserts the end-to-end
-    ///         post-state: drain, escrow seed, OPCM v6 upgrade, CGT v2 flag, then a live deposit.
-    function testFork_mainnetBundle_executesEndToEnd() external {
-        migrator.preflight(input);
-
-        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotActivated.selector);
-        bridge.deposit(makeAddr("preMigrationRecipient"), 1, 1, hex"");
-
-        uint64 minBaseFeeBeforeTx2 = systemConfig.minBaseFee();
-        string memory versionBeforeTx2 = systemConfig.version();
-        MigrateV1V2.Task[4] memory tasks = migrator.buildBundle(input);
-
-        assertEq(tasks[0].target, MULTICALL3);
-        assertEq(tasks[1].target, MULTICALL3);
-        assertEq(tasks[2].target, address(opcm));
-        assertEq(tasks[3].target, MULTICALL3);
-
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_);
-
-        assertEq(celoTokenL1.balanceOf(PORTAL_PROXY), 0);
-        assertEq(celoTokenL1.balanceOf(address(bridge)), legacyPortalBalance);
-        assertEq(bridge.deposits(address(celoTokenL1), address(0)), legacyPortalBalance);
-        assertTrue(bridge.escrowSeeded());
-        assertEq(vm.load(PORTAL_PROXY, MIGRATED_SLOT), bytes32(uint256(1)));
-        assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
-
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[1].target, tasks[1].calldata_);
-
-        assertEq(address(systemConfig.superchainConfig()), EXTERNAL_SUPERCHAIN_CONFIG);
-        assertEq(systemConfig.minBaseFee(), minBaseFeeBeforeTx2);
-        assertEq(_hash(systemConfig.version()), _hash(versionBeforeTx2));
-
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[2].target, tasks[2].calldata_);
-
-        assertTrue(_hash(systemConfig.version()) != _hash(versionBeforeTx2));
-        assertTrue(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)) != ORIGINAL_PORTAL_IMPL);
-
-        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotCgtMode.selector);
-        bridge.deposit(makeAddr("betweenRecipient"), 1, 1, hex"");
-
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[3].target, tasks[3].calldata_);
-
-        assertTrue(systemConfig.isCustomGasToken());
-
-        migrator.verify(input);
-
-        uint256 trackedBefore = bridge.deposits(address(celoTokenL1), address(0));
-        uint256 bridgeBalanceBefore = celoTokenL1.balanceOf(address(bridge));
-        uint256 nonceBefore = messenger.messageNonce();
-        address recipient = makeAddr("postMigrationRecipient");
-        bytes memory extraData = hex"1234";
-
-        deal(address(celoTokenL1), address(this), DEPOSIT_AMOUNT, true);
-        celoTokenL1.approve(address(bridge), DEPOSIT_AMOUNT);
-
-        vm.recordLogs();
-        bridge.deposit(recipient, DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, extraData);
-        Vm.Log[] memory logs = vm.getRecordedLogs();
-
-        assertEq(bridge.deposits(address(celoTokenL1), address(0)), trackedBefore + DEPOSIT_AMOUNT);
-        assertEq(celoTokenL1.balanceOf(address(bridge)), bridgeBalanceBefore + DEPOSIT_AMOUNT);
-        assertEq(messenger.messageNonce(), nonceBefore + 1);
-        assertTrue(_sawSentMessage(logs, address(messenger), address(bridge.otherBridge())));
-    }
-
-    /// @notice Asserts each of the 4 Safe txs stays under the EIP-7825 (Fusaka) 16M per-tx gas cap on live state.
-    function testFork_bundleGasUnderPerTxCap() external {
-        MigrateV1V2.Task[4] memory tasks = migrator.buildBundle(input);
-        for (uint256 i; i < tasks.length; i++) {
-            uint256 before = gasleft();
-            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
-            assertLt(before - gasleft(), PER_TX_GAS_CAP);
-        }
-    }
-
-    /// @notice After a full migration, re-running Tx1 fails and preflight rejects the already-migrated chain.
-    function testFork_migrationIsNotReplayable() external {
-        MigrateV1V2.Task[4] memory tasks = migrator.buildBundle(input);
-        for (uint256 i; i < tasks.length; i++) {
-            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
-        }
-
-        // Re-running Tx1 fails: migrate() reverts AlreadyMigrated, so the Safe tx does not succeed.
-        assertFalse(_execSafeDelegateCallAllowFail(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_));
-
-        // Preflight now rejects the migrated chain (CGT v2 already active).
-        vm.expectRevert();
-        migrator.preflight(input);
-    }
-
-    /// @notice Preflight reverts when the live portal impl is not the expected original.
-    function testFork_preflightRejectsWrongPortalImpl() external {
-        // Point the portal proxy at a different impl via its EIP-1967 slot (bypasses ProxyAdmin auth).
-        vm.store(PORTAL_PROXY, EIP1967_IMPL_SLOT, bytes32(uint256(uint160(input.portalMigratorImpl()))));
-
-        vm.expectRevert(bytes("MigrateV1V2: current portal impl != originalPortalImpl"));
-        migrator.preflight(input);
-    }
-
-    /// @notice Post-migration owner pause/unpause and guardian pause gate consumers.
-    function testFork_celoOwnerPause_endToEnd() external {
-        _runFullMigration();
-
-        ISuperchainConfig externalSc = ISuperchainConfig(EXTERNAL_SUPERCHAIN_CONFIG);
-        IOptimismPortal v6Portal = IOptimismPortal(payable(PORTAL_PROXY));
-
-        // Post-migration baseline: nothing paused via either authority.
-        assertFalse(systemConfig.celoPaused());
-        assertFalse(systemConfig.paused());
-        assertFalse(v6Portal.paused());
-
-        // Non-owner cannot pause.
-        vm.expectRevert("Ownable: caller is not the owner");
-        vm.prank(makeAddr("stranger"));
-        systemConfig.pause();
-
-        // Owner pauses: celoPaused + paused.
-        assertEq(systemConfig.owner(), SYSTEM_CONFIG_OWNER);
-        vm.prank(SYSTEM_CONFIG_OWNER);
-        systemConfig.pause();
-        assertTrue(systemConfig.celoPaused());
-        assertTrue(systemConfig.paused());
-        assertTrue(v6Portal.paused());
-
-        // Bridge deposit is gated by the owner-pause.
-        deal(address(celoTokenL1), address(this), DEPOSIT_AMOUNT, true);
-        celoTokenL1.approve(address(bridge), DEPOSIT_AMOUNT);
-        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_Paused.selector);
-        bridge.deposit(makeAddr("recipient"), DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, hex"");
-
-        // Owner unpauses: everything clears and deposits work again.
-        vm.prank(SYSTEM_CONFIG_OWNER);
-        systemConfig.unpause();
-        assertFalse(systemConfig.celoPaused());
-        assertFalse(systemConfig.paused());
-        assertFalse(v6Portal.paused());
-        bridge.deposit(makeAddr("recipient"), DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, hex"");
-
-        // The external guardian pause is independent of the owner pause.
-        assertFalse(systemConfig.celoPaused());
-        vm.prank(externalSc.guardian());
-        externalSc.pause(address(0));
-        assertFalse(systemConfig.celoPaused());
-        assertTrue(systemConfig.paused());
-        assertTrue(v6Portal.paused());
-    }
-
-    /// @notice A failing sub-call in Tx1 rolls the whole bundle back: no drain, portal impl and flags untouched.
-    function testFork_tx1AtomicRollbackOnFailure() external {
-        // Pre-set the migration flag so migrate() reverts AlreadyMigrated mid-bundle.
-        vm.store(PORTAL_PROXY, MIGRATED_SLOT, bytes32(uint256(1)));
-
-        MigrateV1V2.Task[4] memory tasks = migrator.buildBundle(input);
-        assertFalse(_execSafeDelegateCallAllowFail(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_));
-
-        // Whole tx reverted: portal not drained, impl unchanged, escrow never seeded.
-        assertEq(celoTokenL1.balanceOf(PORTAL_PROXY), legacyPortalBalance);
-        assertEq(celoTokenL1.balanceOf(address(bridge)), 0);
-        assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
-        assertFalse(bridge.escrowSeeded());
-    }
-
-    /// @notice Executes the full 4-tx migration bundle through the real Safe.
-    function _runFullMigration() internal {
-        MigrateV1V2.Task[4] memory tasks = migrator.buildBundle(input);
-        for (uint256 i; i < tasks.length; i++) {
-            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
-        }
+        input = MigrateV1V2Input({
+            portalProxy: payable(PORTAL_PROXY),
+            systemConfig: address(systemConfig),
+            proxyAdmin: address(proxyAdmin),
+            opcm: address(opcm),
+            safe: PARENT_SAFE,
+            portalMigratorImpl: address(portalMigrator),
+            originalPortalImpl: ORIGINAL_PORTAL_IMPL,
+            bridgeL1Proxy: address(bridge),
+            storageSetter: address(new StorageSetter()),
+            externalSuperchainConfig: EXTERNAL_SUPERCHAIN_CONFIG,
+            succinctGameImpl: makeAddr("redeployedSuccinctGame"),
+            celoTokenL1: celoTokenL1,
+            legacyPortalBalance: legacyPortalBalance,
+            cannonPrestate: cannonPrestate,
+            cannonKonaPrestate: cannonKonaPrestate
+        });
     }
 
     function _deployBridge() internal returns (ICeloGasBridgeL1 bridge_) {
@@ -372,7 +206,8 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
     function _resolvePrestates() internal view returns (bytes32 cannon_, bytes32 cannonKona_) {
         IDisputeGameFactory disputeGameFactory = IDisputeGameFactory(systemConfig.disputeGameFactory());
 
-        cannon_ = Claim.unwrap(IFaultDisputeGame(address(disputeGameFactory.gameImpls(GameTypes.CANNON))).absolutePrestate());
+        cannon_ =
+            Claim.unwrap(IFaultDisputeGame(address(disputeGameFactory.gameImpls(GameTypes.CANNON))).absolutePrestate());
 
         // No live Kona game on this chain yet: reuse the live cannon prestate (read on-chain, not zero).
         address cannonKonaGame = address(disputeGameFactory.gameImpls(GameTypes.CANNON_KONA));
@@ -388,6 +223,265 @@ contract CGTMigrationFork_Test is Test, CeloForkSafeExec {
             }
         }
         revert("missing safe owner");
+    }
+}
+
+/// @title CGTMigrationFork_Test
+contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
+    /// @notice Drives the whole migration bundle through the real Safe and asserts the end-to-end
+    ///         post-state: drain, escrow seed, OPCM v6 upgrade, pause, CGT v2 flag, game type 42
+    ///         swap, then a live deposit once unpaused.
+    function testFork_mainnetBundle_executesEndToEnd() external {
+        migrator.preflight(input);
+
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotActivated.selector);
+        bridge.deposit(makeAddr("preMigrationRecipient"), 1, 1, hex"");
+
+        uint64 minBaseFeeBeforeTx2 = systemConfig.minBaseFee();
+        string memory versionBeforeTx2 = systemConfig.version();
+        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
+
+        // Mainnet has a legacy CANNON impl, so the bundle carries the extra clear task at index 2
+        // and everything after it shifts.
+        IDisputeGameFactory dgf = IDisputeGameFactory(systemConfig.disputeGameFactory());
+        bool hasClear = address(dgf.gameImpls(GameTypes.CANNON)) != address(0);
+        uint256 iOpcm = hasClear ? 3 : 2;
+        assertEq(tasks[0].target, MULTICALL3);
+        assertEq(tasks[1].target, MULTICALL3);
+        assertEq(tasks[iOpcm].target, address(opcm));
+        assertEq(tasks[iOpcm + 1].target, MULTICALL3);
+        assertEq(tasks[iOpcm + 2].target, MULTICALL3);
+
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_);
+
+        assertEq(celoTokenL1.balanceOf(PORTAL_PROXY), 0);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), legacyPortalBalance);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), legacyPortalBalance);
+        assertTrue(bridge.escrowSeeded());
+        assertEq(vm.load(PORTAL_PROXY, MIGRATED_SLOT), bytes32(uint256(1)));
+        assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
+
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[1].target, tasks[1].calldata_);
+
+        assertEq(address(systemConfig.superchainConfig()), EXTERNAL_SUPERCHAIN_CONFIG);
+        assertEq(systemConfig.minBaseFee(), minBaseFeeBeforeTx2);
+        assertEq(_hash(systemConfig.version()), _hash(versionBeforeTx2));
+
+        // Retiring the legacy CANNON type must precede OPCM, so OPCM skips it instead of
+        // installing a fresh v6 impl (and registering CANNON_KONA) that we would zero again.
+        if (hasClear) {
+            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[2].target, tasks[2].calldata_);
+            assertEq(address(dgf.gameImpls(GameTypes.CANNON)), address(0));
+        }
+
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm].target, tasks[iOpcm].calldata_);
+
+        assertTrue(_hash(systemConfig.version()) != _hash(versionBeforeTx2));
+        assertTrue(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)) != ORIGINAL_PORTAL_IMPL);
+        // OPCM left CANNON cleared and never registered CANNON_KONA.
+        assertEq(address(dgf.gameImpls(GameTypes.CANNON)), address(0));
+        assertEq(address(dgf.gameImpls(GameTypes.CANNON_KONA)), address(0));
+        // PERMISSIONED_CANNON is still required by OPCM, so it must remain set.
+        assertTrue(address(dgf.gameImpls(GameTypes.PERMISSIONED_CANNON)) != address(0));
+
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotCgtMode.selector);
+        bridge.deposit(makeAddr("betweenRecipient"), 1, 1, hex"");
+
+        // OPCM installed the impl that reads celoPaused, but nothing has written it yet, so the
+        // pause the guardian applied to the CSC is currently orphaned.
+        assertFalse(systemConfig.paused());
+
+        // The pause task carries that state onto SystemConfig's own slot, where the superchainConfig
+        // repoint cannot reach it.
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm + 1].target, tasks[iOpcm + 1].calldata_);
+
+        assertTrue(systemConfig.paused());
+        assertTrue(systemConfig.celoPaused());
+        assertTrue(portal.paused());
+        assertFalse(systemConfig.isCustomGasToken());
+
+        // CGT then flips on an already-frozen system. setFeature only rejects a paused system for
+        // ETH_LOCKBOX, so CUSTOM_GAS_TOKEN goes through.
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm + 2].target, tasks[iOpcm + 2].calldata_);
+
+        assertTrue(systemConfig.isCustomGasToken());
+        assertTrue(systemConfig.paused());
+
+        // Finally the game type 42 swap, which is last wherever the chain runs that type.
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm + 3].target, tasks[iOpcm + 3].calldata_);
+        assertEq(address(dgf.gameImpls(GameType.wrap(OP_SUCCINCT_FAULT_DISPUTE_GAME_TYPE))), input.succinctGameImpl);
+
+        migrator.verify(input);
+
+        // Paused means no CELO can enter the bridge, even with CGT mode live.
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_Paused.selector);
+        bridge.deposit(makeAddr("pausedRecipient"), 1, 1, hex"");
+
+        // L2 activation happens here in the real ceremony; then the owner unpauses.
+        vm.prank(systemConfig.owner());
+        systemConfig.unpause();
+        assertFalse(systemConfig.paused());
+
+        uint256 trackedBefore = bridge.deposits(address(celoTokenL1), address(0));
+        uint256 bridgeBalanceBefore = celoTokenL1.balanceOf(address(bridge));
+        uint256 nonceBefore = messenger.messageNonce();
+        address recipient = makeAddr("postMigrationRecipient");
+        bytes memory extraData = hex"1234";
+
+        deal(address(celoTokenL1), address(this), DEPOSIT_AMOUNT, true);
+        celoTokenL1.approve(address(bridge), DEPOSIT_AMOUNT);
+
+        vm.recordLogs();
+        bridge.deposit(recipient, DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, extraData);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), trackedBefore + DEPOSIT_AMOUNT);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), bridgeBalanceBefore + DEPOSIT_AMOUNT);
+        assertEq(messenger.messageNonce(), nonceBefore + 1);
+        assertTrue(_sawSentMessage(logs, address(messenger), address(bridge.otherBridge())));
+    }
+
+    /// @notice Asserts every task in the bundle stays under the EIP-7825 (Fusaka) 16M per-tx gas cap.
+    function testFork_bundleGasUnderPerTxCap() external {
+        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
+        for (uint256 i; i < tasks.length; i++) {
+            uint256 before = gasleft();
+            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
+            assertLt(before - gasleft(), PER_TX_GAS_CAP);
+        }
+    }
+
+    /// @notice After a full migration, re-running the drain fails and preflight rejects the chain.
+    function testFork_migrationIsNotReplayable() external {
+        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
+        for (uint256 i; i < tasks.length; i++) {
+            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
+        }
+
+        // Re-running the drain fails: migrate() reverts AlreadyMigrated, so the Safe tx does not succeed.
+        assertFalse(_execSafeDelegateCallAllowFail(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_));
+
+        // Preflight now rejects the migrated chain (CGT v2 already active).
+        vm.expectRevert();
+        migrator.preflight(input);
+    }
+
+    /// @notice Preflight reverts when the live portal impl is not the expected original.
+    function testFork_preflightRejectsWrongPortalImpl() external {
+        // Point the portal proxy at a different impl via its EIP-1967 slot (bypasses ProxyAdmin auth).
+        vm.store(PORTAL_PROXY, EIP1967_IMPL_SLOT, bytes32(uint256(uint160(input.portalMigratorImpl))));
+
+        vm.expectRevert(bytes("MigrateV1V2: current portal impl != originalPortalImpl"));
+        migrator.preflight(input);
+    }
+
+    /// @notice Post-migration owner pause/unpause and guardian pause gate consumers.
+    function testFork_celoOwnerPause_endToEnd() external {
+        _runFullMigration();
+
+        ISuperchainConfig externalSc = ISuperchainConfig(EXTERNAL_SUPERCHAIN_CONFIG);
+        IOptimismPortal v6Portal = IOptimismPortal(payable(PORTAL_PROXY));
+
+        // The bundle ends paused; unpause to reach this test's baseline.
+        vm.prank(SYSTEM_CONFIG_OWNER);
+        systemConfig.unpause();
+
+        // Post-migration baseline: nothing paused via either authority.
+        assertFalse(systemConfig.celoPaused());
+        assertFalse(systemConfig.paused());
+        assertFalse(v6Portal.paused());
+
+        // Non-owner cannot pause.
+        vm.expectRevert("Ownable: caller is not the owner");
+        vm.prank(makeAddr("stranger"));
+        systemConfig.pause();
+
+        // Owner pauses: celoPaused + paused.
+        assertEq(systemConfig.owner(), SYSTEM_CONFIG_OWNER);
+        vm.prank(SYSTEM_CONFIG_OWNER);
+        systemConfig.pause();
+        assertTrue(systemConfig.celoPaused());
+        assertTrue(systemConfig.paused());
+        assertTrue(v6Portal.paused());
+
+        // Bridge deposit is gated by the owner-pause.
+        deal(address(celoTokenL1), address(this), DEPOSIT_AMOUNT, true);
+        celoTokenL1.approve(address(bridge), DEPOSIT_AMOUNT);
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_Paused.selector);
+        bridge.deposit(makeAddr("recipient"), DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, hex"");
+
+        // Owner unpauses: everything clears and deposits work again.
+        vm.prank(SYSTEM_CONFIG_OWNER);
+        systemConfig.unpause();
+        assertFalse(systemConfig.celoPaused());
+        assertFalse(systemConfig.paused());
+        assertFalse(v6Portal.paused());
+        bridge.deposit(makeAddr("recipient"), DEPOSIT_AMOUNT, DEPOSIT_GAS_LIMIT, hex"");
+
+        // The external guardian pause is independent of the owner pause.
+        assertFalse(systemConfig.celoPaused());
+        vm.prank(externalSc.guardian());
+        externalSc.pause(address(0));
+        assertFalse(systemConfig.celoPaused());
+        assertTrue(systemConfig.paused());
+        assertTrue(v6Portal.paused());
+    }
+
+    /// @notice A failing sub-call rolls that whole task back: no drain, portal impl and flags untouched.
+    function testFork_drainAtomicRollbackOnFailure() external {
+        // Pre-set the migration flag so migrate() reverts AlreadyMigrated mid-task.
+        vm.store(PORTAL_PROXY, MIGRATED_SLOT, bytes32(uint256(1)));
+
+        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
+        assertFalse(_execSafeDelegateCallAllowFail(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_));
+
+        // Whole tx reverted: portal not drained, impl unchanged, escrow never seeded.
+        assertEq(celoTokenL1.balanceOf(PORTAL_PROXY), legacyPortalBalance);
+        assertEq(celoTokenL1.balanceOf(address(bridge)), 0);
+        assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
+        assertFalse(bridge.escrowSeeded());
+    }
+
+    /// @notice On a chain without game type 42 (Havoc), the swap task is absent and supplying an
+    ///         impl is rejected, so a mainnet address cannot be wired into a Havoc bundle.
+    function testFork_noSuccinctGameType_omitsSwap() external {
+        IDisputeGameFactory dgf = IDisputeGameFactory(systemConfig.disputeGameFactory());
+        uint256 withSwap = migrator.buildBundle(input).length;
+
+        vm.mockCall(
+            address(dgf),
+            abi.encodeCall(IDisputeGameFactory.gameImpls, (GameType.wrap(OP_SUCCINCT_FAULT_DISPUTE_GAME_TYPE))),
+            abi.encode(address(0))
+        );
+
+        vm.expectRevert(bytes("MigrateV1V2: succinctGameImpl set, but chain has no game type 42"));
+        migrator.buildBundle(input);
+
+        input.succinctGameImpl = address(0);
+        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
+        assertEq(tasks.length, withSwap - 1, "swap task dropped");
+
+        for (uint256 i; i < tasks.length; i++) {
+            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
+        }
+        assertTrue(systemConfig.isCustomGasToken());
+        assertTrue(systemConfig.paused());
+        migrator.verify(input);
+    }
+
+    /// @notice A chain that does run game type 42 must be given a replacement impl.
+    function testFork_succinctGameTypePresentWithoutImpl_reverts() external {
+        input.succinctGameImpl = address(0);
+        vm.expectRevert(bytes("MigrateV1V2: succinctGameImpl required, chain runs game type 42"));
+        migrator.buildBundle(input);
+    }
+
+    /// @notice Executes every task in the bundle through the real Safe; ends paused.
+    function _runFullMigration() internal {
+        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
+        for (uint256 i; i < tasks.length; i++) {
+            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
+        }
     }
 
     function _sawSentMessage(Vm.Log[] memory _logs, address _messenger, address _target) internal pure returns (bool) {

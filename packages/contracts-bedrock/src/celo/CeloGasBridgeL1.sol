@@ -239,7 +239,14 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @dev Disabled — inherited from StandardBridge.
     ///      Blocks inherited `finalizeBridgeERC20`. CELO finalization uses `finalizeWithdrawal`,
     ///      which emits `ERC20BridgeFinalized` directly.
-    function _emitERC20BridgeFinalized(address, address, address, address, uint256, bytes memory)
+    function _emitERC20BridgeFinalized(
+        address,
+        address,
+        address,
+        address,
+        uint256,
+        bytes memory
+    )
         internal
         view
         override
