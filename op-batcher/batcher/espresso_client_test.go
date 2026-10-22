@@ -131,16 +131,14 @@ func testEspressoWorkerContexts(t *testing.T, start func(*testing.T, *espressoTr
 func TestEspressoSubmitWorkerContexts(t *testing.T) {
 	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.SpawnWorkers(1, 0)
-		worker := receiveTestValue(t, s.submitWorkerQueue)
-		worker <- espressoTransactionJobAttempt{job: espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}, resp: make(chan espressoSubmitTransactionJobResponse, 1)}
+		s.submitJobQueue <- espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
 	})
 }
 
 func TestEspressoVerifyWorkerContexts(t *testing.T) {
 	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.SpawnWorkers(0, 1)
-		worker := receiveTestValue(t, s.verifyReceiptWorkerQueue)
-		worker <- espressoVerifyReceiptJobAttempt{job: espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}, resp: make(chan espressoVerifyReceiptJobResponse, 1)}
+		s.verifyReceiptJobQueue <- espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}
 	})
 }
 
@@ -216,13 +214,9 @@ func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 		WithEspressoSubmissionClient(setup.Espresso.Client), WithEspressoNetworkTimeout(cfg.TxMgrConfig.NetworkTimeout))
 	submitter.SpawnWorkers(1, 0)
 	t.Cleanup(func() { cancel(); submitter.wg.Wait() })
-	responses := make(chan espressoSubmitTransactionJobResponse, 1)
-	job := espressoTransactionJobAttempt{
-		job:  espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}},
-		resp: responses,
-	}
-	worker := receiveTestValue(t, submitter.submitWorkerQueue)
-	worker <- job
+	responses := submitter.submitRespQueue
+	job := espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
+	submitter.submitJobQueue <- job
 	receiveTestValue(t, requestReceived) // Proves initialization and propagation reached the real SDK/server.
 	response := receiveTestValue(t, responses)
 	require.ErrorIs(t, response.err, sdkclient.ErrEphemeral)
@@ -231,9 +225,7 @@ func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 
 	// A timed-out request must not prevent the same worker from processing another job.
 	close(serverRecovered)
-	nextWorker := receiveTestValue(t, submitter.submitWorkerQueue)
-	require.Equal(t, worker, nextWorker)
-	nextWorker <- job
+	submitter.submitJobQueue <- job
 	response = receiveTestValue(t, responses)
 	require.NoError(t, response.err)
 	require.Equal(t, expectedHash, response.hash)
