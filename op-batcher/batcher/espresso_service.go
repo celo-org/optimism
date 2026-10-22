@@ -63,7 +63,10 @@ type EspressoBatcherConfig struct {
 func (bs *BatcherService) EspressoStreamer() *espressoStreamers.Streamer {
 	bs.driver.mutex.Lock()
 	defer bs.driver.mutex.Unlock()
-	streamer, _ := bs.driver.espressoStreamer.(*espressoStreamers.Streamer)
+	if bs.driver.espressoSession == nil {
+		return nil
+	}
+	streamer, _ := bs.driver.espressoSession.streamer.(*espressoStreamers.Streamer)
 	return streamer
 }
 
