@@ -155,13 +155,11 @@ type BatchSubmitter struct {
 	// final receiptsCh send.
 	authGroup sync.WaitGroup
 
-	espressoSubmitter *espressoTransactionSubmitter
-	espressoStreamer  espressoStreamer
+	// espressoSession is the current run's Espresso session; nil when not running.
+	espressoSession *espressoSession
 
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
-
-	teeVerifierAddress common.Address
 
 	// batchAuth is the read-only binding to the BatchAuthenticator contract,
 	// shared by registerBatcher, resolveTEEVerifierAddress and the
@@ -243,14 +241,13 @@ func (l *BatchSubmitter) StartBatchSubmitting() error {
 	if l.Config.Espresso.Enabled {
 		// Constructed here rather than in NewBatchSubmitter: it performs an L2 lookup, so
 		// it has to run after waitForL2Genesis and needs a context to do it with.
-		if err := l.setupEspressoStreamer(l.shutdownCtx); err != nil {
-			l.rollbackFailedStart()
-			return fmt.Errorf("could not set up the Espresso streamer: %w", err)
-		}
-		if err := l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated); err != nil {
+		session, err := l.newEspressoSession()
+		if err != nil {
 			l.rollbackFailedStart()
 			return err
 		}
+		l.espressoSession = session
+		l.startEspressoLoops(receiptsCh, publishSignal, unsafeBytesUpdated)
 	} else {
 		l.wg.Add(3)
 		go l.receiptsLoop(l.wg, receiptsCh)                                           // ranges over receiptsCh channel
@@ -333,7 +330,7 @@ func (l *BatchSubmitter) StopBatchSubmitting(ctx context.Context) error {
 	l.wg.Wait()
 	l.cancelKillCtx()
 
-	l.stopEspressoStreamer()
+	l.stopEspressoSession()
 
 	l.Log.Info("Batch Submitter stopped")
 	return nil
@@ -920,7 +917,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		defer l.channelMgrMutex.Unlock()
 		l.channelMgr.Clear(l1SafeOrigin)
 		if reanchorTarget != nil {
-			l.espressoStreamer.SetBatchPosition(*reanchorTarget)
+			l.espressoSession.streamer.SetBatchPosition(*reanchorTarget)
 		}
 		return true
 	}

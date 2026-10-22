@@ -8,15 +8,14 @@ import (
 	"time"
 
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
+	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
 
@@ -78,8 +77,9 @@ func TestBatchSubmitterEspressoStopStart(t *testing.T) {
 	var previous espressoStreamer
 	for range 2 {
 		require.NoError(t, batcher.StartBatchSubmitting())
-		require.Equal(t, batcher.Config.NetworkTimeout, batcher.espressoSubmitter.networkTimeout)
-		current := batcher.espressoStreamer
+		require.NotNil(t, batcher.espressoSession)
+		require.Equal(t, batcher.Config.NetworkTimeout, batcher.espressoSession.submitter.networkTimeout)
+		current := batcher.espressoSession.streamer
 		require.NotNil(t, current)
 		if previous != nil {
 			require.NotSame(t, previous, current, "restart must construct a fresh streamer")
@@ -91,32 +91,30 @@ func TestBatchSubmitterEspressoStopStart(t *testing.T) {
 			current.Stop()
 		})
 		recorder := &stopRecordingStreamer{espressoStreamer: current}
-		batcher.espressoStreamer = recorder
+		batcher.espressoSession.streamer = recorder
 		require.True(t, batcher.running)
 
 		require.NoError(t, batcher.StopBatchSubmitting(t.Context()))
 		require.Equal(t, 1, recorder.stopCalls, "driver stop must call streamer Stop")
-		require.Nil(t, batcher.espressoStreamer, "driver stop must clear the streamer reference")
+		require.Nil(t, batcher.espressoSession, "driver stop must drop the session")
 		require.False(t, batcher.running)
 		previous = current
 	}
 }
 
-func TestBatchSubmitterFailedStartStopsAndClearsEspressoStreamer(t *testing.T) {
-	batcher := &BatchSubmitter{DriverSetup: DriverSetup{Log: testlog.Logger(t, log.LevelDebug)}}
-	streamer := &stopRecordingStreamer{}
-	batcher.espressoStreamer = streamer
-	batcher.shutdownCtx, batcher.cancelShutdownCtx = context.WithCancel(t.Context())
-	batcher.killCtx, batcher.cancelKillCtx = context.WithCancel(t.Context())
-	batcher.running = true
+// Stopping drops the whole session (streamer, submitter and verifier address),
+// so no per-start Espresso state survives into the next start. A zero-value
+// Streamer is Stop()-safe, which makes this directly testable.
+func TestStopBatchSubmittingDropsEspressoSession(t *testing.T) {
+	l := newAuthSubmitter(t)
+	l.shutdownCtx, l.cancelShutdownCtx = context.WithCancel(context.Background())
+	l.killCtx, l.cancelKillCtx = context.WithCancel(context.Background())
+	l.wg = &sync.WaitGroup{}
+	l.running = true
+	l.espressoSession = &espressoSession{streamer: &espressoStreamers.Streamer{}}
 
-	batcher.mutex.Lock()
-	batcher.rollbackFailedStart()
-	batcher.mutex.Unlock()
-
-	require.Equal(t, 1, streamer.stopCalls)
-	require.Nil(t, batcher.espressoStreamer)
-	require.False(t, batcher.running)
+	require.NoError(t, l.StopBatchSubmitting(context.Background()))
+	require.Nil(t, l.espressoSession)
 }
 
 // stalledPeekStreamer waits for the caller to cancel or time out each Peek.
@@ -144,7 +142,7 @@ func TestEspressoLoadingLoopBoundsPeekAndRetries(t *testing.T) {
 		UnsafeL2:    eth.L2BlockRef{Number: 1},
 	}, nil)
 	streamer := &stalledPeekStreamer{calls: make(chan context.Context, 4)}
-	batcher.espressoStreamer = streamer
+	batcher.espressoSession = &espressoSession{streamer: streamer}
 	ctx, cancel := context.WithCancel(t.Context())
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -207,7 +205,13 @@ func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	started := time.Now()
-	go func() { defer wg.Done(); results <- batcher.setupEspressoStreamer(ctx) }()
+	var streamer *espressoStreamers.Streamer
+	go func() {
+		defer wg.Done()
+		var err error
+		streamer, err = batcher.setupEspressoStreamer(ctx)
+		results <- err
+	}()
 	t.Cleanup(func() { cancel(); wg.Wait() })
 	callCtx := receiveTestValue(t, calls)
 	deadline, ok := callCtx.Deadline()
@@ -216,5 +220,6 @@ func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
 	require.LessOrEqual(t, time.Until(deadline), batcher.Config.NetworkTimeout, "deadline must not exceed the configured timeout")
 	require.ErrorIs(t, receiveTestValue(t, results), context.DeadlineExceeded)
 	require.NoError(t, ctx.Err(), "the lookup timeout must not cancel its caller")
-	require.Nil(t, batcher.espressoStreamer, "a failed lookup must not install a streamer")
+	require.Nil(t, streamer, "a failed lookup must not return a streamer")
+	require.Nil(t, batcher.espressoSession, "a failed lookup must not publish a session")
 }

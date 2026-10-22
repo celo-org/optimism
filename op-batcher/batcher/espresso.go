@@ -19,6 +19,7 @@ import (
 	tagged_base64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -848,7 +849,7 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 	hash, _ := tagged_base64.New("TX", commitment[:])
 	l.Log.Info("Created Espresso transaction from batch", "hash", hash, "batchNr", bigs.Uint64Strict(espressoBatch.BatchHeader.Number))
 
-	if err := l.espressoSubmitter.SubmitTransaction(transaction); err != nil {
+	if err := l.espressoSession.submitter.SubmitTransaction(transaction); err != nil {
 		return fmt.Errorf("failed to submit job to espresso: %w", err)
 	}
 
@@ -874,7 +875,7 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 		// LocalSafeL2, matching the base computeSyncActions derived clearState from:
 		// the channel manager and the streamer must not be reset onto different heads.
 		// Always at or past the caffeination point: startup gates on that.
-		l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+		l.espressoSession.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 	} else {
 		l.channelMgr.PruneSafeBlocks(syncActions.blocksToPrune)
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
@@ -942,7 +943,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				}
 
 				peekCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
-				batch := l.espressoStreamer.Peek(peekCtx)
+				batch := l.espressoSession.streamer.Peek(peekCtx)
 				cancel()
 				if batch == nil {
 					break
@@ -959,7 +960,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 				if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
 					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
 						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
-					l.espressoStreamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
+					l.espressoSession.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
 					break
 				}
 
@@ -992,7 +993,7 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					break
 				}
 
-				l.espressoStreamer.AdvancePosition()
+				l.espressoSession.streamer.AdvancePosition()
 				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
 
 				// During a large drain, signal periodically so throttling can engage
@@ -1258,17 +1259,16 @@ func (l *BatchSubmitter) fetchBlock(ctx context.Context, blockNumber uint64) (*t
 
 // resolveTEEVerifierAddress queries the BatchAuthenticator contract to get the
 // EspressoTEEVerifier address.
-func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) error {
+func (l *BatchSubmitter) resolveTEEVerifierAddress(ctx context.Context) (common.Address, error) {
 	if l.batchAuth == nil {
-		return errors.New("no BatchAuthenticator configured")
+		return common.Address{}, errors.New("no BatchAuthenticator configured")
 	}
 	addr, err := l.batchAuth.EspressoTEEVerifier(ctx)
 	if err != nil {
-		return err
+		return common.Address{}, err
 	}
-	l.teeVerifierAddress = addr
 	l.Log.Info("Resolved TEE verifier address", "address", addr.Hex())
-	return nil
+	return addr, nil
 }
 
 func (l *BatchSubmitter) registerBatcher(ctx context.Context) error {
@@ -1430,6 +1430,7 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 }
 
 // signEIP712Commitment creates an EIP-712 signature for the given commitment using the batcher's private key.
+// It reads the verifying contract from l.espressoSession, so it must only be called while a session is active.
 func (l *BatchSubmitter) signEIP712Commitment(commitment [32]byte) ([]byte, error) {
 	typedData := apitypes.TypedData{
 		Types: apitypes.Types{
@@ -1448,7 +1449,7 @@ func (l *BatchSubmitter) signEIP712Commitment(commitment [32]byte) ([]byte, erro
 			Name:              "EspressoTEEVerifier",
 			Version:           "1",
 			ChainId:           (*math.HexOrDecimal256)(l.RollupConfig.L1ChainID),
-			VerifyingContract: l.teeVerifierAddress.String(),
+			VerifyingContract: l.espressoSession.teeVerifierAddress.String(),
 		},
 		Message: map[string]interface{}{
 			"commitment": commitment,
