@@ -22,6 +22,8 @@ import { MockSeedBridge } from "test/celo/CeloBridgeHelpers.sol";
 /// @title PortalMigrator_TestInit
 /// @notice Reusable test initialization for `PortalMigrator` tests.
 abstract contract PortalMigrator_TestInit is Test {
+    bytes32 internal constant MIGRATED_SLOT = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
+
     /// @notice Emitted when the actual portal balance differs from the expected legacy balance.
     event BalanceMismatch(uint256 expected, uint256 actual);
 
@@ -72,7 +74,7 @@ abstract contract PortalMigrator_TestInit is Test {
         assertEq(IERC20(_token).balanceOf(bridge), _amount);
         assertEq(mockBridge.seededAmount(), _amount);
         assertTrue(mockBridge.escrowSeeded());
-        assertTrue(portalMigrator.migrated());
+        assertEq(portalMigrator.migrated(), _amount);
     }
 }
 
@@ -84,7 +86,7 @@ contract PortalMigrator_Constructor_Test is PortalMigrator_TestInit {
         assertEq(address(portalMigrator.CELO_TOKEN_L1()), address(celoTokenL1));
         assertEq(portalMigrator.CELO_GAS_BRIDGE_L1(), bridge);
         assertEq(portalMigrator.LEGACY_PORTAL_BALANCE(), LEGACY_PORTAL_BALANCE);
-        assertFalse(portalMigrator.migrated());
+        assertEq(portalMigrator.migrated(), 0);
     }
 }
 
@@ -109,9 +111,8 @@ contract PortalMigrator_Migrate_Test is PortalMigrator_TestInit {
         vm.prank(adminOwner);
         portalMigrator.migrate();
 
-        // Unstructured slot: keccak256("celo.op.portal.migrated") - 1.
-        bytes32 slot = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
-        assertEq(vm.load(address(portalMigrator), slot), bytes32(uint256(1)));
+        // Unstructured slot holds the drained amount; the L2 client reads it from here.
+        assertEq(uint256(vm.load(address(portalMigrator), MIGRATED_SLOT)), LEGACY_PORTAL_BALANCE);
 
         // Inherited sequential range is left untouched (no residue at slot 64).
         assertEq(vm.load(address(portalMigrator), bytes32(uint256(64))), bytes32(0));

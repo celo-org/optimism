@@ -258,7 +258,7 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
         assertEq(celoTokenL1.balanceOf(address(bridge)), legacyPortalBalance);
         assertEq(bridge.deposits(address(celoTokenL1), address(0)), legacyPortalBalance);
         assertTrue(bridge.escrowSeeded());
-        assertEq(vm.load(PORTAL_PROXY, MIGRATED_SLOT), bytes32(uint256(1)));
+        assertEq(uint256(vm.load(PORTAL_PROXY, MIGRATED_SLOT)), legacyPortalBalance, "slot records the drained amount");
         assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
 
         _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[1].target, tasks[1].calldata_);
@@ -429,7 +429,7 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
 
     /// @notice A failing sub-call rolls that whole task back: no drain, portal impl and flags untouched.
     function testFork_drainAtomicRollbackOnFailure() external {
-        // Pre-set the migration flag so migrate() reverts AlreadyMigrated mid-task.
+        // Pre-set a non-zero migrated amount so migrate() reverts AlreadyMigrated mid-task.
         vm.store(PORTAL_PROXY, MIGRATED_SLOT, bytes32(uint256(1)));
 
         MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);

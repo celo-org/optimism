@@ -71,8 +71,8 @@ contract MigrateV1V2 is Script {
     /// @notice Canonical Multicall3 address (same on every chain).
     address internal constant MULTICALL3 = 0xcA11bde05977b3631167028862bE2a173976CA11;
 
-    /// @notice PortalMigrator's migration flag, written to PROXY storage by migrate(). Must match
-    ///         PortalMigrator.MIGRATED_SLOT.
+    /// @notice Holds the CELO amount migrate() drained, written to PROXY storage so it outlives the
+    ///         migrator impl. Zero until migration. Must match PortalMigrator.MIGRATED_SLOT.
     bytes32 internal constant MIGRATED_SLOT = bytes32(uint256(keccak256("celo.op.portal.migrated")) - 1);
 
     /// @notice Upstream storage slot of SystemConfig.superchainConfig (packed with minBaseFee at offset 20).
@@ -318,16 +318,18 @@ contract MigrateV1V2 is Script {
         require(currentImpl != _input.originalPortalImpl, "MigrateV1V2: portal impl not upgraded by OPCM");
         console.log("OK  portal implementation upgraded by OPCM (v6)");
 
-        // Migration flag should be set.
-        require(vm.load(_input.portalProxy, MIGRATED_SLOT) == bytes32(uint256(1)), "MigrateV1V2: portal not migrated");
-        console.log("OK  portal migration flag set (proxy storage)");
-
         // Escrow must be seeded and covered by the bridge's actual CELO balance.
         ICeloGasBridgeL1 bridge = ICeloGasBridgeL1(payable(_input.bridgeL1Proxy));
         require(bridge.escrowSeeded(), "MigrateV1V2: bridge escrow not seeded");
         uint256 trackedEscrow = bridge.deposits(address(_input.celoTokenL1), address(0));
         require(trackedEscrow <= bridgeBalance, "MigrateV1V2: bridge escrow > token balance (insolvent)");
         console.log("OK  tracked escrow covered by CELO balance:", trackedEscrow);
+
+        // The amount recorded on the proxy is what the bridge was actually seeded with.
+        uint256 migratedAmount = uint256(vm.load(_input.portalProxy, MIGRATED_SLOT));
+        require(migratedAmount != 0, "MigrateV1V2: portal not migrated");
+        require(migratedAmount == trackedEscrow, "MigrateV1V2: migrated amount != tracked escrow");
+        console.log("OK  migrated amount recorded in proxy storage:", migratedAmount);
 
         // SystemConfig.superchainConfig must now resolve to the external SuperchainConfig.
         require(
