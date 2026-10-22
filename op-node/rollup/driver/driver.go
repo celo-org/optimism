@@ -53,6 +53,12 @@ func NewDriver(
 ) *Driver {
 	driverCtx, driverCancel := context.WithCancel(context.Background())
 
+	// Keep proof access on the raw clients: confirmation-depth and metrics
+	// wrappers deliberately expose only the normal derivation fetcher methods.
+	l1Proof, _ := l1.(derive.CgtV2ProofClient)
+	l2Proof, _ := l2.(derive.CgtV2ProofClient)
+	cgtSource := derive.NewCgtV2RPCSource(l1Proof, l2Proof)
+
 	statusTracker := status.NewStatusTracker(log, metrics)
 	sys.Register("status", statusTracker)
 
@@ -76,7 +82,7 @@ func NewDriver(
 	attrHandler := attributes.NewAttributesHandler(log, cfg, driverCtx, l2, ec)
 	sys.Register("attributes-handler", attrHandler)
 
-	derivationPipeline := derive.NewDerivationPipeline(log, cfg, depSet, verifConfDepth, l1Blobs, altDA, l2, metrics, l1ChainConfig)
+	derivationPipeline := derive.NewDerivationPipeline(log, cfg, depSet, verifConfDepth, l1Blobs, altDA, l2, metrics, l1ChainConfig, cgtSource)
 
 	pipelineDeriver := derive.NewPipelineDeriver(driverCtx, derivationPipeline)
 	sys.Register("pipeline", pipelineDeriver)
@@ -108,7 +114,7 @@ func NewDriver(
 	var sequencer sequencing.SequencerIface
 	if driverCfg.SequencerEnabled {
 		asyncGossiper := async.NewAsyncGossiper(driverCtx, network, log, metrics)
-		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ChainConfig, depSet, l1, l2)
+		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ChainConfig, depSet, l1, l2, cgtSource)
 		var seqL1Blocks sequencing.L1Blocks
 		if driverCfg.SequencerUseFinalized {
 			seqL1Blocks = finalized.NewFinalized(statusTracker.L1Finalized, l1, log)
