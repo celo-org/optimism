@@ -1,0 +1,141 @@
+# TODO: enable this workflow — ported (disabled) from optimism-espresso-integration
+# (.github/workflows/espresso-devnet-tests-tee.yaml @ celo-integration-rebase-17). It drives the espresso/devnet-tests
+# tier, which currently contains only skipped stubs in this repo. Before enabling:
+#   - port the espresso/ docker-compose devnet and the devnet_tools.go test harness
+#     (replace the espresso/devnet-tests stubs with the real test bodies)
+#   - port .github/workflows/compile-contracts.yaml and .github/actions/cache-submodules
+#   - set up the EC2/Nitro-enclave runner infrastructure used by ec2-devnet-test.yaml:
+#     the EspressoSystems/ec2-github-runner enclave fork, repository secrets
+#     (GH_PERSONAL_ACCESS_TOKEN, AWS_EC2_SUBNET_ID, AWS_EC2_SECURITY_GROUP_ID), the IAM
+#     role, and the Nix+Docker+nitro-cli AMI (ami-0d259f3ae020af5f9 in the reference repo)
+#
+# Triggers reduced to workflow_dispatch so this cannot run automatically while disabled.
+name: Run Espresso Devnet tests (TEE)
+
+# Mirrors espresso-devnet-tests.yaml but runs on Nitro-enabled EC2 instances
+# with the TEE compose profile. Each test group gets its own ephemeral EC2
+# runner managed by ec2-github-runner.
+#
+# Prerequisites:
+#   - EspressoSystems/ec2-github-runner fork with enclave-options support
+#   - Repository secrets: GH_PERSONAL_ACCESS_TOKEN, AWS_EC2_SUBNET_ID, AWS_EC2_SECURITY_GROUP_ID
+#   - AMI ami-0d259f3ae020af5f9 (Amazon Linux 2023 with Nix, Docker, nitro-cli)
+
+# Original triggers, restore when enabling:
+# on:
+#   pull_request:
+#   push:
+#     branches:
+#       - "celo-integration*"
+#   workflow_dispatch:
+on:
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  build-contracts:
+    uses: ./.github/workflows/compile-contracts.yaml
+
+  prepare:
+    needs: build-contracts
+    runs-on: ubuntu-24.04-8core
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache submodules
+        uses: ./.github/actions/cache-submodules
+
+      - name: Install Nix
+        uses: nixbuild/nix-quick-install-action@v30
+        with:
+          nix_conf: |
+            keep-env-derivations = true
+            keep-outputs = true
+      - name: Restore Nix cache
+        id: cache-nix-restore
+        uses: nix-community/cache-nix-action/restore@v6
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('**/*.nix', '**/flake.lock') }}
+      - name: Set up Nix environment
+        uses: nicknovitski/nix-develop@v1
+
+      - name: Cache Go modules
+        uses: actions/setup-go@v5
+
+      - name: Download forge-artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-artifacts
+          path: packages/contracts-bedrock/forge-artifacts/
+
+      - name: Load environment variables
+        run: |
+          while IFS= read -r line; do
+            # Skip comments and empty lines
+            if [[ ! "$line" =~ ^#.* ]] && [[ -n "$line" ]]; then
+              # Remove quotes from values
+              line=$(echo "$line" | sed 's/"\(.*\)"/\1/')
+              echo "$line" >> $GITHUB_ENV
+            fi
+          done < ./espresso/.env
+        shell: bash
+
+      - name: Build op-deployer and prepare allocs
+        run: |
+          cd op-deployer
+          just
+          export PATH=$PATH:$PWD/bin
+          cd ../espresso
+          ./scripts/prepare-allocs.sh
+
+      - name: Upload deployment artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: devnet-deployment
+          path: espresso/deployment/
+          retention-days: 1
+
+      - name: Save Nix cache
+        uses: nix-community/cache-nix-action/save@v6
+        if: always() && steps.cache-nix-restore.outputs.hit-primary-key != 'true'
+        with:
+          primary-key: ${{ steps.cache-nix-restore.outputs.primary-key }}
+
+  # Each test group runs on its own Nitro-enabled EC2 instance.
+  # TestChallengeGame and TestWithdrawal are excluded — they require the succinct-proposer, not available in TEE profile.
+  # TestChangeBatchAuthenticatorOwner is included; it loads env vars from espresso/.env.
+  tee-group-0:
+    needs: prepare
+    uses: ./.github/workflows/ec2-devnet-test.yaml
+    with:
+      tests: "TestSmoke/tee|TestBatcherRestart/tee"
+      group-name: "group-0"
+    secrets: inherit
+
+  tee-group-1:
+    needs: prepare
+    uses: ./.github/workflows/ec2-devnet-test.yaml
+    with:
+      tests: "TestBatcherSwitching/tee"
+      group-name: "group-1"
+    secrets: inherit
+
+  tee-group-2:
+    needs: prepare
+    uses: ./.github/workflows/ec2-devnet-test.yaml
+    with:
+      tests: "TestForcedTransaction/tee|TestChangeBatchAuthenticatorOwner/tee"
+      group-name: "group-2"
+    secrets: inherit
+
+  tee-group-3:
+    needs: prepare
+    uses: ./.github/workflows/ec2-devnet-test.yaml
+    with:
+      tests: "TestBatcherActivePublishOnly/tee"
+      group-name: "group-3"
+    secrets: inherit
