@@ -9,7 +9,6 @@ import (
 	"time"
 
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -100,6 +99,9 @@ type BatcherService struct {
 	EspressoL1Client *ethclient.Client
 	opcrypto.ChainSigner
 	Attestation []byte
+	// batchAuth is the binding to the BatchAuthenticator contract, built from
+	// the rollup config by initBatchAuthenticator. Nil when the chain has none.
+	batchAuth *batchAuthenticatorReader
 }
 
 type DriverSetupOption func(setup *DriverSetup)
@@ -188,6 +190,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 
 	if err := bs.initRollupConfig(ctx); err != nil {
 		return fmt.Errorf("failed to load rollup config: %w", err)
+	}
+	if err := bs.initBatchAuthenticator(); err != nil {
+		return err
 	}
 	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
 		return err
@@ -321,7 +326,7 @@ func (bs *BatcherService) checkEspressoBatchAuthenticator(cfg *CLIConfig) error 
 	if !cfg.Espresso.Enabled {
 		return nil
 	}
-	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+	if bs.batchAuth == nil {
 		return errors.New("--espresso.enabled requires a BatchAuthenticator, but the rollup config has none " +
 			"(BatchAuthenticatorAddress is zero)")
 	}
@@ -339,7 +344,7 @@ func (bs *BatcherService) checkEspressoBatchAuthenticator(cfg *CLIConfig) error 
 // applies to, a scheduled EspressoTime with a non-calldata DA type. It is kept as a
 // second line of defence and applies again if the restriction is ever lifted.
 func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
-	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+	if bs.batchAuth == nil {
 		return nil
 	}
 	// Fallback auth is gated behind the EspressoTime hardfork

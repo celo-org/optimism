@@ -2,6 +2,7 @@ package batcher
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -34,6 +35,8 @@ type EspressoDriverSetup struct {
 	ChainSigner      opcrypto.ChainSigner
 	SequencerAddress common.Address
 	Attestation      []byte
+	// BatchAuth is the BatchAuthenticator reader, nil when the chain has none.
+	BatchAuth *batchAuthenticatorReader
 }
 
 // espressoRuntimeClient provides the client methods used by submission workers and the streamer.
@@ -113,6 +116,9 @@ func (a *batcherL2Adapter) HeaderHashByNumber(ctx context.Context, number *big.I
 // restarts. --espresso.origin-height-espresso keeps its role: it decides where the
 // streamer starts polling HotShot.
 func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) (*espressoStreamers.Streamer, error) {
+	if l.batchAuth == nil {
+		return nil, errors.New("no BatchAuthenticator configured")
+	}
 	anchor, err := l.waitForLocalSafeHead(ctx)
 	if err != nil {
 		return nil, err
@@ -140,7 +146,7 @@ func (l *BatchSubmitter) setupEspressoStreamer(ctx context.Context) (*espressoSt
 		&batcherL1Adapter{L1Client: l.L1Client},
 		&batcherL2Adapter{EthClient: ethClient},
 		lightClientIface,
-		l.RollupConfig.BatchAuthenticatorAddress,
+		l.batchAuth.addr,
 		bigs.Uint64Strict(l.RollupConfig.L2ChainID),
 		derivation.CreateEspressoBatchUnmarshaler(),
 		l.getSyncStatus,

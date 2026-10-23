@@ -92,6 +92,7 @@ func TestCheckFallbackAuthConfirmations(t *testing.T) {
 				DataAvailabilityType: test.daType,
 				TxMgrConfig:          txmgr.CLIConfig{NumConfirmations: test.numConfs},
 			}
+			require.NoError(t, bs.initBatchAuthenticator())
 			err := bs.checkFallbackAuthConfirmations(cfg)
 			if test.wantErr {
 				require.ErrorContains(t, err, "NumConfirmations")
@@ -123,6 +124,7 @@ func TestCheckEspressoBatchAuthenticator(t *testing.T) {
 				BatchAuthenticatorAddress: test.authenticator,
 			}}
 			cfg := &CLIConfig{Espresso: espresso.CLIConfig{Enabled: test.enabled}}
+			require.NoError(t, bs.initBatchAuthenticator())
 			err := bs.checkEspressoBatchAuthenticator(cfg)
 			if test.wantErr {
 				require.ErrorContains(t, err, "BatchAuthenticator")

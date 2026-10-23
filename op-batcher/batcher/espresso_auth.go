@@ -103,7 +103,7 @@ func (l *BatchSubmitter) submitAuthenticatedBatch(transactionReference txRef, ve
 	l.Log.Debug(
 		"Sending authenticateBatchInfo transaction",
 		"txRef", transactionReference,
-		"address", l.RollupConfig.BatchAuthenticatorAddress.String(),
+		"address", verifyCandidate.To,
 	)
 
 	if len(candidate.Blobs) > 0 {
