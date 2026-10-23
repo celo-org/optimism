@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -60,7 +61,7 @@ func CheckBatch(ctx context.Context, cfg *rollup.Config, log log.Logger, l1Block
 }
 
 // checkSingularBatch implements SingularBatch validation rule.
-func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1BlockRef, l2SafeHead eth.L2BlockRef, batch *SingularBatch, l1InclusionBlock eth.L1BlockRef) BatchValidity {
+func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1BlockRef, l2SafeHead eth.L2BlockRef, batch *SingularBatch, l1InclusionBlock eth.L1BlockRef, cgtActivation ...bool) BatchValidity {
 	// add details to the log
 	log = batch.LogContext(log)
 
@@ -131,6 +132,11 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 
 	if batch.Timestamp < batchOrigin.Time {
 		log.Warn("batch timestamp is less than L1 origin timestamp", "l2_timestamp", batch.Timestamp, "l1_timestamp", batchOrigin.Time, "origin", batchOrigin.ID())
+		return BatchDrop
+	}
+
+	if len(cgtActivation) > 0 && cgtActivation[0] && cgtV2HasUserTransactions(cfg, batch.Timestamp, batch.Transactions) {
+		log.Warn("dropping batch with user transactions in CGTv2 activation block")
 		return BatchDrop
 	}
 
@@ -479,4 +485,14 @@ func checkSpanBatchOverlap(ctx context.Context, cfg *rollup.Config, log log.Logg
 		}
 	}
 	return BatchAccept
+}
+
+// PostExec is the upstream protocol exception; it is not an ordinary user tx.
+func cgtV2HasUserTransactions(cfg *rollup.Config, timestamp uint64, txs []hexutil.Bytes) bool {
+	for _, tx := range txs {
+		if len(tx) == 0 || tx[0] != optypes.PostExecTxType || !cfg.IsSDM(timestamp) {
+			return true
+		}
+	}
+	return false
 }

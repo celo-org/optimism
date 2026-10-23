@@ -536,6 +536,9 @@ func (s *Sequencer) onEngineTemporaryError(x rollup.EngineTemporaryErrorEvent) {
 }
 
 func (s *Sequencer) onReset(x rollup.ResetEvent) {
+	if resetter, ok := s.attrBuilder.(interface{ ResetCgtV2() }); ok {
+		resetter.ResetCgtV2()
+	}
 	s.log.Error("Sequencer encountered reset signal, aborting work", "err", x.Err)
 	s.metrics.RecordSequencerReset()
 	// try to cancel any ongoing payload building job
@@ -740,6 +743,11 @@ func (s *Sequencer) startBuildingBlock() {
 	// setting NoTxPool to true, which will cause the Sequencer to not include any transactions
 	// from the transaction pool.
 	attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+s.spec.MaxSequencerDrift(l1Origin.Time)
+
+	if derive.ContainsCgtV2Activation(attrs.Transactions) {
+		attrs.NoTxPool = true
+		s.log.Info("Sequencing CGTv2 activation block")
+	}
 
 	// For the Ecotone activation block we shouldn't include any sequencer transactions.
 	if s.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {

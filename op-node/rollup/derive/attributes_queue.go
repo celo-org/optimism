@@ -125,6 +125,10 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 		return nil, err
 	}
 
+	if ContainsCgtV2Activation(attrs.Transactions) && cgtV2HasUserTransactions(aq.config, batch.Timestamp, batch.Transactions) {
+		return nil, NewCriticalError(fmt.Errorf("CGTv2 activation batch passed validation with user transactions"))
+	}
+
 	// we are verifying, not sequencing, we've got all transactions and do not pull from the tx-pool
 	// (that would make the block derivation non-deterministic)
 	attrs.NoTxPool = true
@@ -136,6 +140,9 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 }
 
 func (aq *AttributesQueue) reset() {
+	if resetter, ok := aq.builder.(interface{ ResetCgtV2() }); ok {
+		resetter.ResetCgtV2()
+	}
 	aq.batch = nil
 	aq.concluding = false // overwritten later, but set for consistency
 	aq.lastAttribs = nil
