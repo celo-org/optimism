@@ -87,9 +87,8 @@ type espressoVerifyReceiptJobResponse struct {
 	currentHeight uint64 // latest known HotShot block height at time of verification attempt
 }
 
-// espressoTransactionSubmitter is a struct that holds the state that governs
-// the worker queue processing details for submitting transactions to Espresso
-// without spawning arbitrarily many goroutines.
+// espressoTransactionSubmitter submits transactions and verifies receipts using
+// bounded worker pools that consume shared job queues.
 type espressoTransactionSubmitter struct {
 	ctx                        context.Context
 	wg                         *sync.WaitGroup
@@ -208,9 +207,9 @@ func WithMaxInFlightJobs(n int) EspressoTransactionSubmitterOption {
 //
 // The resulting instance should reflect the given configuration.
 // After returning, the caller should call SpawnWorkers to start the workers,
-// and Start to start the job scheduling and response handling portions of the
-// transaction submitter. After that, the user should be able to submit
-// transactions to the submitter via the SubmitTransaction method.
+// which immediately begin consuming the shared job queues. Call Start to launch
+// the response handlers and block-height tracker before submitting transactions
+// via SubmitTransaction.
 func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOption) *espressoTransactionSubmitter {
 	config := EspressoTransactionSubmitterConfig{
 		Ctx:                                context.Background(),
@@ -549,11 +548,7 @@ func espressoSubmitTransactionWorker(
 		select {
 		case <-ctx.Done():
 			return
-		case j, ok := <-jobs:
-			if !ok {
-				return
-			}
-			job = j
+		case job = <-jobs:
 		}
 
 		// Submit the transaction to Espresso
@@ -602,11 +597,7 @@ func espressoVerifyTransactionWorker(
 		select {
 		case <-ctx.Done():
 			return
-		case j, ok := <-jobs:
-			if !ok {
-				return
-			}
-			job = j
+		case job = <-jobs:
 		}
 
 		// On the first attempt, snapshot the current block height so we
