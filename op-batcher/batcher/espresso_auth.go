@@ -45,6 +45,14 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	transactionReference := newTxRef(txdata, isCancel)
 	l.Log.Debug("Sending fallback-authenticated L1 transaction", "txRef", transactionReference)
 
+	if l.batchAuth == nil {
+		receiptsCh <- txmgr.TxReceipt[txRef]{
+			ID:  transactionReference,
+			Err: errors.New("no BatchAuthenticator configured"),
+		}
+		return
+	}
+
 	commitment, err := computeCommitment(candidate)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
@@ -56,25 +64,16 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	l.Log.Debug("Computed fallback batch commitment", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]))
 
 	// Pass an empty signature — the contract checks msg.sender for the fallback path.
-	verifyCandidate, err := l.authenticateBatchInfoTx(commitment, []byte{})
+	verifyCandidate, err := l.batchAuth.AuthenticateBatchInfoTx(commitment, []byte{})
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: err,
+			Err: fmt.Errorf("failed to build authenticateBatchInfo transaction: %w", err),
 		}
 		return
 	}
 
 	l.submitAuthenticatedBatch(transactionReference, verifyCandidate, candidate, queue, receiptsCh)
-}
-
-// authenticateBatchInfoTx builds the authenticateBatchInfo transaction through
-// the BatchAuthenticator reader.
-func (l *BatchSubmitter) authenticateBatchInfoTx(commitment [32]byte, signature []byte) (txmgr.TxCandidate, error) {
-	if l.batchAuth == nil {
-		return txmgr.TxCandidate{}, errors.New("no BatchAuthenticator configured")
-	}
-	return l.batchAuth.AuthenticateBatchInfoTx(commitment, signature)
 }
 
 // submitAuthenticatedBatch submits an authenticateBatchInfo tx (verifyCandidate) followed by the

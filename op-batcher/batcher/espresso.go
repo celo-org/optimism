@@ -1371,6 +1371,14 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 	transactionReference := txRef{id: txdata.ID(), isCancel: isCancel, isBlob: txdata.daType == DaTypeBlob, daType: txdata.daType, size: txdata.Len()}
 	l.Log.Debug("Sending Espresso-enabled L1 transaction", "txRef", transactionReference)
 
+	if l.batchAuth == nil {
+		receiptsCh <- txmgr.TxReceipt[txRef]{
+			ID:  transactionReference,
+			Err: errors.New("no BatchAuthenticator configured"),
+		}
+		return
+	}
+
 	commitment, err := computeCommitment(candidate)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
@@ -1392,11 +1400,11 @@ func (l *BatchSubmitter) sendTxWithEspresso(txdata txData, isCancel bool, candid
 
 	l.Log.Debug("Signed transaction", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]), "sig", hexutil.Encode(signature))
 
-	verifyCandidate, err := l.authenticateBatchInfoTx(commitment, signature)
+	verifyCandidate, err := l.batchAuth.AuthenticateBatchInfoTx(commitment, signature)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: err,
+			Err: fmt.Errorf("failed to build authenticateBatchInfo transaction: %w", err),
 		}
 		return
 	}
