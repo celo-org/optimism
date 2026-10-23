@@ -58,7 +58,7 @@ type mockAuthBackend struct {
 	codeAtCalls int
 	callCalls   int
 	// lastCallHadDeadline records whether the context reaching CallContract
-	// carried a deadline, i.e. whether the reader applied NetworkTimeout.
+	// carried a deadline, i.e. whether the binding applied NetworkTimeout.
 	lastCallHadDeadline bool
 }
 
@@ -126,32 +126,32 @@ func (m *mockAuthBackend) CallContract(ctx context.Context, call ethereum.CallMs
 	return nil, fmt.Errorf("unexpected method call %s", method.Name)
 }
 
-func newTestReader(t *testing.T, backend *mockAuthBackend) *batchAuthenticatorReader {
+func newTestBatchAuthenticator(t *testing.T, backend *mockAuthBackend) *batchAuthenticator {
 	t.Helper()
-	r, err := newBatchAuthenticatorReader(testAuthAddr, backend, time.Second)
+	r, err := newBatchAuthenticator(testAuthAddr, backend, time.Second)
 	require.NoError(t, err)
 	return r
 }
 
-// TestNewBatchAuthenticatorReader_ZeroAddressIsNilReader pins the invariant
-// every call site reads: a chain without a BatchAuthenticator gets no reader,
+// TestNewBatchAuthenticator_ZeroAddressIsNil pins the invariant
+// every call site reads: a chain without a BatchAuthenticator gets no binding,
 // never one bound to the zero address that would answer every question with a
 // failed call.
-func TestNewBatchAuthenticatorReader_ZeroAddressIsNilReader(t *testing.T) {
-	r, err := newBatchAuthenticatorReader(common.Address{}, newMockAuthBackend(t), time.Second)
+func TestNewBatchAuthenticator_ZeroAddressIsNil(t *testing.T) {
+	r, err := newBatchAuthenticator(common.Address{}, newMockAuthBackend(t), time.Second)
 	require.NoError(t, err)
 	require.Nil(t, r)
 }
 
-// TestBatchAuthenticatorReader_ReadsDoNotProbe pins the steady-state cost of a
+// TestBatchAuthenticator_ReadsDoNotProbe pins the steady-state cost of a
 // read: one eth_call and no CodeAt, since a deployed contract always returns
 // data and the bindings only look for code when it does not. It also checks
-// that the reader applies the network timeout itself, so no call site can
+// that the binding applies the network timeout itself, so no call site can
 // forget it.
-func TestBatchAuthenticatorReader_ReadsDoNotProbe(t *testing.T) {
+func TestBatchAuthenticator_ReadsDoNotProbe(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.activeIsEspresso = true
-	r := newTestReader(t, backend)
+	r := newTestBatchAuthenticator(t, backend)
 
 	for i := 0; i < 5; i++ {
 		active, err := r.ActiveIsEspresso(context.Background())
@@ -161,17 +161,17 @@ func TestBatchAuthenticatorReader_ReadsDoNotProbe(t *testing.T) {
 
 	require.Zero(t, backend.codeAtCalls, "reads of a deployed contract should not check for code")
 	require.Equal(t, 5, backend.callCalls, "each read is still one eth_call")
-	require.True(t, backend.lastCallHadDeadline, "reader must bound reads by NetworkTimeout")
+	require.True(t, backend.lastCallHadDeadline, "binding must bound reads by NetworkTimeout")
 }
 
-// TestBatchAuthenticatorReader_NotDeployedIsRetried covers a batcher that
+// TestBatchAuthenticator_NotDeployedIsRetried covers a batcher that
 // starts before the BatchAuthenticator is deployed, which is legitimate for the
 // fallback batcher. Its reads must fail with bind.ErrNoCode and recover once the
 // contract appears, rather than caching the failure for the life of the process.
-func TestBatchAuthenticatorReader_NotDeployedIsRetried(t *testing.T) {
+func TestBatchAuthenticator_NotDeployedIsRetried(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.code = nil // not deployed yet
-	r := newTestReader(t, backend)
+	r := newTestBatchAuthenticator(t, backend)
 
 	_, err := r.ActiveIsEspresso(context.Background())
 	require.ErrorIs(t, err, bind.ErrNoCode)
@@ -180,7 +180,7 @@ func TestBatchAuthenticatorReader_NotDeployedIsRetried(t *testing.T) {
 	_, err = r.ActiveIsEspresso(context.Background())
 	require.ErrorContains(t, err, "rpc boom")
 
-	// Contract shows up; the reader recovers without needing a restart.
+	// Contract shows up; the binding recovers without needing a restart.
 	backend.codeErr = nil
 	backend.code = []byte{0x60, 0x00}
 	backend.activeIsEspresso = true
@@ -192,39 +192,39 @@ func TestBatchAuthenticatorReader_NotDeployedIsRetried(t *testing.T) {
 	require.Equal(t, 3, backend.callCalls)
 }
 
-// TestBatchAuthenticatorReader_EspressoTEEVerifier pins the address the batcher
+// TestBatchAuthenticator_EspressoTEEVerifier pins the address the batcher
 // signs against: it is whatever the contract reports, unchanged.
-func TestBatchAuthenticatorReader_EspressoTEEVerifier(t *testing.T) {
+func TestBatchAuthenticator_EspressoTEEVerifier(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.teeVerifier = common.HexToAddress("0x00000000000000000000000000000000000000bb")
 
-	got, err := newTestReader(t, backend).EspressoTEEVerifier(context.Background())
+	got, err := newTestBatchAuthenticator(t, backend).EspressoTEEVerifier(context.Background())
 	require.NoError(t, err)
 	require.Equal(t, backend.teeVerifier, got)
 }
 
-// TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected covers the reader's
+// TestBatchAuthenticator_ZeroTEEVerifierIsRejected covers the binding's
 // guard against a zero espressoTEEVerifier. No supported deployment yields one,
 // but accepting it would have the batcher sign every authentication against the
 // zero address as EIP-712 verifying contract, which the real verifier rejects.
 // Startup must fail instead.
-func TestBatchAuthenticatorReader_ZeroTEEVerifierIsRejected(t *testing.T) {
+func TestBatchAuthenticator_ZeroTEEVerifierIsRejected(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.teeVerifier = common.Address{}
-	r := newTestReader(t, backend)
+	r := newTestBatchAuthenticator(t, backend)
 
 	_, err := r.EspressoTEEVerifier(context.Background())
 	require.ErrorContains(t, err, "zero espressoTEEVerifier address")
 }
 
-// TestBatchAuthenticatorReader_FallbackBatcher locks in that the fallback
+// TestBatchAuthenticator_FallbackBatcher locks in that the fallback
 // batcher address is read through the SystemConfig the BatchAuthenticator
 // itself names, which is the address the contract checks msg.sender against,
-// and that the reader learns that address once.
-func TestBatchAuthenticatorReader_FallbackBatcher(t *testing.T) {
+// and that the binding learns that address once.
+func TestBatchAuthenticator_FallbackBatcher(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.fallbackBatcher = common.HexToAddress("0x00000000000000000000000000000000000000dd")
-	r := newTestReader(t, backend)
+	r := newTestBatchAuthenticator(t, backend)
 
 	got, err := r.FallbackBatcher(context.Background())
 	require.NoError(t, err)
@@ -237,15 +237,15 @@ func TestBatchAuthenticatorReader_FallbackBatcher(t *testing.T) {
 	require.Equal(t, 3, backend.callCalls, "the SystemConfig address is resolved once")
 }
 
-// TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched covers the reader's
+// TestBatchAuthenticator_ZeroSystemConfigIsNotLatched covers the binding's
 // guard against a zero SystemConfig address. No supported deployment yields
-// one, but binding it would pin the reader to a contract that never answers, so
-// the reader must reject it and resolve again on the next read.
-func TestBatchAuthenticatorReader_ZeroSystemConfigIsNotLatched(t *testing.T) {
+// one, but binding it would pin the batcher to a contract that never answers, so
+// the binding must reject it and resolve again on the next read.
+func TestBatchAuthenticator_ZeroSystemConfigIsNotLatched(t *testing.T) {
 	backend := newMockAuthBackend(t)
 	backend.fallbackBatcher = common.HexToAddress("0x00000000000000000000000000000000000000dd")
 	backend.systemConfigAddr = common.Address{}
-	r := newTestReader(t, backend)
+	r := newTestBatchAuthenticator(t, backend)
 
 	_, err := r.FallbackBatcher(context.Background())
 	require.ErrorContains(t, err, "zero systemConfig address")
@@ -317,7 +317,7 @@ func TestCheckBatcherActive(t *testing.T) {
 			l.degradedLog = oplog.NewRepeatStateLogger()
 			l.Txmgr = &testutils.FakeTxMgr{FromAddr: test.from}
 			l.Config.Espresso.Enabled = test.espressoEnabled
-			l.batchAuth = newTestReader(t, backend)
+			l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 			got, err := l.checkBatcherActive(context.Background())
 			require.NoError(t, err)
@@ -352,7 +352,7 @@ func TestCheckBatcherActive_SharedKeyWrongMode(t *testing.T) {
 			l.degradedLog = oplog.NewRepeatStateLogger()
 			l.Txmgr = &testutils.FakeTxMgr{FromAddr: sharedAddr}
 			l.Config.Espresso.Enabled = espressoEnabled
-			l.batchAuth = newTestReader(t, backend)
+			l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 			got, err := l.checkBatcherActive(context.Background())
 			require.NoError(t, err)
@@ -378,7 +378,7 @@ func TestCheckBatcherActive_KeyWarningResetsOnModeSwitch(t *testing.T) {
 	l.degradedLog = oplog.NewRepeatStateLogger()
 	l.Txmgr = &testutils.FakeTxMgr{FromAddr: otherAddr}
 	l.Config.Espresso.Enabled = true
-	l.batchAuth = newTestReader(t, backend)
+	l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 	check := func(want metrics.PublishGateState) {
 		t.Helper()
@@ -402,7 +402,7 @@ func TestCheckBatcherActive_KeyWarningResetsOnModeSwitch(t *testing.T) {
 		"the key was never authorized, so nothing may report it recovered")
 }
 
-// TestCheckBatcherActive_NoAuthenticator guards the nil reader case: without a
+// TestCheckBatcherActive_NoAuthenticator guards the nil binding case: without a
 // configured BatchAuthenticator the gate must report an error rather than
 // silently treating this batcher as active.
 func TestCheckBatcherActive_NoAuthenticator(t *testing.T) {
@@ -468,7 +468,7 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 			l.Config.Espresso.Enabled = test.espressoEnabled
 			l.L1Client = &mockFixedTimeL1Client{time: test.tipTime, err: test.tipErr}
 			l.Txmgr = &testutils.FakeTxMgr{FromAddr: test.from}
-			l.batchAuth = newTestReader(t, backend)
+			l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 			wantSkip := test.wantState != metrics.PublishGateActive
 			require.Equal(t, wantSkip, l.shouldSkipPublishForActiveSeq(context.Background()))
@@ -483,7 +483,7 @@ func TestShouldSkipPublishForActiveSeq(t *testing.T) {
 	}
 }
 
-// TestShouldSkipPublishForActiveSeq_NoAuthenticator guards the nil reader case:
+// TestShouldSkipPublishForActiveSeq_NoAuthenticator guards the nil binding case:
 // a chain without a BatchAuthenticator runs a plain upstream batcher, which
 // never skips a publish and reports the gate as active.
 func TestShouldSkipPublishForActiveSeq_NoAuthenticator(t *testing.T) {
@@ -522,7 +522,7 @@ func TestCheckBatcherActive_ReadErrors(t *testing.T) {
 			l.degradedLog = oplog.NewRepeatStateLogger()
 			l.Txmgr = &testutils.FakeTxMgr{}
 			l.Config.Espresso.Enabled = test.espressoEnabled
-			l.batchAuth = newTestReader(t, backend)
+			l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 			_, err := l.checkBatcherActive(context.Background())
 			require.ErrorContains(t, err, "failed to read "+test.failGetter)
@@ -555,7 +555,7 @@ func TestResolveTEEVerifierAddress(t *testing.T) {
 
 			l := &BatchSubmitter{}
 			l.Log = testlog.Logger(t, log.LevelDebug)
-			l.batchAuth = newTestReader(t, backend)
+			l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 			addr, err := l.resolveTEEVerifierAddress(context.Background())
 			if test.wantErr != "" {
@@ -569,12 +569,12 @@ func TestResolveTEEVerifierAddress(t *testing.T) {
 	}
 }
 
-// TestBatchAuthenticatorReader_RegisterSignerTx pins the registerSigner
+// TestBatchAuthenticator_RegisterSignerTx pins the registerSigner
 // calldata: the journal goes in _verificationData and the proof in _data. With
 // the two swapped the registration reverts, and so does every
 // authenticateBatchInfo signed by the unregistered key after it.
-func TestBatchAuthenticatorReader_RegisterSignerTx(t *testing.T) {
-	r := newTestReader(t, newMockAuthBackend(t))
+func TestBatchAuthenticator_RegisterSignerTx(t *testing.T) {
+	r := newTestBatchAuthenticator(t, newMockAuthBackend(t))
 	journal := []byte("journal")
 	proof := []byte("onchain-proof")
 
@@ -619,14 +619,14 @@ func TestRegisterBatcher_DeploymentCheck(t *testing.T) {
 			backend.codeErr = test.codeErr
 
 			l := newRegisteringBatchSubmitter(t)
-			l.batchAuth = newTestReader(t, backend)
+			l.batchAuth = newTestBatchAuthenticator(t, backend)
 
 			require.ErrorContains(t, l.registerBatcher(context.Background()), test.wantErr)
 		})
 	}
 }
 
-// TestBatchAuthenticatorCallers_NoAuthenticator guards the nil reader case for
+// TestBatchAuthenticatorCallers_NoAuthenticator guards the nil binding case for
 // the two startup steps: without a configured BatchAuthenticator both must
 // fail, and registerBatcher must not ask the attestation service for a proof.
 func TestBatchAuthenticatorCallers_NoAuthenticator(t *testing.T) {
@@ -637,7 +637,7 @@ func TestBatchAuthenticatorCallers_NoAuthenticator(t *testing.T) {
 	require.ErrorContains(t, l.registerBatcher(context.Background()), "no BatchAuthenticator configured")
 }
 
-// newRegisteringBatchSubmitter returns a BatchSubmitter with no reader that is
+// newRegisteringBatchSubmitter returns a BatchSubmitter with no binding that is
 // set up to register: it has an attestation and an attestation service, which
 // fails the test if called, since each caller must stop before asking for a
 // proof.
