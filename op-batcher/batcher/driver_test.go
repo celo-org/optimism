@@ -718,3 +718,28 @@ func TestBatchSubmitter_AltDA_FailureCase4_FailedBlobSubmission(t *testing.T) {
 	require.Equal(t, 4, mockAltDAClient.StoreCount)
 	require.Equal(t, uint64(4), fakeTxMgr.Nonce)
 }
+
+// TestNewBatchSubmitter_BindsBatchAuthenticator covers callers that build the
+// driver without BatcherService: with no binding passed in, NewBatchSubmitter
+// must bind the BatchAuthenticator from the rollup config. A nil binding would
+// make a fallback batcher skip authentication after Espresso activation.
+func TestNewBatchSubmitter_BindsBatchAuthenticator(t *testing.T) {
+	bs, _ := setup(t, nil)
+	require.Nil(t, bs.batchAuth, "a chain without a BatchAuthenticator gets no binding")
+
+	cfg := *defaultTestRollupConfig
+	cfg.BatchAuthenticatorAddress = testAuthAddr
+	bs = NewBatchSubmitter(DriverSetup{
+		Log:          testlog.Logger(t, log.LevelDebug),
+		Metr:         metrics.NoopMetrics,
+		RollupConfig: &cfg,
+		Config: BatcherConfig{
+			ThrottleParams: config.ThrottleParams{
+				ControllerType: config.StepControllerType,
+			},
+		},
+		ChannelConfig: defaultTestChannelConfig(),
+	})
+	require.NotNil(t, bs.batchAuth)
+	require.Equal(t, testAuthAddr, bs.batchAuth.addr)
+}

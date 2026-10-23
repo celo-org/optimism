@@ -1,6 +1,7 @@
 package batcher
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
-	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
@@ -45,6 +45,14 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	transactionReference := newTxRef(txdata, isCancel)
 	l.Log.Debug("Sending fallback-authenticated L1 transaction", "txRef", transactionReference)
 
+	if l.batchAuth == nil {
+		receiptsCh <- txmgr.TxReceipt[txRef]{
+			ID:  transactionReference,
+			Err: errors.New("no BatchAuthenticator configured"),
+		}
+		return
+	}
+
 	commitment, err := computeCommitment(candidate)
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
@@ -55,28 +63,14 @@ func (l *BatchSubmitter) sendTxWithFallbackAuth(txdata txData, isCancel bool, ca
 	}
 	l.Log.Debug("Computed fallback batch commitment", "txRef", transactionReference, "commitment", hexutil.Encode(commitment[:]))
 
-	batchAuthenticatorAbi, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
-	if err != nil {
-		receiptsCh <- txmgr.TxReceipt[txRef]{
-			ID:  transactionReference,
-			Err: fmt.Errorf("failed to get batch authenticator ABI: %w", err),
-		}
-		return
-	}
-
 	// Pass an empty signature — the contract checks msg.sender for the fallback path.
-	authenticateBatchCalldata, err := batchAuthenticatorAbi.Pack("authenticateBatchInfo", commitment, []byte{})
+	verifyCandidate, err := l.batchAuth.AuthenticateBatchInfoTx(commitment, []byte{})
 	if err != nil {
 		receiptsCh <- txmgr.TxReceipt[txRef]{
 			ID:  transactionReference,
-			Err: fmt.Errorf("failed to pack authenticateBatchInfo calldata: %w", err),
+			Err: fmt.Errorf("failed to build authenticateBatchInfo transaction: %w", err),
 		}
 		return
-	}
-
-	verifyCandidate := txmgr.TxCandidate{
-		TxData: authenticateBatchCalldata,
-		To:     &l.RollupConfig.BatchAuthenticatorAddress,
 	}
 
 	l.submitAuthenticatedBatch(transactionReference, verifyCandidate, candidate, queue, receiptsCh)
@@ -108,7 +102,7 @@ func (l *BatchSubmitter) submitAuthenticatedBatch(transactionReference txRef, ve
 	l.Log.Debug(
 		"Sending authenticateBatchInfo transaction",
 		"txRef", transactionReference,
-		"address", l.RollupConfig.BatchAuthenticatorAddress.String(),
+		"address", verifyCandidate.To,
 	)
 
 	if len(candidate.Blobs) > 0 {

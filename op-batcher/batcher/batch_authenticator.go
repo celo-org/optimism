@@ -11,11 +11,15 @@ import (
 
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching"
+	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
-// batchAuthenticatorReader is the batcher's read-only view of the
+// batchAuthenticator is the batcher's single view of the
 // BatchAuthenticator contract. It is bound once at construction and shared by
-// registerBatcher, resolveTEEVerifierAddress and checkBatcherActive.
+// registerBatcher, resolveTEEVerifierAddress and checkBatcherActive. It also
+// builds the transactions sent to the contract (registerSigner and
+// authenticateBatchInfo).
 //
 // The SystemConfig address is read from BatchAuthenticator.systemConfig(),
 // because that is where the contract itself looks up the fallback batcher.
@@ -35,21 +39,21 @@ import (
 // because both addresses are read once and kept, so a bad value would never be
 // re-read. The batcher addresses need no such guard: they are re-read and
 // compared with the batcher's own address on every check.
-type batchAuthenticatorReader struct {
+type batchAuthenticator struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
 	backend bind.ContractCaller
 	timeout time.Duration
 
-	// mu guards systemConfig, so the reader is safe to share.
+	// mu guards systemConfig, so the binding is safe to share.
 	mu           sync.Mutex
 	systemConfig *systemconfig.SystemConfigCaller
 }
 
-// newBatchAuthenticatorReader binds a reader to addr. A zero addr means the
-// chain has no BatchAuthenticator and yields no reader, never one bound to the
+// newBatchAuthenticator binds the contract at addr. A zero addr means the
+// chain has no BatchAuthenticator and yields no binding, never one bound to the
 // zero address; callers read that nil as "no BatchAuthenticator configured".
-func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCaller, timeout time.Duration) (*batchAuthenticatorReader, error) {
+func newBatchAuthenticator(addr common.Address, backend bind.ContractCaller, timeout time.Duration) (*batchAuthenticator, error) {
 	if addr == (common.Address{}) {
 		return nil, nil
 	}
@@ -57,7 +61,7 @@ func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCalle
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind BatchAuthenticator at %s: %w", addr, err)
 	}
-	return &batchAuthenticatorReader{
+	return &batchAuthenticator{
 		addr:    addr,
 		auth:    auth,
 		backend: backend,
@@ -66,9 +70,9 @@ func newBatchAuthenticatorReader(addr common.Address, backend bind.ContractCalle
 }
 
 // ensureDeployed verifies that code exists at the bound address. Reads do not
-// need it, see batchAuthenticatorReader. registerBatcher does: it sends a
+// need it, see batchAuthenticator. registerBatcher does: it sends a
 // transaction, and one sent to an address with no code succeeds as a no-op.
-func (r *batchAuthenticatorReader) ensureDeployed(ctx context.Context) error {
+func (r *batchAuthenticator) ensureDeployed(ctx context.Context) error {
 	cCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	code, err := r.backend.CodeAt(cCtx, r.addr, nil)
@@ -83,7 +87,7 @@ func (r *batchAuthenticatorReader) ensureDeployed(ctx context.Context) error {
 
 // readContract performs one contract read, bounded by the network timeout.
 // getter names the Solidity getter, for the error.
-func readContract[T any](ctx context.Context, r *batchAuthenticatorReader, getter string, call func(*bind.CallOpts) (T, error)) (T, error) {
+func readContract[T any](ctx context.Context, r *batchAuthenticator, getter string, call func(*bind.CallOpts) (T, error)) (T, error) {
 	var zero T
 	cCtx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
@@ -96,19 +100,19 @@ func readContract[T any](ctx context.Context, r *batchAuthenticatorReader, gette
 
 // ActiveIsEspresso reports the contract's activeIsEspresso flag: true when the
 // Espresso (TEE) batcher is active, false when the fallback batcher is.
-func (r *batchAuthenticatorReader) ActiveIsEspresso(ctx context.Context) (bool, error) {
+func (r *batchAuthenticator) ActiveIsEspresso(ctx context.Context) (bool, error) {
 	return readContract(ctx, r, "activeIsEspresso", r.auth.ActiveIsEspresso)
 }
 
 // EspressoBatcher returns the address authorized to authenticate batches while
 // activeIsEspresso is true.
-func (r *batchAuthenticatorReader) EspressoBatcher(ctx context.Context) (common.Address, error) {
+func (r *batchAuthenticator) EspressoBatcher(ctx context.Context) (common.Address, error) {
 	return readContract(ctx, r, "espressoBatcher", r.auth.EspressoBatcher)
 }
 
 // FallbackBatcher returns the address authorized to authenticate batches while
 // activeIsEspresso is false, read from the SystemConfig's batcherHash.
-func (r *batchAuthenticatorReader) FallbackBatcher(ctx context.Context) (common.Address, error) {
+func (r *batchAuthenticator) FallbackBatcher(ctx context.Context) (common.Address, error) {
 	systemConfig, err := r.systemConfigCaller(ctx)
 	if err != nil {
 		return common.Address{}, err
@@ -124,7 +128,7 @@ func (r *batchAuthenticatorReader) FallbackBatcher(ctx context.Context) (common.
 
 // systemConfigCaller binds the SystemConfig named by the BatchAuthenticator,
 // reading the address once and keeping the binding.
-func (r *batchAuthenticatorReader) systemConfigCaller(ctx context.Context) (*systemconfig.SystemConfigCaller, error) {
+func (r *batchAuthenticator) systemConfigCaller(ctx context.Context) (*systemconfig.SystemConfigCaller, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.systemConfig != nil {
@@ -148,7 +152,7 @@ func (r *batchAuthenticatorReader) systemConfigCaller(ctx context.Context) (*sys
 // EspressoTEEVerifier returns the contract's configured EspressoTEEVerifier
 // address, the EIP-712 verifying contract every authentication is signed
 // against.
-func (r *batchAuthenticatorReader) EspressoTEEVerifier(ctx context.Context) (common.Address, error) {
+func (r *batchAuthenticator) EspressoTEEVerifier(ctx context.Context) (common.Address, error) {
 	addr, err := readContract(ctx, r, "espressoTEEVerifier", r.auth.EspressoTEEVerifier)
 	if err != nil {
 		return common.Address{}, err
@@ -157,4 +161,25 @@ func (r *batchAuthenticatorReader) EspressoTEEVerifier(ctx context.Context) (com
 		return common.Address{}, fmt.Errorf("BatchAuthenticator at %s has a zero espressoTEEVerifier address", r.addr)
 	}
 	return addr, nil
+}
+
+// RegisterSignerTx builds a registerSigner(journal, proof) transaction.
+func (r *batchAuthenticator) RegisterSignerTx(journal, proof []byte) (txmgr.TxCandidate, error) {
+	return r.txCandidate("registerSigner", journal, proof)
+}
+
+// AuthenticateBatchInfoTx builds an authenticateBatchInfo(commitment,
+// signature) transaction. The fallback path passes an empty signature.
+func (r *batchAuthenticator) AuthenticateBatchInfoTx(commitment [32]byte, signature []byte) (txmgr.TxCandidate, error) {
+	return r.txCandidate("authenticateBatchInfo", commitment, signature)
+}
+
+// txCandidate packs a call to method and addresses it to the contract.
+// GetAbi parses the ABI once and caches it.
+func (r *batchAuthenticator) txCandidate(method string, args ...any) (txmgr.TxCandidate, error) {
+	authABI, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
+	if err != nil {
+		return txmgr.TxCandidate{}, fmt.Errorf("failed to get BatchAuthenticator ABI: %w", err)
+	}
+	return batching.NewBoundContract(authABI, r.addr).Call(method, args...).ToTxCandidate()
 }
