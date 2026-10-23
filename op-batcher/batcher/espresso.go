@@ -604,9 +604,7 @@ func espressoVerifyTransactionWorker(
 		// can measure how many blocks pass during verification.
 		if job.attempts == 0 {
 			job.startHeight = latestHeight.Load()
-		}
-
-		if job.attempts > 0 {
+		} else {
 			// We have already attempted this job, so we will wait a bit
 			// NOTE: this prevents this worker from being able to process
 			// other jobs while we wait for this delay.
@@ -641,16 +639,14 @@ func espressoVerifyTransactionWorker(
 // SpawnWorkers spawns the given number of workers to process the
 // submit transaction jobs and verify receipt jobs.
 func (s *espressoTransactionSubmitter) SpawnWorkers(numSubmitTransactionWorkers, numVerifyReceiptWorkers int) {
-	workersCtx := s.ctx
-
 	for i := 0; i < numSubmitTransactionWorkers; i++ {
 		s.wg.Add(1)
-		go espressoSubmitTransactionWorker(workersCtx, s.wg, s.espresso, s.networkTimeout, s.submitJobQueue, s.submitRespQueue)
+		go espressoSubmitTransactionWorker(s.ctx, s.wg, s.espresso, s.networkTimeout, s.submitJobQueue, s.submitRespQueue)
 	}
 
 	for i := 0; i < numVerifyReceiptWorkers; i++ {
 		s.wg.Add(1)
-		go espressoVerifyTransactionWorker(workersCtx, s.wg, s.espresso, s.networkTimeout, s.verifyReceiptJobQueue, s.verifyReceiptRespQueue, &s.latestBlockHeight, s.verifyReceiptRetryDelay)
+		go espressoVerifyTransactionWorker(s.ctx, s.wg, s.espresso, s.networkTimeout, s.verifyReceiptJobQueue, s.verifyReceiptRespQueue, &s.latestBlockHeight, s.verifyReceiptRetryDelay)
 	}
 }
 
