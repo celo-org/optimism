@@ -35,7 +35,8 @@ type EspressoDriverSetup struct {
 	ChainSigner      opcrypto.ChainSigner
 	SequencerAddress common.Address
 	Attestation      []byte
-	// BatchAuth is the BatchAuthenticator binding, nil when the chain has none.
+	// BatchAuth is the BatchAuthenticator binding. NewBatchSubmitter binds it
+	// from the rollup config when it is nil.
 	BatchAuth *batchAuthenticator
 }
 
