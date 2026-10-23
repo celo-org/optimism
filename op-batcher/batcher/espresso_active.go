@@ -10,7 +10,15 @@ import (
 )
 
 // checkBatcherActive queries the BatchAuthenticator contract to decide whether
-// this batcher should be publishing. It applies two checks:
+// this batcher should be publishing.
+//
+// Only meaningful once event-based batch auth is enforced: the caller
+// (evaluatePublishGate) must gate on derive.IsEspressoAuthEnforced first, since
+// pre-enforcement the contract may be undeployed and its activeIsEspresso flag
+// does not confer ownership: only the SystemConfig batcher key can publish a
+// batch that derives before the boundary.
+//
+// It applies two checks:
 //  1. Mode: the contract's activeIsEspresso flag must match this node's role
 //     (Config.Espresso.Enabled). A mismatch reports PublishGateModeInactive.
 //  2. Identity: the sender key (Txmgr.From) must be the authorized batcher for
