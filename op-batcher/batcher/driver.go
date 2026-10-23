@@ -161,11 +161,11 @@ type BatchSubmitter struct {
 	// clearStateRequested asks the espresso batch loading loop to run clearState
 	clearStateRequested atomic.Bool
 
-	// batchAuth is the read-only binding to the BatchAuthenticator contract,
-	// shared by registerBatcher, resolveTEEVerifierAddress and the
-	// checkBatcherActive gate. Nil when RollupConfig has a zero
-	// BatchAuthenticatorAddress.
-	batchAuth *batchAuthenticatorReader
+	// batchAuth is the binding to the BatchAuthenticator contract, shared by
+	// registerBatcher, resolveTEEVerifierAddress, the checkBatcherActive gate
+	// and the auth send paths, which build their transactions through it. Nil
+	// when the chain has no BatchAuthenticator.
+	batchAuth *batchAuthenticator
 
 	// degradedLog throttles repeated warnings from tick-driven loops so the
 	// log debouncer doesn't see the same message every poll interval.

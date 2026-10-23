@@ -101,7 +101,7 @@ type BatcherService struct {
 	Attestation []byte
 	// batchAuth is the binding to the BatchAuthenticator contract, built from
 	// the rollup config by initBatchAuthenticator. Nil when the chain has none.
-	batchAuth *batchAuthenticatorReader
+	batchAuth *batchAuthenticator
 }
 
 type DriverSetupOption func(setup *DriverSetup)

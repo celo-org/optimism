@@ -71,9 +71,9 @@ type fallbackAuthMetricsSpy struct {
 func (s *fallbackAuthMetricsSpy) RecordFallbackAuthWindowExceeded() { s.windowExceeded++ }
 
 // testRollupConfigAuthAddr is the BatchAuthenticator address in the auth
-// fixtures' rollup config. It differs from testAuthAddr, the address the reader
+// fixtures' rollup config. It differs from testAuthAddr, the address the binding
 // is bound to, so a builder that addresses its tx from the rollup config instead
-// of going through the reader fails the To checks.
+// of going through the binding fails the To checks.
 var testRollupConfigAuthAddr = common.HexToAddress("0x00000000000000000000000000000000000000ee")
 
 func newAuthSubmitter(t *testing.T) *BatchSubmitter {
@@ -83,7 +83,7 @@ func newAuthSubmitter(t *testing.T) *BatchSubmitter {
 	l.RollupConfig = &rollup.Config{
 		BatchAuthenticatorAddress: testRollupConfigAuthAddr,
 	}
-	batchAuth, err := newBatchAuthenticatorReader(testAuthAddr, nil, time.Second)
+	batchAuth, err := newBatchAuthenticator(testAuthAddr, nil, time.Second)
 	require.NoError(t, err)
 	l.batchAuth = batchAuth
 	return l
@@ -567,7 +567,7 @@ func TestComputeCommitment_Parity(t *testing.T) {
 }
 
 // TestAuth_NoAuthenticator verifies both auth paths fail before any work when
-// the batcher has no BatchAuthenticator reader. The submitter has no Espresso
+// the batcher has no BatchAuthenticator binding. The submitter has no Espresso
 // session or batcher key, so the TEE path only passes if the check comes
 // before the commitment is signed.
 func TestAuth_NoAuthenticator(t *testing.T) {

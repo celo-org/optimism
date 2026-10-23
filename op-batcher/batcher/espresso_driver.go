@@ -35,8 +35,8 @@ type EspressoDriverSetup struct {
 	ChainSigner      opcrypto.ChainSigner
 	SequencerAddress common.Address
 	Attestation      []byte
-	// BatchAuth is the BatchAuthenticator reader, nil when the chain has none.
-	BatchAuth *batchAuthenticatorReader
+	// BatchAuth is the BatchAuthenticator binding, nil when the chain has none.
+	BatchAuth *batchAuthenticator
 }
 
 // espressoRuntimeClient provides the client methods used by submission workers and the streamer.
