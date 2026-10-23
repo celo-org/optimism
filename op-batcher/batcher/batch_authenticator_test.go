@@ -569,6 +569,35 @@ func TestResolveTEEVerifierAddress(t *testing.T) {
 	}
 }
 
+// TestBatchAuthenticatorReader_RegisterSignerTx pins the registerSigner
+// calldata: the journal goes in _verificationData and the proof in _data. With
+// the two swapped the registration reverts, and so does every
+// authenticateBatchInfo signed by the unregistered key after it.
+func TestBatchAuthenticatorReader_RegisterSignerTx(t *testing.T) {
+	r := newTestReader(t, newMockAuthBackend(t))
+	journal := []byte("journal")
+	proof := []byte("onchain-proof")
+
+	candidate, err := r.RegisterSignerTx(journal, proof)
+	require.NoError(t, err)
+	require.NotNil(t, candidate.To)
+	require.Equal(t, testAuthAddr, *candidate.To)
+
+	authABI, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
+	require.NoError(t, err)
+	method, ok := authABI.Methods["registerSigner"]
+	require.True(t, ok)
+	require.Equal(t, method.ID, candidate.TxData[:4], "calldata is not a registerSigner call")
+
+	args, err := method.Inputs.Unpack(candidate.TxData[4:])
+	require.NoError(t, err)
+	require.Len(t, args, 2)
+	require.Equal(t, "_verificationData", method.Inputs[0].Name)
+	require.Equal(t, journal, args[0])
+	require.Equal(t, "_data", method.Inputs[1].Name)
+	require.Equal(t, proof, args[1])
+}
+
 // TestRegisterBatcher_DeploymentCheck covers registerBatcher's checks on the
 // BatchAuthenticator before it asks for a proof and sends the registration: a
 // registration sent to an address with no code would succeed as a no-op, so
