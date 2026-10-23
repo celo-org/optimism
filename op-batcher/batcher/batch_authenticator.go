@@ -6,12 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/systemconfig"
+	"github.com/ethereum-optimism/optimism/op-service/sources/batching"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
 )
 
@@ -19,7 +19,7 @@ import (
 // BatchAuthenticator contract. It is bound once at construction and shared by
 // registerBatcher, resolveTEEVerifierAddress and checkBatcherActive. It also
 // builds the transactions sent to the contract (registerSigner and
-// authenticateBatchInfo), with the ABI parsed once.
+// authenticateBatchInfo).
 //
 // The SystemConfig address is read from BatchAuthenticator.systemConfig(),
 // because that is where the contract itself looks up the fallback batcher.
@@ -42,7 +42,6 @@ import (
 type batchAuthenticator struct {
 	addr    common.Address
 	auth    *batchauthenticator.BatchAuthenticatorCaller
-	abi     *abi.ABI
 	backend bind.ContractCaller
 	timeout time.Duration
 
@@ -62,14 +61,9 @@ func newBatchAuthenticator(addr common.Address, backend bind.ContractCaller, tim
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind BatchAuthenticator at %s: %w", addr, err)
 	}
-	authABI, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get BatchAuthenticator ABI: %w", err)
-	}
 	return &batchAuthenticator{
 		addr:    addr,
 		auth:    auth,
-		abi:     authABI,
 		backend: backend,
 		timeout: timeout,
 	}, nil
@@ -181,10 +175,11 @@ func (r *batchAuthenticator) AuthenticateBatchInfoTx(commitment [32]byte, signat
 }
 
 // txCandidate packs a call to method and addresses it to the contract.
+// GetAbi parses the ABI once and caches it.
 func (r *batchAuthenticator) txCandidate(method string, args ...any) (txmgr.TxCandidate, error) {
-	data, err := r.abi.Pack(method, args...)
+	authABI, err := batchauthenticator.BatchAuthenticatorMetaData.GetAbi()
 	if err != nil {
-		return txmgr.TxCandidate{}, fmt.Errorf("failed to pack %s calldata: %w", method, err)
+		return txmgr.TxCandidate{}, fmt.Errorf("failed to get BatchAuthenticator ABI: %w", err)
 	}
-	return txmgr.TxCandidate{TxData: data, To: &r.addr}, nil
+	return batching.NewBoundContract(authABI, r.addr).Call(method, args...).ToTxCandidate()
 }
