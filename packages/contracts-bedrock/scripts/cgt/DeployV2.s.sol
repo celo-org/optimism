@@ -166,12 +166,10 @@ contract DeployV2 is Script {
 
         // ---- Deploy CeloGasBridgeL1 implementation ----
         CeloGasBridgeL1 celoGasBridgeL1Impl = new CeloGasBridgeL1();
-        _output.set(_output.celoGasBridgeL1Impl.selector, address(celoGasBridgeL1Impl));
         console.log("CeloGasBridgeL1 implementation deployed at:", address(celoGasBridgeL1Impl));
 
         // ---- Deploy CeloGasBridgeL1 proxy with the deployer as temporary admin ----
         Proxy celoGasBridgeL1Proxy = new Proxy(msg.sender);
-        _output.set(_output.celoGasBridgeL1Proxy.selector, address(celoGasBridgeL1Proxy));
         console.log("CeloGasBridgeL1 proxy deployed at:", address(celoGasBridgeL1Proxy));
 
         // ---- Set implementation and initialize (deployer acts as admin) ----
@@ -200,15 +198,19 @@ contract DeployV2 is Script {
             _gasBridge: address(celoGasBridgeL1Proxy),
             _legacyPortalBalance: _input.legacyPortalBalance()
         });
-        _output.set(_output.portalMigratorImpl.selector, address(portalMigratorImpl));
         console.log("PortalMigrator implementation deployed at:", address(portalMigratorImpl));
 
         // ---- Deploy StorageSetter (used to change SystemConfig.superchainConfig during migration) ----
         StorageSetter storageSetter = new StorageSetter();
-        _output.set(_output.storageSetter.selector, address(storageSetter));
         console.log("StorageSetter deployed at:", address(storageSetter));
 
         // ---- Stop broadcasting transactions ----
         vm.stopBroadcast();
+
+        // ---- Record the deployed addresses ----
+        _output.set(_output.celoGasBridgeL1Impl.selector, address(celoGasBridgeL1Impl));
+        _output.set(_output.celoGasBridgeL1Proxy.selector, address(celoGasBridgeL1Proxy));
+        _output.set(_output.portalMigratorImpl.selector, address(portalMigratorImpl));
+        _output.set(_output.storageSetter.selector, address(storageSetter));
     }
 }
