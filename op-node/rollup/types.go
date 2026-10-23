@@ -173,8 +173,12 @@ type Config struct {
 	// EspressoTime sets the activation time of the Espresso upgrade.
 	// Pre-fork, the derivation pipeline behaves exactly as upstream Optimism: batches are
 	// accepted based on the L1 transaction sender matching the SystemConfig batcher address.
-	// Post-fork, batches must be authenticated via BatchInfoAuthenticated events emitted by
-	// the BatchAuthenticator contract; sender-based authorization is rejected.
+	// That continues to hold for a grace period after activation: event-based batch
+	// authentication is only enforced from EspressoTime + derive.BatchAuthEnforcementDelaySecs,
+	// and only from there are batches required to carry a BatchInfoAuthenticated event from
+	// the BatchAuthenticator contract with sender-based authorization rejected. See
+	// derive.BatchAuthEnforcementDelaySecs for the grace-period mechanism, which operators
+	// setting an activation time need to account for.
 	// EspressoTime is conceptually an L2-timestamp fork activation time, but the
 	// derivation pipeline gates on it by comparing against the L1 origin time of the
 	// enclosing L1 block (the L2 epoch's L1 origin), mirroring upstream's ecotoneTime

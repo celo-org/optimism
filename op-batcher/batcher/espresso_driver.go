@@ -345,21 +345,23 @@ func (l *BatchSubmitter) shouldSkipPublishForActiveSeq(ctx context.Context) bool
 	return state != metrics.PublishGateActive
 }
 
-// evaluatePublishGate decides whether this batcher may publish. It fails
-// closed: if any gate input cannot be evaluated it reports PublishGateError and
-// the publish is retried on the next tick. Repeated skips are throttled through
-// degradedLog, like the skip branches in checkBatcherActive, as a fallback
-// batcher started before the BatchAuthenticator is deployed fails on every tick.
+// evaluatePublishGate evaluates the gate and reports why it decided as it did,
+// so the reason reaches the publish_gate metric rather than only the logs. It
+// fails closed: if any gate input cannot be evaluated it reports
+// PublishGateError and the publish is retried on the next tick. Repeated
+// failures are throttled through degradedLog, as a fallback batcher started
+// before the BatchAuthenticator is deployed fails on every tick.
 func (l *BatchSubmitter) evaluatePublishGate(ctx context.Context) metrics.PublishGateState {
 	if l.batchAuth == nil {
 		return metrics.PublishGateActive
 	}
 	enforced, err := l.isBatchAuthEnforcedAtTip(ctx)
 	if err != nil {
-		l.degradedLog.Warn(l.Log, "publishGateEnforcementErr", "Failed to evaluate the batch-auth enforcement boundary, skipping publish", "err", err)
+		l.degradedLog.Warn(l.Log, "publishGate/boundary",
+			"Failed to evaluate the batch-auth enforcement boundary, skipping publish", "err", err)
 		return metrics.PublishGateError
 	}
-	l.degradedLog.Clear(l.Log, "publishGateEnforcementErr", "Batch-auth enforcement boundary evaluation recovered")
+	l.degradedLog.Clear(l.Log, "publishGate/boundary", "Batch-auth enforcement boundary readable again")
 	if !enforced {
 		if l.Config.Espresso.Enabled {
 			l.Log.Debug("Event-based batch auth is not enforced at the L1 tip yet, leaving publishing to the fallback batcher")
@@ -369,10 +371,11 @@ func (l *BatchSubmitter) evaluatePublishGate(ctx context.Context) metrics.Publis
 	}
 	state, err := l.checkBatcherActive(ctx)
 	if err != nil {
-		l.degradedLog.Warn(l.Log, "activeCheckErr", "Failed to check if batcher is active, skipping publish", "err", err)
+		l.degradedLog.Warn(l.Log, "publishGate/activeCheck",
+			"Failed to check if batcher is active, skipping publish", "err", err)
 		return metrics.PublishGateError
 	}
-	l.degradedLog.Clear(l.Log, "activeCheckErr", "Active-batcher check recovered")
+	l.degradedLog.Clear(l.Log, "publishGate/activeCheck", "Batcher active-check reads recovered")
 	return state
 }
 
