@@ -828,14 +828,26 @@ func (s *espressoTransactionSubmitter) Start() {
 	go s.handleVerifyReceiptJobResponse()
 }
 
-// queueBlockToEspresso converts, signs, and queues a block for submission.
+// queueBlockToEspresso converts a block to an EspressoBatch, checks it against the
+// derivation batch rules on top of parent, then signs and queues it for submission.
 // On error, the block loader leaves the block unqueued so it can retry.
-func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.Block) error {
+func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, parent eth.L2BlockRef, block *types.Block) error {
 	espressoBatch, err := derivation.BlockToEspressoBatch(l.RollupConfig, block)
 	if err != nil {
 		l.Log.Warn("Failed to derive batch from block", "err", err)
 		return fmt.Errorf("failed to derive batch from block: %w", err)
 	}
+
+	if err := l.checkDerivationRules(ctx, parent, block, &espressoBatch.Batch); err != nil {
+		if errors.Is(err, errBatchRejected) {
+			// The block will be refetched and rejected on every tick until the
+			// sequencer reorgs it away, so throttle the log.
+			l.degradedLog.Warn(l.Log, "invalidBatch", "Refusing to sign block that violates derivation rules",
+				"block", eth.ToBlockID(block), "parent", parent.ID(), "err", err)
+		}
+		return fmt.Errorf("derivation check failed: %w", err)
+	}
+	l.degradedLog.Clear(l.Log, "invalidBatch", "Derivation check passing again")
 
 	signCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
 	transaction, err := espressoBatch.ToEspressoTransaction(signCtx, bigs.Uint64Strict(l.RollupConfig.L2ChainID), l.Espresso.ChainSigner)
@@ -897,6 +909,19 @@ func (l *BatchSubmitter) performClearState(ctx context.Context) bool {
 	l.Log.Info("Clearing state as requested by the block queueing loop")
 	l.clearState(ctx)
 	return true
+}
+
+// espressoBatchParent returns the block a streamed batch must build on: the last
+// block in the channel manager, or the local-safe head if it holds none.
+func (l *BatchSubmitter) espressoBatchParent(syncStatus *eth.SyncStatus) (eth.L2BlockRef, error) {
+	l.channelMgrMutex.Lock()
+	defer l.channelMgrMutex.Unlock()
+	n := l.channelMgr.blocks.Len()
+	if n == 0 {
+		return syncStatus.LocalSafeL2, nil
+	}
+	last, _ := l.channelMgr.blocks.PeekN(n - 1)
+	return derive.L2BlockToBlockRef(l.RollupConfig, last.Block)
 }
 
 // Periodically refreshes the sync status and drains the Espresso streamer of any
@@ -982,6 +1007,35 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 					"parentHash", block.ParentHash(),
 				)
 
+				// Anyone holding the authorized batcher key can post to Espresso directly,
+				// bypassing the check in queueBlockToEspresso, so re-check before the enclave
+				// commits to the batch on L1.
+				parent, err := l.espressoBatchParent(newSyncStatus)
+				if err != nil {
+					l.Log.Error("failed to get parent of streamed batch", "err", err)
+					l.clearState(ctx)
+					break
+				}
+				if block.ParentHash() != parent.Hash {
+					l.Log.Warn("Streamed batch does not extend the channel manager tip, re-anchoring",
+						"blockNr", block.NumberU64(), "parentHash", block.ParentHash(), "tip", parent.ID())
+					l.clearState(ctx)
+					break
+				}
+				if err := l.checkDerivationRules(ctx, parent, block, &batch.Batch); err != nil {
+					if errors.Is(err, errBatchRejected) {
+						l.degradedLog.Warn(l.Log, "invalidStreamedBatch", "Refusing to commit to streamed batch that violates derivation rules",
+							"block", eth.ToBlockID(block), "parent", parent.ID(), "signer", batch.SignerAddress, "err", err)
+					} else {
+						// Undecided or a fetch error: retry on the next tick.
+						l.degradedLog.Warn(l.Log, "streamedBatchCheckRetry", "Cannot check streamed batch yet, retrying",
+							"block", eth.ToBlockID(block), "err", err)
+					}
+					break
+				}
+				l.degradedLog.Clear(l.Log, "invalidStreamedBatch", "Streamed batches passing the derivation check again")
+				l.degradedLog.Clear(l.Log, "streamedBatchCheckRetry", "Streamed batch check recovered")
+
 				l.channelMgrMutex.Lock()
 				err = l.channelMgr.AddL2Block(block)
 				l.channelMgrMutex.Unlock()
@@ -1057,7 +1111,13 @@ func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusive
 			break
 		}
 
-		err = l.batcher.queueBlockToEspresso(ctx, block)
+		parent, err := l.parentRef(ctx, block)
+		if err != nil {
+			l.batcher.Log.Warn("failed to get parent of block", "block_number", i, "err", err)
+			break
+		}
+
+		err = l.batcher.queueBlockToEspresso(ctx, parent, block)
 		if err != nil {
 			l.batcher.Log.Debug("queue block to espresso failed", "err", err)
 			break
@@ -1065,6 +1125,27 @@ func (l *BlockLoader) EnqueueBlocks(ctx context.Context, blocksToQueue inclusive
 
 		l.queuedBlocks = append(l.queuedBlocks, blockRef)
 	}
+}
+
+// parentRef returns the block the derivation check treats as the safe head
+// when checking block: the last queued block, or, right after a start or
+// reset, the parent fetched from the L2 RPC.
+func (l *BlockLoader) parentRef(ctx context.Context, block *types.Block) (eth.L2BlockRef, error) {
+	if len(l.queuedBlocks) > 0 {
+		// EnqueueBlocks already checked that block builds on it.
+		return l.queuedBlocks[len(l.queuedBlocks)-1], nil
+	}
+	if block.NumberU64() == 0 {
+		return eth.L2BlockRef{}, errors.New("genesis block has no parent")
+	}
+	parent, err := l.batcher.fetchBlock(ctx, block.NumberU64()-1)
+	if err != nil {
+		return eth.L2BlockRef{}, err
+	}
+	if parent.Hash() != block.ParentHash() {
+		return eth.L2BlockRef{}, fmt.Errorf("fetched parent %s does not match parent hash %s", parent.Hash(), block.ParentHash())
+	}
+	return derive.L2BlockToBlockRef(l.batcher.RollupConfig, parent)
 }
 
 type EnqueueBlockAction uint

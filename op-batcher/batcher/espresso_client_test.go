@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,11 +15,14 @@ import (
 	taggedbase64 "github.com/EspressoSystems/espresso-network/sdks/go/tagged-base64"
 	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/espresso"
+	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -263,14 +267,52 @@ func (s *stalledChainSigner) Sign(ctx context.Context, _ []byte) ([]byte, error)
 	return nil, ctx.Err()
 }
 
+// derivationCheckL1Client serves L1 headers to the derivation check.
+type derivationCheckL1Client struct {
+	L1Client
+	l1HeaderFetcher
+}
+
+func (c *derivationCheckL1Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
+	return c.l1HeaderFetcher.HeaderByNumber(ctx, number)
+}
+
 func TestQueueBlockToEspressoSigningContext(t *testing.T) {
 	testEspressoCallContexts(t, func(t *testing.T, ctx context.Context, timeout time.Duration, calls chan context.Context) func(error) {
 		batcher, _ := setup(t, nil)
 		batcher.Config.NetworkTimeout = timeout
 		batcher.Espresso.ChainSigner = &stalledChainSigner{calls: calls}
-		block := newMiniL2BlockWithChainID(0, batcher.RollupConfig.L2ChainID)
+		// The block must pass the derivation check for signing to be reached.
+		batcher.RollupConfig = &rollup.Config{
+			Genesis:           batcher.RollupConfig.Genesis,
+			L2ChainID:         batcher.RollupConfig.L2ChainID,
+			BlockTime:         2,
+			SeqWindowSize:     10,
+			MaxSequencerDrift: 600,
+		}
+		const l1Number, l1Time = 100, 1000
+		l1Header := types.NewBlock(&types.Header{
+			BaseFee:    big.NewInt(10),
+			Difficulty: common.Big0,
+			Number:     big.NewInt(l1Number),
+			Time:       l1Time,
+		}, nil, nil, trie.NewStackTrie(nil), types.DefaultBlockConfig).Header()
+		l1 := &fakeL1{headers: make([]*types.Header, l1Number+1)}
+		l1.headers[l1Number] = l1Header
+		batcher.L1Client = &derivationCheckL1Client{l1HeaderFetcher: l1}
+		parent := eth.L2BlockRef{
+			Hash:     common.Hash{0xaa},
+			Number:   1,
+			Time:     l1Time,
+			L1Origin: eth.HeaderBlockID(l1Header),
+		}
+		block := newMiniL2BlockWithChainIDNumberParentAndL1Information(0, batcher.RollupConfig.L2ChainID,
+			big.NewInt(int64(parent.Number+1)), parent.Hash, l1Number, l1Time)
+		header := block.Header()
+		header.Time = parent.Time + batcher.RollupConfig.BlockTime
+		block = block.WithSeal(header)
 		result := make(chan error, 1)
-		go func() { result <- batcher.queueBlockToEspresso(ctx, block) }()
+		go func() { result <- batcher.queueBlockToEspresso(ctx, parent, block) }()
 		return func(expectedErr error) {
 			require.ErrorIs(t, receiveTestValue(t, result), expectedErr)
 		}
