@@ -289,13 +289,16 @@ contract MigrateV1V2 is Script {
         require(portalBalance == 0, "MigrateV1V2: portal still holds CELO");
         console.log("OK  portal CELO balance == 0");
 
-        // CeloGasBridgeL1 holds the migrated CELO; warn if the amount drifted from expected.
+        // The slot is the expected amount; legacyPortalBalance's env default reads the now-drained portal.
+        uint256 migratedAmount = uint256(vm.load(_input.portalProxy, MIGRATED_SLOT));
+        require(migratedAmount != 0, "MigrateV1V2: portal not migrated");
+
+        // The bridge may hold more than it was seeded with once deposits resume, never less.
         uint256 bridgeBalance = _input.celoTokenL1.balanceOf(_input.bridgeL1Proxy);
-        if (bridgeBalance != _input.legacyPortalBalance) {
-            console.log("WARN CeloGasBridgeL1 balance differs from expected. expected:", _input.legacyPortalBalance);
-            console.log("WARN actual CeloGasBridgeL1 balance:", bridgeBalance);
-        } else {
-            console.log("OK  CeloGasBridgeL1 balance matches expected migrated amount:", bridgeBalance);
+        require(bridgeBalance >= migratedAmount, "MigrateV1V2: bridge holds less CELO than was migrated");
+        console.log("OK  CeloGasBridgeL1 covers the migrated amount:", migratedAmount);
+        if (bridgeBalance != migratedAmount) {
+            console.log("     bridge balance now (post-migration deposits):", bridgeBalance);
         }
 
         // CGT feature flag should be flipped on.
@@ -325,9 +328,6 @@ contract MigrateV1V2 is Script {
         require(trackedEscrow <= bridgeBalance, "MigrateV1V2: bridge escrow > token balance (insolvent)");
         console.log("OK  tracked escrow covered by CELO balance:", trackedEscrow);
 
-        // The amount recorded on the proxy is what the bridge was actually seeded with.
-        uint256 migratedAmount = uint256(vm.load(_input.portalProxy, MIGRATED_SLOT));
-        require(migratedAmount != 0, "MigrateV1V2: portal not migrated");
         require(migratedAmount == trackedEscrow, "MigrateV1V2: migrated amount != tracked escrow");
         console.log("OK  migrated amount recorded in proxy storage:", migratedAmount);
 
