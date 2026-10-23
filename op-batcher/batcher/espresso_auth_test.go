@@ -565,3 +565,35 @@ func TestComputeCommitment_Parity(t *testing.T) {
 		}
 	})
 }
+
+// TestAuth_NoAuthenticator verifies both auth paths fail before any work when
+// the batcher has no BatchAuthenticator reader. The submitter has no Espresso
+// session or batcher key, so the TEE path only passes if the check comes
+// before the commitment is signed.
+func TestAuth_NoAuthenticator(t *testing.T) {
+	paths := map[string]func(*BatchSubmitter) func(txData, bool, *txmgr.TxCandidate, TxSender[txRef], chan txmgr.TxReceipt[txRef]){
+		"fallback": func(l *BatchSubmitter) func(txData, bool, *txmgr.TxCandidate, TxSender[txRef], chan txmgr.TxReceipt[txRef]) {
+			return l.sendTxWithFallbackAuth
+		},
+		"espresso": func(l *BatchSubmitter) func(txData, bool, *txmgr.TxCandidate, TxSender[txRef], chan txmgr.TxReceipt[txRef]) {
+			return l.sendTxWithEspresso
+		},
+	}
+	for name, path := range paths {
+		t.Run(name, func(t *testing.T) {
+			l := newAuthSubmitter(t)
+			l.batchAuth = nil
+			txdata := testAuthTxData()
+			queue := &fakeTxSender{}
+			receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
+
+			path(l)(txdata, false, &txmgr.TxCandidate{TxData: []byte("batch-calldata")}, queue, receiptsCh)
+			l.authGroup.Wait()
+
+			got := <-receiptsCh
+			require.ErrorContains(t, got.Err, "no BatchAuthenticator configured")
+			require.Equal(t, txdata.ID().String(), got.ID.id.String())
+			require.Empty(t, queue.sends)
+		})
+	}
+}
