@@ -70,14 +70,20 @@ type fallbackAuthMetricsSpy struct {
 
 func (s *fallbackAuthMetricsSpy) RecordFallbackAuthWindowExceeded() { s.windowExceeded++ }
 
+// testRollupConfigAuthAddr is the BatchAuthenticator address in the auth
+// fixtures' rollup config. It differs from testAuthAddr, the address the reader
+// is bound to, so a builder that addresses its tx from the rollup config instead
+// of going through the reader fails the To checks.
+var testRollupConfigAuthAddr = common.HexToAddress("0x00000000000000000000000000000000000000ee")
+
 func newAuthSubmitter(t *testing.T) *BatchSubmitter {
 	l := &BatchSubmitter{}
 	l.Log = testlog.Logger(t, log.LevelDebug)
 	l.Metr = metrics.NoopMetrics
 	l.RollupConfig = &rollup.Config{
-		BatchAuthenticatorAddress: common.HexToAddress("0x00000000000000000000000000000000000000aa"),
+		BatchAuthenticatorAddress: testRollupConfigAuthAddr,
 	}
-	batchAuth, err := newBatchAuthenticatorReader(l.RollupConfig.BatchAuthenticatorAddress, nil, time.Second)
+	batchAuth, err := newBatchAuthenticatorReader(testAuthAddr, nil, time.Second)
 	require.NoError(t, err)
 	l.batchAuth = batchAuth
 	return l
@@ -120,7 +126,7 @@ func TestSubmitAuthenticatedBatch_OrderingAndSuccess(t *testing.T) {
 	l := newAuthSubmitter(t)
 	txdata := testAuthTxData()
 	ref := authTxRef(txdata)
-	verifyCandidate := txmgr.TxCandidate{TxData: []byte("auth-calldata"), To: &l.RollupConfig.BatchAuthenticatorAddress}
+	verifyCandidate := txmgr.TxCandidate{TxData: []byte("auth-calldata"), To: &testAuthAddr}
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	queue := &fakeTxSender{
@@ -290,7 +296,7 @@ func TestAuth_BlobSerialized(t *testing.T) {
 	require.Equal(t, 0, queue.pairCalls, "blob pair must not be pipelined")
 	require.False(t, queue.sends[0].viaPair)
 	require.False(t, queue.sends[1].viaPair)
-	require.Equal(t, l.RollupConfig.BatchAuthenticatorAddress, *queue.sends[0].candidate.To)
+	require.Equal(t, testAuthAddr, *queue.sends[0].candidate.To)
 
 	got := <-receiptsCh
 	require.NoError(t, got.Err)
@@ -439,7 +445,7 @@ func TestFallbackAuth_Calldata(t *testing.T) {
 
 	require.Len(t, queue.sends, 2)
 	require.NotNil(t, queue.sends[0].candidate.To)
-	require.Equal(t, l.RollupConfig.BatchAuthenticatorAddress, *queue.sends[0].candidate.To)
+	require.Equal(t, testAuthAddr, *queue.sends[0].candidate.To)
 
 	expectedCommitment, err := computeCommitment(candidate)
 	require.NoError(t, err)
@@ -476,7 +482,7 @@ func TestEspressoAuth_Calldata(t *testing.T) {
 
 	require.Len(t, queue.sends, 2)
 	require.NotNil(t, queue.sends[0].candidate.To)
-	require.Equal(t, l.RollupConfig.BatchAuthenticatorAddress, *queue.sends[0].candidate.To)
+	require.Equal(t, testAuthAddr, *queue.sends[0].candidate.To)
 
 	expectedCommitment, err := computeCommitment(candidate)
 	require.NoError(t, err)
