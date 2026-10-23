@@ -190,14 +190,7 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 		panic(err)
 	}
 
-	// Bind the BatchAuthenticator reader once, here, rather than per call site.
-	// This does no network I/O - only ABI parsing, which can fail solely on a
-	// malformed generated binding, so a failure here is a build-time defect.
-	reader, err := newBatchAuthenticatorReader(setup.RollupConfig.BatchAuthenticatorAddress, setup.L1Client, setup.Config.NetworkTimeout)
-	if err != nil {
-		panic(err)
-	}
-	batcher.batchAuth = reader
+	batcher.batchAuth = setup.Espresso.BatchAuth
 
 	return batcher
 }

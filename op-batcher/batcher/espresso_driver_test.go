@@ -223,3 +223,15 @@ func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
 	require.Nil(t, streamer, "a failed lookup must not return a streamer")
 	require.Nil(t, batcher.espressoSession, "a failed lookup must not publish a session")
 }
+
+// TestSetupEspressoStreamer_NoAuthenticator guards the nil reader case: the
+// streamer filters batches by the BatchAuthenticator address, so without one it
+// must fail before it waits for the local-safe head.
+func TestSetupEspressoStreamer_NoAuthenticator(t *testing.T) {
+	batcher := newEspressoLifecycleTestBatcher(t)
+	batcher.batchAuth = nil
+
+	streamer, err := batcher.setupEspressoStreamer(t.Context())
+	require.ErrorContains(t, err, "no BatchAuthenticator configured")
+	require.Nil(t, streamer)
+}
