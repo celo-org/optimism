@@ -97,10 +97,10 @@ func (bs *BatcherService) applyEspressoDriverSetup(ds *DriverSetup) {
 	ds.Espresso.BatchAuth = bs.batchAuth
 }
 
-// initBatchAuthenticator binds the BatchAuthenticator contract. It is the one
-// place that reads RollupConfig.BatchAuthenticatorAddress: the startup checks
-// and the driver all go through the binding, which is nil when the chain has no
-// BatchAuthenticator. Binding does no network I/O.
+// initBatchAuthenticator binds the BatchAuthenticator contract. The startup
+// checks and the driver go through the binding, which is nil when the chain has
+// no BatchAuthenticator, instead of reading RollupConfig.BatchAuthenticatorAddress.
+// Binding does no network I/O.
 func (bs *BatcherService) initBatchAuthenticator() error {
 	auth, err := newBatchAuthenticator(bs.RollupConfig.BatchAuthenticatorAddress, bs.L1Client, bs.NetworkTimeout)
 	if err != nil {

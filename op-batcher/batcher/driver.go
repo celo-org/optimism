@@ -190,7 +190,19 @@ func NewBatchSubmitter(setup DriverSetup) *BatchSubmitter {
 		panic(err)
 	}
 
+	// BatcherService binds the BatchAuthenticator before its startup checks and
+	// passes it in. Callers outside the package cannot, since the type is
+	// unexported, so bind it here from the same rollup config: a nil binding
+	// would make a fallback batcher skip authentication after Espresso
+	// activation. Binding does no network I/O and fails only on a malformed
+	// generated binding.
 	batcher.batchAuth = setup.Espresso.BatchAuth
+	if batcher.batchAuth == nil {
+		batcher.batchAuth, err = newBatchAuthenticator(setup.RollupConfig.BatchAuthenticatorAddress, setup.L1Client, setup.Config.NetworkTimeout)
+		if err != nil {
+			panic(err)
+		}
+	}
 
 	return batcher
 }
