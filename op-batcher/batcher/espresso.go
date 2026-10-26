@@ -72,7 +72,6 @@ type espressoTransactionSubmitter struct {
 	submitSlots                chan struct{}
 	verifySlots                chan struct{}
 	receiptRetries             *rate.Limiter
-	failed                     atomic.Bool // consumed by the block queueing loop; never mutate its loader here
 }
 
 // espressoSubmissionClient provides the client methods used by submission and receipt workers.
@@ -257,7 +256,7 @@ const (
 	RetrySubmission
 	// Retry the verification.
 	RetryVerification
-	// Skip the current job and proceed to the next one.
+	// Stop processing a transaction after a permanent error.
 	Skip
 )
 
@@ -267,7 +266,7 @@ const (
 //
 // * If there is no error: Handle.
 //
-// * If there is a permanent issue that won't be fixed by a retry: Skip.
+// * If the error is permanent: Skip.
 //
 // * Otherwise: RetrySubmission.
 func evaluateSubmission(err error) JobEvaluation {
@@ -287,13 +286,13 @@ func evaluateSubmission(err error) JobEvaluation {
 // submitAndConfirm runs the full lifecycle for one transaction: submit it to
 // Espresso, then poll until its receipt is verifiable. A verification timeout
 // loops back to re-submit. It returns once the transaction is confirmed,
-// permanently fails, or the context is cancelled.
+// permanently fails, or the session context is cancelled.
 func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx *espressoCommon.Transaction) {
 	allowImmediateLookup := true
 	for {
 		hash, ok := s.submitToEspresso(ctx, tx)
 		if !ok {
-			return // context cancelled or a permanent submit failure
+			return // session cancelled or submission permanently failed
 		}
 
 		outcome := s.confirmReceipt(ctx, hash, allowImmediateLookup)
@@ -310,9 +309,8 @@ func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx 
 	}
 }
 
-// submitToEspresso retains the existing exponential-backoff policy. Transient
-// failures keep their transaction slot until recovery or session cancellation;
-// only a permanent failure requests loader recovery.
+// submitToEspresso retries transient and unclassified errors with exponential
+// backoff. Permanent errors end this transaction, preserving the existing policy.
 func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx *espressoCommon.Transaction) (*espressoCommon.TaggedBase64, bool) {
 	backoff := retry.Exponential()
 	for attempt := 0; ; attempt++ {
@@ -323,13 +321,12 @@ func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx 
 		if ctx.Err() != nil {
 			return nil, false
 		}
-		warnUnclassifiedEspressoError("submit", err)
+		logEspressoRequestError("submit", err)
 		switch evaluateSubmission(err) {
 		case Handle:
 			log.Info("Submitted transaction to Espresso", "hash", hash)
 			return hash, true
 		case Skip:
-			s.failTransaction("submit", err)
 			return nil, false
 		}
 		if s.clock.SleepCtx(ctx, backoff.Duration(attempt)) != nil {
@@ -351,17 +348,12 @@ func (s *espressoTransactionSubmitter) submitAttempt(ctx context.Context, tx *es
 }
 
 // Keep diagnostics at the call sites so the evaluation functions stay pure.
-func warnUnclassifiedEspressoError(stage string, err error) {
-	if err != nil && !errors.Is(err, espressoClient.ErrEphemeral) && !errors.Is(err, espressoClient.ErrPermanent) {
+func logEspressoRequestError(stage string, err error) {
+	if errors.Is(err, espressoClient.ErrPermanent) {
+		log.Error("Espresso request failed permanently", "stage", stage, "err", err)
+	} else if err != nil && !errors.Is(err, espressoClient.ErrEphemeral) {
 		log.Warn("Espresso error not explicitly marked as retryable or not", "stage", stage, "err", err)
 	}
-}
-
-// A failed async transaction has already been recorded as queued by BlockLoader.
-// Request recovery on its owning loop, otherwise that block is silently skipped.
-func (s *espressoTransactionSubmitter) failTransaction(stage string, err error) {
-	log.Error("Espresso transaction failed; requesting block loader reset", "stage", stage, "err", err)
-	s.failed.Store(true)
 }
 
 // verifyOutcome is the result of confirmReceipt.
@@ -370,7 +362,7 @@ type verifyOutcome int
 const (
 	verifyDone     verifyOutcome = iota // receipt is verifiable; we are done
 	verifyResubmit                      // verification timed out; re-submit
-	verifyAbort                         // permanent failure or context cancelled
+	verifyAbort                         // permanent error or session context cancelled
 )
 
 // confirmReceipt gives each submission round fresh verification windows. Only
@@ -399,7 +391,7 @@ func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash 
 		if ctx.Err() != nil {
 			return verifyAbort
 		}
-		warnUnclassifiedEspressoError("verify", err)
+		logEspressoRequestError("verify", err)
 		currentHeight := s.latestBlockHeight.Load()
 		if startHeight == 0 && currentHeight > 0 {
 			startHeight = currentHeight
@@ -408,7 +400,6 @@ func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash 
 		case Handle:
 			return verifyDone
 		case Skip:
-			s.failTransaction("verify", err)
 			return verifyAbort
 		case RetrySubmission:
 			log.Info("Espresso verification window expired; re-submitting", "hash", hash,
@@ -453,7 +444,7 @@ func (s *espressoTransactionSubmitter) fetchReceipt(ctx context.Context, hash *e
 //
 // * If there is no error: Handle.
 //
-// * If there is a permanent issue that won't be fixed by a retry: Skip.
+// * If the error is permanent: Skip.
 //
 // * If enough HotShot blocks have passed since verification started: RetrySubmission.
 //
@@ -474,7 +465,7 @@ func (s *espressoTransactionSubmitter) evaluateVerification(err error, startHeig
 	if startHeight > 0 && currentHeight >= startHeight && currentHeight-startHeight >= s.verifyReceiptMaxBlocks {
 		return RetrySubmission
 	}
-	if now.Sub(startTime) >= s.verifyReceiptSafetyTimeout {
+	if now.Sub(startTime) > s.verifyReceiptSafetyTimeout {
 		return RetrySubmission
 	}
 
@@ -770,11 +761,6 @@ const (
 // If reorg is detected, empty range and ActionReset is returned.
 // If there isn't enough information or no blocks to load yet, empty range and ActionRetry is returned.
 func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBlockRange, EnqueueBlockAction) {
-	// Async submission failures are handed back to this loop, which owns queuedBlocks.
-	if session := l.batcher.espressoSession; session != nil && session.submitter != nil && session.submitter.failed.Swap(false) {
-		return inclusiveBlockRange{}, ActionReset
-	}
-
 	// Mirror computeSyncActions' zero-field guard: op-node has transiently
 	// reported statuses with individual fields zeroed while the rest are
 	// populated (see sync_actions_test.go). Treating a zero LocalSafeL2 as the

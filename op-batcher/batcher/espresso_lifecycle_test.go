@@ -152,9 +152,9 @@ func TestEspressoConcurrentAdmissionLimit(t *testing.T) {
 	require.ErrorIs(t, s.SubmitTransaction(&espressoCommon.Transaction{}), context.Canceled)
 }
 
-// Transient failures must back off and keep their slot through an outage. These
-// failures must not turn a recoverable outage into a loader reset.
-func TestEspressoTransientRetriesRecoverWithoutReset(t *testing.T) {
+// Transient failures retain the admitted transaction and back off until the
+// endpoint recovers or the session stops. There is no retry-count limit.
+func TestEspressoTransientSubmissionRetriesUntilConfirmed(t *testing.T) {
 	c := newEspressoTestClock()
 	calls := make(chan struct{}, 16)
 	var recovered atomic.Bool
@@ -175,8 +175,7 @@ func TestEspressoTransientRetriesRecoverWithoutReset(t *testing.T) {
 	for attempt := range 10 {
 		receiveTestValue(t, calls)
 		delay := receiveTestValue(t, c.sleeps)
-		require.Positive(t, delay, "transient retries must not spin")
-		require.False(t, s.failed.Load(), "a transient outage must not reset the loader")
+		require.Positive(t, delay, "submission retries must not spin")
 		var full ErrTooManyInFlightRequests
 		require.ErrorAs(t, s.SubmitTransaction(&espressoCommon.Transaction{}), &full)
 		if attempt == 9 {
@@ -186,10 +185,9 @@ func TestEspressoTransientRetriesRecoverWithoutReset(t *testing.T) {
 	}
 	receiveTestValue(t, calls)
 	waitEspressoGroup(t, s)
-	require.False(t, s.failed.Load())
 }
 
-func TestEspressoPermanentFailureDoesNotCancelOtherTransactions(t *testing.T) {
+func TestEspressoPermanentFailureReleasesSlotWithoutCancellingOthers(t *testing.T) {
 	for _, stage := range []string{"submit", "verify"} {
 		t.Run(stage, func(t *testing.T) {
 			blocked := make(chan context.Context, 1)
@@ -209,11 +207,22 @@ func TestEspressoPermanentFailureDoesNotCancelOtherTransactions(t *testing.T) {
 					return espressoCommon.TransactionQueryData{}, sdkclient.ErrPermanent
 				},
 			}
-			s, _ := newControlledSubmitter(t, client)
+			s, _ := newControlledSubmitter(t, client, withTestInFlightLimit(2))
 			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{Namespace: 1}))
 			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{Namespace: 2}))
 			active := receiveTestValue(t, blocked)
-			require.Eventually(t, s.failed.Load, time.Second, time.Millisecond)
+			// The failed transaction must release its slot; the healthy one stays active.
+			require.Eventually(t, func() bool {
+				err := s.SubmitTransaction(&espressoCommon.Transaction{Namespace: 3})
+				if err == nil {
+					return true
+				}
+				var full ErrTooManyInFlightRequests
+				require.ErrorAs(t, err, &full)
+				return false
+			}, time.Second, time.Millisecond)
+			replacement := receiveTestValue(t, blocked)
+			require.NoError(t, replacement.Err())
 			require.NoError(t, active.Err())
 			require.NoError(t, s.ctx.Err())
 		})
@@ -297,13 +306,13 @@ func TestEspressoVerificationRestartsSafetyTimeout(t *testing.T) {
 	v := newVerificationTest(t)
 	first := receiveTestValue(t, v.requests)
 	first.reply <- sdkclient.ErrEphemeral
-	v.retry(t, 500*time.Millisecond, 0, 1).reply <- sdkclient.ErrEphemeral
+	v.retry(t, 500*time.Millisecond+time.Nanosecond, 0, 1).reply <- sdkclient.ErrEphemeral
 	second := receiveTestValue(t, v.requests)
 	require.EqualValues(t, 2, v.submissions.Load())
 	require.NotEqual(t, first.hash.String(), second.hash.String())
 	second.reply <- sdkclient.ErrEphemeral
 	v.retry(t, 100*time.Millisecond, 0, 2).reply <- sdkclient.ErrEphemeral
-	v.retry(t, 400*time.Millisecond, 0, 2).reply <- sdkclient.ErrEphemeral
+	v.retry(t, 400*time.Millisecond+time.Nanosecond, 0, 2).reply <- sdkclient.ErrEphemeral
 	third := receiveTestValue(t, v.requests)
 	require.EqualValues(t, 3, v.submissions.Load())
 	third.reply <- nil
@@ -418,7 +427,6 @@ func stopEspressoTestBatcher(t *testing.T, s *espressoTransactionSubmitter, canc
 	go func() { stopped <- batcher.StopBatchSubmitting(t.Context()) }()
 	require.NoError(t, receiveTestValue(t, stopped))
 	require.Nil(t, batcher.espressoSession)
-	require.False(t, s.failed.Load(), "normal shutdown must not report submission failure")
 }
 
 func TestEspressoStopCancelsSubmissionBackoff(t *testing.T) {
@@ -496,14 +504,13 @@ func TestEspressoStopCancelsReceiptAndWaitsForTracker(t *testing.T) {
 	release.Do(func() { close(releaseHeight) })
 	require.NoError(t, receiveTestValue(t, stopped))
 	require.Nil(t, batcher.espressoSession)
-	require.False(t, s.failed.Load())
 }
 
-// Queue-loop recovery integration.
+// Queue-loop retry integration.
 
-// newQueueRecoveryBatcher provides two consecutive unsafe blocks and a real
+// newQueueRetryBatcher provides two consecutive unsafe blocks and a real
 // local signer. The returned hashes identify their expected signed transactions.
-func newQueueRecoveryBatcher(t *testing.T) (*BatchSubmitter, []string) {
+func newQueueRetryBatcher(t *testing.T) (*BatchSubmitter, []string) {
 	t.Helper()
 	batcher, endpoints := setup(t, nil)
 	batcher.Config.PollInterval = time.Millisecond
@@ -537,17 +544,22 @@ func newQueueRecoveryBatcher(t *testing.T) (*BatchSubmitter, []string) {
 	return batcher, hashes
 }
 
-// queueRecoveryClient fails the selected transaction once, then confirms it.
-type queueRecoveryClient struct {
+// queueRetryClient transiently fails the first block once and holds the second in
+// flight until the first confirms, exposing any reset-driven duplicate work.
+type queueRetryClient struct {
 	controlledEspressoClient
-	failedHash  string
-	failStage   string
-	submissions atomic.Int64
-	failed      atomic.Bool
-	confirmed   chan string
+	failedHash          string
+	failStage           string
+	submissions         atomic.Int64
+	otherSubmissions    atomic.Int64
+	otherReceiptStarted chan struct{}
+	releaseOther        chan struct{}
+	firstConfirmed      sync.Once
+	failed              atomic.Bool
+	confirmed           chan string
 }
 
-func (c *queueRecoveryClient) SubmitTransaction(_ context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+func (c *queueRetryClient) SubmitTransaction(_ context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
 	commitment := tx.Commit()
 	hash, err := taggedbase64.New("TX", commitment[:])
 	if err != nil {
@@ -556,23 +568,35 @@ func (c *queueRecoveryClient) SubmitTransaction(_ context.Context, tx espressoCo
 	if hash.String() == c.failedHash {
 		c.submissions.Add(1)
 		if c.failStage == "submit" && c.failed.CompareAndSwap(false, true) {
-			return nil, sdkclient.ErrPermanent
+			return nil, sdkclient.ErrEphemeral
 		}
+	} else {
+		c.otherSubmissions.Add(1)
 	}
 	return hash, nil
 }
 
-func (c *queueRecoveryClient) FetchTransactionByHash(_ context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
+func (c *queueRetryClient) FetchTransactionByHash(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
 	if hash.String() == c.failedHash && c.failStage == "receipt" && c.failed.CompareAndSwap(false, true) {
-		return espressoCommon.TransactionQueryData{}, sdkclient.ErrPermanent
+		return espressoCommon.TransactionQueryData{}, sdkclient.ErrEphemeral
+	}
+	if hash.String() == c.failedHash {
+		c.firstConfirmed.Do(func() { close(c.releaseOther) })
+	} else {
+		c.otherReceiptStarted <- struct{}{}
+		select {
+		case <-c.releaseOther:
+		case <-ctx.Done():
+			return espressoCommon.TransactionQueryData{}, ctx.Err()
+		}
 	}
 	c.confirmed <- hash.String()
 	return espressoCommon.TransactionQueryData{}, nil
 }
 
-func startEspressoQueueLoop(t *testing.T, batcher *BatchSubmitter, client espressoSubmissionClient) *espressoTransactionSubmitter {
+func startEspressoQueueLoop(t *testing.T, batcher *BatchSubmitter, client espressoSubmissionClient, options ...EspressoTransactionSubmitterOption) *espressoTransactionSubmitter {
 	t.Helper()
-	s, cancel := newControlledSubmitter(t, client)
+	s, cancel := newControlledSubmitter(t, client, options...)
 	batcher.wg = s.wg
 	batcher.running = true
 	batcher.cancelShutdownCtx = cancel
@@ -584,30 +608,39 @@ func startEspressoQueueLoop(t *testing.T, batcher *BatchSubmitter, client espres
 	return s
 }
 
-// Exercise the real queue loop through fetching, signing, permanent failure,
-// resubmission, receipt confirmation and shutdown. External endpoints are simulated.
-func TestEspressoQueueLoopRecoversPermanentFailure(t *testing.T) {
-	for _, failStage := range []string{"submit", "receipt"} {
-		t.Run(failStage, func(t *testing.T) {
-			batcher, hashes := newQueueRecoveryBatcher(t)
-			client := &queueRecoveryClient{
-				failedHash: hashes[0], failStage: failStage, confirmed: make(chan string, 16),
+// Exercise fetching, signing, retrying and confirmation without resetting the
+// queue or replaying a healthy block that is still being verified.
+func TestEspressoQueueLoopRetriesWithoutReplayingOtherBlocks(t *testing.T) {
+	for _, scenario := range []struct {
+		stage           string
+		wantSubmissions int64
+	}{
+		{"submit", 2}, {"receipt", 1},
+	} {
+		t.Run(scenario.stage, func(t *testing.T) {
+			batcher, hashes := newQueueRetryBatcher(t)
+			c := newEspressoTestClock()
+			client := &queueRetryClient{
+				failedHash: hashes[0], failStage: scenario.stage, confirmed: make(chan string, 16),
+				otherReceiptStarted: make(chan struct{}, 16), releaseOther: make(chan struct{}),
 			}
-			s := startEspressoQueueLoop(t, batcher, client)
+			s := startEspressoQueueLoop(t, batcher, client, withTestClock(c))
 
+			receiveTestValue(t, client.otherReceiptStarted)
+			c.AdvanceTime(receiveTestValue(t, c.sleeps))
 			seen := make(map[string]bool)
 			for !seen[hashes[0]] || !seen[hashes[1]] {
 				seen[receiveTestValue(t, client.confirmed)] = true
 			}
-			// Finish processing both successful receipts before shutdown.
 			waitEspressoGroup(t, s)
 			stopped := make(chan error, 1)
 			go func() { stopped <- batcher.StopBatchSubmitting(t.Context()) }()
 			require.NoError(t, receiveTestValue(t, stopped))
 
-			require.True(t, client.failed.Load(), "the injected failure must have been exercised")
-			require.EqualValues(t, 2, client.submissions.Load(), "block 11 must be submitted again by the queue loop")
-			require.True(t, batcher.clearStateRequested.Load(), "queue recovery must also request streamer recovery")
+			require.True(t, client.failed.Load(), "the injected transient error must have been exercised")
+			require.Equal(t, scenario.wantSubmissions, client.submissions.Load())
+			require.EqualValues(t, 1, client.otherSubmissions.Load(), "the healthy in-flight block must not be replayed")
+			require.False(t, batcher.clearStateRequested.Load(), "an SDK error must not reset unrelated work")
 			require.Nil(t, batcher.espressoSession)
 		})
 	}

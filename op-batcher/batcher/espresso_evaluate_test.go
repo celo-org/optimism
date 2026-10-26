@@ -10,11 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestEvaluateSubmission covers evaluateSubmission, the pure decision function
-// submitToEspresso uses to classify the result of submitting an Espresso
-// transaction: no error -> Handle (proceed to receipt verification), a permanent
-// error -> Skip (drop the tx), an ephemeral or unclassified error ->
-// RetrySubmission (submit again).
+// Submission proceeds on success, stops on permanent errors, and retries
+// transient or unclassified errors, matching the original worker-pool policy.
 func TestEvaluateSubmission(t *testing.T) {
 	tests := []struct {
 		name string
@@ -37,9 +34,8 @@ func TestEvaluateSubmission(t *testing.T) {
 
 // TestEvaluateVerification covers evaluateVerification, the pure decision
 // function confirmReceipt uses after each receipt-poll attempt: receipt found ->
-// Handle (confirmed, done), a permanent error -> Skip, verification that has
-// outlasted its block-count or wall-clock budget -> RetrySubmission (re-submit a
-// fresh copy), otherwise -> RetryVerification (keep polling).
+// Handle (confirmed, done), an expired verification window -> RetrySubmission,
+// otherwise -> RetryVerification. Permanent errors take precedence and stop work.
 func TestEvaluateVerification(t *testing.T) {
 	const maxBlocks = 5
 	const safetyTimeout = 5 * time.Minute
@@ -61,6 +57,8 @@ func TestEvaluateVerification(t *testing.T) {
 	}{
 		{"success", nil, 100, 100, now, Handle},
 		{"permanent", espressoClient.ErrPermanent, 100, 100, now, Skip},
+		{"permanent wrapped", fmt.Errorf("boom: %w", espressoClient.ErrPermanent), 100, 100, now, Skip},
+		{"permanent takes precedence over expired window", espressoClient.ErrPermanent, 100, 105, now, Skip},
 		{
 			name: "within both windows keeps polling",
 			err:  espressoClient.ErrEphemeral, startHeight: 100, currentHeight: 104, startTime: now,
@@ -96,9 +94,9 @@ func TestEvaluateVerification(t *testing.T) {
 			want: RetryVerification,
 		},
 		{
-			name: "exact safety deadline re-submits",
+			name: "exact safety deadline keeps polling",
 			err:  espressoClient.ErrEphemeral, startHeight: 100, currentHeight: 100, startTime: now.Add(-safetyTimeout),
-			want: RetrySubmission,
+			want: RetryVerification,
 		},
 		{
 			name: "unclassified error is retried like ephemeral",
