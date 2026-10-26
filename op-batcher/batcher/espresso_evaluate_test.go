@@ -49,7 +49,7 @@ func TestEvaluateVerification(t *testing.T) {
 	}
 
 	// now is the reference "started" time; recent enough not to trip the safety timeout.
-	now := time.Now()
+	now := time.Unix(1_000, 0)
 
 	tests := []struct {
 		name          string
@@ -84,6 +84,22 @@ func TestEvaluateVerification(t *testing.T) {
 			startTime: now.Add(-2 * safetyTimeout),
 			want:      RetrySubmission,
 		},
+
+		{
+			name: "height addition must not overflow",
+			err:  espressoClient.ErrEphemeral, startHeight: ^uint64(0) - 2, currentHeight: ^uint64(0), startTime: now,
+			want: RetryVerification,
+		},
+		{
+			name: "height regression keeps polling",
+			err:  espressoClient.ErrEphemeral, startHeight: 100, currentHeight: 99, startTime: now,
+			want: RetryVerification,
+		},
+		{
+			name: "exact safety deadline re-submits",
+			err:  espressoClient.ErrEphemeral, startHeight: 100, currentHeight: 100, startTime: now.Add(-safetyTimeout),
+			want: RetrySubmission,
+		},
 		{
 			name: "unclassified error is retried like ephemeral",
 			err:  errors.New("something else"), startHeight: 100, currentHeight: 104, startTime: now,
@@ -92,7 +108,7 @@ func TestEvaluateVerification(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.want, s.evaluateVerification(tt.err, tt.startHeight, tt.currentHeight, tt.startTime))
+			require.Equal(t, tt.want, s.evaluateVerification(tt.err, tt.startHeight, tt.currentHeight, tt.startTime, now))
 		})
 	}
 }

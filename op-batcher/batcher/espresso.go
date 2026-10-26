@@ -27,11 +27,13 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"golang.org/x/sync/errgroup"
+	"golang.org/x/time/rate"
 
 	"github.com/ethereum-optimism/optimism/espresso"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
+	"github.com/ethereum-optimism/optimism/op-service/clock"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/retry"
 	"github.com/ethereum-optimism/optimism/op-service/txmgr"
@@ -46,6 +48,10 @@ type EspressoOnchainProof struct {
 	} `json:"raw_proof"`
 	OnchainProof string `json:"onchain_proof"`
 }
+
+// Preserve the four-call limit of each original worker pool. Transaction
+// admission remains separate so catch-up can keep 128 transactions in flight.
+const espressoWorkerConcurrency = 4
 
 // espressoTransactionSubmitter submits transactions to Espresso and confirms
 // their receipts. Each accepted transaction runs its whole lifecycle (submit,
@@ -62,6 +68,11 @@ type espressoTransactionSubmitter struct {
 	verifyReceiptSafetyTimeout time.Duration
 	verifyReceiptRetryDelay    time.Duration
 	maxInFlight                int
+	clock                      clock.Clock
+	submitSlots                chan struct{}
+	verifySlots                chan struct{}
+	receiptRetries             *rate.Limiter
+	failed                     atomic.Bool // consumed by the block queueing loop; never mutate its loader here
 }
 
 // espressoSubmissionClient provides the client methods used by submission and receipt workers.
@@ -83,6 +94,7 @@ type EspressoTransactionSubmitterConfig struct {
 	VerifyReceiptSafetyTimeout time.Duration
 	VerifyReceiptRetryDelay    time.Duration
 	MaxInFlightJobs            int
+	Clock                      clock.Clock
 }
 
 // EspressoTransactionSubmitterOption is a function that can be used to
@@ -162,6 +174,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		VerifyReceiptSafetyTimeout: espresso.DefaultVerifyReceiptSafetyTimeout,
 		VerifyReceiptRetryDelay:    espresso.DefaultVerifyReceiptRetryDelay,
 		MaxInFlightJobs:            espresso.DefaultMaxInFlightRequestsToEspresso,
+		Clock:                      clock.SystemClock,
 	}
 
 	for _, option := range options {
@@ -170,6 +183,13 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 
 	if config.EspressoSubmissionClient == nil {
 		panic("Espresso submission client is required")
+	}
+
+	if config.MaxInFlightJobs < 1 {
+		panic("Espresso transaction limit must be positive")
+	}
+	if config.Clock == nil || config.VerifyReceiptRetryDelay <= 0 {
+		panic("Espresso clock and positive receipt retry delay are required")
 	}
 
 	eg := new(errgroup.Group)
@@ -185,6 +205,10 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		verifyReceiptSafetyTimeout: config.VerifyReceiptSafetyTimeout,
 		verifyReceiptRetryDelay:    config.VerifyReceiptRetryDelay,
 		maxInFlight:                config.MaxInFlightJobs,
+		clock:                      config.Clock,
+		submitSlots:                make(chan struct{}, espressoWorkerConcurrency),
+		verifySlots:                make(chan struct{}, espressoWorkerConcurrency),
+		receiptRetries:             rate.NewLimiter(rate.Limit(float64(espressoWorkerConcurrency)/config.VerifyReceiptRetryDelay.Seconds()), espressoWorkerConcurrency),
 	}
 }
 
@@ -206,6 +230,9 @@ func (e ErrTooManyInFlightRequests) Error() string {
 // running, it returns ErrTooManyInFlightRequests immediately so the caller can
 // apply back pressure and try again later.
 func (s *espressoTransactionSubmitter) SubmitTransaction(tx *espressoCommon.Transaction) error {
+	if err := s.ctx.Err(); err != nil {
+		return err
+	}
 	// wg tracks the goroutine for shutdown; the errgroup bounds concurrency.
 	s.wg.Add(1)
 	started := s.eg.TryGo(func() error {
@@ -253,11 +280,6 @@ func evaluateSubmission(err error) JobEvaluation {
 		return Skip
 	}
 
-	if !errors.Is(err, espressoClient.ErrEphemeral) {
-		// Log the warning for a potentially missed error handling, but still retry it.
-		log.Warn("error not explicitly marked as retryable or not", "err", err)
-	}
-
 	// Otherwise, retry the submission.
 	return RetrySubmission
 }
@@ -267,13 +289,16 @@ func evaluateSubmission(err error) JobEvaluation {
 // loops back to re-submit. It returns once the transaction is confirmed,
 // permanently fails, or the context is cancelled.
 func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx *espressoCommon.Transaction) {
+	allowImmediateLookup := true
 	for {
 		hash, ok := s.submitToEspresso(ctx, tx)
 		if !ok {
 			return // context cancelled or a permanent submit failure
 		}
 
-		switch s.confirmReceipt(ctx, hash) {
+		outcome := s.confirmReceipt(ctx, hash, allowImmediateLookup)
+		allowImmediateLookup = false
+		switch outcome {
 		case verifyDone:
 			log.Info("Transaction confirmed on Espresso", "hash", hash.String())
 			return
@@ -285,35 +310,58 @@ func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx 
 	}
 }
 
-// submitToEspresso submits the transaction, retrying ephemeral failures with
-// exponential backoff so a persistently failing endpoint is not hammered by the
-// many in-flight submissions at once. It returns the transaction hash on
-// success, or ok=false if the failure is permanent or the context is cancelled.
+// submitToEspresso retains the existing exponential-backoff policy. Transient
+// failures keep their transaction slot until recovery or session cancellation;
+// only a permanent failure requests loader recovery.
 func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx *espressoCommon.Transaction) (*espressoCommon.TaggedBase64, bool) {
 	backoff := retry.Exponential()
 	for attempt := 0; ; attempt++ {
 		if ctx.Err() != nil {
 			return nil, false
 		}
-
-		callCtx, cancelCall := context.WithTimeout(ctx, s.networkTimeout)
-		hash, err := s.espresso.SubmitTransaction(callCtx, *tx)
-		cancelCall()
-		if err == nil {
-			log.Info("Submitted transaction to Espresso", "hash", hash)
+		hash, err := s.submitAttempt(ctx, tx)
+		if ctx.Err() != nil {
+			return nil, false
 		}
-
+		warnUnclassifiedEspressoError("submit", err)
 		switch evaluateSubmission(err) {
 		case Handle:
+			log.Info("Submitted transaction to Espresso", "hash", hash)
 			return hash, true
 		case Skip:
+			s.failTransaction("submit", err)
 			return nil, false
-		default: // RetrySubmission
-			if !sleep(ctx, backoff.Duration(attempt)) {
-				return nil, false
-			}
+		}
+		if s.clock.SleepCtx(ctx, backoff.Duration(attempt)) != nil {
+			return nil, false
 		}
 	}
+}
+
+func (s *espressoTransactionSubmitter) submitAttempt(ctx context.Context, tx *espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case s.submitSlots <- struct{}{}:
+	}
+	defer func() { <-s.submitSlots }()
+	callCtx, cancel := context.WithTimeout(ctx, s.networkTimeout)
+	defer cancel()
+	return s.espresso.SubmitTransaction(callCtx, *tx)
+}
+
+// Keep diagnostics at the call sites so the evaluation functions stay pure.
+func warnUnclassifiedEspressoError(stage string, err error) {
+	if err != nil && !errors.Is(err, espressoClient.ErrEphemeral) && !errors.Is(err, espressoClient.ErrPermanent) {
+		log.Warn("Espresso error not explicitly marked as retryable or not", "stage", stage, "err", err)
+	}
+}
+
+// A failed async transaction has already been recorded as queued by BlockLoader.
+// Request recovery on its owning loop, otherwise that block is silently skipped.
+func (s *espressoTransactionSubmitter) failTransaction(stage string, err error) {
+	log.Error("Espresso transaction failed; requesting block loader reset", "stage", stage, "err", err)
+	s.failed.Store(true)
 }
 
 // verifyOutcome is the result of confirmReceipt.
@@ -325,53 +373,74 @@ const (
 	verifyAbort                         // permanent failure or context cancelled
 )
 
-// confirmReceipt polls for the transaction's receipt until it is verifiable,
-// re-submitting (verifyResubmit) if it takes too long. The first attempt is
-// immediate; subsequent attempts wait verifyReceiptRetryDelay.
-func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash *espressoCommon.TaggedBase64) verifyOutcome {
-	startTime := time.Now()
-	// Snapshot the current height so we can measure how many blocks pass.
+// confirmReceipt gives each submission round fresh verification windows. Only
+// the first lookup of a newly admitted transaction bypasses the retry budget.
+// Subsequent lookups preserve the original worker pool's aggregate retry rate:
+// four calls per configured retry interval, with at most four RPCs in progress.
+func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash *espressoCommon.TaggedBase64, allowImmediateLookup bool) verifyOutcome {
+	startTime := s.clock.Now()
 	startHeight := s.latestBlockHeight.Load()
-
 	for attempt := 0; ; attempt++ {
-		if attempt > 0 {
-			if !sleep(ctx, s.verifyReceiptRetryDelay) {
-				return verifyAbort
-			}
-		}
 		if ctx.Err() != nil {
 			return verifyAbort
 		}
-
-		callCtx, cancelCall := context.WithTimeout(ctx, s.networkTimeout)
-		_, err := s.espresso.FetchTransactionByHash(callCtx, hash)
-		cancelCall()
+		if attempt > 0 {
+			if s.clock.SleepCtx(ctx, s.verifyReceiptRetryDelay) != nil {
+				return verifyAbort
+			}
+		}
+		// Retries and resubmissions share the budget; a new transaction may
+		// perform its first lookup immediately.
+		needsRetryBudget := attempt > 0 || !allowImmediateLookup
+		if needsRetryBudget && !s.waitReceiptRetry(ctx) {
+			return verifyAbort
+		}
+		_, err := s.fetchReceipt(ctx, hash)
+		if ctx.Err() != nil {
+			return verifyAbort
+		}
+		warnUnclassifiedEspressoError("verify", err)
 		currentHeight := s.latestBlockHeight.Load()
-
-		switch s.evaluateVerification(err, startHeight, currentHeight, startTime) {
+		if startHeight == 0 && currentHeight > 0 {
+			startHeight = currentHeight
+		}
+		switch s.evaluateVerification(err, startHeight, currentHeight, startTime, s.clock.Now()) {
 		case Handle:
 			return verifyDone
 		case Skip:
+			s.failTransaction("verify", err)
 			return verifyAbort
 		case RetrySubmission:
+			log.Info("Espresso verification window expired; re-submitting", "hash", hash,
+				"startHeight", startHeight, "currentHeight", currentHeight)
 			return verifyResubmit
-		default: // RetryVerification
-			continue
 		}
 	}
 }
 
-// sleep waits for d or until ctx is cancelled. It returns false if ctx was
-// cancelled first.
-func sleep(ctx context.Context, d time.Duration) bool {
-	timer := time.NewTimer(d)
-	defer timer.Stop()
+func (s *espressoTransactionSubmitter) waitReceiptRetry(ctx context.Context) bool {
+	reservation := s.receiptRetries.ReserveN(s.clock.Now(), 1)
+	delay := reservation.DelayFrom(s.clock.Now())
+	if delay <= 0 {
+		return ctx.Err() == nil
+	}
+	if s.clock.SleepCtx(ctx, delay) != nil {
+		reservation.CancelAt(s.clock.Now())
+		return false
+	}
+	return true
+}
+
+func (s *espressoTransactionSubmitter) fetchReceipt(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
 	select {
 	case <-ctx.Done():
-		return false
-	case <-timer.C:
-		return true
+		return espressoCommon.TransactionQueryData{}, ctx.Err()
+	case s.verifySlots <- struct{}{}:
 	}
+	defer func() { <-s.verifySlots }()
+	callCtx, cancel := context.WithTimeout(ctx, s.networkTimeout)
+	defer cancel()
+	return s.espresso.FetchTransactionByHash(callCtx, hash)
 }
 
 // Default values for receipt verification tuning are defined as exported
@@ -391,7 +460,7 @@ func sleep(ctx context.Context, d time.Duration) bool {
 // * If the wall-clock safety timeout is exceeded: RetrySubmission.
 //
 // * Otherwise: RetryVerification.
-func (s *espressoTransactionSubmitter) evaluateVerification(err error, startHeight, currentHeight uint64, startTime time.Time) JobEvaluation {
+func (s *espressoTransactionSubmitter) evaluateVerification(err error, startHeight, currentHeight uint64, startTime, now time.Time) JobEvaluation {
 	// If there's no error, continue handling the verification.
 	if err == nil {
 		return Handle
@@ -401,28 +470,11 @@ func (s *espressoTransactionSubmitter) evaluateVerification(err error, startHeig
 		return Skip
 	}
 
-	if !errors.Is(err, espressoClient.ErrEphemeral) {
-		// Log the warning for a potentially missed error handling, but still retry it.
-		log.Warn("error not explicitly marked as retryable or not", "err", err)
-	}
-
-	// Block-count-based timeout: re-submit if enough HotShot blocks have
-	// passed since verification started. The startHeight guard handles the
-	// edge case where the height tracker hasn't fetched its first value yet.
-	if startHeight > 0 && currentHeight >= startHeight+s.verifyReceiptMaxBlocks {
-		log.Info("Verification timed out by block count, re-submitting",
-			"startHeight", startHeight,
-			"currentHeight", currentHeight,
-			"maxBlocks", s.verifyReceiptMaxBlocks)
+	// Use subtraction after checking ordering to avoid overflowing startHeight.
+	if startHeight > 0 && currentHeight >= startHeight && currentHeight-startHeight >= s.verifyReceiptMaxBlocks {
 		return RetrySubmission
 	}
-
-	// Wall-clock safety backstop in case the block height tracker is stale
-	// or broken (e.g., query service returning old data).
-	if elapsed := time.Since(startTime); elapsed > s.verifyReceiptSafetyTimeout {
-		log.Warn("Verification timed out by safety timeout, re-submitting",
-			"elapsed", elapsed,
-			"safetyTimeout", s.verifyReceiptSafetyTimeout)
+	if now.Sub(startTime) >= s.verifyReceiptSafetyTimeout {
 		return RetrySubmission
 	}
 
@@ -430,11 +482,12 @@ func (s *espressoTransactionSubmitter) evaluateVerification(err error, startHeig
 	return RetryVerification
 }
 
-// trackBlockHeight periodically polls FetchLatestBlockHeight and stores
-// the result in s.latestBlockHeight for verify jobs to compare against.
-// This avoids redundant height queries from individual verify goroutines.
+// trackBlockHeight shares the latest height across receipt verification jobs.
 func (s *espressoTransactionSubmitter) trackBlockHeight() {
 	for {
+		if s.ctx.Err() != nil {
+			return
+		}
 		callCtx, cancel := context.WithTimeout(s.ctx, s.networkTimeout)
 		height, err := s.espresso.FetchLatestBlockHeight(callCtx)
 		cancel()
@@ -443,20 +496,23 @@ func (s *espressoTransactionSubmitter) trackBlockHeight() {
 		} else if s.ctx.Err() == nil {
 			log.Debug("failed to fetch latest block height for verification tracking", "err", err)
 		}
-
-		// Wait for the next interval or until context is done.
+		timer := s.clock.NewTimer(s.verifyReceiptRetryDelay)
 		select {
-		case <-time.After(s.verifyReceiptRetryDelay):
 		case <-s.ctx.Done():
+			timer.Stop()
 			return
+		case <-timer.Ch():
+			timer.Stop()
 		}
 	}
 }
 
-// Start launches the shared block-height tracker. Per-transaction work is
-// started on demand by SubmitTransaction.
+// Start registers the tracker before launching it. In production the queueing
+// loop also owns a slot in this wait group, so shutdown waits for that producer
+// before the group can drain and no later TryGo can race the final Wait.
 func (s *espressoTransactionSubmitter) Start() {
-	go s.trackBlockHeight()
+	s.wg.Add(1)
+	go func() { defer s.wg.Done(); s.trackBlockHeight() }()
 }
 
 // queueBlockToEspresso converts, signs, and queues a block for submission.
@@ -714,6 +770,11 @@ const (
 // If reorg is detected, empty range and ActionReset is returned.
 // If there isn't enough information or no blocks to load yet, empty range and ActionRetry is returned.
 func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBlockRange, EnqueueBlockAction) {
+	// Async submission failures are handed back to this loop, which owns queuedBlocks.
+	if session := l.batcher.espressoSession; session != nil && session.submitter != nil && session.submitter.failed.Swap(false) {
+		return inclusiveBlockRange{}, ActionReset
+	}
+
 	// Mirror computeSyncActions' zero-field guard: op-node has transiently
 	// reported statuses with individual fields zeroed while the rest are
 	// populated (see sync_actions_test.go). Treating a zero LocalSafeL2 as the

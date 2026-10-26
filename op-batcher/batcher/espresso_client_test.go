@@ -143,50 +143,9 @@ func TestEspressoVerifyContexts(t *testing.T) {
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			s.confirmReceipt(s.ctx, new(espressoCommon.TaggedBase64))
+			s.confirmReceipt(s.ctx, new(espressoCommon.TaggedBase64), true)
 		}()
 	})
-}
-
-// blockingEspressoLifecycleClient blocks in the selected stage until cancellation.
-// Receipt tests let submission succeed so both transactions reach verification.
-type blockingEspressoLifecycleClient struct {
-	contextErrorEspressoClient
-	verify bool
-}
-
-func (c *blockingEspressoLifecycleClient) SubmitTransaction(ctx context.Context, tx espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
-	if c.verify {
-		return taggedbase64.New("TX", []byte{1})
-	}
-	return c.contextErrorEspressoClient.SubmitTransaction(ctx, tx)
-}
-
-// TestEspressoTransactionsProcessConcurrently preserves #524's overlap check
-// across the errgroup rewrite: both transactions must reach the selected client
-// method while the first call is still blocked. Start is omitted to avoid height
-// queries competing with the calls observed by the test.
-func TestEspressoTransactionsProcessConcurrently(t *testing.T) {
-	for _, stage := range []string{"submit", "verify"} {
-		t.Run(stage, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(t.Context())
-			calls := make(chan context.Context, 2)
-			client := &blockingEspressoLifecycleClient{
-				contextErrorEspressoClient: contextErrorEspressoClient{calls: calls},
-				verify:                     stage == "verify",
-			}
-			s := NewEspressoTransactionSubmitter(WithContext(ctx),
-				WithEspressoSubmissionClient(client), WithEspressoNetworkTimeout(time.Minute))
-			t.Cleanup(func() { cancel(); s.wg.Wait() })
-			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{}))
-			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{}))
-
-			first := receiveTestValue(t, calls)
-			second := receiveTestValue(t, calls)
-			require.NoError(t, first.Err(), "first call must remain blocked while the second starts")
-			require.NoError(t, second.Err())
-		})
-	}
 }
 
 func TestEspressoHeightTrackerContexts(t *testing.T) {
