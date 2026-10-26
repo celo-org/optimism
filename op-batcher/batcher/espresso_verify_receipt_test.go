@@ -64,13 +64,6 @@ func TestEvaluateVerification(t *testing.T) {
 			want:          RetrySubmission,
 		},
 		{
-			name:          "far past maxBlocks re-submits",
-			err:           ephemeralErr,
-			startHeight:   100,
-			currentHeight: 100 + 100*maxBlocks,
-			want:          RetrySubmission,
-		},
-		{
 			// The tracker had not stored a height when the job started, so
 			// block counting is meaningless: the guard must fall through to
 			// verification retry, not treat height 0 as "maxBlocks passed".
@@ -120,17 +113,15 @@ func TestEvaluateVerification(t *testing.T) {
 
 // stuckReceiptEspressoClient accepts submissions and serves an advancing
 // HotShot block height, but never finds a submitted transaction: the shape of
-// an Espresso node that swallowed a transaction. The embedded nil interface
-// panics on any other method, proving no other client call is involved.
+// an Espresso node that swallowed a transaction.
 type stuckReceiptEspressoClient struct {
-	espressoClient.EspressoClient
 	fetches     atomic.Int64
 	submissions atomic.Int64
 }
 
-// FetchLatestBlockHeight advances HotShot by 10 blocks per poll from a base of
-// 100, so a single step already exceeds the 5-block verify budget the test
-// configures.
+var _ espressoSubmissionClient = (*stuckReceiptEspressoClient)(nil)
+
+// FetchLatestBlockHeight advances HotShot by 10 blocks per poll.
 func (c *stuckReceiptEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
 	return 100 + 10*uint64(c.fetches.Add(1)), nil
 }

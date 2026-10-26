@@ -192,9 +192,8 @@ const (
 // is the derived tip), but a handoff from the fallback batcher must set the flag
 // explicitly - nothing derives a handoff height from the rollup config, since
 // espresso_time is a timestamp and its L2 block height is not statically known.
-// The timeout and retry interval are parameters (espressoAnchorTimeout and
-// espressoAnchorRetryInterval in production) so tests can exercise the retry
-// and give-up paths without waiting out the real one-minute anchor timeout.
+// The timeout and retry interval are parameters so tests can reach the retry and
+// give-up paths quickly.
 func (l *BatchSubmitter) waitForLocalSafeHead(ctx context.Context, timeout, retryInterval time.Duration) (eth.L2BlockRef, error) {
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

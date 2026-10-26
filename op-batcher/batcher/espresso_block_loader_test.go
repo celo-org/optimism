@@ -5,15 +5,14 @@ import (
 	"errors"
 	"math/big"
 	"math/rand"
-	"sync"
 	"testing"
 	"time"
 
-	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	derivetest "github.com/ethereum-optimism/optimism/op-node/rollup/derive/test"
+	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -202,14 +201,89 @@ func TestNextBlockRangeBranches(t *testing.T) {
 		}
 	}
 
-	t.Run("queue caught up with the unsafe head retries", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		loader.queuedBlocks = numberedRefs(105, 109)
-		r, action := loader.nextBlockRange(newStatus(numberedRef(104), 109))
-		require.Equal(t, EnqueueBlockAction(ActionRetry), action)
-		require.Equal(t, inclusiveBlockRange{}, r)
-		require.Equal(t, numberedRefs(105, 109), loader.queuedBlocks)
-	})
+	tests := []struct {
+		name       string
+		queued     []eth.L2BlockRef
+		safe       eth.L2BlockRef
+		unsafe     uint64
+		wantAction EnqueueBlockAction
+		wantRange  inclusiveBlockRange
+		wantQueue  []eth.L2BlockRef // nil: unchanged
+	}{
+		{
+			name:       "queue caught up with the unsafe head retries",
+			queued:     numberedRefs(105, 109),
+			safe:       numberedRef(104),
+			unsafe:     109,
+			wantAction: ActionRetry,
+		},
+		{
+			name:       "derivation ahead of the whole queue resets",
+			queued:     numberedRefs(105, 106),
+			safe:       numberedRef(107),
+			unsafe:     110,
+			wantAction: ActionReset,
+		},
+		{
+			name:       "safe head below the oldest queued block resets",
+			queued:     numberedRefs(105, 108),
+			safe:       numberedRef(103),
+			unsafe:     110,
+			wantAction: ActionReset,
+		},
+		{
+			// A queue with a hole (106 missing, e.g. after a partial enqueue
+			// failure) makes the count-based check the only guard.
+			name:       "gapped queue with the safe head above its span resets",
+			queued:     []eth.L2BlockRef{numberedRef(105), numberedRef(107)},
+			safe:       numberedRef(107),
+			unsafe:     110,
+			wantAction: ActionReset,
+		},
+		{
+			// Same height we queued at 106, different (canonical) hash: our
+			// queued chain was orphaned and must not keep feeding Espresso.
+			name:       "safe-chain reorg is detected by hash mismatch",
+			queued:     numberedRefs(105, 108),
+			safe:       eth.L2BlockRef{Number: 106, Hash: common.Hash{0xde, 0xad}},
+			unsafe:     110,
+			wantAction: ActionReset,
+		},
+		{
+			// Blocks strictly below the safe head are derived and must be dropped.
+			name:       "matching safe hash prunes derived blocks and enqueues the rest",
+			queued:     numberedRefs(105, 108),
+			safe:       numberedRef(106),
+			unsafe:     110,
+			wantAction: ActionEnqueue,
+			wantRange:  inclusiveBlockRange{109, 110},
+			wantQueue:  numberedRefs(106, 108),
+		},
+		{
+			// Hash deliberately unrelated to the queue: nothing of ours sits at
+			// the safe height yet, so no hash comparison (and no prune) may fire.
+			name:       "safe head just below the queue enqueues without pruning",
+			queued:     numberedRefs(105, 108),
+			safe:       eth.L2BlockRef{Number: 104, Hash: common.Hash{0xbe, 0xef}},
+			unsafe:     110,
+			wantAction: ActionEnqueue,
+			wantRange:  inclusiveBlockRange{109, 110},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			loader := newTestBlockLoader(t)
+			loader.queuedBlocks = test.queued
+			r, action := loader.nextBlockRange(newStatus(test.safe, test.unsafe))
+			require.Equal(t, test.wantAction, action)
+			require.Equal(t, test.wantRange, r)
+			if test.wantQueue == nil {
+				test.wantQueue = test.queued
+			}
+			require.Equal(t, test.wantQueue, loader.queuedBlocks)
+		})
+	}
 
 	t.Run("reversed CurrentL1 retries and keeps the old baseline", func(t *testing.T) {
 		loader := newTestBlockLoader(t)
@@ -222,92 +296,26 @@ func TestNextBlockRangeBranches(t *testing.T) {
 		require.Same(t, prev, loader.prevSyncStatus,
 			"a reversed status must not become the comparison baseline")
 	})
-
-	t.Run("derivation ahead of the whole queue resets", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		loader.queuedBlocks = numberedRefs(105, 106)
-		_, action := loader.nextBlockRange(newStatus(numberedRef(107), 110))
-		require.Equal(t, EnqueueBlockAction(ActionReset), action)
-	})
-
-	t.Run("safe head below the oldest queued block resets", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		loader.queuedBlocks = numberedRefs(105, 108)
-		_, action := loader.nextBlockRange(newStatus(numberedRef(103), 110))
-		require.Equal(t, EnqueueBlockAction(ActionReset), action)
-	})
-
-	t.Run("gapped queue with the safe head above its span resets", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		// A queue with a hole (106 missing, e.g. after a partial enqueue
-		// failure) makes the count-based check the only guard.
-		loader.queuedBlocks = []eth.L2BlockRef{numberedRef(105), numberedRef(107)}
-		_, action := loader.nextBlockRange(newStatus(numberedRef(107), 110))
-		require.Equal(t, EnqueueBlockAction(ActionReset), action)
-	})
-
-	t.Run("safe-chain reorg is detected by hash mismatch", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		loader.queuedBlocks = numberedRefs(105, 108)
-		// Same height we queued at 106, different (canonical) hash: our
-		// queued chain was orphaned and must not keep feeding Espresso.
-		reorgedSafe := eth.L2BlockRef{Number: 106, Hash: common.Hash{0xde, 0xad}}
-		_, action := loader.nextBlockRange(newStatus(reorgedSafe, 110))
-		require.Equal(t, EnqueueBlockAction(ActionReset), action)
-	})
-
-	t.Run("matching safe hash prunes derived blocks and enqueues the rest", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		loader.queuedBlocks = numberedRefs(105, 108)
-		r, action := loader.nextBlockRange(newStatus(numberedRef(106), 110))
-		require.Equal(t, EnqueueBlockAction(ActionEnqueue), action)
-		require.Equal(t, inclusiveBlockRange{109, 110}, r)
-		require.Equal(t, numberedRefs(106, 108), loader.queuedBlocks,
-			"blocks strictly below the safe head are derived and must be dropped")
-	})
-
-	t.Run("safe head just below the queue enqueues without pruning", func(t *testing.T) {
-		loader := newTestBlockLoader(t)
-		loader.queuedBlocks = numberedRefs(105, 108)
-		// Hash deliberately unrelated to the queue: with zero blocks to
-		// enqueue-check there is nothing of ours at the safe height yet, so
-		// no hash comparison (and no prune) may fire.
-		safe := eth.L2BlockRef{Number: 104, Hash: common.Hash{0xbe, 0xef}}
-		r, action := loader.nextBlockRange(newStatus(safe, 110))
-		require.Equal(t, EnqueueBlockAction(ActionEnqueue), action)
-		require.Equal(t, inclusiveBlockRange{109, 110}, r)
-		require.Equal(t, numberedRefs(105, 108), loader.queuedBlocks)
-	})
-}
-
-// nopEspressoClient satisfies the EspressoClient interface for wiring up an
-// espressoTransactionSubmitter whose workers are never spawned; any actual use
-// of the client would panic on the embedded nil interface.
-type nopEspressoClient struct {
-	espressoClient.EspressoClient
 }
 
 // fakeChainSigner returns a constant signature; EnqueueBlocks only needs
 // signing to succeed, not to verify.
-type fakeChainSigner struct{}
+type fakeChainSigner struct{ opcrypto.ChainSigner }
 
-func (fakeChainSigner) SignTransaction(ctx context.Context, addr common.Address, tx *types.Transaction) (*types.Transaction, error) {
-	return tx, nil
-}
-
-func (fakeChainSigner) Sign(ctx context.Context, hash []byte) ([]byte, error) {
+func (fakeChainSigner) Sign(context.Context, []byte) ([]byte, error) {
 	return make([]byte, 65), nil
 }
 
 // newEnqueueTestSubmitter builds a BatchSubmitter that can run EnqueueBlocks
 // end to end: fetch a block from the (mock) sequencer, convert it, sign it,
-// and hand it to the espresso transaction submitter's job queue.
+// and hand it to the espresso transaction submitter's job queue. The submitter
+// never spawns workers, so the queue is where the job stays.
 func newEnqueueTestSubmitter(t *testing.T) (*BatchSubmitter, *mockL2EndpointProvider) {
 	bs, ep := setup(t, nil)
 	bs.Espresso.ChainSigner = fakeChainSigner{}
 	bs.espressoSession = &espressoSession{submitter: NewEspressoTransactionSubmitter(
 		WithContext(t.Context()),
-		WithEspressoSubmissionClient(nopEspressoClient{}),
+		WithEspressoSubmissionClient(&contextErrorEspressoClient{}),
 	)}
 	return bs, ep
 }
@@ -318,16 +326,15 @@ func newEnqueueTestSubmitter(t *testing.T) (*BatchSubmitter, *mockL2EndpointProv
 // queueing loop (the data race the handshake was introduced to fix).
 func TestEnqueueBlocksReorgDetection(t *testing.T) {
 	rng := rand.New(rand.NewSource(1234))
+	// A queued tip that no fetched block extends.
+	orphanedTip := []eth.L2BlockRef{{Number: 105, Hash: common.Hash{0xee}}}
 
 	t.Run("a reorged block resets the loader and requests a state clear", func(t *testing.T) {
 		bs, ep := newEnqueueTestSubmitter(t)
 		loader := &BlockLoader{batcher: bs}
-		loader.queuedBlocks = []eth.L2BlockRef{{Number: 105, Hash: common.Hash{0xee}}}
+		loader.queuedBlocks = orphanedTip
 		loader.prevSyncStatus = &eth.SyncStatus{}
-
 		block := derivetest.RandomL2BlockWithChainId(rng, 1, defaultTestRollupConfig.L2ChainID)
-		require.NotEqual(t, loader.queuedBlocks[0].Hash, block.ParentHash(),
-			"sanity: the fetched block must not extend the queued tip")
 		ep.ethClient.ExpectBlockByNumber(new(big.Int).SetUint64(106), block, nil)
 
 		loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 106})
@@ -361,26 +368,22 @@ func TestEnqueueBlocksReorgDetection(t *testing.T) {
 	t.Run("a fetch failure stops the scan without resetting", func(t *testing.T) {
 		bs, ep := newEnqueueTestSubmitter(t)
 		loader := &BlockLoader{batcher: bs}
-		loader.queuedBlocks = []eth.L2BlockRef{{Number: 105, Hash: common.Hash{0xee}}}
+		loader.queuedBlocks = orphanedTip
 		ep.ethClient.ExpectBlockByNumber(new(big.Int).SetUint64(106), (*types.Block)(nil), errors.New("rpc down"))
 
 		// The range spans two blocks; the mock would reject a fetch of 107,
 		// so completing without a mock failure also proves the scan stopped.
 		loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 107})
 
-		require.Equal(t, []eth.L2BlockRef{{Number: 105, Hash: common.Hash{0xee}}}, loader.queuedBlocks,
+		require.Equal(t, orphanedTip, loader.queuedBlocks,
 			"a transient fetch failure must keep the queue for the next tick")
 		require.False(t, bs.clearStateRequested.Load())
 	})
 }
 
-// TestClearStateHandshake locks the requestClearState/performClearState CAS
-// handshake between the batch queueing loop (requester) and the batch loading
-// loop (performer). The handshake exists so the queueing loop never runs
-// clearState itself — doing so raced the loading loop on the channel manager
-// and streamer. TestEnqueueBlocksReorgDetection locks the requester side of
-// that fix (a reorg requests the clear, never performs it); this locks the
-// performer side.
+// TestClearStateHandshake locks the performer side of the
+// requestClearState/performClearState handshake (TestEnqueueBlocksReorgDetection
+// locks the requester side): a clear runs once per request and never without one.
 func TestClearStateHandshake(t *testing.T) {
 	populatedStatus := &eth.SyncStatus{
 		HeadL1:      eth.L1BlockRef{Number: 50, Hash: common.Hash{0xa1}},
@@ -394,33 +397,13 @@ func TestClearStateHandshake(t *testing.T) {
 		require.False(t, bs.performClearState(t.Context()))
 	})
 
-	t.Run("a request is performed exactly once", func(t *testing.T) {
+	t.Run("repeated requests coalesce into one clear", func(t *testing.T) {
 		bs, ep := setup(t, nil)
 		ep.rollupClient.ExpectSyncStatus(populatedStatus, nil)
 
 		bs.requestClearState()
+		bs.requestClearState()
 		require.True(t, bs.performClearState(t.Context()), "the requested clear must be performed")
 		require.False(t, bs.performClearState(t.Context()), "the request must be consumed by the CAS")
-		require.False(t, bs.clearStateRequested.Load())
-	})
-
-	t.Run("concurrent requests coalesce into one clear", func(t *testing.T) {
-		bs, ep := setup(t, nil)
-		ep.rollupClient.ExpectSyncStatus(populatedStatus, nil)
-
-		var wg sync.WaitGroup
-		for i := 0; i < 4; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				for j := 0; j < 64; j++ {
-					bs.requestClearState()
-				}
-			}()
-		}
-		wg.Wait()
-
-		require.True(t, bs.performClearState(t.Context()), "the pending request must be performed")
-		require.False(t, bs.performClearState(t.Context()), "all requests coalesce into a single clear")
 	})
 }

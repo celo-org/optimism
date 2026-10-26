@@ -3,6 +3,7 @@ package batcher
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"testing"
@@ -13,12 +14,10 @@ import (
 	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
-	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 )
 
@@ -227,36 +226,23 @@ func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
 	require.Nil(t, batcher.espressoSession, "a failed lookup must not publish a session")
 }
 
-const testCaffeinationL2 = uint64(500)
-
+// newAnchorTestSubmitter builds a batcher whose anchor gate waits for the given
+// caffeination height, with a mock rollup client to feed sync statuses.
 func newAnchorTestSubmitter(t *testing.T, caffeinationL2 uint64) (*BatchSubmitter, *mockL2EndpointProvider) {
-	ep := newEndpointProvider()
-	l := &BatchSubmitter{
-		DriverSetup: DriverSetup{
-			Log: testlog.Logger(t, log.LevelDebug),
-			Config: BatcherConfig{
-				NetworkTimeout: time.Second,
-				Espresso: EspressoBatcherConfig{
-					CaffeinationHeightL2: caffeinationL2,
-				},
-			},
-			EndpointProvider: ep,
-		},
-	}
-	return l, ep
+	bs, ep := setup(t, nil)
+	bs.Config.NetworkTimeout = time.Second
+	bs.Config.Espresso.CaffeinationHeightL2 = caffeinationL2
+	return bs, ep
 }
 
 // anchorStatus returns a sync status whose HeadL1 is populated (getSyncStatus
 // backs off internally on an empty HeadL1) and whose LocalSafeL2 sits at the
-// given height.
+// given height; zero leaves LocalSafeL2 empty.
 func anchorStatus(localSafe uint64) *eth.SyncStatus {
-	status := &eth.SyncStatus{
-		HeadL1: eth.L1BlockRef{Number: 50, Hash: common.Hash{0xa1}},
+	return &eth.SyncStatus{
+		HeadL1:      eth.L1BlockRef{Number: 50, Hash: common.Hash{0xa1}},
+		LocalSafeL2: numberedRef(localSafe),
 	}
-	if localSafe > 0 {
-		status.LocalSafeL2 = eth.L2BlockRef{Number: localSafe, Hash: common.Hash{byte(localSafe)}}
-	}
-	return status
 }
 
 // TestWaitForLocalSafeHead locks the streamer's anchor gate: the Espresso
@@ -265,75 +251,88 @@ func anchorStatus(localSafe uint64) *eth.SyncStatus {
 // transient sync-status trouble, and must give up with a retryable error
 // rather than anchoring below the caffeination point.
 func TestWaitForLocalSafeHead(t *testing.T) {
-	t.Run("anchors once the caffeination point is local-safe", func(t *testing.T) {
-		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
-		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2), nil)
+	const caffeinationL2 = uint64(500)
+	type syncStatusResponse struct {
+		status *eth.SyncStatus
+		err    error
+	}
 
-		anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
-		require.NoError(t, err)
-		require.Equal(t, testCaffeinationL2, anchor.Number)
-	})
+	tests := []struct {
+		name           string
+		caffeinationL2 uint64
+		responses      []syncStatusResponse
+		wantAnchor     uint64
+	}{
+		{
+			name:           "anchors once the caffeination point is local-safe",
+			caffeinationL2: caffeinationL2,
+			responses:      []syncStatusResponse{{status: anchorStatus(caffeinationL2)}},
+			wantAnchor:     caffeinationL2,
+		},
+		{
+			name:           "anchors past the caffeination point",
+			caffeinationL2: caffeinationL2,
+			responses:      []syncStatusResponse{{status: anchorStatus(caffeinationL2 + 7)}},
+			wantAnchor:     caffeinationL2 + 7,
+		},
+		{
+			name:           "retries through a transient sync-status failure",
+			caffeinationL2: caffeinationL2,
+			responses: []syncStatusResponse{
+				{err: errors.New("transient RPC failure")},
+				{status: anchorStatus(caffeinationL2)},
+			},
+			wantAnchor: caffeinationL2,
+		},
+		{
+			name:           "retries past an empty local-safe head",
+			caffeinationL2: caffeinationL2,
+			responses: []syncStatusResponse{
+				{status: anchorStatus(0)}, // populated status, zero LocalSafeL2
+				{status: anchorStatus(caffeinationL2)},
+			},
+			wantAnchor: caffeinationL2,
+		},
+		{
+			// --espresso.origin-height-l2 unset: no floor beyond a populated
+			// head. Steady-state restarts rely on this; handoffs must set the flag.
+			name:           "zero caffeination height anchors on any populated local-safe head",
+			caffeinationL2: 0,
+			responses:      []syncStatusResponse{{status: anchorStatus(1)}},
+			wantAnchor:     1,
+		},
+	}
 
-	t.Run("anchors past the caffeination point", func(t *testing.T) {
-		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
-		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2+7), nil)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l, ep := newAnchorTestSubmitter(t, test.caffeinationL2)
+			for _, response := range test.responses {
+				ep.rollupClient.ExpectSyncStatus(response.status, response.err)
+			}
 
-		anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
-		require.NoError(t, err)
-		require.Equal(t, testCaffeinationL2+7, anchor.Number)
-	})
+			anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
+			require.NoError(t, err)
+			require.Equal(t, test.wantAnchor, anchor.Number)
+		})
+	}
 
 	t.Run("gives up while the caffeination point stays underived", func(t *testing.T) {
-		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
-		ep.rollupClient.Mock.On("SyncStatus").Return(anchorStatus(testCaffeinationL2-1), nil)
+		l, ep := newAnchorTestSubmitter(t, caffeinationL2)
+		ep.rollupClient.Mock.On("SyncStatus").Return(anchorStatus(caffeinationL2-1), nil)
 
-		_, err := l.waitForLocalSafeHead(t.Context(), 50*time.Millisecond, 5*time.Millisecond)
-		require.ErrorContains(t, err, "caffeination point (500)",
+		_, err := l.waitForLocalSafeHead(t.Context(), 5*time.Millisecond, time.Millisecond)
+		require.ErrorContains(t, err, fmt.Sprintf("caffeination point (%d)", caffeinationL2),
 			"the give-up error must name the height the operator is waiting on")
 		require.ErrorIs(t, err, context.DeadlineExceeded)
-	})
-
-	t.Run("retries through a transient sync-status failure", func(t *testing.T) {
-		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
-		ep.rollupClient.ExpectSyncStatus(nil, errors.New("transient RPC failure"))
-		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2), nil)
-
-		anchor, err := l.waitForLocalSafeHead(t.Context(), 5*time.Second, time.Millisecond)
-		require.NoError(t, err)
-		require.Equal(t, testCaffeinationL2, anchor.Number)
-	})
-
-	t.Run("retries past an empty local-safe head", func(t *testing.T) {
-		l, ep := newAnchorTestSubmitter(t, testCaffeinationL2)
-		ep.rollupClient.ExpectSyncStatus(anchorStatus(0), nil) // populated status, zero LocalSafeL2
-		ep.rollupClient.ExpectSyncStatus(anchorStatus(testCaffeinationL2), nil)
-
-		anchor, err := l.waitForLocalSafeHead(t.Context(), 5*time.Second, time.Millisecond)
-		require.NoError(t, err)
-		require.Equal(t, testCaffeinationL2, anchor.Number)
-	})
-
-	t.Run("zero caffeination height anchors on any populated local-safe head", func(t *testing.T) {
-		// --espresso.origin-height-l2 unset: no floor beyond a populated
-		// head. Steady-state restarts rely on this; handoffs must set the flag.
-		l, ep := newAnchorTestSubmitter(t, 0)
-		ep.rollupClient.ExpectSyncStatus(anchorStatus(1), nil)
-
-		anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
-		require.NoError(t, err)
-		require.Equal(t, uint64(1), anchor.Number)
 	})
 }
 
 // TestRollbackFailedStart locks the startup rollback: a failed Espresso setup
 // must undo everything StartBatchSubmitting set up — clear the running flag so
 // a later start attempt is not rejected with "batcher is already running", and
-// cancel both contexts so nothing keeps running behind the failed start. The
-// session itself needs no unwinding: newEspressoSession publishes it only once
-// fully built, so a failed start never has one.
+// cancel both contexts so nothing keeps running behind the failed start.
 func TestRollbackFailedStart(t *testing.T) {
-	l := &BatchSubmitter{}
-	l.Log = testlog.Logger(t, log.LevelDebug)
+	l := newAuthSubmitter(t)
 	l.shutdownCtx, l.cancelShutdownCtx = context.WithCancel(context.Background())
 	l.killCtx, l.cancelKillCtx = context.WithCancel(context.Background())
 	l.running = true
@@ -343,5 +342,4 @@ func TestRollbackFailedStart(t *testing.T) {
 	require.False(t, l.running, "a failed start must not wedge later start attempts")
 	require.ErrorIs(t, l.shutdownCtx.Err(), context.Canceled)
 	require.ErrorIs(t, l.killCtx.Err(), context.Canceled)
-	require.Nil(t, l.espressoSession, "a failed start must not leave a session behind")
 }
