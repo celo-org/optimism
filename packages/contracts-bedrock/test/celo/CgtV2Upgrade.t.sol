@@ -175,7 +175,15 @@ contract CgtV2Upgrade_Test is Test {
                 vm.broadcast(txs[i].from);
                 bytes memory code = txs[i].data;
                 address deployed;
+                uint256 beforeCreate = gasleft();
                 assembly { deployed := create(0, add(code, 32), mload(code)) }
+                uint256 executionGas = beforeCreate - gasleft();
+                // Conservative bound: CREATE already pays its base cost. Add a transaction
+                // base and the maximum calldata floor, including zero bytes, for deposits.
+                // Real deposit execution is also covered by the shared-client fixture tests.
+                uint256 gasUpperBound = executionGas + 21_000 + 40 * code.length;
+                assertLe(gasUpperBound, txs[i].gasLimit, txs[i].intent);
+                emit log_named_uint(txs[i].intent, gasUpperBound);
                 assertEq(deployed, expected);
                 assertGt(deployed.code.length, 0);
             } else {
