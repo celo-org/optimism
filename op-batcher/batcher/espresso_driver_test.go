@@ -2,6 +2,8 @@ package batcher
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"math/big"
 	"sync"
 	"testing"
@@ -222,4 +224,122 @@ func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
 	require.NoError(t, ctx.Err(), "the lookup timeout must not cancel its caller")
 	require.Nil(t, streamer, "a failed lookup must not return a streamer")
 	require.Nil(t, batcher.espressoSession, "a failed lookup must not publish a session")
+}
+
+// newAnchorTestSubmitter builds a batcher whose anchor gate waits for the given
+// caffeination height, with a mock rollup client to feed sync statuses.
+func newAnchorTestSubmitter(t *testing.T, caffeinationL2 uint64) (*BatchSubmitter, *mockL2EndpointProvider) {
+	bs, ep := setup(t, nil)
+	bs.Config.NetworkTimeout = time.Second
+	bs.Config.Espresso.CaffeinationHeightL2 = caffeinationL2
+	return bs, ep
+}
+
+// anchorStatus returns a sync status whose HeadL1 is populated (getSyncStatus
+// backs off internally on an empty HeadL1) and whose LocalSafeL2 sits at the
+// given height; zero leaves LocalSafeL2 empty.
+func anchorStatus(localSafe uint64) *eth.SyncStatus {
+	return &eth.SyncStatus{
+		HeadL1:      eth.L1BlockRef{Number: 50, Hash: common.Hash{0xa1}},
+		LocalSafeL2: numberedRef(localSafe),
+	}
+}
+
+// TestWaitForLocalSafeHead locks the streamer's anchor gate: the Espresso
+// batcher must refuse to run until the caffeination point is local-safe (the
+// fallback batcher's pre-activation channels have derived), must retry through
+// transient sync-status trouble, and must give up with a retryable error
+// rather than anchoring below the caffeination point.
+func TestWaitForLocalSafeHead(t *testing.T) {
+	const caffeinationL2 = uint64(500)
+	type syncStatusResponse struct {
+		status *eth.SyncStatus
+		err    error
+	}
+
+	tests := []struct {
+		name           string
+		caffeinationL2 uint64
+		responses      []syncStatusResponse
+		wantAnchor     uint64
+	}{
+		{
+			name:           "anchors once the caffeination point is local-safe",
+			caffeinationL2: caffeinationL2,
+			responses:      []syncStatusResponse{{status: anchorStatus(caffeinationL2)}},
+			wantAnchor:     caffeinationL2,
+		},
+		{
+			name:           "anchors past the caffeination point",
+			caffeinationL2: caffeinationL2,
+			responses:      []syncStatusResponse{{status: anchorStatus(caffeinationL2 + 7)}},
+			wantAnchor:     caffeinationL2 + 7,
+		},
+		{
+			name:           "retries through a transient sync-status failure",
+			caffeinationL2: caffeinationL2,
+			responses: []syncStatusResponse{
+				{err: errors.New("transient RPC failure")},
+				{status: anchorStatus(caffeinationL2)},
+			},
+			wantAnchor: caffeinationL2,
+		},
+		{
+			name:           "retries past an empty local-safe head",
+			caffeinationL2: caffeinationL2,
+			responses: []syncStatusResponse{
+				{status: anchorStatus(0)}, // populated status, zero LocalSafeL2
+				{status: anchorStatus(caffeinationL2)},
+			},
+			wantAnchor: caffeinationL2,
+		},
+		{
+			// --espresso.origin-height-l2 unset: no floor beyond a populated
+			// head. Steady-state restarts rely on this; handoffs must set the flag.
+			name:           "zero caffeination height anchors on any populated local-safe head",
+			caffeinationL2: 0,
+			responses:      []syncStatusResponse{{status: anchorStatus(1)}},
+			wantAnchor:     1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			l, ep := newAnchorTestSubmitter(t, test.caffeinationL2)
+			for _, response := range test.responses {
+				ep.rollupClient.ExpectSyncStatus(response.status, response.err)
+			}
+
+			anchor, err := l.waitForLocalSafeHead(t.Context(), time.Second, time.Millisecond)
+			require.NoError(t, err)
+			require.Equal(t, test.wantAnchor, anchor.Number)
+		})
+	}
+
+	t.Run("gives up while the caffeination point stays underived", func(t *testing.T) {
+		l, ep := newAnchorTestSubmitter(t, caffeinationL2)
+		ep.rollupClient.Mock.On("SyncStatus").Return(anchorStatus(caffeinationL2-1), nil)
+
+		_, err := l.waitForLocalSafeHead(t.Context(), 5*time.Millisecond, time.Millisecond)
+		require.ErrorContains(t, err, fmt.Sprintf("caffeination point (%d)", caffeinationL2),
+			"the give-up error must name the height the operator is waiting on")
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+	})
+}
+
+// TestRollbackFailedStart locks the startup rollback: a failed Espresso setup
+// must undo everything StartBatchSubmitting set up — clear the running flag so
+// a later start attempt is not rejected with "batcher is already running", and
+// cancel both contexts so nothing keeps running behind the failed start.
+func TestRollbackFailedStart(t *testing.T) {
+	l := newAuthSubmitter(t)
+	l.shutdownCtx, l.cancelShutdownCtx = context.WithCancel(context.Background())
+	l.killCtx, l.cancelKillCtx = context.WithCancel(context.Background())
+	l.running = true
+
+	l.rollbackFailedStart()
+
+	require.False(t, l.running, "a failed start must not wedge later start attempts")
+	require.ErrorIs(t, l.shutdownCtx.Err(), context.Canceled)
+	require.ErrorIs(t, l.killCtx.Err(), context.Canceled)
 }
