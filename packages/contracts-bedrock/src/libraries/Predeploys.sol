@@ -189,6 +189,11 @@ library Predeploys {
             || (_isCustomGasToken && _addr == NATIVE_ASSET_LIQUIDITY);
     }
 
+    /// @notice Returns whether the address is a proxied reserved predeploy.
+    function isUpgradeable(address _proxy) internal pure returns (bool) {
+        return isPredeployNamespace(_proxy) && !notProxied(_proxy);
+    }
+
     function isPredeployNamespace(address _addr) internal pure returns (bool) {
         return uint160(_addr) >> 11 == uint160(0x4200000000000000000000000000000000000000) >> 11;
     }
