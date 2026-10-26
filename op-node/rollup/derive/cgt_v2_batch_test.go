@@ -16,7 +16,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/testutils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/stretchr/testify/require"
 )
@@ -94,8 +93,8 @@ func TestCgtV2BatchRPCErrorRetriesCandidate(t *testing.T) {
 }
 
 func TestCgtV2PipelineConstructorWiring(t *testing.T) {
-	rs := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{cgtFeatureLog(common.Address{0x33})}}})
-	d, s, parent, origin := cgtTestDeriver(t, rs)
+	rs := cgtSeededReceipts()
+	_, s, parent, origin := cgtTestDeriver(t, rs)
 	cfg := &rollup.Config{BlockTime: 2, L1ChainID: big.NewInt(1), L2ChainID: big.NewInt(1337), L1SystemConfigAddress: common.Address{0x33}, DepositContractAddress: common.Address{0x44}}
 	l1 := &testutils.MockL1Source{}
 	l1.ExpectFetchReceipts(origin.Hash, s.info, rs, nil)
@@ -103,7 +102,6 @@ func TestCgtV2PipelineConstructorWiring(t *testing.T) {
 	l2.ExpectSystemConfigByL2Hash(parent.Hash, eth.SystemConfig{GasLimit: 30000000}, nil)
 	pipeline := NewDerivationPipeline(testlog.Logger(t, log.LevelError), cfg, nil, l1, nil, nil, l2, nil, params.MergedTestChainConfig, s)
 	builder := pipeline.attrib.builder.(*FetchingAttributesBuilder)
-	builder.cgt.snapshot = d.snapshot
 	batch := &SingularBatch{ParentHash: parent.Hash, EpochHash: origin.Hash, EpochNum: rollup.Epoch(origin.Number), Timestamp: 102}
 	attrs, err := pipeline.attrib.createNextAttributes(context.Background(), batch, parent)
 	require.NoError(t, err)
@@ -112,7 +110,6 @@ func TestCgtV2PipelineConstructorWiring(t *testing.T) {
 	mux := pipeline.attrib.prev.(*BatchMux)
 	require.Same(t, builder, mux.cgt, "batch validation and attributes must use the same authenticated derivation")
 	pipeline.attrib.reset()
-	require.False(t, builder.cgt.tracker.initialized)
 	l1.AssertExpectations(t)
 	l2.AssertExpectations(t)
 }

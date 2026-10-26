@@ -536,9 +536,6 @@ func (s *Sequencer) onEngineTemporaryError(x rollup.EngineTemporaryErrorEvent) {
 }
 
 func (s *Sequencer) onReset(x rollup.ResetEvent) {
-	if resetter, ok := s.attrBuilder.(interface{ ResetCgtV2() }); ok {
-		resetter.ResetCgtV2()
-	}
 	s.log.Error("Sequencer encountered reset signal, aborting work", "err", x.Err)
 	s.metrics.RecordSequencerReset()
 	// try to cancel any ongoing payload building job

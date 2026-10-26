@@ -48,9 +48,11 @@ func NewFetchingAttributesBuilder(rollupCfg *rollup.Config, l1ChainConfig *param
 		panic("FetchingAttributesBuilder requires a dependency set when Lagoon fork is scheduled")
 	}
 	var cgt *cgtV2Derivation
+	source, _ := l1.(CgtV2InputSource)
 	if len(cgtSources) > 0 {
-		cgt = newCgtV2Derivation(rollupCfg, cgtSources[0])
+		source = cgtSources[0]
 	}
+	cgt = newCgtV2Derivation(rollupCfg, source)
 	return &FetchingAttributesBuilder{
 		cgt:           cgt,
 		rollupCfg:     rollupCfg,
@@ -76,11 +78,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	var l1Info eth.BlockInfo
 	var depositTxs []hexutil.Bytes
 	var seqNumber uint64
-	if ba.cgt != nil {
-		if err := ba.cgt.tracker.prepareParent(ctx, l2Parent); err != nil {
-			return nil, err
-		}
-	}
+	var cgtUpgrades []hexutil.Bytes
 
 	sysConfig, err := ba.l2.SystemConfigByL2Hash(ctx, l2Parent.Hash)
 	if err != nil {
@@ -97,12 +95,11 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		}
 
 		var deposits []hexutil.Bytes
-		if ba.cgt != nil && !ba.cgt.tracker.complete {
-			deposits, _, err = ba.cgt.deposits(ctx, l2Parent, epoch, receipts)
+		if ba.cgt != nil {
+			info, deposits, cgtUpgrades, err = ba.cgt.originDeposits(ctx, l2Parent, epoch, receipts)
 			if err != nil {
 				return nil, err
 			}
-			info = ba.cgt.info
 		} else {
 			deposits, err = DeriveDeposits(receipts.Geth(), ba.rollupCfg.DepositContractAddress)
 		}
@@ -129,14 +126,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		}
 		var info eth.BlockInfo
 		var err error
-		if ba.cgt != nil && !ba.cgt.tracker.complete {
-			info, err = ba.cgt.source.L1BlockInfo(ctx, epoch)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			info, err = ba.l1.InfoByHash(ctx, epoch.Hash)
-		}
+		info, err = ba.l1.InfoByHash(ctx, epoch.Hash)
 		if err != nil {
 			return nil, NewTemporaryError(fmt.Errorf("failed to fetch L1 block info: %w", err))
 		}
@@ -211,6 +201,11 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		upgradeGas += lagoonGas
 	}
 
+	if len(cgtUpgrades) > 0 {
+		upgradeTxs = append(upgradeTxs, cgtUpgrades...)
+		upgradeGas += cgtV2UpgradeGas
+	}
+
 	l1InfoTx, err := L1InfoDepositBytes(ba.rollupCfg, ba.l1ChainConfig, sysConfig, seqNumber, l1Info, nextL2Time)
 	if err != nil {
 		return nil, NewCriticalError(fmt.Errorf("failed to create l1InfoTx: %w", err))
@@ -235,6 +230,9 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	}
 
 	gasLimit := sysConfig.GasLimit + upgradeGas
+	if gasLimit < sysConfig.GasLimit {
+		return nil, NewCriticalError(fmt.Errorf("CGTv2 upgrade gas overflows block gas limit"))
+	}
 
 	r := &eth.PayloadAttributes{
 		Timestamp:             hexutil.Uint64(nextL2Time),

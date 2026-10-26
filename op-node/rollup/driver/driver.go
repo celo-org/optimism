@@ -53,11 +53,8 @@ func NewDriver(
 ) *Driver {
 	driverCtx, driverCancel := context.WithCancel(context.Background())
 
-	// Keep proof access on the raw clients: confirmation-depth and metrics
-	// wrappers deliberately expose only the normal derivation fetcher methods.
-	l1Proof, _ := l1.(derive.CgtV2ProofClient)
-	l2Proof, _ := l2.(derive.CgtV2ProofClient)
-	cgtSource := derive.NewCgtV2RPCSource(l1Proof, l2Proof)
+	// Keep raw header access before confirmation-depth and metrics wrappers.
+	cgtSource, _ := l1.(derive.CgtV2InputSource)
 
 	statusTracker := status.NewStatusTracker(log, metrics)
 	sys.Register("status", statusTracker)

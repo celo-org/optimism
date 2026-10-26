@@ -4,10 +4,10 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum-optimism/optimism/op-core/forks"
+	optypes "github.com/ethereum-optimism/optimism/op-core/types"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -16,31 +16,32 @@ import (
 )
 
 // Characterize the existing safe/unsafe comparison: expected derivation
-// already authenticates the signal, and consolidation must compare its position.
-func TestCgtV2SafeAttributesRejectMissingOrMisplacedSignal(t *testing.T) {
+// already authenticates the group, and consolidation must compare every step.
+func TestCgtV2SafeAttributesRejectMissingOrMisplacedGroup(t *testing.T) {
 	cfg := &rollup.Config{ChainOpConfig: defaultOpConfig}
 	cfg.ActivateAtGenesis(forks.Jovian)
 	for _, name := range []string{"valid", "missing", "misplaced", "wrong amount"} {
 		t.Run(name, func(t *testing.T) {
 			args := jovianArgs()
-			signal, err := derive.CgtV2ActivationDeposit(common.Hash{1}, big.NewInt(600))
+			group, _, err := derive.CgtV2UpgradeTransactions(big.NewInt(1337), big.NewInt(600))
 			require.NoError(t, err)
-			raw, err := signal.MarshalBinary()
-			require.NoError(t, err)
-			// Opaque non-signal txs stand for the surrounding L1-info/deposits.
-			before := args.attrs.Transactions[0]
-			after := eth.Data{0xc0}
-			args.attrs.Transactions = []eth.Data{before, raw, after}
-			txs := []eth.Data{before, raw, after}
+			// Origin deposits precede the complete upgrade group.
+			before, deposit := args.attrs.Transactions[0], eth.Data{0xc0}
+			args.attrs.Transactions = append([]eth.Data{before, deposit}, group...)
+			txs := append([]eth.Data(nil), args.attrs.Transactions...)
 			switch name {
 			case "missing":
-				txs = []eth.Data{before, after}
+				txs = txs[:len(txs)-1]
 			case "misplaced":
-				txs = []eth.Data{before, after, raw}
+				txs[1], txs[2] = txs[2], txs[1]
 			case "wrong amount":
-				changed := append(eth.Data(nil), raw...)
-				changed[len(changed)-1]++
-				txs[1] = changed
+				funding, err := optypes.UnmarshalDepositTx(txs[len(txs)-1])
+				require.NoError(t, err)
+				funding.Mint.Add(funding.Mint, big.NewInt(1))
+				funding.Value.Add(funding.Value, big.NewInt(1))
+				changed, err := funding.MarshalBinary()
+				require.NoError(t, err)
+				txs[len(txs)-1] = changed
 			}
 			args.envelope.ExecutionPayload.Transactions = txs
 			err = AttributesMatchBlock(cfg, args.attrs, args.parentHash, args.envelope, testlog.Logger(t, log.LevelCrit))

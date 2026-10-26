@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
 
-	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/engine"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
@@ -17,7 +16,6 @@ import (
 type cgtAttributesBuilder struct {
 	derive.AttributesBuilder
 	active bool
-	resets int
 }
 
 func (b *cgtAttributesBuilder) PreparePayloadAttributes(ctx context.Context, p eth.L2BlockRef, h eth.BlockID) (*eth.PayloadAttributes, error) {
@@ -25,18 +23,13 @@ func (b *cgtAttributesBuilder) PreparePayloadAttributes(ctx context.Context, p e
 	if err != nil || !b.active {
 		return attrs, err
 	}
-	tx, err := derive.CgtV2ActivationDeposit(h.Hash, big.NewInt(600))
+	group, _, err := derive.CgtV2UpgradeTransactions(big.NewInt(1337), big.NewInt(600))
 	if err != nil {
 		return nil, err
 	}
-	raw, err := tx.MarshalBinary()
-	if err != nil {
-		return nil, err
-	}
-	attrs.Transactions = append(attrs.Transactions, raw)
+	attrs.Transactions = append(attrs.Transactions, group...)
 	return attrs, nil
 }
-func (b *cgtAttributesBuilder) ResetCgtV2() { b.resets++ }
 
 func TestCgtV2SequencerNoTxPool(t *testing.T) {
 	s := newSeqSetup(t)
@@ -56,7 +49,4 @@ func TestCgtV2SequencerNoTxPool(t *testing.T) {
 	deliver(s.seq, engine.ForkchoiceUpdateEvent{UnsafeL2Head: eth.L2BlockRef{Hash: common.Hash{9}, Number: s.head.Number + 1, Time: s.head.Time + s.deps.cfg.BlockTime, L1Origin: s.l1Origin.ID()}})
 	s.seq.RunAction()
 	require.Equal(t, []bool{true, false}, noTxPool)
-	s.seq.building = BuildingState{}
-	deliver(s.seq, rollup.ResetEvent{})
-	require.Equal(t, 1, builder.resets)
 }

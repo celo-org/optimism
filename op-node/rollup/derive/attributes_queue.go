@@ -140,9 +140,6 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 }
 
 func (aq *AttributesQueue) reset() {
-	if resetter, ok := aq.builder.(interface{ ResetCgtV2() }); ok {
-		resetter.ResetCgtV2()
-	}
 	aq.batch = nil
 	aq.concluding = false // overwritten later, but set for consistency
 	aq.lastAttribs = nil

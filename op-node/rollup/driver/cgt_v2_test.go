@@ -5,9 +5,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/sources"
 )
 
-// Keep the driver's raw concrete clients compatible with the proof interface;
+// Keep the driver's raw L1 client compatible with the header interface;
 // the wrappers installed later do not expose these methods.
-var (
-	_ derive.CgtV2ProofClient = (*sources.L1Client)(nil)
-	_ derive.CgtV2ProofClient = (*sources.EngineClient)(nil)
-)
+var _ derive.CgtV2InputSource = (*sources.L1Client)(nil)
