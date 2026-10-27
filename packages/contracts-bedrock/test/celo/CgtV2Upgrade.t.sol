@@ -202,6 +202,74 @@ contract CgtV2Upgrade_Test is Test {
         assertEq(Predeploys.NATIVE_ASSET_LIQUIDITY.balance, 400);
     }
 
+    function test_runProduction_exportsConfiguredNUTBundle_succeeds() external {
+        address generator = deployCode("GenerateCgtV2NUTBundle.s.sol:GenerateCgtV2NUTBundle");
+        string memory path = ".testdata/cgtv2-production-entrypoint.json";
+        vm.createDir(".testdata", true);
+        (bool success,) = generator.call(
+            abi.encodeWithSignature(
+                "runProduction((address,address,address,address),string)",
+                NetworkConfig(BRIDGE, L1_BRIDGE, L1_TOKEN, OWNER),
+                path
+            )
+        );
+        assertTrue(success, "production export failed");
+
+        string memory json = vm.readFile(path);
+        assertEq(vm.parseJsonString(json, ".metadata.version"), "1.0.0");
+        assertEq(vm.parseJsonString(json, ".transactions[11].intent"), "CGTv2 flag enable");
+        assertFalse(vm.keyExistsJson(json, ".transactions[12]"));
+        assertEq(vm.parseJsonAddress(json, ".transactions[10].to"), Predeploys.PROXY_ADMIN);
+
+        // The manager constructor ends with the four network-specific addresses.
+        // Decode those words independently of the generator's address calculation.
+        bytes memory deployment = vm.parseJsonBytes(json, ".transactions[9].data");
+        bytes memory configWords = new bytes(128);
+        for (uint256 i; i < configWords.length; i++) {
+            configWords[i] = deployment[deployment.length - configWords.length + i];
+        }
+        NetworkConfig memory exported = abi.decode(configWords, (NetworkConfig));
+        assertEq(exported.bridgeProxy, BRIDGE);
+        assertEq(exported.l1Bridge, L1_BRIDGE);
+        assertEq(exported.l1Token, L1_TOKEN);
+        assertEq(exported.owner, OWNER);
+        vm.removeFile(path);
+    }
+
+    function test_runProduction_invalidConfig_reverts() external {
+        address generator = deployCode("GenerateCgtV2NUTBundle.s.sol:GenerateCgtV2NUTBundle");
+        for (uint256 i; i < 5; i++) {
+            NetworkConfig memory config = NetworkConfig(BRIDGE, L1_BRIDGE, L1_TOKEN, OWNER);
+            if (i == 0) config.bridgeProxy = address(0);
+            if (i == 1) config.l1Bridge = address(0);
+            if (i == 2) config.l1Token = address(0);
+            if (i == 3) config.owner = address(0);
+            if (i == 4) config.bridgeProxy = Predeploys.L1_BLOCK_ATTRIBUTES;
+            (bool success, bytes memory result) = generator.call(
+                abi.encodeWithSignature(
+                    "runProduction((address,address,address,address),string)",
+                    config,
+                    ".testdata/cgtv2-invalid-entrypoint.json"
+                )
+            );
+            assertFalse(success);
+            assertEq(result, abi.encodeWithSignature("Error(string)", "GenerateCgtV2NUTBundle: invalid configuration"));
+        }
+    }
+
+    function test_runProduction_emptyOutputPath_reverts() external {
+        address generator = deployCode("GenerateCgtV2NUTBundle.s.sol:GenerateCgtV2NUTBundle");
+        (bool success, bytes memory result) = generator.call(
+            abi.encodeWithSignature(
+                "runProduction((address,address,address,address),string)",
+                NetworkConfig(BRIDGE, L1_BRIDGE, L1_TOKEN, OWNER),
+                ""
+            )
+        );
+        assertFalse(success);
+        assertEq(result, abi.encodeWithSignature("Error(string)", "GenerateCgtV2NUTBundle: empty output path"));
+    }
+
     function test_upgrade_zeroReserveFunding_succeeds() external {
         _upgrade(manager);
         vm.prank(Predeploys.LIQUIDITY_CONTROLLER);

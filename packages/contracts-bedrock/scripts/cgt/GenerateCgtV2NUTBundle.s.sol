@@ -104,7 +104,28 @@ contract GenerateCgtV2NUTBundle is Script {
             l1Token: address(0xbb),
             owner: address(0xaa)
         });
-        NutTx[] memory txs = transactions(config);
+        _writeBundle(config, "snapshots/upgrades/cgtv2-fixture-nut-bundle.json");
+        _writePrestate(config);
+    }
+
+    /// @notice Generates a bundle from finalized network addresses without broadcasting transactions.
+    /// @dev This only writes an artifact. Go and Rust must explicitly register the reviewed bundle
+    ///      before that network can activate CGTv2. Gas limits still require production calibration.
+    /// @param _config Reserved L2 bridge proxy, L1 bridge, L1 CELO token and controller owner.
+    /// @param _outputPath Network-specific JSON path allowed by Foundry's filesystem permissions.
+    function runProduction(NetworkConfig memory _config, string memory _outputPath) external {
+        require(
+            Predeploys.isUpgradeable(_config.bridgeProxy)
+                && !Predeploys.isSupportedPredeploy(_config.bridgeProxy, type(uint256).max, true, true)
+                && _config.l1Bridge != address(0) && _config.l1Token != address(0) && _config.owner != address(0),
+            "GenerateCgtV2NUTBundle: invalid configuration"
+        );
+        require(bytes(_outputPath).length != 0, "GenerateCgtV2NUTBundle: empty output path");
+        _writeBundle(_config, _outputPath);
+    }
+
+    function _writeBundle(NetworkConfig memory _config, string memory _outputPath) internal {
+        NutTx[] memory txs = transactions(_config);
         string memory json = '{"metadata":{"version":"1.0.0"},"transactions":[';
         for (uint256 i; i < txs.length; i++) {
             string memory to = txs[i].isCreation ? "null" : string.concat('"', vm.toString(txs[i].to), '"');
@@ -124,8 +145,7 @@ contract GenerateCgtV2NUTBundle is Script {
                 "}"
             );
         }
-        vm.writeFile("snapshots/upgrades/cgtv2-fixture-nut-bundle.json", string.concat(json, "]}"));
-        _writePrestate(config);
+        vm.writeFile(_outputPath, string.concat(json, "]}"));
     }
 
     function _account(
