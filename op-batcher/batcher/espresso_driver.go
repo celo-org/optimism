@@ -289,6 +289,7 @@ func (l *BatchSubmitter) newEspressoSession() (*espressoSession, error) {
 
 	submitter := NewEspressoTransactionSubmitter(
 		WithContext(l.shutdownCtx),
+		WithEspressoLogger(l.Log),
 		WithWaitGroup(l.wg),
 		WithEspressoSubmissionClient(l.Espresso.Client),
 		WithEspressoNetworkTimeout(l.Config.NetworkTimeout),

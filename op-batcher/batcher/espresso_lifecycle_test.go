@@ -107,6 +107,43 @@ func withTestInFlightLimit(n int) EspressoTransactionSubmitterOption {
 	return func(cfg *EspressoTransactionSubmitterConfig) { cfg.MaxInFlightJobs = n }
 }
 
+// Submitter logging.
+
+func TestEspressoSubmitterUsesInjectedLogger(t *testing.T) {
+	for _, scenario := range []struct {
+		name                  string
+		submitErr, receiptErr error
+		messages              []string
+	}{
+		{"confirmed", nil, nil, []string{"Submitted transaction to Espresso", "Transaction confirmed on Espresso"}},
+		{"submit failure", sdkclient.ErrPermanent, nil, []string{"Espresso request failed permanently"}},
+		{"receipt failure", nil, sdkclient.ErrPermanent, []string{"Submitted transaction to Espresso", "Espresso request failed permanently"}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			logger, logs := testlog.CaptureLogger(t, log.LevelDebug)
+			client := &controlledEspressoClient{
+				submit: func(context.Context, espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+					if scenario.submitErr != nil {
+						return nil, scenario.submitErr
+					}
+					return taggedbase64.New("TX", []byte{1})
+				},
+				receipt: func(context.Context, *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
+					return espressoCommon.TransactionQueryData{}, scenario.receiptErr
+				},
+			}
+			s, _ := newControlledSubmitter(t, client, WithEspressoLogger(logger.New("component", "espresso-submitter-test")))
+			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{}))
+			waitEspressoGroup(t, s) // Read captured records only after the logging goroutine exits.
+			records := logs.FindLogs(testlog.NewAttributesFilter("component", "espresso-submitter-test"))
+			require.Len(t, records, len(scenario.messages))
+			for i, message := range scenario.messages {
+				require.Equal(t, message, records[i].Message)
+			}
+		})
+	}
+}
+
 // Admission and transaction retries.
 
 func TestEspressoRejectsInvalidLimits(t *testing.T) {

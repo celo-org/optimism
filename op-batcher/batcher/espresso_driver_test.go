@@ -79,6 +79,7 @@ func TestBatchSubmitterEspressoStopStart(t *testing.T) {
 		require.NoError(t, batcher.StartBatchSubmitting())
 		require.NotNil(t, batcher.espressoSession)
 		require.Equal(t, batcher.Config.NetworkTimeout, batcher.espressoSession.submitter.networkTimeout)
+		require.Equal(t, batcher.Log, batcher.espressoSession.submitter.logger)
 		current := batcher.espressoSession.streamer
 		require.NotNil(t, current)
 		if previous != nil {

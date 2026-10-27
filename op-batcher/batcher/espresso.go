@@ -59,6 +59,7 @@ const espressoWorkerConcurrency = 4
 // most maxInFlight run at once.
 type espressoTransactionSubmitter struct {
 	ctx                        context.Context
+	logger                     log.Logger
 	wg                         *sync.WaitGroup
 	eg                         *errgroup.Group // bounds concurrent submitAndConfirm goroutines
 	espresso                   espressoSubmissionClient
@@ -86,6 +87,7 @@ type espressoSubmissionClient interface {
 // creating the EspressoTransactionSubmitter.
 type EspressoTransactionSubmitterConfig struct {
 	Ctx                        context.Context
+	Logger                     log.Logger
 	EspressoSubmissionClient   espressoSubmissionClient
 	NetworkTimeout             time.Duration
 	Wg                         *sync.WaitGroup
@@ -105,6 +107,14 @@ type EspressoTransactionSubmitterOption func(*EspressoTransactionSubmitterConfig
 func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
 		config.Ctx = ctx
+	}
+}
+
+// WithEspressoLogger sets the logger for transaction submission and verification.
+// If unset or nil, the submitter uses the root logger for compatibility.
+func WithEspressoLogger(logger log.Logger) EspressoTransactionSubmitterOption {
+	return func(config *EspressoTransactionSubmitterConfig) {
+		config.Logger = logger
 	}
 }
 
@@ -191,11 +201,16 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		panic("Espresso clock and positive receipt retry delay are required")
 	}
 
+	if config.Logger == nil {
+		config.Logger = log.Root()
+	}
+
 	eg := new(errgroup.Group)
 	eg.SetLimit(config.MaxInFlightJobs)
 
 	return &espressoTransactionSubmitter{
 		ctx:                        config.Ctx,
+		logger:                     config.Logger,
 		wg:                         config.Wg,
 		eg:                         eg,
 		espresso:                   config.EspressoSubmissionClient,
@@ -299,7 +314,7 @@ func (s *espressoTransactionSubmitter) submitAndConfirm(ctx context.Context, tx 
 		allowImmediateLookup = false
 		switch outcome {
 		case verifyDone:
-			log.Info("Transaction confirmed on Espresso", "hash", hash.String())
+			s.logger.Info("Transaction confirmed on Espresso", "hash", hash.String())
 			return
 		case verifyResubmit:
 			continue // verification timed out; submit a fresh copy
@@ -321,10 +336,10 @@ func (s *espressoTransactionSubmitter) submitToEspresso(ctx context.Context, tx 
 		if ctx.Err() != nil {
 			return nil, false
 		}
-		logEspressoRequestError("submit", err)
+		s.logEspressoRequestError("submit", err)
 		switch evaluateSubmission(err) {
 		case Handle:
-			log.Info("Submitted transaction to Espresso", "hash", hash)
+			s.logger.Info("Submitted transaction to Espresso", "hash", hash)
 			return hash, true
 		case Skip:
 			return nil, false
@@ -348,11 +363,11 @@ func (s *espressoTransactionSubmitter) submitAttempt(ctx context.Context, tx *es
 }
 
 // Keep diagnostics at the call sites so the evaluation functions stay pure.
-func logEspressoRequestError(stage string, err error) {
+func (s *espressoTransactionSubmitter) logEspressoRequestError(stage string, err error) {
 	if errors.Is(err, espressoClient.ErrPermanent) {
-		log.Error("Espresso request failed permanently", "stage", stage, "err", err)
+		s.logger.Error("Espresso request failed permanently", "stage", stage, "err", err)
 	} else if err != nil && !errors.Is(err, espressoClient.ErrEphemeral) {
-		log.Warn("Espresso error not explicitly marked as retryable or not", "stage", stage, "err", err)
+		s.logger.Warn("Espresso error not explicitly marked as retryable or not", "stage", stage, "err", err)
 	}
 }
 
@@ -391,7 +406,7 @@ func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash 
 		if ctx.Err() != nil {
 			return verifyAbort
 		}
-		logEspressoRequestError("verify", err)
+		s.logEspressoRequestError("verify", err)
 		currentHeight := s.latestBlockHeight.Load()
 		if startHeight == 0 && currentHeight > 0 {
 			startHeight = currentHeight
@@ -402,7 +417,7 @@ func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash 
 		case Skip:
 			return verifyAbort
 		case RetrySubmission:
-			log.Info("Espresso verification window expired; re-submitting", "hash", hash,
+			s.logger.Info("Espresso verification window expired; re-submitting", "hash", hash,
 				"startHeight", startHeight, "currentHeight", currentHeight)
 			return verifyResubmit
 		}
@@ -485,7 +500,7 @@ func (s *espressoTransactionSubmitter) trackBlockHeight() {
 		if err == nil {
 			s.latestBlockHeight.Store(height)
 		} else if s.ctx.Err() == nil {
-			log.Debug("failed to fetch latest block height for verification tracking", "err", err)
+			s.logger.Debug("failed to fetch latest block height for verification tracking", "err", err)
 		}
 		timer := s.clock.NewTimer(s.verifyReceiptRetryDelay)
 		select {
