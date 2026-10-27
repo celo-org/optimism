@@ -403,7 +403,7 @@ const (
 // four calls per configured retry interval, with at most four RPCs in progress.
 func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash *espressoCommon.TaggedBase64, allowImmediateLookup bool) verifyOutcome {
 	startTime := s.clock.Now()
-	startHeight := s.latestBlockHeight.Load()
+	var startHeight uint64
 	for attempt := 0; ; attempt++ {
 		if ctx.Err() != nil {
 			return verifyAbort
@@ -419,7 +419,20 @@ func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash 
 		if needsRetryBudget && !s.waitReceiptRetry(ctx) {
 			return verifyAbort
 		}
-		_, err := s.fetchReceipt(ctx, hash)
+		select {
+		case <-ctx.Done():
+			return verifyAbort
+		case s.verifySlots <- struct{}{}:
+		}
+		if attempt == 0 {
+			// Queue waiting counts toward the safety deadline, but the height
+			// window starts when the first lookup acquires RPC capacity.
+			startHeight = s.latestBlockHeight.Load()
+		}
+		callCtx, cancel := context.WithTimeout(ctx, s.networkTimeout)
+		_, err := s.espresso.FetchTransactionByHash(callCtx, hash)
+		cancel()
+		<-s.verifySlots
 		if ctx.Err() != nil {
 			return verifyAbort
 		}
@@ -452,18 +465,6 @@ func (s *espressoTransactionSubmitter) waitReceiptRetry(ctx context.Context) boo
 		return false
 	}
 	return true
-}
-
-func (s *espressoTransactionSubmitter) fetchReceipt(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
-	select {
-	case <-ctx.Done():
-		return espressoCommon.TransactionQueryData{}, ctx.Err()
-	case s.verifySlots <- struct{}{}:
-	}
-	defer func() { <-s.verifySlots }()
-	callCtx, cancel := context.WithTimeout(ctx, s.networkTimeout)
-	defer cancel()
-	return s.espresso.FetchTransactionByHash(callCtx, hash)
 }
 
 // Default values for receipt verification tuning are defined as exported

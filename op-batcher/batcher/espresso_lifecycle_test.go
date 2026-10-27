@@ -387,6 +387,55 @@ func (v *verificationTest) retry(t *testing.T, advance time.Duration, height uin
 	return request
 }
 
+// Signal when confirmReceipt reaches its RPC-slot select, so the test can
+// advance height and time while capacity is occupied without scheduling sleeps.
+type receiptSlotWaitContext struct {
+	context.Context
+	waiting chan struct{}
+	once    sync.Once
+}
+
+func (c *receiptSlotWaitContext) Done() <-chan struct{} {
+	c.once.Do(func() { close(c.waiting) })
+	return c.Context.Done()
+}
+
+func TestEspressoVerificationWindowsWhileWaitingForSlot(t *testing.T) {
+	for _, safetyExpired := range []bool{false, true} {
+		name := "height window starts at first lookup"
+		if safetyExpired {
+			name = "safety deadline includes slot wait"
+		}
+		t.Run(name, func(t *testing.T) {
+			c := newEspressoTestClock()
+			s, _ := newControlledSubmitter(t, &controlledEspressoClient{}, withTestClock(c),
+				WithVerifyReceiptMaxBlocks(5), WithVerifyReceiptSafetyTimeout(time.Second))
+			s.latestBlockHeight.Store(100)
+			for range cap(s.verifySlots) {
+				s.verifySlots <- struct{}{}
+			}
+			ctx := &receiptSlotWaitContext{Context: s.ctx, waiting: make(chan struct{})}
+			result := make(chan verifyOutcome, 1)
+			go func() { result <- s.confirmReceipt(ctx, nil, true) }()
+			receiveTestValue(t, ctx.waiting)
+			s.latestBlockHeight.Store(105)
+			if safetyExpired {
+				c.AdvanceTime(time.Second + time.Nanosecond)
+			}
+			<-s.verifySlots // Allow the first lookup, which returns ErrEphemeral.
+			if !safetyExpired {
+				// Five blocks passed while waiting, but verification must still
+				// get its own five-block window before requesting resubmission.
+				delay := receiveTestValue(t, c.sleeps)
+				require.Equal(t, 100*time.Millisecond, delay)
+				s.latestBlockHeight.Store(110)
+				c.AdvanceTime(delay)
+			}
+			require.Equal(t, verifyResubmit, receiveTestValue(t, result))
+		})
+	}
+}
+
 func TestEspressoVerificationAdoptsHeightAndRestartsWindow(t *testing.T) {
 	v := newVerificationTest(t, WithVerifyReceiptSafetyTimeout(time.Hour))
 	first := receiveTestValue(t, v.requests)
