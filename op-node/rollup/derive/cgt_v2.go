@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -116,4 +117,56 @@ func (ba *FetchingAttributesBuilder) CgtV2ActivationBlock(ctx context.Context, p
 	}
 	_, _, upgrades, err := ba.cgt.originDeposits(ctx, parent, epoch, receipts)
 	return len(upgrades) > 0, err
+}
+
+// CgtV2InputSource supplies untrusted header bytes. No account/storage proof or
+// L2 completion RPC is required. HeaderByHash normally reuses the L1 client's cache.
+type CgtV2InputSource interface {
+	HeaderByHash(context.Context, common.Hash) (*types.Header, error)
+}
+
+func cgtV2Header(ctx context.Context, rpc CgtV2InputSource, block eth.BlockID) (*types.Header, error) {
+	if rpc == nil {
+		return nil, NewCriticalError(fmt.Errorf("CGTv2 requires L1 header RPC support"))
+	}
+	header, err := rpc.HeaderByHash(ctx, block.Hash)
+	if err != nil {
+		return nil, NewTemporaryError(fmt.Errorf("CGTv2 header %s: %w", block, err))
+	}
+	if header == nil || header.Number == nil || !header.Number.IsUint64() || bigs.Uint64Strict(header.Number) != block.Number || header.Hash() != block.Hash {
+		return nil, NewCriticalError(fmt.Errorf("CGTv2 header does not match requested block %s", block))
+	}
+	return header, nil
+}
+
+var cgtV2EscrowEvent = crypto.Keccak256Hash([]byte("EscrowSeeded(address,uint256)"))
+
+// Receipts must be authenticated before using this result. RPC log metadata is irrelevant.
+// seedEscrowGenesis emits a different indexed caller, so only the configured Portal matches.
+// The approved L1 migration seeds once; the first matching event supplies A.
+func cgtV2EscrowAmount(receipts optypes.Receipts, bridge, portal common.Address) (*big.Int, error) {
+	expectedPortal := common.BytesToHash(portal.Bytes())
+	for _, receipt := range receipts {
+		if receipt == nil {
+			return nil, fmt.Errorf("CGTv2 missing origin receipt")
+		}
+		if receipt.Status != types.ReceiptStatusSuccessful {
+			continue
+		}
+		for _, log := range receipt.Logs {
+			if log == nil {
+				return nil, fmt.Errorf("CGTv2 missing origin log")
+			}
+			if log.Address != bridge || len(log.Topics) == 0 || log.Topics[0] != cgtV2EscrowEvent {
+				continue
+			}
+			if len(log.Topics) != 2 || len(log.Data) != 32 {
+				return nil, fmt.Errorf("malformed CGTv2 EscrowSeeded event")
+			}
+			if log.Topics[1] == expectedPortal {
+				return new(big.Int).SetBytes(log.Data), nil
+			}
+		}
+	}
+	return nil, nil
 }
