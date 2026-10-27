@@ -30,6 +30,7 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/ethereum-optimism/optimism/espresso"
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
@@ -60,6 +61,7 @@ const espressoWorkerConcurrency = 4
 type espressoTransactionSubmitter struct {
 	ctx                        context.Context
 	logger                     log.Logger
+	metr                       metrics.Metricer
 	wg                         *sync.WaitGroup
 	eg                         *errgroup.Group // bounds concurrent submitAndConfirm goroutines
 	espresso                   espressoSubmissionClient
@@ -88,6 +90,7 @@ type espressoSubmissionClient interface {
 type EspressoTransactionSubmitterConfig struct {
 	Ctx                        context.Context
 	Logger                     log.Logger
+	Metrics                    metrics.Metricer
 	EspressoSubmissionClient   espressoSubmissionClient
 	NetworkTimeout             time.Duration
 	Wg                         *sync.WaitGroup
@@ -115,6 +118,14 @@ func WithContext(ctx context.Context) EspressoTransactionSubmitterOption {
 func WithEspressoLogger(logger log.Logger) EspressoTransactionSubmitterOption {
 	return func(config *EspressoTransactionSubmitterConfig) {
 		config.Logger = logger
+	}
+}
+
+// WithEspressoMetrics sets the metrics recorder for active transaction lifecycles.
+// If unset or nil, metrics recording is disabled.
+func WithEspressoMetrics(metr metrics.Metricer) EspressoTransactionSubmitterOption {
+	return func(config *EspressoTransactionSubmitterConfig) {
+		config.Metrics = metr
 	}
 }
 
@@ -204,6 +215,9 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 	if config.Logger == nil {
 		config.Logger = log.Root()
 	}
+	if config.Metrics == nil {
+		config.Metrics = metrics.NoopMetrics
+	}
 
 	eg := new(errgroup.Group)
 	eg.SetLimit(config.MaxInFlightJobs)
@@ -211,6 +225,7 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 	return &espressoTransactionSubmitter{
 		ctx:                        config.Ctx,
 		logger:                     config.Logger,
+		metr:                       config.Metrics,
 		wg:                         config.Wg,
 		eg:                         eg,
 		espresso:                   config.EspressoSubmissionClient,
@@ -251,6 +266,8 @@ func (s *espressoTransactionSubmitter) SubmitTransaction(tx *espressoCommon.Tran
 	s.wg.Add(1)
 	started := s.eg.TryGo(func() error {
 		defer s.wg.Done()
+		s.metr.RecordEspressoTransactionStarted()
+		defer s.metr.RecordEspressoTransactionFinished()
 		s.submitAndConfirm(s.ctx, tx)
 		return nil
 	})

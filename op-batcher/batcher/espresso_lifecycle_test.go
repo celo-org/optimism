@@ -18,10 +18,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
 
+	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum-optimism/optimism/op-service/clock"
 	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	opmetrics "github.com/ethereum-optimism/optimism/op-service/metrics"
 	"github.com/ethereum-optimism/optimism/op-service/signer"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 )
@@ -107,7 +109,7 @@ func withTestInFlightLimit(n int) EspressoTransactionSubmitterOption {
 	return func(cfg *EspressoTransactionSubmitterConfig) { cfg.MaxInFlightJobs = n }
 }
 
-// Submitter logging.
+// Submitter observability.
 
 func TestEspressoSubmitterUsesInjectedLogger(t *testing.T) {
 	for _, scenario := range []struct {
@@ -144,6 +146,64 @@ func TestEspressoSubmitterUsesInjectedLogger(t *testing.T) {
 	}
 }
 
+// espressoInFlightGauge reads the exported Prometheus series, rather than a test spy.
+func espressoInFlightGauge(t *testing.T, metr *metrics.Metrics) float64 {
+	t.Helper()
+	return opmetrics.NewMetricChecker(t, metr.Registry()).
+		FindByName("op_batcher_test_espresso_transactions_in_flight").FindByLabels(nil).Gauge.GetValue()
+}
+
+func TestEspressoInFlightGaugeTracksLifecycle(t *testing.T) {
+	c := newEspressoTestClock()
+	metr := metrics.NewMetrics("test")
+	var submissions atomic.Int64
+	requests := make(chan receiptRequest, 1)
+	heights := make(chan struct{}, 8)
+	client := &controlledEspressoClient{
+		submit: func(context.Context, espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+			if submissions.Add(1) == 1 {
+				return nil, sdkclient.ErrEphemeral
+			}
+			return taggedbase64.New("TX", []byte{1})
+		},
+		receipt: func(ctx context.Context, hash *espressoCommon.TaggedBase64) (espressoCommon.TransactionQueryData, error) {
+			request := receiptRequest{hash, make(chan error, 1)}
+			requests <- request
+			select {
+			case err := <-request.reply:
+				return espressoCommon.TransactionQueryData{}, err
+			case <-ctx.Done():
+				return espressoCommon.TransactionQueryData{}, ctx.Err()
+			}
+		},
+		height: func(context.Context) (uint64, error) {
+			heights <- struct{}{}
+			return 100, nil
+		},
+	}
+	s, cancel := newControlledSubmitter(t, client, withTestClock(c), withTestInFlightLimit(1), WithEspressoMetrics(metr))
+	require.Zero(t, espressoInFlightGauge(t, metr))
+	s.Start()
+	receiveTestValue(t, heights)
+	require.Zero(t, espressoInFlightGauge(t, metr), "the height tracker is not a transaction")
+	require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{}))
+	delay := receiveTestValue(t, c.sleeps)
+	require.Equal(t, 1.0, espressoInFlightGauge(t, metr), "submission backoff retains the lifecycle")
+	c.AdvanceTime(delay)
+	first := receiveTestValue(t, requests)
+	require.Equal(t, 1.0, espressoInFlightGauge(t, metr), "a receipt RPC retains the same lifecycle")
+	first.reply <- sdkclient.ErrEphemeral
+	delay = receiveTestValue(t, c.sleeps)
+	require.Equal(t, 1.0, espressoInFlightGauge(t, metr), "receipt retry waits retain the lifecycle")
+	c.AdvanceTime(delay)
+	receiveTestValue(t, requests).reply <- nil
+	waitEspressoGroup(t, s)
+	require.Zero(t, espressoInFlightGauge(t, metr), "confirmation releases the lifecycle")
+	cancel()
+	s.wg.Wait()
+	require.Zero(t, espressoInFlightGauge(t, metr))
+}
+
 // Admission and transaction retries.
 
 func TestEspressoRejectsInvalidLimits(t *testing.T) {
@@ -158,7 +218,8 @@ func TestEspressoRejectsInvalidLimits(t *testing.T) {
 // goroutines. Every admitted job stays blocked until all producers have returned.
 func TestEspressoConcurrentAdmissionLimit(t *testing.T) {
 	calls := make(chan context.Context, 4096)
-	s, cancel := newControlledSubmitter(t, &contextErrorEspressoClient{calls: calls}, withTestInFlightLimit(3), WithEspressoNetworkTimeout(time.Minute))
+	metr := metrics.NewMetrics("test")
+	s, cancel := newControlledSubmitter(t, &contextErrorEspressoClient{calls: calls}, withTestInFlightLimit(3), WithEspressoNetworkTimeout(time.Minute), WithEspressoMetrics(metr))
 	var accepted atomic.Int64
 	errors := make(chan error, 4096)
 	var producers sync.WaitGroup
@@ -185,8 +246,11 @@ func TestEspressoConcurrentAdmissionLimit(t *testing.T) {
 	for range 3 {
 		require.NoError(t, receiveTestValue(t, calls).Err())
 	}
+	require.Equal(t, 3.0, espressoInFlightGauge(t, metr), "rejected admissions must not change the gauge")
 	cancel()
 	require.ErrorIs(t, s.SubmitTransaction(&espressoCommon.Transaction{}), context.Canceled)
+	s.wg.Wait()
+	require.Zero(t, espressoInFlightGauge(t, metr), "cancellation must release every active lifecycle")
 }
 
 // Transient failures retain the admitted transaction and back off until the
@@ -244,7 +308,8 @@ func TestEspressoPermanentFailureReleasesSlotWithoutCancellingOthers(t *testing.
 					return espressoCommon.TransactionQueryData{}, sdkclient.ErrPermanent
 				},
 			}
-			s, _ := newControlledSubmitter(t, client, withTestInFlightLimit(2))
+			metr := metrics.NewMetrics("test")
+			s, cancel := newControlledSubmitter(t, client, withTestInFlightLimit(2), WithEspressoMetrics(metr))
 			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{Namespace: 1}))
 			require.NoError(t, s.SubmitTransaction(&espressoCommon.Transaction{Namespace: 2}))
 			active := receiveTestValue(t, blocked)
@@ -262,6 +327,10 @@ func TestEspressoPermanentFailureReleasesSlotWithoutCancellingOthers(t *testing.
 			require.NoError(t, replacement.Err())
 			require.NoError(t, active.Err())
 			require.NoError(t, s.ctx.Err())
+			require.Equal(t, 2.0, espressoInFlightGauge(t, metr), "permanent failure must release its gauge contribution")
+			cancel()
+			s.wg.Wait()
+			require.Zero(t, espressoInFlightGauge(t, metr))
 		})
 	}
 }
