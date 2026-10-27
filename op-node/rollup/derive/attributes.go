@@ -101,16 +101,16 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 				return nil, err
 			}
 		} else {
+			if l2Parent.L1Origin.Hash != info.ParentHash() {
+				return nil, NewResetError(
+					fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
+						epoch, info.ParentHash(), l2Parent.L1Origin))
+			}
 			deposits, err = DeriveDeposits(receipts.Geth(), ba.rollupCfg.DepositContractAddress)
 		}
 		if err != nil {
 			// deposits may never be ignored. Failing to process them is a critical error.
 			return nil, NewCriticalError(fmt.Errorf("failed to derive some deposits: %w", err))
-		}
-		if l2Parent.L1Origin.Hash != info.ParentHash() {
-			return nil, NewResetError(
-				fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
-					epoch, info.ParentHash(), l2Parent.L1Origin))
 		}
 
 		// errors from UpdateSystemConfigWithL1Receipts are ignored as they represent malformed or invalid updates

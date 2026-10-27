@@ -9,12 +9,13 @@ import (
 	"github.com/ethereum-optimism/optimism/op-core/forks"
 	"github.com/ethereum-optimism/optimism/op-core/predeploys"
 	optypes "github.com/ethereum-optimism/optimism/op-core/types"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
-// Synthetic chain 1337 only. Production addresses, artifacts and S remain unresolved.
+// Synthetic chain 1337 only. Production NUT bundles remain unresolved.
 // Provenance and cross-client vectors are stored beside this fixture.
 //
 //go:embed testdata/cgtv2/cgtv2-fixture-nut-bundle.json
@@ -32,10 +33,19 @@ func cgtV2NUTBundle() (*nutBundle, error) {
 // CgtV2UpgradeTransactions builds static upgrade deposits and dynamic reserve funding.
 // The exact amount is authenticated by derivation from the EscrowSeeded receipt.
 func CgtV2UpgradeTransactions(chainID, migratedAmount *big.Int) ([]hexutil.Bytes, uint64, error) {
-	if chainID == nil || chainID.Cmp(big.NewInt(1337)) != 0 {
-		return nil, 0, fmt.Errorf("CGTv2 network addresses, bundle and total supply are unresolved for chain %v", chainID)
+	if chainID == nil || !chainID.IsUint64() {
+		return nil, 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
 	}
-	if migratedAmount == nil || migratedAmount.Sign() < 0 || migratedAmount.Cmp(big.NewInt(1000)) > 0 {
+	network, ok := cgtV2Params(bigs.Uint64Strict(chainID))
+	if !ok {
+		return nil, 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
+	}
+	// A network profile does not authorize running fixture contracts on that network.
+	if bigs.Uint64Strict(chainID) != cgtV2FixtureChainID {
+		return nil, 0, fmt.Errorf("CGTv2 upgrade bundle is unresolved for chain %v", chainID)
+	}
+	reserve, ok := network.reserveSeed(migratedAmount)
+	if !ok {
 		return nil, 0, fmt.Errorf("CGTv2 migrated amount exceeds fixed total supply or is invalid")
 	}
 	bundle, err := cgtV2NUTBundle()
@@ -46,7 +56,6 @@ func CgtV2UpgradeTransactions(chainID, migratedAmount *big.Int) ([]hexutil.Bytes
 	if err != nil {
 		return nil, 0, err
 	}
-	reserve := new(big.Int).Sub(big.NewInt(1000), migratedAmount)
 	target := predeploys.NativeAssetLiquidityAddr
 	funding := &optypes.DepositTx{
 		SourceHash: cgtV2FundingSource,

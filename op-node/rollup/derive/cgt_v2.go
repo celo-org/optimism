@@ -32,16 +32,14 @@ func newCgtV2Derivation(cfg *rollup.Config, source CgtV2InputSource) *cgtV2Deriv
 	if cfg.L2ChainID == nil || !cfg.L2ChainID.IsUint64() {
 		return nil
 	}
-	switch bigs.Uint64Strict(cfg.L2ChainID) {
-	case 1337, 42220, 44787, 62320, 11142220, 11162320:
-	default:
+	network, ok := cgtV2Params(bigs.Uint64Strict(cfg.L2ChainID))
+	if !ok {
 		return nil
 	}
-	d := &cgtV2Derivation{source: source, portal: cfg.DepositContractAddress, chainID: cfg.L2ChainID}
-	if bigs.Uint64Strict(cfg.L2ChainID) == 1337 {
-		d.bridge = common.HexToAddress("0xcc")
+	return &cgtV2Derivation{
+		source: source, portal: cfg.DepositContractAddress,
+		bridge: network.bridge, chainID: new(big.Int).Set(cfg.L2ChainID),
 	}
-	return d
 }
 
 func (d *cgtV2Derivation) originDeposits(ctx context.Context, parent eth.L2BlockRef, origin eth.BlockID, receipts optypes.Receipts) (eth.BlockInfo, []hexutil.Bytes, []hexutil.Bytes, error) {
@@ -70,21 +68,6 @@ func (d *cgtV2Derivation) originDeposits(ctx context.Context, parent eth.L2Block
 	}
 	if types.DeriveSha(receipts, trie.NewStackTrie(nil)) != header.ReceiptHash {
 		return nil, nil, nil, NewCriticalError(fmt.Errorf("CGTv2 receipts do not match origin %s", origin))
-	}
-	// Production inputs must be compiled in before release. Do not silently
-	// skip a migration-shaped event when its emitter is still unresolved.
-	if d.bridge == (common.Address{}) {
-		portalTopic := common.BytesToHash(d.portal.Bytes())
-		for _, receipt := range receipts {
-			if receipt.Status != types.ReceiptStatusSuccessful {
-				continue
-			}
-			for _, log := range receipt.Logs {
-				if len(log.Topics) >= 2 && log.Topics[0] == cgtV2EscrowEvent && log.Topics[1] == portalTopic {
-					return nil, nil, nil, NewCriticalError(fmt.Errorf("CGTv2 L1 bridge address is unresolved for chain %s", d.chainID))
-				}
-			}
-		}
 	}
 	amount, err := cgtV2EscrowAmount(receipts, d.bridge, d.portal)
 	if err != nil {

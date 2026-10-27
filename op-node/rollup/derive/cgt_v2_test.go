@@ -133,3 +133,39 @@ func TestCgtV2UpgradeGasRoundTrip(t *testing.T) {
 	_, err = PayloadToSystemConfig(cfg, payload)
 	require.Error(t, err)
 }
+
+func TestCgtV2DeprecatedChainsAreNotEnabled(t *testing.T) {
+	for _, id := range []int64{44787, 62320} {
+		cfg := cgtTestConfig()
+		cfg.L2ChainID = big.NewInt(id)
+		require.Nil(t, newCgtV2Derivation(cfg, &cgtInputStub{}))
+	}
+}
+
+func TestCgtV2IgnoresForeignEscrowEmitter(t *testing.T) {
+	receipts := cgtSeededReceipts()
+	d, _, parent, origin := cgtTestDeriver(t, receipts)
+	cfg := cgtTestConfig()
+	cfg.L2ChainID = big.NewInt(params.CeloMainnetChainID)
+	d = newCgtV2Derivation(cfg, d.source)
+	_, _, group, err := d.originDeposits(context.Background(), parent, origin, receipts)
+	require.NoError(t, err)
+	require.Empty(t, group)
+}
+
+func TestAttributesParentMismatchPrecedesMalformedDeposit(t *testing.T) {
+	for _, chainID := range []int64{10, 1337} {
+		t.Run(big.NewInt(chainID).String(), func(t *testing.T) {
+			cfg := cgtTestConfig()
+			cfg.L2ChainID = big.NewInt(chainID)
+			deposit := cgtPortalLog(t, cfg.DepositContractAddress, 1)
+			deposit.Data = nil
+			receipts := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{deposit}}})
+			_, source, parent, origin := cgtTestDeriver(t, receipts)
+			parent.L1Origin.Hash = common.Hash{0xff}
+			builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
+			_, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
+			require.ErrorIs(t, err, ErrReset)
+		})
+	}
+}
