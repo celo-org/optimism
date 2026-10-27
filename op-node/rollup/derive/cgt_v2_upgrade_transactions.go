@@ -66,8 +66,12 @@ func (p cgtV2NetworkParams) reserveSeed(migratedAmount *big.Int) (*big.Int, bool
 //go:embed testdata/cgtv2/cgtv2-fixture-nut-bundle.json
 var cgtV2FixtureBundle []byte
 
+// Fixture gas limits: seven 6M deployments, twelve 500k direct calls,
+// and 100k reserve funding. The v6 ProxyAdmin remains unchanged.
+// TODO(CGTv2): calibrate limits against final contracts and production state,
+// then update the bundle and matching Go/Rust group allowances.
 const cgtV2FundingGas uint64 = 100_000
-const cgtV2UpgradeGas uint64 = 56_300_000
+const cgtV2UpgradeGas uint64 = 48_100_000
 
 var cgtV2FundingSource = (&UpgradeDepositSource{Intent: "Celo: CGTv2 Reserve Funding"}).SourceHash()
 
@@ -85,6 +89,8 @@ func CgtV2UpgradeTransactions(chainID, migratedAmount *big.Int) ([]hexutil.Bytes
 	if !ok {
 		return nil, 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
 	}
+	// TODO(CGTv2): replace this fixture-only guard with per-network bundle selection
+	// once the production contracts and network configuration are finalized.
 	// A network profile does not authorize running fixture contracts on that network.
 	if bigs.Uint64Strict(chainID) != cgtV2FixtureChainID {
 		return nil, 0, fmt.Errorf("CGTv2 upgrade bundle is unresolved for chain %v", chainID)

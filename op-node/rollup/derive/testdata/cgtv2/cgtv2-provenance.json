@@ -1,33 +1,40 @@
 {
   "fixtureOnly": true,
   "chainId": 1337,
-  "sourceCommit": "380a543846c5943c5c036778c38eecf80651009d",
+  "sourceCommit": "ceee0446c35744c622de9ee59713f6c633b5c6f6",
   "contractBase": "0296412d673a666af6236efa1f615032b1f1c424",
-  "upstreamHelpers": "6c5a77cc4be1148712d36b50a35e1f74cf930314",
+  "upgradeMethod": "direct v6 Proxy upgrade deposits; no Karst backports",
   "forgeVersion": "forge Version: 1.7.1\nCommit SHA: 4072e48705af9d93e3c0f6e29e93b5e9a40caed8\nBuild Timestamp: 2026-05-08T07:54:31.470926000Z (1778226871)\nBuild Profile: dist",
   "generation": [
     "forge script --offline scripts/cgt/GenerateCgtV2NUTBundle.s.sol --sig runFixture()",
     "python3 scripts/cgt/export-cgtv2-fixture.py"
   ],
-  "staticGasLimit": 56200000,
+  "staticGasLimit": 48000000,
   "fundingGasLimit": 100000,
   "sha256": {
     "cgtv2-00.rlp": "1cd23b9ccac9676e9a1cbc7352fa3b00b625489399ae204d018c84a324630734",
-    "cgtv2-01.rlp": "77d845fbd1f74e4cb98da9b46c91b747d760ef6afea1838d60bd4e7956b51e3c",
-    "cgtv2-02.rlp": "44bc3120b7e1c6db3578d08033cad41d92dcd55db12c5785922eaedc59b898eb",
-    "cgtv2-03.rlp": "205c9c17ccb8de87b52b865381a64662d7e6a12a10746942412bd1452a54d3cc",
-    "cgtv2-04.rlp": "9d8f37ff5400ccb85eefd8e4a9e77d8b62f0096c4d57773359931dfffbbfc197",
-    "cgtv2-05.rlp": "3dd1b489f494b997bdc2b898edf52240d20a25bb18ac72afbd8518c6c4b0ebc2",
-    "cgtv2-06.rlp": "bb3b7896da46a331d2d62ee3095e58e20ea5c1abeea2bd1e22c7d6c5ed9372aa",
-    "cgtv2-07.rlp": "f5c101bcf2311bbc1364eecbf5b9b17b9c7390842d3e047aee4446454749a98d",
-    "cgtv2-08.rlp": "445b36b27c0fd62ac2d63d3bc588dd9f54e873138ad6a50ab26de62e44fa7012",
-    "cgtv2-09.rlp": "fe8d719506534b3f441d3a0e8d516b8e5289ce55fb27fe2af17690408993eb29",
-    "cgtv2-10.rlp": "87c5cea8e2f22c3c684fe771b52705dec2d5b8303e5ba64a660dee79e1a8a4ef",
-    "cgtv2-11.rlp": "3359d33848f6e74f47c3d2ebefdf17149d1dab9869ebdce10757b3acccf5eb86",
-    "cgtv2-fixture-nut-bundle.json": "2125b0dacfa80a2b93049fc7b77081770ae806cd2c6986df7639b44bef002fec",
+    "cgtv2-01.rlp": "7465e1a2e80957dc75ad9bdf1df5ed99d1c14d0ad5ef5622824d689ba234e0ec",
+    "cgtv2-02.rlp": "ff6180dfecbd582ceac18599f1015a3f6e0ad0477ae69a1c3435f8ed4c1f40ab",
+    "cgtv2-03.rlp": "4031c8c4bbcd420ac5ea02ad6e0cf705ef3b54dd19530cfab95b1f21dbd10058",
+    "cgtv2-04.rlp": "f14f1c8d652f0b93835ba1a0aaf59a241b3a42cfa5bd6e86efe4a8931dc895b6",
+    "cgtv2-05.rlp": "d17087042bcaa72be3d1fb6d1c4d60def161ca1085673307c97b3a99e4dd54a7",
+    "cgtv2-06.rlp": "b6e5a49527754ffbed53a6b62fe01bfcdcb1ced9b9f315bef10e68d854731745",
+    "cgtv2-07.rlp": "f28ef788c43d632d52d739f53afc8e950f1fd4b7639d2c50d53508f366581992",
+    "cgtv2-08.rlp": "bcc7e761bee74cf0648743a12ff56c88130a2da0f9f18df87bfc1bfec3f2e68f",
+    "cgtv2-09.rlp": "54719910e9adf38a29310c90d01fef00e77b9f4993950e02e8317d08f7d1a898",
+    "cgtv2-10.rlp": "250e6884cb96f2ccfa6c38609323bc55246f9afa4211d683a7c49ed2275e4561",
+    "cgtv2-11.rlp": "13867ae93f952634aff33e95c0dcd0326d777cd6b0528de0ff94d7e1d3d8cc36",
+    "cgtv2-12.rlp": "985c6908f343ff465312949d98a6572ec662a3e2e107801ce531617b156ba2ea",
+    "cgtv2-13.rlp": "1b8281753dc4718fee2ebc515a96892d01ae72cb04984d3b59d935d7b263607c",
+    "cgtv2-14.rlp": "6c42e8020b9967262228557be295ee8f6b9d1ee12bd77214a8c29727b473e7c3",
+    "cgtv2-15.rlp": "939a784bb6e96a9cb0cb1699a8d9e0d770831958c326ad0255324806ee65fc77",
+    "cgtv2-16.rlp": "e7761849fca2c758c93d9730fa9da723833588e3e1031e963bda5852200a36e5",
+    "cgtv2-17.rlp": "5a54df707b6b7a02b8564989e9ff2f93d91fac231db40da4a249eb90ad4a7914",
+    "cgtv2-18.rlp": "3bc9fa9827aa4ebffe483dff4e3dcbd2b6710898d829b0d4dfbc006f0f4c0d80",
+    "cgtv2-fixture-nut-bundle.json": "79533e381f9d4f02c8ee656f74e16cc2b6ac623bba2572ec8876aaeabc77a08d",
     "cgtv2-fixture-prestate.json": "6ebe021ee90a6dfc987ca94d143ea8b70824435ec8204ba4a1b8d77cb4bf90ea",
     "cgtv2-funding-400.rlp": "230f0f5481a6e5fe89cf3f3120be85f803d9d2c58aaa2440943e13228eea8ae4",
-    "cgtv2-vectors.json": "71bfb322455f008c6979d83602f4a0f9b0e96a81392d9e8b0e8377c2f5f54e96"
+    "cgtv2-vectors.json": "8d2a6efc96337624d3f0e1a881443ff8f88f4b0ec5191f5973b0e98bb2580ea2"
   },
   "builds": {
     "StorageSetter": {
@@ -87,68 +94,6 @@
         },
         "compilationTarget": {
           "src/universal/StorageSetter.sol": "StorageSetter"
-        },
-        "evmVersion": "london",
-        "libraries": {}
-      }
-    },
-    "L2ProxyAdmin": {
-      "compiler": {
-        "version": "0.8.15+commit.e14f2714"
-      },
-      "settings": {
-        "remappings": [
-          "@espresso-tee-contracts/=lib/espresso-tee-contracts/src/",
-          "@espresso-tee/=lib/espresso-tee-contracts/src/",
-          "@lib-keccak/=lib/lib-keccak/contracts/lib/",
-          "@nitro-validator/=lib/espresso-tee-contracts/lib/nitro-validator/src/",
-          "@openzeppelin/contracts-upgradeable-v5/=lib/openzeppelin-contracts-upgradeable-v5/contracts/",
-          "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
-          "@openzeppelin/contracts-v5/=lib/openzeppelin-contracts-v5/contracts/",
-          "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-          "@rari-capital/solmate/=lib/solmate/",
-          "@solady-test/=lib/lib-keccak/lib/solady/test/",
-          "@solady-v0.0.245/=lib/solady-v0.0.245/src/",
-          "@solady/=lib/solady/src/",
-          "aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src/",
-          "ds-test/=lib/forge-std/lib/ds-test/src/",
-          "erc4626-tests/=lib/espresso-tee-contracts/lib/openzeppelin-contracts-upgradeable/lib/erc4626-tests/",
-          "espresso-tee-contracts/=lib/espresso-tee-contracts/",
-          "forge-std/=lib/forge-std/src/",
-          "halmos-cheatcodes/=lib/espresso-tee-contracts/lib/openzeppelin-contracts-upgradeable/lib/halmos-cheatcodes/src/",
-          "interfaces/=interfaces/",
-          "kontrol-cheatcodes/=lib/kontrol-cheatcodes/src/",
-          "lib-keccak/=lib/lib-keccak/contracts/",
-          "openzeppelin-contracts-upgradeable-v5/=lib/openzeppelin-contracts-upgradeable-v5/",
-          "openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
-          "openzeppelin-contracts-v5/=lib/openzeppelin-contracts-v5/",
-          "openzeppelin-contracts/=lib/openzeppelin-contracts/",
-          "risc0-ethereum/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/lib/risc0-ethereum/",
-          "safe-contracts/=lib/safe-contracts/contracts/",
-          "safe-smart-account/=lib/espresso-tee-contracts/lib/safe-utils/lib/safe-smart-account/",
-          "safe-utils/=lib/espresso-tee-contracts/lib/safe-utils/src/",
-          "solady-v0.0.245/=lib/solady-v0.0.245/src/",
-          "solady/=lib/solady/",
-          "solidity-http/=lib/espresso-tee-contracts/lib/safe-utils/lib/solidity-http/src/",
-          "solidity-stringutils/=lib/espresso-tee-contracts/lib/safe-utils/lib/solidity-stringutils/",
-          "solmate/=lib/solmate/src/",
-          "sp1-contracts/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/lib/sp1-contracts/contracts/",
-          "lib/espresso-tee-contracts/:@espresso-tee/=lib/espresso-tee-contracts/src/",
-          "lib/espresso-tee-contracts/:@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable-v5/contracts/",
-          "lib/espresso-tee-contracts/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts/",
-          "lib/espresso-tee-contracts/:aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src/",
-          "lib/espresso-tee-contracts/:solady/=lib/solady/src/",
-          "lib/openzeppelin-contracts-upgradeable-v5/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts/"
-        ],
-        "optimizer": {
-          "enabled": true,
-          "runs": 999999
-        },
-        "metadata": {
-          "bytecodeHash": "none"
-        },
-        "compilationTarget": {
-          "src/L2/L2ProxyAdmin.sol": "L2ProxyAdmin"
         },
         "evmVersion": "london",
         "libraries": {}
@@ -525,74 +470,12 @@
         "evmVersion": "cancun",
         "libraries": {}
       }
-    },
-    "CeloCGTV2ContractsManager": {
-      "compiler": {
-        "version": "0.8.15+commit.e14f2714"
-      },
-      "settings": {
-        "remappings": [
-          "@espresso-tee-contracts/=lib/espresso-tee-contracts/src/",
-          "@espresso-tee/=lib/espresso-tee-contracts/src/",
-          "@lib-keccak/=lib/lib-keccak/contracts/lib/",
-          "@nitro-validator/=lib/espresso-tee-contracts/lib/nitro-validator/src/",
-          "@openzeppelin/contracts-upgradeable-v5/=lib/openzeppelin-contracts-upgradeable-v5/contracts/",
-          "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
-          "@openzeppelin/contracts-v5/=lib/openzeppelin-contracts-v5/contracts/",
-          "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
-          "@rari-capital/solmate/=lib/solmate/",
-          "@solady-test/=lib/lib-keccak/lib/solady/test/",
-          "@solady-v0.0.245/=lib/solady-v0.0.245/src/",
-          "@solady/=lib/solady/src/",
-          "aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src/",
-          "ds-test/=lib/forge-std/lib/ds-test/src/",
-          "erc4626-tests/=lib/espresso-tee-contracts/lib/openzeppelin-contracts-upgradeable/lib/erc4626-tests/",
-          "espresso-tee-contracts/=lib/espresso-tee-contracts/",
-          "forge-std/=lib/forge-std/src/",
-          "halmos-cheatcodes/=lib/espresso-tee-contracts/lib/openzeppelin-contracts-upgradeable/lib/halmos-cheatcodes/src/",
-          "interfaces/=interfaces/",
-          "kontrol-cheatcodes/=lib/kontrol-cheatcodes/src/",
-          "lib-keccak/=lib/lib-keccak/contracts/",
-          "openzeppelin-contracts-upgradeable-v5/=lib/openzeppelin-contracts-upgradeable-v5/",
-          "openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
-          "openzeppelin-contracts-v5/=lib/openzeppelin-contracts-v5/",
-          "openzeppelin-contracts/=lib/openzeppelin-contracts/",
-          "risc0-ethereum/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/lib/risc0-ethereum/",
-          "safe-contracts/=lib/safe-contracts/contracts/",
-          "safe-smart-account/=lib/espresso-tee-contracts/lib/safe-utils/lib/safe-smart-account/",
-          "safe-utils/=lib/espresso-tee-contracts/lib/safe-utils/src/",
-          "solady-v0.0.245/=lib/solady-v0.0.245/src/",
-          "solady/=lib/solady/",
-          "solidity-http/=lib/espresso-tee-contracts/lib/safe-utils/lib/solidity-http/src/",
-          "solidity-stringutils/=lib/espresso-tee-contracts/lib/safe-utils/lib/solidity-stringutils/",
-          "solmate/=lib/solmate/src/",
-          "sp1-contracts/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/lib/sp1-contracts/contracts/",
-          "lib/espresso-tee-contracts/:@espresso-tee/=lib/espresso-tee-contracts/src/",
-          "lib/espresso-tee-contracts/:@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable-v5/contracts/",
-          "lib/espresso-tee-contracts/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts/",
-          "lib/espresso-tee-contracts/:aws-nitro-enclave-attestation/=lib/espresso-tee-contracts/lib/aws-nitro-enclave-attestation/contracts/src/",
-          "lib/espresso-tee-contracts/:solady/=lib/solady/src/",
-          "lib/openzeppelin-contracts-upgradeable-v5/:@openzeppelin/contracts/=lib/openzeppelin-contracts-v5/contracts/"
-        ],
-        "optimizer": {
-          "enabled": true,
-          "runs": 999999
-        },
-        "metadata": {
-          "bytecodeHash": "none"
-        },
-        "compilationTarget": {
-          "src/celo/CeloCGTV2ContractsManager.sol": "CeloCGTV2ContractsManager"
-        },
-        "evmVersion": "london",
-        "libraries": {}
-      }
     }
   },
   "unresolved": [
     "production reserved bridge address",
     "production network configuration",
-    "production total supply",
+    "production legacy vault and gas-token settings",
     "production prestate and deployer nonce checks",
     "production gas limits"
   ]
