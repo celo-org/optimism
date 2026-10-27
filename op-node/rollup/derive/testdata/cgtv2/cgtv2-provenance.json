@@ -1,7 +1,7 @@
 {
   "fixtureOnly": true,
   "chainId": 1337,
-  "sourceCommit": "ea52addd9ae38f5d4df3ceb96ee36463dd7144ca",
+  "sourceCommit": "380a543846c5943c5c036778c38eecf80651009d",
   "contractBase": "0296412d673a666af6236efa1f615032b1f1c424",
   "upstreamHelpers": "6c5a77cc4be1148712d36b50a35e1f74cf930314",
   "forgeVersion": "forge Version: 1.7.1\nCommit SHA: 4072e48705af9d93e3c0f6e29e93b5e9a40caed8\nBuild Timestamp: 2026-05-08T07:54:31.470926000Z (1778226871)\nBuild Profile: dist",
@@ -13,7 +13,7 @@
   "fundingGasLimit": 100000,
   "sha256": {
     "cgtv2-00.rlp": "1cd23b9ccac9676e9a1cbc7352fa3b00b625489399ae204d018c84a324630734",
-    "cgtv2-01.rlp": "ef1f38b1481a8bab2400f5e7cce43c743855d90707e26e99db7cc69be4a0c4cd",
+    "cgtv2-01.rlp": "77d845fbd1f74e4cb98da9b46c91b747d760ef6afea1838d60bd4e7956b51e3c",
     "cgtv2-02.rlp": "44bc3120b7e1c6db3578d08033cad41d92dcd55db12c5785922eaedc59b898eb",
     "cgtv2-03.rlp": "205c9c17ccb8de87b52b865381a64662d7e6a12a10746942412bd1452a54d3cc",
     "cgtv2-04.rlp": "9d8f37ff5400ccb85eefd8e4a9e77d8b62f0096c4d57773359931dfffbbfc197",
@@ -24,10 +24,10 @@
     "cgtv2-09.rlp": "fe8d719506534b3f441d3a0e8d516b8e5289ce55fb27fe2af17690408993eb29",
     "cgtv2-10.rlp": "87c5cea8e2f22c3c684fe771b52705dec2d5b8303e5ba64a660dee79e1a8a4ef",
     "cgtv2-11.rlp": "3359d33848f6e74f47c3d2ebefdf17149d1dab9869ebdce10757b3acccf5eb86",
-    "cgtv2-fixture-nut-bundle.json": "f962b68ea81f490c4ddd64bf33410d61ba30a2ddcb7f210120743dd806c1e96d",
+    "cgtv2-fixture-nut-bundle.json": "2125b0dacfa80a2b93049fc7b77081770ae806cd2c6986df7639b44bef002fec",
     "cgtv2-fixture-prestate.json": "6ebe021ee90a6dfc987ca94d143ea8b70824435ec8204ba4a1b8d77cb4bf90ea",
     "cgtv2-funding-400.rlp": "230f0f5481a6e5fe89cf3f3120be85f803d9d2c58aaa2440943e13228eea8ae4",
-    "cgtv2-vectors.json": "571b2b3c6d65f2340b323847bbee2588fd828f2bbca4fadd9ce49bc9c15a2f13"
+    "cgtv2-vectors.json": "71bfb322455f008c6979d83602f4a0f9b0e96a81392d9e8b0e8377c2f5f54e96"
   },
   "builds": {
     "StorageSetter": {
