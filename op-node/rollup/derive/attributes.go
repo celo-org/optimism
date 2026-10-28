@@ -203,7 +203,14 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 
 	if len(cgtUpgrades) > 0 {
 		upgradeTxs = append(upgradeTxs, cgtUpgrades...)
-		upgradeGas += cgtV2UpgradeGas
+		gas, err := CgtV2UpgradeGas(ba.rollupCfg.L2ChainID)
+		if err != nil {
+			return nil, NewCriticalError(err)
+		}
+		if gas > ^uint64(0)-upgradeGas {
+			return nil, NewCriticalError(fmt.Errorf("CGTv2 upgrade gas overflow"))
+		}
+		upgradeGas += gas
 	}
 
 	l1InfoTx, err := L1InfoDepositBytes(ba.rollupCfg, ba.l1ChainConfig, sysConfig, seqNumber, l1Info, nextL2Time)

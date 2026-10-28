@@ -27,13 +27,14 @@ var cgtV2TemporaryL1Bridge = common.HexToAddress("0x0000000000000000000000000000
 type cgtV2NetworkParams struct {
 	bridge      common.Address
 	totalSupply string
+	bundle      []byte
 }
 
 // Production profiles never select the synthetic NUT bundle.
 var cgtV2Networks = map[uint64]cgtV2NetworkParams{
-	params.CeloMainnetChainID: {bridge: cgtV2TemporaryL1Bridge, totalSupply: cgtV2TotalSupply},
-	params.CeloSepoliaChainID: {bridge: cgtV2TemporaryL1Bridge, totalSupply: cgtV2TotalSupply},
-	params.CeloChaosChainID:   {bridge: cgtV2TemporaryL1Bridge, totalSupply: cgtV2TotalSupply},
+	params.CeloMainnetChainID: {bridge: cgtV2TemporaryL1Bridge, totalSupply: cgtV2TotalSupply, bundle: cgtV2MainnetBundle},
+	params.CeloSepoliaChainID: {bridge: cgtV2TemporaryL1Bridge, totalSupply: cgtV2TotalSupply, bundle: cgtV2SepoliaBundle},
+	params.CeloChaosChainID:   {bridge: cgtV2TemporaryL1Bridge, totalSupply: cgtV2TotalSupply, bundle: cgtV2ChaosBundle},
 }
 
 // Synthetic profile matching the frozen contract/NUT fixtures, not a production default.
@@ -46,7 +47,9 @@ var cgtV2FixtureParams = cgtV2NetworkParams{
 
 func cgtV2Params(chainID uint64) (cgtV2NetworkParams, bool) {
 	if chainID == cgtV2FixtureChainID {
-		return cgtV2FixtureParams, true
+		network := cgtV2FixtureParams
+		network.bundle = cgtV2FixtureBundle
+		return network, true
 	}
 	network, ok := cgtV2Networks[chainID]
 	return network, ok
@@ -66,6 +69,33 @@ func (p cgtV2NetworkParams) reserveSeed(migratedAmount *big.Int) (*big.Int, bool
 //go:embed testdata/cgtv2/cgtv2-fixture-nut-bundle.json
 var cgtV2FixtureBundle []byte
 
+//go:embed upgrades/cgtv2/mainnet.json
+var cgtV2MainnetBundle []byte
+
+//go:embed upgrades/cgtv2/sepolia.json
+var cgtV2SepoliaBundle []byte
+
+//go:embed upgrades/cgtv2/chaos.json
+var cgtV2ChaosBundle []byte
+
+var cgtV2Intents = [...]string{
+	"L1BlockCGT deployment",
+	"L2ToL1MessagePasserCGT deployment",
+	"NativeAssetLiquidity deployment",
+	"LiquidityController deployment",
+	"CeloGasBridgeL2 deployment",
+	"CeloSequencerFeeVault deployment",
+	"L1BlockCGT upgrade",
+	"L2ToL1MessagePasserCGT upgrade",
+	"NativeAssetLiquidity upgrade",
+	"LiquidityController upgrade and initialize",
+	"CeloGasBridgeL2 upgrade and initialize",
+	"CeloSequencerFeeVault upgrade and initialize",
+	"CeloGasBridgeL2 minter authorization",
+	"LiquidityController ownership transfer",
+	"CGTv2 flag enable",
+}
+
 // Fixture gas limits: six 6M deployments, nine 500k direct calls,
 // and 100k reserve funding. The v6 ProxyAdmin remains unchanged.
 // TODO(CGTv2): calibrate limits against final contracts and production state,
@@ -75,8 +105,53 @@ const cgtV2UpgradeGas uint64 = 40_600_000
 
 var cgtV2FundingSource = (&UpgradeDepositSource{Intent: "Celo: CGTv2 Reserve Funding"}).SourceHash()
 
-func cgtV2NUTBundle() (*nutBundle, error) {
-	return readNUTBundle(forks.Name("cgtv2"), bytes.NewReader(cgtV2FixtureBundle))
+func cgtV2NUTBundle(chainID uint64) (*nutBundle, error) {
+	network, ok := cgtV2Params(chainID)
+	if !ok {
+		return nil, fmt.Errorf("CGTv2 unsupported chain %d", chainID)
+	}
+	bundle, err := readNUTBundle(forks.Name("cgtv2"), bytes.NewReader(network.bundle))
+	if err != nil {
+		return nil, err
+	}
+	if len(bundle.Transactions) == 0 {
+		return nil, fmt.Errorf("CGTv2 upgrade bundle is unresolved for chain %d", chainID)
+	}
+	if len(bundle.Transactions) != len(cgtV2Intents) {
+		return nil, fmt.Errorf("CGTv2 invalid static transaction count")
+	}
+	for i, tx := range bundle.Transactions {
+		if tx.Intent != cgtV2Intents[i] || tx.GasLimit == 0 {
+			return nil, fmt.Errorf("CGTv2 invalid static transaction %d", i)
+		}
+	}
+	if _, err := cgtV2BundleGas(bundle); err != nil {
+		return nil, err
+	}
+	return bundle, nil
+}
+
+func cgtV2BundleGas(bundle *nutBundle) (uint64, error) {
+	total := cgtV2FundingGas
+	for _, tx := range bundle.Transactions {
+		if tx.GasLimit > ^uint64(0)-total {
+			return 0, fmt.Errorf("CGTv2 upgrade gas overflow")
+		}
+		total += tx.GasLimit
+	}
+	return total, nil
+}
+
+// CgtV2UpgradeGas returns the selected network bundle's checked one-time allowance.
+func CgtV2UpgradeGas(chainID *big.Int) (uint64, error) {
+	if chainID == nil || !chainID.IsUint64() {
+		return 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
+	}
+	bundle, err := cgtV2NUTBundle(bigs.Uint64Strict(chainID))
+	if err != nil {
+		return 0, err
+	}
+	return cgtV2BundleGas(bundle)
 }
 
 // CgtV2UpgradeTransactions builds static upgrade deposits and dynamic reserve funding.
@@ -89,17 +164,11 @@ func CgtV2UpgradeTransactions(chainID, migratedAmount *big.Int) ([]hexutil.Bytes
 	if !ok {
 		return nil, 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
 	}
-	// TODO(CGTv2): replace this fixture-only guard with per-network bundle selection
-	// once the production contracts and network configuration are finalized.
-	// A network profile does not authorize running fixture contracts on that network.
-	if bigs.Uint64Strict(chainID) != cgtV2FixtureChainID {
-		return nil, 0, fmt.Errorf("CGTv2 upgrade bundle is unresolved for chain %v", chainID)
-	}
 	reserve, ok := network.reserveSeed(migratedAmount)
 	if !ok {
 		return nil, 0, fmt.Errorf("CGTv2 migrated amount exceeds fixed total supply or is invalid")
 	}
-	bundle, err := cgtV2NUTBundle()
+	bundle, err := cgtV2NUTBundle(bigs.Uint64Strict(chainID))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -118,18 +187,15 @@ func CgtV2UpgradeTransactions(chainID, migratedAmount *big.Int) ([]hexutil.Bytes
 	if err != nil {
 		return nil, 0, err
 	}
-	return append(txs, raw), bundle.totalGas() + cgtV2FundingGas, nil
+	gas, err := cgtV2BundleGas(bundle)
+	return append(txs, raw), gas, err
 }
 
 var cgtV2GroupSources = func() map[common.Hash]struct{} {
-	bundle, err := cgtV2NUTBundle()
-	if err != nil {
-		panic(fmt.Sprintf("invalid embedded CGTv2 NUT fixture: %v", err))
-	}
 	sources := map[common.Hash]struct{}{cgtV2FundingSource: {}}
-	for i, tx := range bundle.Transactions {
-		intent := fmt.Sprintf("%s %d: %s", capitalizeForkName(bundle.ForkName), i, tx.Intent)
-		sources[(&UpgradeDepositSource{Intent: intent}).SourceHash()] = struct{}{}
+	for i, intent := range cgtV2Intents {
+		qualified := fmt.Sprintf("Cgtv2 %d: %s", i, intent)
+		sources[(&UpgradeDepositSource{Intent: qualified}).SourceHash()] = struct{}{}
 	}
 	return sources
 }()
