@@ -131,17 +131,57 @@ func testEspressoWorkerContexts(t *testing.T, start func(*testing.T, *espressoTr
 func TestEspressoSubmitWorkerContexts(t *testing.T) {
 	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.SpawnWorkers(1, 0)
-		worker := receiveTestValue(t, s.submitWorkerQueue)
-		worker <- espressoTransactionJobAttempt{job: espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}, resp: make(chan espressoSubmitTransactionJobResponse, 1)}
+		s.submitJobQueue <- espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
 	})
 }
 
 func TestEspressoVerifyWorkerContexts(t *testing.T) {
 	testEspressoWorkerContexts(t, func(t *testing.T, s *espressoTransactionSubmitter) {
 		s.SpawnWorkers(0, 1)
-		worker := receiveTestValue(t, s.verifyReceiptWorkerQueue)
-		worker <- espressoVerifyReceiptJobAttempt{job: espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}, resp: make(chan espressoVerifyReceiptJobResponse, 1)}
+		s.verifyReceiptJobQueue <- espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}
 	})
+}
+
+// TestEspressoWorkersProcessJobsConcurrently proves that each shared job queue
+// feeds multiple workers: both client calls must start while the first is still
+// blocked. Start is intentionally omitted so response handlers cannot retry jobs.
+func TestEspressoWorkersProcessJobsConcurrently(t *testing.T) {
+	for _, stage := range []struct {
+		name          string
+		submitWorkers int
+		verifyWorkers int
+		enqueue       func(*espressoTransactionSubmitter)
+	}{
+		{
+			name: "submit", submitWorkers: 2,
+			enqueue: func(s *espressoTransactionSubmitter) {
+				s.submitJobQueue <- espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
+			},
+		},
+		{
+			name: "verify", verifyWorkers: 2,
+			enqueue: func(s *espressoTransactionSubmitter) {
+				s.verifyReceiptJobQueue <- espressoVerifyReceiptJob{hash: new(espressoCommon.TaggedBase64)}
+			},
+		},
+	} {
+		t.Run(stage.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(t.Context())
+			calls := make(chan context.Context, 2)
+			s := NewEspressoTransactionSubmitter(WithContext(ctx),
+				WithEspressoSubmissionClient(&contextErrorEspressoClient{calls: calls}),
+				WithEspressoNetworkTimeout(time.Minute))
+			t.Cleanup(func() { cancel(); s.wg.Wait() })
+			s.SpawnWorkers(stage.submitWorkers, stage.verifyWorkers)
+			stage.enqueue(s)
+			stage.enqueue(s)
+
+			first := receiveTestValue(t, calls)
+			second := receiveTestValue(t, calls)
+			require.NoError(t, first.Err(), "first call must remain blocked while the second starts")
+			require.NoError(t, second.Err())
+		})
+	}
 }
 
 func TestEspressoHeightTrackerContexts(t *testing.T) {
@@ -214,26 +254,22 @@ func TestInitEspressoSubmissionTimeoutAndRecovery(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	submitter := NewEspressoTransactionSubmitter(WithContext(ctx),
 		WithEspressoSubmissionClient(setup.Espresso.Client), WithEspressoNetworkTimeout(cfg.TxMgrConfig.NetworkTimeout))
+	// Exactly one worker processes both jobs. Leave Start uncalled so this test
+	// is the sole consumer of submitRespQueue, without a competing response handler.
 	submitter.SpawnWorkers(1, 0)
 	t.Cleanup(func() { cancel(); submitter.wg.Wait() })
-	responses := make(chan espressoSubmitTransactionJobResponse, 1)
-	job := espressoTransactionJobAttempt{
-		job:  espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}},
-		resp: responses,
-	}
-	worker := receiveTestValue(t, submitter.submitWorkerQueue)
-	worker <- job
+	responses := submitter.submitRespQueue
+	job := espressoSubmitTransactionJob{transaction: &espressoCommon.Transaction{}}
+	submitter.submitJobQueue <- job
 	receiveTestValue(t, requestReceived) // Proves initialization and propagation reached the real SDK/server.
 	response := receiveTestValue(t, responses)
 	require.ErrorIs(t, response.err, sdkclient.ErrEphemeral)
 	require.ErrorContains(t, response.err, context.DeadlineExceeded.Error())
 	require.NoError(t, ctx.Err(), "request timeout must not cancel the parent context")
 
-	// A timed-out request must not prevent the same worker from processing another job.
+	// The sole worker must process the next job after its first request times out.
 	close(serverRecovered)
-	nextWorker := receiveTestValue(t, submitter.submitWorkerQueue)
-	require.Equal(t, worker, nextWorker)
-	nextWorker <- job
+	submitter.submitJobQueue <- job
 	response = receiveTestValue(t, responses)
 	require.NoError(t, response.err)
 	require.Equal(t, expectedHash, response.hash)
