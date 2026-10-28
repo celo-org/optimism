@@ -66,6 +66,8 @@ func (*noopMetrics) RecordBatchDataSizeBytes(string, int)    {}
 func (*noopMetrics) RecordFailoverToEthDA()                  {}
 func (*noopMetrics) RecordFallbackAuthWindowExceeded()       {}
 func (*noopMetrics) RecordPublishGateState(PublishGateState) {}
+func (*noopMetrics) RecordEspressoTransactionStarted()       {}
+func (*noopMetrics) RecordEspressoTransactionFinished()      {}
 
 func (*noopMetrics) StartBalanceMetrics(log.Logger, *ethclient.Client, common.Address) io.Closer {
 	return nil

@@ -289,6 +289,8 @@ func (l *BatchSubmitter) newEspressoSession() (*espressoSession, error) {
 
 	submitter := NewEspressoTransactionSubmitter(
 		WithContext(l.shutdownCtx),
+		WithEspressoLogger(l.Log),
+		WithEspressoMetrics(l.Metr),
 		WithWaitGroup(l.wg),
 		WithEspressoSubmissionClient(l.Espresso.Client),
 		WithEspressoNetworkTimeout(l.Config.NetworkTimeout),
@@ -296,7 +298,6 @@ func (l *BatchSubmitter) newEspressoSession() (*espressoSession, error) {
 		WithVerifyReceiptSafetyTimeout(l.Config.Espresso.VerifyReceiptSafetyTimeout),
 		WithVerifyReceiptRetryDelay(l.Config.Espresso.VerifyReceiptRetryDelay),
 	)
-	submitter.SpawnWorkers(4, 4)
 	submitter.Start()
 
 	return &espressoSession{
