@@ -1,6 +1,7 @@
 package derive
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -8,6 +9,7 @@ import (
 	"testing"
 
 	optypes "github.com/ethereum-optimism/optimism/op-core/types"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
@@ -79,6 +81,27 @@ func TestCgtV2NetworkSupplyAndBounds(t *testing.T) {
 		_, ok := cgtV2Params(id)
 		require.False(t, ok)
 	}
+}
+
+func TestCgtV2BundleGasRoundTrip(t *testing.T) {
+	bundle, err := cgtV2NUTBundle(cgtV2FixtureChainID)
+	require.NoError(t, err)
+	bundle.Transactions[0].GasLimit += 111
+	original := cgtV2FixtureBundle
+	t.Cleanup(func() { cgtV2FixtureBundle = original })
+	cgtV2FixtureBundle, err = json.Marshal(bundle)
+	require.NoError(t, err)
+	receipts := cgtSeededReceipts()
+	_, source, parent, origin := cgtTestDeriver(t, receipts)
+	cfg := cgtTestConfig()
+	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
+	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
+	require.NoError(t, err)
+	require.EqualValues(t, 70_600_111, *attrs.GasLimit)
+	payload := &eth.ExecutionPayload{BlockNumber: 101, Timestamp: attrs.Timestamp, GasLimit: *attrs.GasLimit, Transactions: attrs.Transactions}
+	recovered, err := PayloadToSystemConfig(cfg, payload)
+	require.NoError(t, err)
+	require.EqualValues(t, 30_000_000, recovered.GasLimit)
 }
 
 func TestCgtV2ProductionBundleSelection(t *testing.T) {
