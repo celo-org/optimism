@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
@@ -69,13 +70,22 @@ type fallbackAuthMetricsSpy struct {
 
 func (s *fallbackAuthMetricsSpy) RecordFallbackAuthWindowExceeded() { s.windowExceeded++ }
 
+// testRollupConfigAuthAddr is the BatchAuthenticator address in the auth
+// fixtures' rollup config. It differs from testAuthAddr, the address the binding
+// is bound to, so a builder that addresses its tx from the rollup config instead
+// of going through the binding fails the To checks.
+var testRollupConfigAuthAddr = common.HexToAddress("0x00000000000000000000000000000000000000ee")
+
 func newAuthSubmitter(t *testing.T) *BatchSubmitter {
 	l := &BatchSubmitter{}
 	l.Log = testlog.Logger(t, log.LevelDebug)
 	l.Metr = metrics.NoopMetrics
 	l.RollupConfig = &rollup.Config{
-		BatchAuthenticatorAddress: common.HexToAddress("0x00000000000000000000000000000000000000aa"),
+		BatchAuthenticatorAddress: testRollupConfigAuthAddr,
 	}
+	batchAuth, err := newBatchAuthenticator(testAuthAddr, nil, time.Second)
+	require.NoError(t, err)
+	l.batchAuth = batchAuth
 	return l
 }
 
@@ -116,7 +126,7 @@ func TestSubmitAuthenticatedBatch_OrderingAndSuccess(t *testing.T) {
 	l := newAuthSubmitter(t)
 	txdata := testAuthTxData()
 	ref := authTxRef(txdata)
-	verifyCandidate := txmgr.TxCandidate{TxData: []byte("auth-calldata"), To: &l.RollupConfig.BatchAuthenticatorAddress}
+	verifyCandidate := txmgr.TxCandidate{TxData: []byte("auth-calldata"), To: &testAuthAddr}
 	candidate := &txmgr.TxCandidate{TxData: []byte("batch-calldata")}
 
 	queue := &fakeTxSender{
@@ -286,7 +296,7 @@ func TestAuth_BlobSerialized(t *testing.T) {
 	require.Equal(t, 0, queue.pairCalls, "blob pair must not be pipelined")
 	require.False(t, queue.sends[0].viaPair)
 	require.False(t, queue.sends[1].viaPair)
-	require.Equal(t, l.RollupConfig.BatchAuthenticatorAddress, *queue.sends[0].candidate.To)
+	require.Equal(t, testAuthAddr, *queue.sends[0].candidate.To)
 
 	got := <-receiptsCh
 	require.NoError(t, got.Err)
@@ -435,7 +445,7 @@ func TestFallbackAuth_Calldata(t *testing.T) {
 
 	require.Len(t, queue.sends, 2)
 	require.NotNil(t, queue.sends[0].candidate.To)
-	require.Equal(t, l.RollupConfig.BatchAuthenticatorAddress, *queue.sends[0].candidate.To)
+	require.Equal(t, testAuthAddr, *queue.sends[0].candidate.To)
 
 	expectedCommitment, err := computeCommitment(candidate)
 	require.NoError(t, err)
@@ -472,7 +482,7 @@ func TestEspressoAuth_Calldata(t *testing.T) {
 
 	require.Len(t, queue.sends, 2)
 	require.NotNil(t, queue.sends[0].candidate.To)
-	require.Equal(t, l.RollupConfig.BatchAuthenticatorAddress, *queue.sends[0].candidate.To)
+	require.Equal(t, testAuthAddr, *queue.sends[0].candidate.To)
 
 	expectedCommitment, err := computeCommitment(candidate)
 	require.NoError(t, err)
@@ -554,4 +564,36 @@ func TestComputeCommitment_Parity(t *testing.T) {
 			require.Equal(t, derive.ComputeBlobBatchHash(blobHashes), common.Hash(got))
 		}
 	})
+}
+
+// TestAuth_NoAuthenticator verifies both auth paths fail before any work when
+// the batcher has no BatchAuthenticator binding. The submitter has no Espresso
+// session or batcher key, so the TEE path only passes if the check comes
+// before the commitment is signed.
+func TestAuth_NoAuthenticator(t *testing.T) {
+	paths := map[string]func(*BatchSubmitter) func(txData, bool, *txmgr.TxCandidate, TxSender[txRef], chan txmgr.TxReceipt[txRef]){
+		"fallback": func(l *BatchSubmitter) func(txData, bool, *txmgr.TxCandidate, TxSender[txRef], chan txmgr.TxReceipt[txRef]) {
+			return l.sendTxWithFallbackAuth
+		},
+		"espresso": func(l *BatchSubmitter) func(txData, bool, *txmgr.TxCandidate, TxSender[txRef], chan txmgr.TxReceipt[txRef]) {
+			return l.sendTxWithEspresso
+		},
+	}
+	for name, path := range paths {
+		t.Run(name, func(t *testing.T) {
+			l := newAuthSubmitter(t)
+			l.batchAuth = nil
+			txdata := testAuthTxData()
+			queue := &fakeTxSender{}
+			receiptsCh := make(chan txmgr.TxReceipt[txRef], 1)
+
+			path(l)(txdata, false, &txmgr.TxCandidate{TxData: []byte("batch-calldata")}, queue, receiptsCh)
+			l.authGroup.Wait()
+
+			got := <-receiptsCh
+			require.ErrorContains(t, got.Err, "no BatchAuthenticator configured")
+			require.Equal(t, txdata.ID().String(), got.ID.id.String())
+			require.Empty(t, queue.sends)
+		})
+	}
 }

@@ -53,7 +53,7 @@ func newEspressoLifecycleTestBatcher(t *testing.T) *BatchSubmitter {
 
 	backend := newMockAuthBackend(t)
 	backend.teeVerifier = common.Address{1}
-	batcher.batchAuth = newTestReader(t, backend)
+	batcher.batchAuth = newTestBatchAuthenticator(t, backend)
 	lightClient, err := espressoLightClient.NewLightclientCaller(common.Address{2}, backend)
 	require.NoError(t, err)
 	batcher.Espresso.LightClient = lightClient
@@ -224,4 +224,16 @@ func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
 	require.NoError(t, ctx.Err(), "the lookup timeout must not cancel its caller")
 	require.Nil(t, streamer, "a failed lookup must not return a streamer")
 	require.Nil(t, batcher.espressoSession, "a failed lookup must not publish a session")
+}
+
+// TestSetupEspressoStreamer_NoAuthenticator guards the nil binding case: the
+// streamer filters batches by the BatchAuthenticator address, so without one it
+// must fail before it waits for the local-safe head.
+func TestSetupEspressoStreamer_NoAuthenticator(t *testing.T) {
+	batcher := newEspressoLifecycleTestBatcher(t)
+	batcher.batchAuth = nil
+
+	streamer, err := batcher.setupEspressoStreamer(t.Context())
+	require.ErrorContains(t, err, "no BatchAuthenticator configured")
+	require.Nil(t, streamer)
 }
