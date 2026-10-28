@@ -137,6 +137,7 @@ func (bs *BatcherService) initEspresso(ctx context.Context, cfg *CLIConfig) erro
 	bs.Espresso.VerifyReceiptRetryDelay = cfg.Espresso.VerifyReceiptRetryDelay
 
 	queryURL := cfg.Espresso.QueryServiceURL
+	// The SDK directs new callers to NewClientFromOptions; NewClient remains for compatibility.
 	client, err := espressoClient.NewClientFromOptions(
 		espressoClient.WithBaseUrl(queryURL),
 		espressoClient.WithTransactionSubmitter(espressoClient.NewQuerySubmitter(queryURL)),
