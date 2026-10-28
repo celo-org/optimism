@@ -10,29 +10,15 @@ It depends directly on some code shared with the derivation pipeline, namely the
 
 ## Espresso endpoint configuration
 
-When Espresso is enabled, configure exactly one query-service URL pointing to
-its load balancer:
+When Espresso is enabled, configure one HTTP(S) query-service endpoint through `--espresso.query-service-url` or `OP_BATCHER_ESPRESSO_QUERY_SERVICE_URL`:
 
 ```bash
---espresso.url=https://espresso-lb.example.com
-# Or:
-OP_BATCHER_ESPRESSO_URL=https://espresso-lb.example.com
+--espresso.query-service-url=https://espresso-lb.example.com
 ```
 
-The load balancer owns backend selection and failover. The batcher uses the SDK's
-single-endpoint client, without client-side multi-endpoint failover or majority
-reads. Existing request deadlines and caller cancellation remain in effect;
-`--network-timeout` still bounds batcher requests, and streamer polling keeps its
-own deadlines.
+The load balancer handles backend selection and failover. Use backend affinity or keep backends sufficiently synchronized so that height, inclusion, and range reads remain consistent; lagging backends can cause range retries or early transaction resubmission. The client performs no multi-endpoint failover or majority reads.
 
-Before upgrading, replace `--espresso.urls` / `OP_BATCHER_ESPRESSO_URLS` with
-`--espresso.url` / `OP_BATCHER_ESPRESSO_URL`, supplying one load-balanced URL.
-Remove any comma-separated or repeated URLs, including the previous workaround
-of listing the same URL twice. The old plural flag and environment variable are
-no longer used; Espresso startup requires the new singular setting. Ensure the
-load balancer routes submission and query APIs, including `availability/limits`,
-which the SDK reads before fetching namespace transaction ranges. Deploy the configuration change together
-with this client change: the old multi-node client requires at least two URLs.
+Route both submission and query APIs, including `availability/limits`, through the endpoint. Batcher requests retain their configured `--network-timeout` and caller cancellation; streamer polling retains its own deadlines.
 
 ## Testing
 

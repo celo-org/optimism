@@ -3,6 +3,7 @@ package espresso
 import (
 	"crypto/ecdsa"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ const (
 var (
 	EnabledFlagName                    = espressoFlags("enabled")
 	PollIntervalFlagName               = espressoFlags("poll-interval")
-	QueryServiceURLFlagName            = espressoFlags("url")
+	QueryServiceURLFlagName            = espressoFlags("query-service-url")
 	LightClientAddrFlagName            = espressoFlags("light-client-addr")
 	L1UrlFlagName                      = espressoFlags("l1-url")
 	TestingBatcherPrivateKeyFlagName   = espressoFlags("testing-batcher-private-key")
@@ -67,8 +68,8 @@ func CLIFlags(envPrefix string, category string) []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:     QueryServiceURLFlagName,
-			Usage:    "Espresso query service URL; use a load balancer for backend failover",
-			EnvVars:  espressoEnvs(envPrefix, "URL"),
+			Usage:    "Single HTTP(S) Espresso query service URL; specify once (repeated flags use the last value); use a load balancer for backend failover",
+			EnvVars:  espressoEnvs(envPrefix, "QUERY_SERVICE_URL"),
 			Category: category,
 		},
 		&cli.StringFlag{
@@ -156,8 +157,18 @@ type CLIConfig struct {
 func (c CLIConfig) Check() error {
 	if c.Enabled {
 		// Check required fields when Espresso is enabled
-		if strings.TrimSpace(c.QueryServiceURL) == "" {
+		if c.QueryServiceURL == "" {
 			return fmt.Errorf("Espresso query service URL is required when Espresso is enabled")
+		}
+		if strings.Contains(c.QueryServiceURL, ",") {
+			return fmt.Errorf("Espresso query service URL must be a single URL, not a comma-separated list")
+		}
+		queryURL, err := url.Parse(c.QueryServiceURL)
+		if err != nil {
+			return fmt.Errorf("invalid Espresso query service URL: %w", err)
+		}
+		if (queryURL.Scheme != "http" && queryURL.Scheme != "https") || queryURL.Hostname() == "" {
+			return fmt.Errorf("Espresso query service URL must be an absolute HTTP(S) URL with a host")
 		}
 		if c.LightClientAddr == (common.Address{}) {
 			return fmt.Errorf("light client address is required when Espresso is enabled")
@@ -188,7 +199,7 @@ func ReadCLIConfig(c *cli.Context) CLIConfig {
 	config := CLIConfig{
 		Enabled:                    c.Bool(EnabledFlagName),
 		PollInterval:               c.Duration(PollIntervalFlagName),
-		QueryServiceURL:            c.String(QueryServiceURLFlagName),
+		QueryServiceURL:            strings.TrimSpace(c.String(QueryServiceURLFlagName)),
 		L1URL:                      c.String(L1UrlFlagName),
 		CaffeinationHeightEspresso: c.Uint64(CaffeinationHeightEspresso),
 		CaffeinationHeightL2:       c.Uint64(CaffeinationHeightL2),

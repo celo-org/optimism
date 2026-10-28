@@ -45,7 +45,7 @@ func (c *contextErrorEspressoClient) FetchTransactionByHash(ctx context.Context,
 	return espressoCommon.TransactionQueryData{}, c.sdkContextError(ctx)
 }
 func (c *contextErrorEspressoClient) FetchLatestBlockHeight(ctx context.Context) (uint64, error) {
-	return 0, fmt.Errorf("fetch latest block height failed with all nodes, Errors: %v", []error{c.sdkContextError(ctx)})
+	return 0, c.sdkContextError(ctx)
 }
 func (c *contextErrorEspressoClient) FetchNamespaceTransactionsInRange(ctx context.Context, _, _, _ uint64) ([]espressoCommon.NamespaceTransactionsRangeData, error) {
 	return nil, c.sdkContextError(ctx)
