@@ -71,6 +71,8 @@ type Metricer interface {
 
 	RecordFallbackAuthWindowExceeded()
 	RecordPublishGateState(state PublishGateState)
+	RecordEspressoTransactionStarted()
+	RecordEspressoTransactionFinished()
 
 	Document() []opmetrics.DocumentedMetric
 
@@ -118,6 +120,7 @@ type Metrics struct {
 	altDaFailoverTotal              prometheus.Counter
 	fallbackAuthWindowExceededTotal prometheus.Counter
 	publishGate                     prometheus.GaugeVec
+	espressoTransactionsInFlight    prometheus.Gauge
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -270,6 +273,11 @@ func NewMetrics(procName string) *Metrics {
 			Name:      "publish_gate",
 			Help:      "Publish gate state: 1 for the current state, 0 for the others",
 		}, []string{"state"}),
+		espressoTransactionsInFlight: factory.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "espresso_transactions_in_flight",
+			Help:      "Active Espresso transaction lifecycles, including RPC waits and retry delays.",
+		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
 			Name:      "blob_used_bytes",
@@ -516,6 +524,17 @@ func (m *Metrics) RecordFailoverToEthDA() {
 
 func (m *Metrics) RecordFallbackAuthWindowExceeded() {
 	m.fallbackAuthWindowExceededTotal.Inc()
+}
+
+// RecordEspressoTransactionStarted counts one active transaction lifecycle.
+func (m *Metrics) RecordEspressoTransactionStarted() {
+	m.espressoTransactionsInFlight.Inc()
+}
+
+// RecordEspressoTransactionFinished releases a lifecycle on confirmation,
+// permanent failure, or session cancellation.
+func (m *Metrics) RecordEspressoTransactionFinished() {
+	m.espressoTransactionsInFlight.Dec()
 }
 
 // RecordPublishGateState sets the current state to 1 and the others to 0.
