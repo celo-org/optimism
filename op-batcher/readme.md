@@ -16,7 +16,7 @@ When Espresso is enabled, configure one HTTP(S) query-service endpoint through `
 --espresso.query-service-url=https://espresso-lb.example.com
 ```
 
-The load balancer handles backend selection and failover. Use backend affinity or keep backends sufficiently synchronized so that height, inclusion, and range reads remain consistent; lagging backends can cause range retries or early transaction resubmission. The client performs no multi-endpoint failover or majority reads.
+The client uses the configured endpoint for all Espresso requests. Infrastructure behind that endpoint should handle backend selection and failover as needed and provide consistent height, transaction, and range reads. When using multiple backends, keep them sufficiently synchronized; session affinity can reduce cross-backend inconsistencies but does not guarantee freshness. Lagging backends can cause range-read retries or unnecessary transaction resubmission.
 
 Route both submission and query APIs, including `availability/limits`, through the endpoint. Batcher requests retain their configured `--network-timeout` and caller cancellation; streamer polling retains its own deadlines.
 
