@@ -83,7 +83,7 @@ func TestCgtV2AttributesBuilderWiring(t *testing.T) {
 	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.Len(t, attrs.Transactions, 21)
+	require.Len(t, attrs.Transactions, 17)
 	require.True(t, attrs.NoTxPool)
 	require.True(t, ContainsCgtV2Activation(attrs.Transactions))
 	require.EqualValues(t, 30_000_000+cgtV2UpgradeGas, *attrs.GasLimit)
@@ -107,7 +107,7 @@ func TestCgtV2SameOriginAndReorgReplay(t *testing.T) {
 	d, source, parent, origin := cgtTestDeriver(t, receipts)
 	_, _, first, err := d.originDeposits(context.Background(), parent, origin, receipts)
 	require.NoError(t, err)
-	require.Len(t, first, 20)
+	require.Len(t, first, 16)
 	child := eth.L2BlockRef{Hash: common.Hash{3}, ParentHash: parent.Hash, Number: 101, Time: 102, L1Origin: origin}
 	builder := NewFetchingAttributesBuilder(cgtTestConfig(), params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
 	reads := source.headerReads
@@ -277,7 +277,7 @@ func TestCgtV2EscrowAppendsGroupAfterAllOriginDeposits(t *testing.T) {
 	txs := append(deposits, upgrades...)
 	require.NoError(t, err)
 	require.NotEmpty(t, upgrades)
-	require.Len(t, txs, 22)
+	require.Len(t, txs, 18)
 	for i, index := range []uint64{0, 2} {
 		tx, err := optypes.UnmarshalDepositTx(txs[i])
 		require.NoError(t, err)
@@ -318,7 +318,7 @@ func TestCgtV2AuthenticatedDerivation(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.Len(t, group, 20)
+			require.Len(t, group, 16)
 			fund, err := optypes.UnmarshalDepositTx(group[len(group)-1])
 			require.NoError(t, err)
 			require.EqualValues(t, 400, bigs.Uint64Strict(fund.Mint))
@@ -427,7 +427,7 @@ func TestCgtV2FullOriginMatchesNativeProofClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, vector.Transactions, attrs.Transactions)
 	require.EqualValues(t, vector.GasLimit, *attrs.GasLimit)
-	require.Len(t, attrs.Transactions, 23)
+	require.Len(t, attrs.Transactions, 19)
 	for _, index := range []int{1, 2} {
 		deposit, err := optypes.UnmarshalDepositTx(attrs.Transactions[index])
 		require.NoError(t, err)

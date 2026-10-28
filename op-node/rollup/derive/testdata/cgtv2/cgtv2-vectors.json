@@ -1,117 +1,93 @@
 [
   {
-    "intent": "Cgtv2 0: StorageSetter deployment",
-    "sourceHash": "0xd2a23e9fa3e3e4cad6c1923c27ea7b0d3a8ad410317847b7af7947aba258fc70",
-    "transactionHash": "0xf524c720d79d259ddad07c59ce5c066fb182d29beae7c3b4ae8ff586adafdbd9",
+    "intent": "Cgtv2 0: L1BlockCGT deployment",
+    "sourceHash": "0xe8b6bddc74ca2348dfeb9f2fc37e41ad1136706e3e14c323db581ae7d8a7f5dd",
+    "transactionHash": "0xd9a783c4586b1824dac69b56f06b5761a09921936acb354df90c08e4c1f0e97c",
     "file": "cgtv2-00.rlp"
   },
   {
-    "intent": "Cgtv2 1: L1BlockCGT deployment",
-    "sourceHash": "0x2a284bd32192700a09f514eca97683369273456967998e093aa3c9428994a724",
-    "transactionHash": "0xefba0476af8823e9daf33eb0ecee1523c4aabd18be99948ebe5fc4f7fc65c969",
+    "intent": "Cgtv2 1: L2ToL1MessagePasserCGT deployment",
+    "sourceHash": "0x8ac94cdab57980899d110d46c0b3881f880ca9f8f8efd2e500c25f407a354caa",
+    "transactionHash": "0x92a975cffa47afbc6c0a795fce66e19b7256319b7399aae1f9b8697ed1e7749e",
     "file": "cgtv2-01.rlp"
   },
   {
-    "intent": "Cgtv2 2: L2ToL1MessagePasserCGT deployment",
-    "sourceHash": "0x006be41bcbe9940c4ae21bc123464cdac27e39432f168b9ef24d9d3edf229b42",
-    "transactionHash": "0xdb17eb6219f93f7ac63ed5a3e7425281a9c3f521bdd32eb3fbac8e758011a922",
+    "intent": "Cgtv2 2: NativeAssetLiquidity deployment",
+    "sourceHash": "0x4e4cf0523069bfac7a343730e3314ac1d873ec4e28f6d4efe6649a6bec4dd175",
+    "transactionHash": "0xfe104a59dcbddbd217eed68b806860d3be537cc5311348d9cb2278da6ba08cf0",
     "file": "cgtv2-02.rlp"
   },
   {
-    "intent": "Cgtv2 3: NativeAssetLiquidity deployment",
-    "sourceHash": "0xa89b8c0cced1ef67915bcdb20ef2b802717cc168fbce2a73ffcc3a70ed120e43",
-    "transactionHash": "0xa0e5e54a5fd04b266713c5cf20896bb2eeca5bf7404b03cd9e1cfa8447b68b67",
+    "intent": "Cgtv2 3: LiquidityController deployment",
+    "sourceHash": "0xda8cec519a6a9a753102238a0c27b61785172d9e8fdbf6b185f64ed35383eb0a",
+    "transactionHash": "0x04db88192f6eacd5983a0857dda187a2c2e14a706a0d0278ce4a7d5d873a4341",
     "file": "cgtv2-03.rlp"
   },
   {
-    "intent": "Cgtv2 4: LiquidityController deployment",
-    "sourceHash": "0x40ea0faa586e8c92b24fbdd8ca17d30b2e9f923ac3b2da2a3d52be00bcb71ff5",
-    "transactionHash": "0x0f2e8acc90f8a1742e9fbb7bf53e854b16d094e87284aa92d692605a021a4f56",
+    "intent": "Cgtv2 4: CeloGasBridgeL2 deployment",
+    "sourceHash": "0x0f838e20e51107602b62f4bff5d4fe5fce8b630742f528c1631d3f31302f020a",
+    "transactionHash": "0x638077d49482f8a1ac7a190fce67a8ae95b5c1d50324e430e30a0d2aa310a57d",
     "file": "cgtv2-04.rlp"
   },
   {
-    "intent": "Cgtv2 5: CeloGasBridgeL2 deployment",
-    "sourceHash": "0x29b58e54e01baf01f6a02d40054e9690f09891ec691c5c120e6725e01e38636b",
-    "transactionHash": "0xc62c3a114e8037fd2b459a1795a0bac5e52bdfed7cabdde3898228c0ce19468e",
+    "intent": "Cgtv2 5: CeloSequencerFeeVault deployment",
+    "sourceHash": "0xc8344c43a6b02494738d761bae8934c4c6a58201673b5b8f395fc8769cee97da",
+    "transactionHash": "0x3ed9b57206a5420121c3a7fd8b33e2fb988af84dc91d823cceaf0a8b16f65ff2",
     "file": "cgtv2-05.rlp"
   },
   {
-    "intent": "Cgtv2 6: CeloSequencerFeeVault deployment",
-    "sourceHash": "0x2a9b8cea0f7322e5b6eaa29258224e604832bcb2ee96c6750251df8aa5d912ec",
-    "transactionHash": "0x71db5b919cd27bf82b3e89a53fb1658d289c401694943f11bf8e43431a2c6786",
+    "intent": "Cgtv2 6: L1BlockCGT upgrade",
+    "sourceHash": "0x2697e0caf77ebe373bcc912974e67fa950ec9c5c09d9d38cfec7f695d5cf4f32",
+    "transactionHash": "0x2c476e0186d68ed55d129f627a7e938a175f49e301fc1bad222910363f5af2e5",
     "file": "cgtv2-06.rlp"
   },
   {
-    "intent": "Cgtv2 7: L1BlockCGT upgrade",
-    "sourceHash": "0x9426e742a0d6792c5393e2cc86779ebc03201ded6a1db62bb0197e313d90df26",
-    "transactionHash": "0xa3984c865799191df9a4630af95ae00972b4d78535c3e990d1cec10b99f74d0e",
+    "intent": "Cgtv2 7: L2ToL1MessagePasserCGT upgrade",
+    "sourceHash": "0x28a84669c988b642cb2ddf5263c75ff03833e29a32224f46cce6a4f94df81750",
+    "transactionHash": "0x5986801d8452aa01c96cd7279168e21df56b13e015cb6f0106ae80dcd77d7c7f",
     "file": "cgtv2-07.rlp"
   },
   {
-    "intent": "Cgtv2 8: L2ToL1MessagePasserCGT upgrade",
-    "sourceHash": "0xa8f05345284590de1f8f262188a168bdc25040ac112def9ce98fd8c70eed9c63",
-    "transactionHash": "0x5bb5ba83b7ac519774b1dad7654e5a0dd9dbd2a4b5acc4f47aa45c644af38473",
+    "intent": "Cgtv2 8: NativeAssetLiquidity upgrade",
+    "sourceHash": "0xb857ec479aab77471c0dd4705831cde2f307ab75d4d5c34d08fde98f3b018787",
+    "transactionHash": "0x2c69709b96fb114e9b3fe7d9785ac882a9db91364e5ba1ae3e687347f4b265d4",
     "file": "cgtv2-08.rlp"
   },
   {
-    "intent": "Cgtv2 9: NativeAssetLiquidity upgrade",
-    "sourceHash": "0x913bbb68848381a9485c046f578cf00cb7b5add47605ea376b2f44287fffd831",
-    "transactionHash": "0x721fb6c35ae8ddc6004b803bb37a5abd0e7f6152087dec5afaa2040cc3d6a5b2",
+    "intent": "Cgtv2 9: LiquidityController upgrade and initialize",
+    "sourceHash": "0xa57a786addec759fddb921e7976b14e21f347294d7ba4892a3dd77656075e196",
+    "transactionHash": "0xd4b7a8cd2a381de560b8f0d5a2beeade9de9ca33122fe9a4cc500cb84fb189e4",
     "file": "cgtv2-09.rlp"
   },
   {
-    "intent": "Cgtv2 10: LiquidityController initializer reset",
-    "sourceHash": "0x0f43e9c738ca1805b7dc6e5b86e83add43c0d0a5169b65416424b6ee07cbef33",
-    "transactionHash": "0xac027579a28755f73f2f9275d071ec6df4f6fa793f3b8e0daca7f0259a904b48",
+    "intent": "Cgtv2 10: CeloGasBridgeL2 upgrade and initialize",
+    "sourceHash": "0x59f475cc82ad3fc51ed5a079d0568681d8b1a4166810891d26a89e443872d927",
+    "transactionHash": "0x1e6758df65da37ffa8500854b80f0f385d8cc654e759156523e0580862681eee",
     "file": "cgtv2-10.rlp"
   },
   {
-    "intent": "Cgtv2 11: LiquidityController upgrade and initialize",
-    "sourceHash": "0x58c9b45af22875f9dd2c42e7e3ff460f0257e3ce4cb3bd64d3b0f368463a2c34",
-    "transactionHash": "0x15743e0d2d33b087ade1a2112daa93cfa19c36814f3915d142622c43c34953a6",
+    "intent": "Cgtv2 11: CeloSequencerFeeVault upgrade and initialize",
+    "sourceHash": "0x9824968fa7b1fefb73f79286602f46b8f0604c4506e9f5aec62049a9ba165ae3",
+    "transactionHash": "0x64ec937b0eca64f7b96711239dd8bda0bb5abb9e9194795042b090a48c549d18",
     "file": "cgtv2-11.rlp"
   },
   {
-    "intent": "Cgtv2 12: CeloGasBridgeL2 initializer reset",
-    "sourceHash": "0x35b721d3288263608aa084febede9c03ea459b0131531a5a3449671220aa7039",
-    "transactionHash": "0x0d6f619502537c5aa6679f057ab37d64c8f2f76dd22261e1cc80feada24444c0",
+    "intent": "Cgtv2 12: CeloGasBridgeL2 minter authorization",
+    "sourceHash": "0x4ed5f219c86547a3862a43fc53722e3c078fe614a1189cc93d1dec43cff54f43",
+    "transactionHash": "0x70d529f82199235e3809088e3adf3d1d3aeee4231a9fd2fb0de9de0b57d108da",
     "file": "cgtv2-12.rlp"
   },
   {
-    "intent": "Cgtv2 13: CeloGasBridgeL2 upgrade and initialize",
-    "sourceHash": "0xfc779e5284ed842262b2c87e4ec2f5fabef18e395e5c0d455488d72748f3ebc6",
-    "transactionHash": "0x07b5b5ff04cf4f298c3002f957beaf44946290f4b8f02e761198bc005a344c6f",
+    "intent": "Cgtv2 13: LiquidityController ownership transfer",
+    "sourceHash": "0x303ad62677530d5994e6c1a538636acaa4228ce80d39786d4862158b4a3bfa24",
+    "transactionHash": "0xcafe499641d821127d7c694faaeb51674300d37ced9f803ecf470880fb1c777c",
     "file": "cgtv2-13.rlp"
   },
   {
-    "intent": "Cgtv2 14: CeloSequencerFeeVault initializer reset",
-    "sourceHash": "0x5319dbf9e20d8da7110b0ab7a9f4d6579db2667fe7dc6d3e0026ff7ca1e4c82a",
-    "transactionHash": "0x92d4bd9f95bf3d9a4c6c571e74853b1878eb4607b2c2a4e8b4ad367597d23e22",
+    "intent": "Cgtv2 14: CGTv2 flag enable",
+    "sourceHash": "0xf9c93f6f41a62482f972450ace24c7bb25ca464d6ce02830570acf39013aec05",
+    "transactionHash": "0x266c8af67547fc2961dea8d2f41efde68c30e32e118e93dea0f4f8d441bab6dd",
     "file": "cgtv2-14.rlp"
-  },
-  {
-    "intent": "Cgtv2 15: CeloSequencerFeeVault upgrade and initialize",
-    "sourceHash": "0x8ca122140cca5d000c9088aeaa7269eaa7e072faf217137fcb12eded6ee3da73",
-    "transactionHash": "0xb43a22d877fb42ac06d0322e6db6d3bbcfd4dfbfbb2dd27657f8c98797b6a38b",
-    "file": "cgtv2-15.rlp"
-  },
-  {
-    "intent": "Cgtv2 16: CeloGasBridgeL2 minter authorization",
-    "sourceHash": "0xb0ca91d9947a614c3be70bdf954e5dd82c76ddc8af8948bc796ba777af45310a",
-    "transactionHash": "0x4af99f21960dfa87b1aaa9098fa434ecd76bd7f2a0f0326c3f2a48328939da17",
-    "file": "cgtv2-16.rlp"
-  },
-  {
-    "intent": "Cgtv2 17: LiquidityController ownership transfer",
-    "sourceHash": "0x05612a19e7c104084abde1c28b0dbb013039d1478998a74cc7d5337985fe1876",
-    "transactionHash": "0x0eb5e620986261c50a18cae8896a62e7636c1fd1f7b7d60d1b1b7e40b3d4420c",
-    "file": "cgtv2-17.rlp"
-  },
-  {
-    "intent": "Cgtv2 18: CGTv2 flag enable",
-    "sourceHash": "0x88a54bc82b660253b47d066f0ec5157bdc2e903700053aeb873c21e436309dfe",
-    "transactionHash": "0xc19a174c95c52a4498dbe9f11e615fa1553dbe3df6a9bbe0513891738919760f",
-    "file": "cgtv2-18.rlp"
   },
   {
     "intent": "Celo: CGTv2 Reserve Funding",

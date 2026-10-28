@@ -16,8 +16,8 @@ import (
 func TestCgtV2GroupMatchesSharedVectors(t *testing.T) {
 	raw, gas, err := CgtV2UpgradeTransactions(big.NewInt(1337), big.NewInt(600))
 	require.NoError(t, err)
-	require.Len(t, raw, 20)
-	require.EqualValues(t, 48_100_000, gas)
+	require.Len(t, raw, 16)
+	require.EqualValues(t, 40_600_000, gas)
 	var vectors []struct {
 		SourceHash      common.Hash
 		TransactionHash common.Hash
