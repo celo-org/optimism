@@ -104,7 +104,7 @@ func TestIsFallbackAuthRequired_ForkBoundary(t *testing.T) {
 			l.RollupConfig = &rollup.Config{EspressoTime: test.espressoTime}
 			l.Config.NetworkTimeout = time.Second
 			l.L1Client = &mockFixedTimeL1Client{time: test.tipTime}
-			auth, err := newBatchAuthenticatorReader(test.authAddr, l.L1Client, l.Config.NetworkTimeout)
+			auth, err := newBatchAuthenticator(test.authAddr, l.L1Client, l.Config.NetworkTimeout)
 			require.NoError(t, err)
 			l.batchAuth = auth
 

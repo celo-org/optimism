@@ -94,6 +94,20 @@ func (bs *BatcherService) applyEspressoDriverSetup(ds *DriverSetup) {
 	ds.Espresso.Client = bs.EspressoClient
 	ds.Espresso.LightClient = bs.EspressoLightClient
 	ds.Espresso.Attestation = bs.Attestation
+	ds.Espresso.BatchAuth = bs.batchAuth
+}
+
+// initBatchAuthenticator binds the BatchAuthenticator contract. The startup
+// checks and the driver go through the binding, which is nil when the chain has
+// no BatchAuthenticator, instead of reading RollupConfig.BatchAuthenticatorAddress.
+// Binding does no network I/O.
+func (bs *BatcherService) initBatchAuthenticator() error {
+	auth, err := newBatchAuthenticator(bs.RollupConfig.BatchAuthenticatorAddress, bs.L1Client, bs.NetworkTimeout)
+	if err != nil {
+		return err
+	}
+	bs.batchAuth = auth
+	return nil
 }
 
 // initKeyPair generates an ephemeral ECDSA key pair for the batcher's
