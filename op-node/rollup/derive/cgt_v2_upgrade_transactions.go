@@ -20,7 +20,7 @@ import (
 // Source: celo-contracts/v6.0.0 at 0296412d673a666af6236efa1f615032b1f1c424.
 const cgtV2TotalSupply = "1000000000000000000000000000"
 
-// TODO(CGTv2): replace for each network after its L1 bridge deployment.
+// TODO(celo-org/celo-blockchain-planning#1466): replace for each network after its L1 bridge deployment.
 // This temporary address is not a deployed production bridge.
 var cgtV2TemporaryL1Bridge = common.HexToAddress("0x00000000000000000000000000000000c6700001")
 
@@ -98,7 +98,7 @@ var cgtV2Intents = [...]string{
 
 // Fixture gas limits: six 6M deployments, nine 500k direct calls,
 // and 100k reserve funding. The v6 ProxyAdmin remains unchanged.
-// TODO(CGTv2): calibrate limits against final contracts and production state,
+// TODO(celo-org/celo-blockchain-planning#1466): calibrate limits against final contracts and production state,
 // then update the bundle and matching Go/Rust group allowances.
 const cgtV2FundingGas uint64 = 100_000
 const cgtV2UpgradeGas uint64 = 40_600_000
