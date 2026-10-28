@@ -741,6 +741,11 @@ func (s *Sequencer) startBuildingBlock() {
 	// from the transaction pool.
 	attrs.NoTxPool = uint64(attrs.Timestamp) > l1Origin.Time+s.spec.MaxSequencerDrift(l1Origin.Time)
 
+	if derive.ContainsCgtV2Activation(attrs.Transactions) {
+		attrs.NoTxPool = true
+		s.log.Info("Sequencing CGTv2 activation block")
+	}
+
 	// For the Ecotone activation block we shouldn't include any sequencer transactions.
 	if s.rollupCfg.IsEcotoneActivationBlock(uint64(attrs.Timestamp)) {
 		attrs.NoTxPool = true
