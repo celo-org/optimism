@@ -8,7 +8,6 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/log"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -135,7 +134,7 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 		return BatchDrop
 	}
 
-	if len(cgtActivation) > 0 && cgtActivation[0] && cgtV2HasUserTransactions(cfg, batch.Timestamp, batch.Transactions) {
+	if len(cgtActivation) > 0 && cgtActivation[0] && len(batch.Transactions) > 0 {
 		log.Warn("dropping batch with user transactions in CGTv2 activation block")
 		return BatchDrop
 	}
@@ -485,14 +484,4 @@ func checkSpanBatchOverlap(ctx context.Context, cfg *rollup.Config, log log.Logg
 		}
 	}
 	return BatchAccept
-}
-
-// PostExec is the upstream protocol exception; it is not an ordinary user tx.
-func cgtV2HasUserTransactions(cfg *rollup.Config, timestamp uint64, txs []hexutil.Bytes) bool {
-	for _, tx := range txs {
-		if len(tx) == 0 || tx[0] != optypes.PostExecTxType || !cfg.IsSDM(timestamp) {
-			return true
-		}
-	}
-	return false
 }

@@ -125,7 +125,7 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 		return nil, err
 	}
 
-	if ContainsCgtV2Activation(attrs.Transactions) && cgtV2HasUserTransactions(aq.config, batch.Timestamp, batch.Transactions) {
+	if ContainsCgtV2Activation(attrs.Transactions) && len(batch.Transactions) > 0 {
 		return nil, NewCriticalError(fmt.Errorf("CGTv2 activation batch passed validation with user transactions"))
 	}
 

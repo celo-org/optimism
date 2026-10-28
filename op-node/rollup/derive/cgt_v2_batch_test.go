@@ -60,7 +60,7 @@ func TestCgtV2BatchRejection(t *testing.T) {
 				mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, newFakeSafeBlockFetcher(), detector)
 				require.ErrorIs(t, mux.Reset(context.Background(), b, eth.SystemConfig{}), io.EOF)
 				got, _, err := mux.NextBatch(context.Background(), parent)
-				if kind == "native" || kind == "CIP-64" {
+				if kind != "empty" {
 					require.ErrorIs(t, err, NotEnoughData)
 					require.Nil(t, got)
 					require.Empty(t, prev.batches)
