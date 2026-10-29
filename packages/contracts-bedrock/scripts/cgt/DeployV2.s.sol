@@ -7,6 +7,7 @@ import { console2 as console } from "forge-std/console2.sol";
 
 // Contracts
 import { CeloGasBridgeL1 } from "src/celo/CeloGasBridgeL1.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { PortalMigrator } from "src/celo/PortalMigrator.sol";
 import { Proxy } from "src/universal/Proxy.sol";
 import { StandardBridge } from "src/universal/StandardBridge.sol";
@@ -139,7 +140,7 @@ contract DeployV2 is Script {
         input.set(input.l1CrossDomainMessenger.selector, vm.envAddress("L1_CROSS_DOMAIN_MESSENGER"));
         input.set(input.systemConfig.selector, vm.envAddress("SYSTEM_CONFIG"));
         input.set(input.l1BridgeProxyAdmin.selector, vm.envAddress("L1_BRIDGE_PROXY_ADMIN"));
-        input.set(input.otherBridge.selector, vm.envAddress("OTHER_BRIDGE"));
+        input.set(input.otherBridge.selector, vm.envOr("OTHER_BRIDGE", CeloPredeploys.CELO_GAS_BRIDGE_L2));
         input.set(
             input.proofMaturityDelaySeconds.selector,
             vm.envOr("PROOF_MATURITY_DELAY_SECONDS", IOptimismPortal2(payable(portalProxy)).proofMaturityDelaySeconds())
