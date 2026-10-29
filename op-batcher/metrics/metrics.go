@@ -70,6 +70,9 @@ type Metricer interface {
 	RecordFailoverToEthDA()
 
 	RecordFallbackAuthWindowExceeded()
+	RecordPublishGateState(state PublishGateState)
+	RecordEspressoTransactionStarted()
+	RecordEspressoTransactionFinished()
 
 	Document() []opmetrics.DocumentedMetric
 
@@ -116,6 +119,8 @@ type Metrics struct {
 	batchStoredDataSizeBytesTotal   prometheus.CounterVec
 	altDaFailoverTotal              prometheus.Counter
 	fallbackAuthWindowExceededTotal prometheus.Counter
+	publishGate                     prometheus.GaugeVec
+	espressoTransactionsInFlight    prometheus.Gauge
 
 	batcherTxEvs opmetrics.EventVec
 
@@ -263,6 +268,16 @@ func NewMetrics(procName string) *Metrics {
 			Name:      "fallback_auth_window_exceeded_total",
 			Help:      "Total number of fallback-auth submissions dropped because the batch tx landed beyond BatchAuthLookbackWindow blocks after its auth tx",
 		}),
+		publishGate: *factory.NewGaugeVec(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "publish_gate",
+			Help:      "Publish gate state: 1 for the current state, 0 for the others",
+		}, []string{"state"}),
+		espressoTransactionsInFlight: factory.NewGauge(prometheus.GaugeOpts{
+			Namespace: ns,
+			Name:      "espresso_transactions_in_flight",
+			Help:      "Active Espresso transaction lifecycles, including RPC waits and retry delays.",
+		}),
 		blobUsedBytes: factory.NewHistogram(prometheus.HistogramOpts{
 			Namespace: ns,
 			Name:      "blob_used_bytes",
@@ -385,6 +400,22 @@ const (
 	TxStageFailed    = "failed"
 )
 
+// PublishGateState is the outcome of a publish-gate evaluation, the "state"
+// label of the publish_gate metric.
+type PublishGateState string
+
+const (
+	PublishGateActive          PublishGateState = "active"           // this batcher may publish
+	PublishGateModeInactive    PublishGateState = "mode_inactive"    // activeIsEspresso names the other batcher
+	PublishGateKeyUnauthorized PublishGateState = "key_unauthorized" // our key is not the authorized batcher for the active mode
+	PublishGateError           PublishGateState = "error"            // the gate could not be evaluated
+)
+
+// PublishGateStates lists every state so RecordPublishGateState can zero the others.
+var PublishGateStates = []PublishGateState{
+	PublishGateActive, PublishGateModeInactive, PublishGateKeyUnauthorized, PublishGateError,
+}
+
 func (m *Metrics) RecordLatestL1Block(l1ref eth.L1BlockRef) {
 	m.RecordL1Ref("latest", l1ref)
 }
@@ -493,6 +524,28 @@ func (m *Metrics) RecordFailoverToEthDA() {
 
 func (m *Metrics) RecordFallbackAuthWindowExceeded() {
 	m.fallbackAuthWindowExceededTotal.Inc()
+}
+
+// RecordEspressoTransactionStarted counts one active transaction lifecycle.
+func (m *Metrics) RecordEspressoTransactionStarted() {
+	m.espressoTransactionsInFlight.Inc()
+}
+
+// RecordEspressoTransactionFinished releases a lifecycle on confirmation,
+// permanent failure, or session cancellation.
+func (m *Metrics) RecordEspressoTransactionFinished() {
+	m.espressoTransactionsInFlight.Dec()
+}
+
+// RecordPublishGateState sets the current state to 1 and the others to 0.
+func (m *Metrics) RecordPublishGateState(state PublishGateState) {
+	for _, s := range PublishGateStates {
+		if s == state {
+			m.publishGate.WithLabelValues(string(s)).Set(1)
+		} else {
+			m.publishGate.WithLabelValues(string(s)).Set(0)
+		}
+	}
 }
 
 func (m *Metrics) RecordChannelQueueLength(len int) {
