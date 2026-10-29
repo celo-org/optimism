@@ -272,7 +272,7 @@ contract L2Genesis is Script {
         if (_input.useCustomGasToken) {
             setLiquidityController(_input); // 29
             setNativeAssetLiquidity(_input); // 2A
-            setCeloGasBridgeL2(_input.celoGasBridgeL1Proxy, _input.celoTokenL1); // 1023
+            setCeloGasBridgeL2(_input.celoGasBridgeL1Proxy, _input.celoTokenL1); // 07EF
         }
     }
 

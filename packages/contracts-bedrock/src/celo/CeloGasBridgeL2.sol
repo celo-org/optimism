@@ -16,7 +16,7 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 
 /// @custom:proxied true
-/// @custom:predeploy 0x4200000000000000000000000000000000001023
+/// @custom:predeploy 0x42000000000000000000000000000000000007ef
 /// @title CeloGasBridgeL2
 /// @notice Single-asset L2 bridge for native CELO under CGT v2.
 /// @dev    Inherited `bridgeETH`, `bridgeETHTo`, `finalizeBridgeETH`, and `finalizeBridgeERC20`
