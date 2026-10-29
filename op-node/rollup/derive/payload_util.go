@@ -116,7 +116,18 @@ func PayloadToSystemConfig(rollupCfg *rollup.Config, payload *eth.ExecutionPaylo
 	// (see PreparePayloadAttributes). Subtract it back here so the reconstructed config holds the
 	// steady-state limit. This runs before UpdateSystemConfigWithL1Receipts in
 	// PreparePayloadAttributes, so a setGasLimit in the same block's L1 origin takes precedence.
-	if gasToStrip := upgradeGasToStrip(rollupCfg, uint64(payload.Timestamp)); gasToStrip > 0 {
+	gasToStrip := upgradeGasToStrip(rollupCfg, uint64(payload.Timestamp))
+	if ContainsCgtV2Activation(payload.Transactions) {
+		gas, err := CgtV2UpgradeGas(rollupCfg.L2ChainID)
+		if err != nil {
+			return eth.SystemConfig{}, err
+		}
+		if gas > ^uint64(0)-gasToStrip {
+			return eth.SystemConfig{}, fmt.Errorf("CGTv2 upgrade gas overflow")
+		}
+		gasToStrip += gas
+	}
+	if gasToStrip > 0 {
 		if r.GasLimit < gasToStrip {
 			return eth.SystemConfig{}, fmt.Errorf("activation block gas limit %d below upgrade gas %d", r.GasLimit, gasToStrip)
 		}

@@ -60,7 +60,7 @@ func CheckBatch(ctx context.Context, cfg *rollup.Config, log log.Logger, l1Block
 }
 
 // checkSingularBatch implements SingularBatch validation rule.
-func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1BlockRef, l2SafeHead eth.L2BlockRef, batch *SingularBatch, l1InclusionBlock eth.L1BlockRef) BatchValidity {
+func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1BlockRef, l2SafeHead eth.L2BlockRef, batch *SingularBatch, l1InclusionBlock eth.L1BlockRef, cgtActivation ...bool) BatchValidity {
 	// add details to the log
 	log = batch.LogContext(log)
 
@@ -131,6 +131,11 @@ func checkSingularBatch(cfg *rollup.Config, log log.Logger, l1Blocks []eth.L1Blo
 
 	if batch.Timestamp < batchOrigin.Time {
 		log.Warn("batch timestamp is less than L1 origin timestamp", "l2_timestamp", batch.Timestamp, "l1_timestamp", batchOrigin.Time, "origin", batchOrigin.ID())
+		return BatchDrop
+	}
+
+	if len(cgtActivation) > 0 && cgtActivation[0] && len(batch.Transactions) > 0 {
+		log.Warn("dropping batch with user transactions in CGTv2 activation block")
 		return BatchDrop
 	}
 

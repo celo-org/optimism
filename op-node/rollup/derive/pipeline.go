@@ -98,7 +98,7 @@ type DerivationPipeline struct {
 
 // NewDerivationPipeline creates a DerivationPipeline, to turn L1 data into L2 block-inputs.
 func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, depSet DependencySet, l1Fetcher L1Fetcher, l1Blobs L1BlobsFetcher,
-	altDA AltDAInputFetcher, l2Source L2Source, metrics Metrics, l1ChainConfig *params.ChainConfig,
+	altDA AltDAInputFetcher, l2Source L2Source, metrics Metrics, l1ChainConfig *params.ChainConfig, cgtSources ...CgtV2InputSource,
 ) *DerivationPipeline {
 	spec := rollup.NewChainSpec(rollupCfg)
 	// Stages are strung together into a pipeline,
@@ -109,8 +109,8 @@ func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, depSet Depe
 	frameQueue := NewFrameQueue(log, rollupCfg, l1Src)
 	channelMux := NewChannelMux(log, spec, frameQueue, metrics)
 	chInReader := NewChannelInReader(rollupCfg, log, channelMux, metrics)
-	batchMux := NewBatchMux(log, rollupCfg, chInReader, l2Source)
-	attrBuilder := NewFetchingAttributesBuilder(rollupCfg, l1ChainConfig, depSet, l1Fetcher, l2Source)
+	attrBuilder := NewFetchingAttributesBuilder(rollupCfg, l1ChainConfig, depSet, l1Fetcher, l2Source, cgtSources...)
+	batchMux := NewBatchMux(log, rollupCfg, chInReader, l2Source, attrBuilder)
 	attributesQueue := NewAttributesQueue(log, rollupCfg, attrBuilder, batchMux)
 
 	// Reset from ResetEngine then up from L1 Traversal. The stages do not talk to each other during
