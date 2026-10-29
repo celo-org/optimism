@@ -14,7 +14,7 @@ library CeloPredeploys {
     address internal constant FEE_CURRENCY = 0x4200000000000000000000000000000000001022;
     address internal constant FEE_CURRENCY_DIRECTORY = 0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF;
     address internal constant cUSD = 0x765DE816845861e75A25fCA122bb6898B8B1282a;
-    address internal constant CELO_GAS_BRIDGE_L2 = 0x4200000000000000000000000000000000001023;
+    address internal constant CELO_GAS_BRIDGE_L2 = 0x42000000000000000000000000000000000007ef;
 
     /// @notice Returns the name of the predeploy at the given address.
     function getName(address _addr) internal pure returns (string memory out_) {

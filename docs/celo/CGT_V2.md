@@ -63,7 +63,7 @@ Ethereum (chainId `1`) ↔ Celo (`42220`).
 
 | Contract | Address |
 |---|---|
-| `CeloGasBridgeL2` | `0x4200000000000000000000000000000000001023` |
+| `CeloGasBridgeL2` | `0x42000000000000000000000000000000000007ef` |
 | GoldToken (CELO ERC-20 view, 18 dp) | `0x471EcE3750Da237f93B8E339c536989b8978a438` |
 | `LiquidityController` | `0x420000000000000000000000000000000000002A` |
 | `NativeAssetLiquidity` | `0x4200000000000000000000000000000000000029` |
@@ -162,7 +162,7 @@ import { publicActionsL1, publicActionsL2, walletActionsL1, getWithdrawals } fro
 const l1 = walletClientL1.extend(publicActionsL1()).extend(walletActionsL1());
 const l2 = publicClientL2.extend(publicActionsL2());
 
-// 1 · Initiate on L2 (bridgeL2 = 0x4200000000000000000000000000000000001023)
+// 1 · Initiate on L2 (bridgeL2 = 0x42000000000000000000000000000000000007ef)
 const tx = await bridgeL2.withdraw(to, amount, 200_000n, "0x", { value: amount });
 const receipt = await l2.getTransactionReceipt({ hash: tx.hash });
 const [withdrawal] = getWithdrawals(receipt);

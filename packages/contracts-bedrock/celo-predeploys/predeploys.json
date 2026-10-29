@@ -2,7 +2,7 @@
   "description": "One-shot activation state for the Celo CGT v2 L2 predeploys: a single self-contained bundle (code + storage + balances). For each predeploys[] entry: (1) plant impl.bytecode at impl.address; (2) ensure the proxy account at address holds proxyShell.bytecode (identical for all predeploys; already on-chain for kind=upgrade); (3) apply storage (and balance) to the proxy account. A value of param:X is network-specific -- substitute params.X[network]; every other value is literal and identical on all networks. eip1967Slots decodes the two structural slots. Verify planted code with codeHash. Regenerate with generate.sh.",
   "build": {
     "gitBranch": "celo-contracts/v6.0.0",
-    "gitCommit": "db220657e2fb8ad81b4ca676193e60433a7d27ef",
+    "gitCommit": "0296412d673a666af6236efa1f615032b1f1c424",
     "forge": "forge Version: 1.2.3-v1.2.3",
     "settings": "optimizer=true, runs=999999, bytecode_hash=none; solc + evm_version are per-contract (0.8.15 -> london, 0.8.25 -> cancun)",
     "derivation": "storage/balances captured by simulating the real init calls and recording the diff, cross-checked with the compiler storage layout, cast index, and live Celo mainnet/sepolia/chaos"
@@ -143,9 +143,9 @@
           "note": "gasPayingTokenSymbol = \"CELO\""
         },
         {
-          "slot": "0xde7e0d28ff6c7384356f2757f7714325aba6baaf05019dbc32fc04e101dfee4f",
+          "slot": "0x6ffdbfb2370600b6018f8f9a5d6c4db5c5d4ef0c4d1f4c3747f4f668a33ed106",
           "value": "0x0000000000000000000000000000000000000000000000000000000000000001",
-          "note": "minters[CeloGasBridgeL2 0x42..1023] = true"
+          "note": "minters[CeloGasBridgeL2 0x42..07EF] = true"
         },
         {
           "slot": "0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103",
@@ -162,9 +162,9 @@
     {
       "name": "CeloGasBridgeL2",
       "kind": "new",
-      "address": "0x4200000000000000000000000000000000001023",
+      "address": "0x42000000000000000000000000000000000007ef",
       "impl": {
-        "address": "0xc0d3C0d3C0d3C0D3C0D3c0d3c0d3C0d3C0d31023",
+        "address": "0xc0D3C0d3C0D3c0d3c0d3C0d3c0d3c0d3c0D307EF",
         "source": "src/celo/CeloGasBridgeL2.sol",
         "solc": "0.8.15+commit.e14f2714",
         "evmVersion": "london",
@@ -200,7 +200,7 @@
         },
         {
           "slot": "0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc",
-          "value": "0x000000000000000000000000c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d31023",
+          "value": "0x000000000000000000000000c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d3c0d307ef",
           "note": "EIP-1967 implementation slot -> impl.address"
         }
       ]
