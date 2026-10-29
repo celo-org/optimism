@@ -81,7 +81,8 @@ func TestEspressoTimeoutWarnerRateLimitsConcurrentWorkers(t *testing.T) {
 	logs.RequireMessageContainedOnce(t, timeoutWarning)
 
 	// The next warning reports the timeouts suppressed since the previous one,
-	// so together the two warnings account for every timeout.
+	// so together the two warnings account for every timeout. A zero Sometimes
+	// runs its first Do, allowing exactly one more warning.
 	w.limiter = rate.Sometimes{}
 	w.check(context.Background(), expired, context.DeadlineExceeded)
 	recs := logs.FindLogs(testlog.NewMessageContainsFilter(timeoutWarning))
