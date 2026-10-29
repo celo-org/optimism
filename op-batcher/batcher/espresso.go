@@ -74,6 +74,43 @@ type espressoTransactionSubmitter struct {
 	submitSlots                chan struct{}
 	verifySlots                chan struct{}
 	receiptRetries             *rate.Limiter
+	submitTimeoutWarner        *espressoTimeoutWarner
+	verifyTimeoutWarner        *espressoTimeoutWarner
+}
+
+// espressoTimeoutWarner emits rate-limited warnings when Espresso requests for
+// one operation exceed their deadline. It is shared by all transactions performing
+// that operation, so concurrent timeouts produce at most one warning per interval.
+type espressoTimeoutWarner struct {
+	log       log.Logger
+	operation string
+	timeout   time.Duration
+	limiter   rate.Sometimes
+	count     atomic.Int64 // timeouts since the last warning
+}
+
+func newEspressoTimeoutWarner(logger log.Logger, operation string, timeout time.Duration) *espressoTimeoutWarner {
+	return &espressoTimeoutWarner{
+		log:       logger,
+		operation: operation,
+		timeout:   timeout,
+		limiter:   rate.Sometimes{Interval: time.Minute},
+	}
+}
+
+// check warns if a failed request was aborted by its own deadline. It inspects
+// callCtx rather than err, since the SDK does not always wrap context errors,
+// so it must be called before callCtx is cancelled. Requests aborted because
+// ctx was cancelled (e.g. on shutdown) are not reported.
+func (w *espressoTimeoutWarner) check(ctx, callCtx context.Context, err error) {
+	if err == nil || ctx.Err() != nil || !errors.Is(callCtx.Err(), context.DeadlineExceeded) {
+		return
+	}
+	w.count.Add(1)
+	w.limiter.Do(func() {
+		w.log.Warn("Espresso request timed out, will retry",
+			"operation", w.operation, "timeout", w.timeout, "timeouts", w.count.Swap(0), "err", err)
+	})
 }
 
 // espressoSubmissionClient provides the client methods used by submission and receipt workers.
@@ -237,6 +274,8 @@ func NewEspressoTransactionSubmitter(options ...EspressoTransactionSubmitterOpti
 		submitSlots:                make(chan struct{}, espressoWorkerConcurrency),
 		verifySlots:                make(chan struct{}, espressoWorkerConcurrency),
 		receiptRetries:             rate.NewLimiter(rate.Limit(float64(espressoWorkerConcurrency)/config.VerifyReceiptRetryDelay.Seconds()), espressoWorkerConcurrency),
+		submitTimeoutWarner:        newEspressoTimeoutWarner(config.Logger, "submit transaction", config.NetworkTimeout),
+		verifyTimeoutWarner:        newEspressoTimeoutWarner(config.Logger, "verify transaction", config.NetworkTimeout),
 	}
 }
 
@@ -375,7 +414,9 @@ func (s *espressoTransactionSubmitter) submitAttempt(ctx context.Context, tx *es
 	defer func() { <-s.submitSlots }()
 	callCtx, cancel := context.WithTimeout(ctx, s.networkTimeout)
 	defer cancel()
-	return s.espresso.SubmitTransaction(callCtx, *tx)
+	hash, err := s.espresso.SubmitTransaction(callCtx, *tx)
+	s.submitTimeoutWarner.check(ctx, callCtx, err)
+	return hash, err
 }
 
 // Keep diagnostics at the call sites so the evaluation functions stay pure.
@@ -430,6 +471,7 @@ func (s *espressoTransactionSubmitter) confirmReceipt(ctx context.Context, hash 
 		}
 		callCtx, cancel := context.WithTimeout(ctx, s.networkTimeout)
 		_, err := s.espresso.FetchTransactionByHash(callCtx, hash)
+		s.verifyTimeoutWarner.check(ctx, callCtx, err)
 		cancel()
 		<-s.verifySlots
 		if ctx.Err() != nil {
