@@ -23,6 +23,10 @@ const (
 	// Optional Forks - not part of mainline
 	PectraBlobSchedule Name = "pectrablobschedule"
 
+	// Celo: Upgrade 18 (CGT v2) is a one-shot migration trigger for the live Celo networks;
+	// fresh CGT chains start from a v2 genesis and never activate it.
+	Upgrade18 Name = "upgrade18"
+
 	None Name = ""
 )
 
@@ -46,6 +50,7 @@ var All = []Name{
 // AllOpt lists all optional forks in chronological order.
 var AllOpt = []Name{
 	PectraBlobSchedule,
+	Upgrade18,
 	// ADD NEW OPTIONAL FORKS HERE!
 }
 

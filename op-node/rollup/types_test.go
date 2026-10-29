@@ -1,6 +1,7 @@
 package rollup
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -1336,4 +1337,45 @@ func TestConfig_ActivateAtGenesis(t *testing.T) {
 		}
 		require.Zero(t, cfg)
 	})
+}
+
+// TestConfig_Upgrade18 covers the optional Celo Upgrade 18 (CGT v2) migration fork: the IsUpgrade18
+// predicate and the ActivationTime/SetActivationTime wiring (which also backs the
+// --override.upgrade18 CLI flag).
+func TestConfig_Upgrade18(t *testing.T) {
+	cfg := Config{BlockTime: 2}
+
+	// Unset: never active.
+	require.False(t, cfg.IsUpgrade18(^uint64(0)))
+	require.Nil(t, cfg.ActivationTime(forks.Upgrade18))
+
+	ts := uint64(1000)
+	cfg.SetActivationTime(forks.Upgrade18, &ts)
+	require.Equal(t, &ts, cfg.Upgrade18Time)
+	require.Equal(t, &ts, cfg.ActivationTime(forks.Upgrade18))
+	require.False(t, cfg.IsUpgrade18(999))
+	require.True(t, cfg.IsUpgrade18(1000))
+	require.True(t, cfg.IsForkActive(forks.Upgrade18, 1000))
+}
+
+// TestConfig_Upgrade18JSON pins the exact JSON key of Upgrade18Time: celo-kona's
+// `CeloRollupConfig` keys the migration off `upgrade18_time` in the same rollup.json, so the two
+// sides must stay key-identical. ParseRollupConfig rejects unknown fields, which makes this the
+// cross-client contract test — before the field existed, op-node refused a rollup.json
+// carrying it.
+func TestConfig_Upgrade18JSON(t *testing.T) {
+	config := randConfig()
+	ts := uint64(4242)
+	config.Upgrade18Time = &ts
+
+	data, err := json.Marshal(config)
+	require.NoError(t, err)
+
+	var keys map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(data, &keys))
+	require.Contains(t, keys, "upgrade18_time")
+
+	var roundTripped Config
+	require.NoError(t, roundTripped.ParseRollupConfig(bytes.NewReader(data)))
+	require.Equal(t, config, &roundTripped)
 }

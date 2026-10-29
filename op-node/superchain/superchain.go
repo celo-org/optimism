@@ -123,4 +123,5 @@ func applyHardforks(cfg *rollup.Config, hardforks registry.HardforkConfig) {
 	cfg.KeepKarstUpgradeGas = hardforks.KeepKarstUpgradeGas
 	cfg.Cel2Time = hardforks.Cel2Time
 	cfg.EspressoTime = hardforks.EspressoTime
+	cfg.Upgrade18Time = hardforks.Upgrade18Time
 }
