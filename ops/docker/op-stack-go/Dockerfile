@@ -53,7 +53,7 @@ EOF
 RUN forge --version
 
 # We may be cross-building for another platform. Specify which platform we need as builder.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-alpine3.23 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine3.23 AS builder
 
 # Enforce that builds use the committed go.mod/go.sum exactly and never
 # silently mutate them. Fails the build if the lockfile is out of date.
@@ -185,7 +185,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
 
 # Compile contracts in a glibc-based image (solc requires glibc, crashes on Alpine musl).
 # Uses BUILDPLATFORM so it runs natively (no QEMU). Contract artifacts are platform-independent.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm AS op-deployer-contracts
+FROM --platform=$BUILDPLATFORM golang:1.26.10-bookworm AS op-deployer-contracts
 ARG BUILDARCH
 ENV GOFLAGS=-mod=readonly
 RUN apt-get -o Acquire::Retries=8 update && apt-get -o Acquire::Retries=8 install -y --no-install-recommends curl jq git && rm -rf /var/lib/apt/lists/*
@@ -287,18 +287,31 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry --mount=type=cache,targe
   RUSTFLAGS="-C target-cpu=generic" cargo build --locked --bin kona-host --profile release-perf --target "$RUST_TARGET" && \
   cp "/rust/target/$RUST_TARGET/release-perf/kona-host" /kona-host
 
+# celo: the digest pin on TARGET_BASE_IMAGE freezes its CA bundle, so a root CA
+# removal (e.g. eMudhra's emSign ECC Root CA - G3, Oct 2026) never reaches the
+# images. Upgrade the bundle at build time; the Go binaries read it for TLS.
+# The version floor fails the build rather than ship an older bundle, and it
+# changes this layer's cache key; raise it for the next removal.
+# apk runs on BUILDPLATFORM because the release workflow cross-builds arm64
+# without QEMU; the bundle is arch-independent, so only the file is copied over.
+FROM --platform=$BUILDPLATFORM $TARGET_BASE_IMAGE AS ca-bundle
+RUN n=0; until apk add --no-cache --upgrade 'ca-certificates-bundle>=20261020'; do n=$((n+1)); [ "$n" -ge 15 ] && exit 1; echo "apk add retry $n/15 in 20s" >&2; sleep 20; done
+
+FROM $TARGET_BASE_IMAGE AS target-base
+COPY --from=ca-bundle /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+
 FROM dhi.io/alpine-base:3.23 AS cannon-target
 USER 0
 COPY --from=cannon-builder /app/cannon/bin/cannon /usr/local/bin/
 COPY --from=cannon-builder /app/cannon/multicannon/embeds/* /usr/local/bin/
 CMD ["cannon"]
 
-FROM $TARGET_BASE_IMAGE AS op-wheel-target
+FROM target-base AS op-wheel-target
 USER 0
 COPY --from=op-wheel-builder /app/op-wheel/bin/op-wheel /usr/local/bin/
 CMD ["op-wheel"]
 
-FROM $TARGET_BASE_IMAGE AS op-node-target
+FROM target-base AS op-node-target
 USER 0
 COPY --from=op-node-builder /app/op-node/bin/op-node /usr/local/bin/
 CMD ["op-node"]
@@ -322,42 +335,42 @@ ENV OP_CHALLENGER_ASTERISC_KONA_SERVER=/usr/local/bin/kona-host
 ENV OP_CHALLENGER_CANNON_KONA_SERVER=/usr/local/bin/kona-host
 CMD ["op-challenger"]
 
-FROM $TARGET_BASE_IMAGE AS op-dispute-mon-target
+FROM target-base AS op-dispute-mon-target
 USER 0
 COPY --from=op-dispute-mon-builder /app/op-dispute-mon/bin/op-dispute-mon /usr/local/bin/
 CMD ["op-dispute-mon"]
 
-FROM $TARGET_BASE_IMAGE AS op-batcher-target
+FROM target-base AS op-batcher-target
 USER 0
 COPY --from=op-batcher-builder /app/op-batcher/bin/op-batcher /usr/local/bin/
 CMD ["op-batcher"]
 
-FROM $TARGET_BASE_IMAGE AS op-proposer-target
+FROM target-base AS op-proposer-target
 USER 0
 COPY --from=op-proposer-builder /app/op-proposer/bin/op-proposer /usr/local/bin/
 CMD ["op-proposer"]
 
-FROM $TARGET_BASE_IMAGE AS op-conductor-target
+FROM target-base AS op-conductor-target
 USER 0
 COPY --from=op-conductor-builder /app/op-conductor/bin/op-conductor /usr/local/bin/
 CMD ["op-conductor"]
 
-FROM $TARGET_BASE_IMAGE AS da-server-target
+FROM target-base AS da-server-target
 USER 0
 COPY --from=da-server-builder /app/op-alt-da/bin/da-server /usr/local/bin/
 CMD ["da-server"]
 
-FROM $TARGET_BASE_IMAGE AS op-supernode-target
+FROM target-base AS op-supernode-target
 USER 0
 COPY --from=op-supernode-builder /app/op-supernode/bin/op-supernode /usr/local/bin/
 CMD ["op-supernode"]
 
-FROM $TARGET_BASE_IMAGE AS op-interop-filter-target
+FROM target-base AS op-interop-filter-target
 USER 0
 COPY --from=op-interop-filter-builder /app/op-interop-filter/bin/op-interop-filter /usr/local/bin/
 CMD ["op-interop-filter"]
 
-FROM $TARGET_BASE_IMAGE AS op-test-sequencer-target
+FROM target-base AS op-test-sequencer-target
 USER 0
 COPY --from=op-test-sequencer-builder /app/op-test-sequencer/bin/op-test-sequencer /usr/local/bin/
 CMD ["op-test-sequencer"]
@@ -369,17 +382,17 @@ COPY --from=op-deployer-builder /app/op-deployer/bin/op-deployer /usr/local/bin/
 ENV FORGE_ENV=alpine
 CMD ["op-deployer"]
 
-FROM $TARGET_BASE_IMAGE AS op-dripper-target
+FROM target-base AS op-dripper-target
 USER 0
 COPY --from=op-dripper-builder /app/op-dripper/bin/op-dripper /usr/local/bin/
 CMD ["op-dripper"]
 
-FROM $TARGET_BASE_IMAGE AS op-faucet-target
+FROM target-base AS op-faucet-target
 USER 0
 COPY --from=op-faucet-builder /app/op-faucet/bin/op-faucet /usr/local/bin/
 CMD ["op-faucet"]
 
-FROM $TARGET_BASE_IMAGE AS op-interop-mon-target
+FROM target-base AS op-interop-mon-target
 USER 0
 COPY --from=op-interop-mon-builder /app/op-interop-mon/bin/op-interop-mon /usr/local/bin/
 CMD ["op-interop-mon"]
