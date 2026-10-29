@@ -7,6 +7,7 @@ import { console2 as console } from "forge-std/console2.sol";
 import { IMulticall3 } from "forge-std/interfaces/IMulticall3.sol";
 
 // Contracts
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { PortalMigrator } from "src/celo/PortalMigrator.sol";
 
 // Libraries
@@ -176,7 +177,10 @@ contract MigrateV1V2 is Script {
         );
         require(address(bridge.systemConfig()) == _input.systemConfig, "MigrateV1V2: bridge systemConfig not wired");
         require(address(bridge.messenger()) != address(0), "MigrateV1V2: bridge messenger not wired");
-        require(address(bridge.otherBridge()) != address(0), "MigrateV1V2: bridge otherBridge not wired");
+        require(
+            address(bridge.otherBridge()) == CeloPredeploys.CELO_GAS_BRIDGE_L2,
+            "MigrateV1V2: bridge otherBridge != CeloGasBridgeL2 predeploy"
+        );
         require(!bridge.escrowSeeded(), "MigrateV1V2: bridge escrow already seeded");
         console.log("OK  CeloGasBridgeL1 initialized, wired, and not yet seeded");
 
