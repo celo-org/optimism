@@ -424,3 +424,7 @@ lint: lint-fix lint-check
 # Generates a table of contents for the POLICY.md file.
 toc:
   md_toc -p github meta/POLICY.md
+
+# Generate CGTv2 upgrade calldata from pinned L2 getters or verify the frozen settings.
+cgtv2-bundle *ARGS:
+  python3 scripts/cgt/cgtv2_bundle.py {{ARGS}}

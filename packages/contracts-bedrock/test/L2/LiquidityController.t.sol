@@ -243,7 +243,7 @@ contract LiquidityController_Burn_Test is LiquidityController_TestInit {
     /// @notice Tests that the burn function reverts when called by unauthorized address.
     function testFuzz_burn_fromUnauthorizedCaller_fails(address _caller, uint256 _amount, address _minter) public {
         _authorizeMinter(_minter);
-        vm.assume(_caller != _minter);
+        vm.assume(!liquidityController.minters(_caller));
         _amount = bound(_amount, 0, address(nativeAssetLiquidity).balance);
 
         // Deal the unauthorized caller with the amount to burn

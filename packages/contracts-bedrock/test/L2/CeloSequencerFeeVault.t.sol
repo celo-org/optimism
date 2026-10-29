@@ -13,6 +13,7 @@ import { ICeloSequencerFeeVault } from "interfaces/L2/ICeloSequencerFeeVault.sol
 // Libraries
 import { Hashing } from "src/libraries/Hashing.sol";
 import { Types } from "src/libraries/Types.sol";
+import { Features } from "src/libraries/Features.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 
@@ -44,8 +45,8 @@ contract CeloSequencerFeeVault_Constructor_Test is CeloSequencerFeeVault_TestIni
         assertEq(sequencerFeeVault.recipient(), recipient);
         assertEq(sequencerFeeVault.MIN_WITHDRAWAL_AMOUNT(), deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount());
         assertEq(sequencerFeeVault.minWithdrawalAmount(), deploy.cfg().sequencerFeeVaultMinimumWithdrawalAmount());
-        assertEq(uint8(sequencerFeeVault.WITHDRAWAL_NETWORK()), uint8(Types.WithdrawalNetwork.L1));
-        assertEq(uint8(sequencerFeeVault.withdrawalNetwork()), uint8(Types.WithdrawalNetwork.L1));
+        assertEq(uint8(sequencerFeeVault.WITHDRAWAL_NETWORK()), deploy.cfg().sequencerFeeVaultWithdrawalNetwork());
+        assertEq(uint8(sequencerFeeVault.withdrawalNetwork()), deploy.cfg().sequencerFeeVaultWithdrawalNetwork());
     }
 }
 
@@ -84,6 +85,7 @@ contract CeloSequencerFeeVault_Withdraw_Test is CeloSequencerFeeVault_TestInit {
 
     /// @notice Tests that `withdraw` successfully initiates a withdrawal to L1.
     function test_withdraw_toL1_succeeds() external {
+        skipIfSysFeatureEnabled(Features.CUSTOM_GAS_TOKEN);
         uint256 amount = sequencerFeeVault.MIN_WITHDRAWAL_AMOUNT() + 1;
         vm.deal(address(sequencerFeeVault), amount);
 
