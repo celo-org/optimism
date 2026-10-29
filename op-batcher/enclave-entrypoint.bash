@@ -170,7 +170,7 @@ else
 fi
 
 # Batcher flags whose values are URLs
-URL_ARG_RE='^(--altda\.da-server|--espresso\.espresso-attestation-service|--espresso\.urls|--espresso\.l1-url|--l1-eth-rpc|--l2-eth-rpc|--rollup-rpc|--signer\.endpoint|--throttle\.additional-endpoints)(=|$)'
+URL_ARG_RE='^(--altda\.da-server|--espresso\.espresso-attestation-service|--espresso\.query-service-url|--espresso\.l1-url|--l1-eth-rpc|--l2-eth-rpc|--rollup-rpc|--signer\.endpoint|--throttle\.additional-endpoints)(=|$)'
 # Process all arguments
 filtered_args=()
 url_args=()
@@ -190,8 +190,8 @@ while [ $# -gt 0 ]; do
             value="$1"
         fi
 
-        # Handle comma-separated values for any flag
-        if [[ "$value" == *","* ]]; then
+        # The Espresso query service takes one URL; other endpoint flags may take lists.
+        if [[ "$flag" != "--espresso.query-service-url" && "$value" == *","* ]]; then
             IFS=',' read -r -a parts <<< "$value"
             rewritten_parts=()
             for part in "${parts[@]}"; do
