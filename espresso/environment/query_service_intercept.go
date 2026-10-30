@@ -430,14 +430,14 @@ func createEspressoProxyOption(ctx *E2eDevnetLauncherContext, proxy *EspressoDev
 			return
 		}
 
-		if len(cfg.Espresso.QueryServiceURLs) == 0 {
+		if cfg.Espresso.QueryServiceURL == "" {
 			// This should be being called after the Espresso
 			// Dev Node is Already Live.
 			// Without an Espresso URL, we cannot proceed.
 			return
 		}
 
-		u, err := url.Parse(cfg.Espresso.QueryServiceURLs[0])
+		u, err := url.Parse(cfg.Espresso.QueryServiceURL)
 		if err != nil || u == nil {
 			// We encountered an error
 			ctx.Error = err
@@ -447,8 +447,7 @@ func createEspressoProxyOption(ctx *E2eDevnetLauncherContext, proxy *EspressoDev
 		// Set the proxy
 		proxy.u = *u
 		// Replace the Espresso URL with the proxy URL
-		// We need to provide at least 2 URLs to create a valid multiple nodes client
-		cfg.Espresso.QueryServiceURLs = []string{server.URL, server.URL}
+		cfg.Espresso.QueryServiceURL = server.URL
 	}
 }
 
