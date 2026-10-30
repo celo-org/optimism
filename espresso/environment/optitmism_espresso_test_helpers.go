@@ -415,33 +415,6 @@ func GetBatcherConfig(c *batcher.CLIConfig) E2eDevnetLauncherOption {
 	}
 }
 
-// SetEspressoUrls allows to set the list of urls for the Espresso client in such a way that N of them are "good" and M of them are "bad".
-// Good urls are the urls defined by this test framework repeated M times. The bad url is provided to the function
-// This function is introduced for testing purposes. It allows to check the enforcement of the majority rule (Test 12)
-func SetEspressoUrls(numGood int, numBad int, badServerUrl string) E2eDevnetLauncherOption {
-	return func(ct *E2eDevnetLauncherContext) E2eSystemOption {
-		return E2eSystemOption{
-			StartOptions: []e2esys.StartOption{
-				{
-					BatcherMod: func(c *batcher.CLIConfig, sys *e2esys.System) {
-						goodUrl := c.Espresso.QueryServiceURLs[0]
-						var urls []string
-
-						for i := 0; i < numGood; i++ {
-							urls = append(urls, goodUrl)
-						}
-
-						for i := 0; i < numBad; i++ {
-							urls = append(urls, badServerUrl)
-						}
-						c.Espresso.QueryServiceURLs = urls
-					},
-				},
-			},
-		}
-	}
-}
-
 // SystemConfigOptionDisableBatcher is a SystemConfigOption that disables
 // the Batcher.
 //
@@ -490,7 +463,7 @@ func launchEspressoDevNodeStartOption(ct *E2eDevnetLauncherContext) e2esys.Start
 
 			// The in-memory mock Espresso client is created and injected into the
 			// batchers by e2esys.SystemConfig.Start (sys.EspressoClient). Here we only
-			// finish configuring the Espresso CLI config; the QueryServiceURLs placeholder
+			// finish configuring the Espresso CLI config; the QueryServiceURL placeholder
 			// is set by e2esys and is never dialed because the mock client overrides it.
 			c.Espresso.Enabled = true
 			c.LogConfig.Level = slog.LevelDebug

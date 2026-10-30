@@ -1065,12 +1065,11 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 	// Espresso e2e systems use an in-memory mock Espresso client (shared across all
 	// batchers and the tests) in place of a real espresso-dev-node. The mock is
 	// injected into the batcher via WithEspressoClientOverride; the placeholder query
-	// service URLs only satisfy the SDK client's ">=2 URLs" validation and are never
-	// dialed.
+	// service URL only satisfies the CLI config validation and is never dialed.
 	var espressoOverrideOpts []bss.DriverSetupOption
 	if cfg.AllocType.IsEspresso() {
 		sys.EspressoClient = espresso.NewMockEspressoClient(250 * time.Millisecond)
-		espressoCfg.QueryServiceURLs = []string{"http://espresso-mock.invalid", "http://espresso-mock.invalid"}
+		espressoCfg.QueryServiceURL = "http://espresso-mock.invalid"
 		espressoOverrideOpts = append(espressoOverrideOpts, bss.WithEspressoClientOverride(sys.EspressoClient))
 	}
 
