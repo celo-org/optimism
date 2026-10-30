@@ -22,14 +22,15 @@ import (
 // TestE2eDevnetWithoutAuthenticatingBatches verifies that batches posted without
 // a corresponding BatchInfoAuthenticated event are rejected by the derivation pipeline.
 //
-// The batcher's BatchAuthenticatorAddress is zeroed out so it skips the
-// authenticateBatchInfo call. Batches land on L1 (BatchInbox is an EOA, so txs
-// succeed), but the derivation pipeline finds no matching auth event and ignores them.
+// The batcher's transaction manager redirects its authenticateBatchInfo calls to
+// the zero address, so they succeed without emitting BatchInfoAuthenticated.
+// Batches land on L1 (BatchInbox is an EOA, so txs succeed), but the derivation
+// pipeline finds no matching auth event and ignores them.
 //
 // Arrange:
 //
 //	Start sequencer, batcher in Espresso mode and OP node.
-//	Zero out the batcher's BatchAuthenticatorAddress so it skips authentication.
+//	Redirect the batcher's authenticateBatchInfo calls to the zero address.
 //
 // Assert:
 //
@@ -65,20 +66,20 @@ func TestE2eDevnetWithoutAuthenticatingBatches(t *testing.T) {
 	}
 	txMgr, err := txmgr.NewSimpleTxManagerFromConfig("always-sending", log.Root(), &metrics.NoopTxMetrics{}, txMgrConfig)
 	require.NoError(t, err)
-	batchDriver.Txmgr = txMgr
+	// The batcher binds the BatchAuthenticator once, at construction, and keeps
+	// using the real contract for its startup and publish-gate reads. Redirect
+	// only its authenticateBatchInfo transactions to the zero-address EOA: they
+	// succeed but emit no BatchInfoAuthenticated event, so the batch txs land on
+	// the BatchInbox unauthenticated, which is the scenario under test.
+	batchDriver.Txmgr = RedirectingTxManager{
+		TxManager: txMgr,
+		from:      system.RollupConfig.BatchAuthenticatorAddress,
+		to:        common.Address{},
+	}
 
 	// Start the batcher
 	err = batchDriver.StartBatchSubmitting()
 	require.NoError(t, err, "Couldn't start batcher")
-
-	// Zero out the BatchAuthenticator address only now: StartBatchSubmitting
-	// constructs the Espresso streamer, which requires the real contract to
-	// validate the batches it reads back from Espresso. Zeroing the address
-	// after startup makes the publish path send its authenticateBatchInfo call
-	// to the zero-address EOA instead — the tx succeeds but emits no
-	// BatchInfoAuthenticated event, so the batch txs land on the BatchInbox
-	// unauthenticated, which is the scenario under test.
-	batchDriver.RollupConfig.BatchAuthenticatorAddress = common.Address{}
 
 	l1Client := system.NodeClient(e2esys.RoleL1)
 
@@ -189,3 +190,33 @@ func (m AlwaysSendingETHBackend) BlobBaseFee(ctx context.Context) (*big.Int, err
 
 // Ensure conformance to ETHBackend
 var _ txmgr.ETHBackend = AlwaysSendingETHBackend{}
+
+// RedirectingTxManager wraps a TxManager and sends every transaction addressed
+// to from to the address to instead. All other transactions pass through
+// unchanged.
+type RedirectingTxManager struct {
+	txmgr.TxManager
+	from common.Address
+	to   common.Address
+}
+
+func (m RedirectingTxManager) redirect(candidate txmgr.TxCandidate) txmgr.TxCandidate {
+	if candidate.To != nil && *candidate.To == m.from {
+		to := m.to
+		candidate.To = &to
+	}
+	return candidate
+}
+
+// Send implements txmgr.TxManager.
+func (m RedirectingTxManager) Send(ctx context.Context, candidate txmgr.TxCandidate) (*types.Receipt, error) {
+	return m.TxManager.Send(ctx, m.redirect(candidate))
+}
+
+// SendAsync implements txmgr.TxManager.
+func (m RedirectingTxManager) SendAsync(ctx context.Context, candidate txmgr.TxCandidate, ch chan txmgr.SendResponse) {
+	m.TxManager.SendAsync(ctx, m.redirect(candidate), ch)
+}
+
+// Ensure conformance to TxManager
+var _ txmgr.TxManager = RedirectingTxManager{}
