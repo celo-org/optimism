@@ -218,5 +218,11 @@ func (m RedirectingTxManager) SendAsync(ctx context.Context, candidate txmgr.TxC
 	m.TxManager.SendAsync(ctx, m.redirect(candidate), ch)
 }
 
+// SendPairAsync implements txmgr.TxManager. The batcher submits each
+// authenticateBatchInfo call and its batch tx as a pair.
+func (m RedirectingTxManager) SendPairAsync(ctx context.Context, first, second txmgr.TxCandidate, firstCh, secondCh chan txmgr.SendResponse) {
+	m.TxManager.SendPairAsync(ctx, m.redirect(first), m.redirect(second), firstCh, secondCh)
+}
+
 // Ensure conformance to TxManager
 var _ txmgr.TxManager = RedirectingTxManager{}
