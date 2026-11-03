@@ -68,6 +68,7 @@ for name in artifacts:
     metadata = artifact['metadata']
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
+    assert artifact['bytecode']['object'] == bundle['transactions'][artifacts.index(name)]['data'], name
     builds[name] = {'compiler': metadata['compiler'], 'settings': metadata['settings']}
 # Drop retired generated steps before freezing the manifest.
 for path in OUT.glob('cgtv2-[0-9][0-9].rlp'):
@@ -77,7 +78,8 @@ files = sorted(p for p in OUT.glob('cgtv2*') if p.name != 'cgtv2-provenance.json
 provenance = {
     'fixtureOnly': True, 'chainId': 1337,
     'sourceCommit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-    'contractBase': '0296412d673a666af6236efa1f615032b1f1c424',
+    'contractBase': subprocess.check_output(
+        ['git', 'merge-base', 'HEAD', 'origin/celo-contracts/v6.0.0'], text=True).strip(),
     'upgradeMethod': 'direct v6 Proxy upgrade deposits; no Karst backports',
     'forgeVersion': subprocess.check_output(['forge', '--version'], text=True).strip(),
     'generation': ['forge script --offline scripts/cgt/GenerateCgtV2NUTBundle.s.sol --sig runFixture()',
@@ -86,7 +88,7 @@ provenance = {
     'fundingGasLimit': funding['gasLimit'],
     'sha256': {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
     'builds': builds,
-    'unresolved': ['production reserved bridge address', 'production network configuration',
+    'unresolved': ['production network configuration',
                    'production legacy vault and gas-token settings', 'production prestate and deployer nonce checks',
                    'production gas limits'],
 }

@@ -13,7 +13,7 @@ import urllib.request
 
 ROOT = Path(__file__).resolve().parents[2]
 VAULT = "0x4200000000000000000000000000000000000011"
-ADDRESSES = ("bridgeProxy", "l1Bridge", "l1Token", "owner")
+ADDRESSES = ("l1Bridge", "l1Token", "owner")
 METADATA = ("gasPayingTokenName", "gasPayingTokenSymbol")
 GETTERS = {
     "vaultRecipient": (VAULT, "RECIPIENT()", "address"),
@@ -60,7 +60,7 @@ class Rpc:
 
 def deployment_config(data):
     if set(data) != {"chainId", *ADDRESSES, *METADATA}:
-        raise BundleError("config must contain chainId, bridgeProxy, l1Bridge, l1Token, owner, gasPayingTokenName and gasPayingTokenSymbol only")
+        raise BundleError("config must contain chainId, l1Bridge, l1Token, owner, gasPayingTokenName and gasPayingTokenSymbol only")
     if type(data["chainId"]) is not int or data["chainId"] <= 0:
         raise BundleError("invalid chainId")
     for key in ADDRESSES:

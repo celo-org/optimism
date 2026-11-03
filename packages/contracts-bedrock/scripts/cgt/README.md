@@ -6,12 +6,11 @@ Use an L2 RPC that supports historical `eth_call` with an EIP-1898 block selecto
 
 ## Generate
 
-Create a JSON file containing the expected L2 chain ID, the four finalized deployment addresses, and the intended token name and symbol. Do not include vault settings; the tool obtains those from the legacy vault. Token metadata is required explicitly because the legacy Celo L1Block getters return Ether/ETH rather than the intended Celo/CELO metadata.
+Create a JSON file containing the expected L2 chain ID, the three finalized deployment addresses, and the intended token name and symbol. Do not include vault settings; the tool obtains those from the legacy vault. Token metadata is required explicitly because the legacy Celo L1Block getters return Ether/ETH rather than the intended Celo/CELO metadata.
 
 ```json
 {
   "chainId": 42220,
-  "bridgeProxy": "<reserved L2 bridge proxy>",
   "l1Bridge": "<L1 gas bridge>",
   "l1Token": "<L1 CELO token>",
   "owner": "<controller governance owner>",
@@ -19,6 +18,8 @@ Create a JSON file containing the expected L2 chain ID, the four finalized deplo
   "gasPayingTokenSymbol": "CELO"
 }
 ```
+
+The L2 bridge address is fixed to `CeloPredeploys.CELO_GAS_BRIDGE_L2` (`0x42000000000000000000000000000000000007ef`), matching the L1 migration contracts. It is not a deployment-config input.
 
 From `packages/contracts-bedrock`, run:
 

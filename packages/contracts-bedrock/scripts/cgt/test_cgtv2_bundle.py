@@ -15,7 +15,7 @@ BLOCK = "0x" + "11" * 32
 NEXT_BLOCK = "0x" + "22" * 32
 VAULT = "0x4200000000000000000000000000000000000011"
 L1_BLOCK = "0x4200000000000000000000000000000000000015"
-DEPLOYMENT = {"chainId": 1337, "bridgeProxy": "0x42000000000000000000000000000000000007fe",
+DEPLOYMENT = {"chainId": 1337,
               "l1Bridge": "0x00000000000000000000000000000000000000cc",
               "l1Token": "0x00000000000000000000000000000000000000bb",
               "owner": "0x00000000000000000000000000000000000000aa",
@@ -131,6 +131,17 @@ class BundleWorkflowTests(unittest.TestCase):
         return self.command("verify", "--rpc-url", self.rpc, "--block-hash", block,
                             "--bundle", str(bundle or original),
                             "--snapshot", str(original.with_suffix(".snapshot.json")))
+
+    def test_generate_rejects_bridge_proxy_override(self):
+        config = self.directory / "bridge-override.json"
+        config.write_text(json.dumps(DEPLOYMENT | {
+            "bridgeProxy": "0x42000000000000000000000000000000000007fe"
+        }))
+        result = self.command("generate", "--rpc-url", self.rpc, "--config", str(config),
+                              "--output", str(self.directory / "override.json"))
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("config must contain", result.stderr)
+        self.assertEqual(self.calls, [])
 
     def test_generate_uses_configured_metadata_not_legacy_l1block(self):
         self.values.update({"0xd8444715": string_result("Ether"),

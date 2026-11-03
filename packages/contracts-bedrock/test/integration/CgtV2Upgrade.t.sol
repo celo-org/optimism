@@ -11,6 +11,7 @@ import {
 import { GenerateCgtV2NUTBundle } from "scripts/cgt/GenerateCgtV2NUTBundle.s.sol";
 import { Proxy } from "src/universal/Proxy.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { Types } from "src/libraries/Types.sol";
 import { IL1Block } from "interfaces/L2/IL1Block.sol";
 import { INativeAssetLiquidity } from "interfaces/L2/INativeAssetLiquidity.sol";
@@ -20,7 +21,7 @@ import { ICeloGasBridgeL2 } from "interfaces/celo/ICeloGasBridgeL2.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 
 contract CgtV2Upgrade_Upgrade_Test is Test {
-    address internal constant BRIDGE = 0x42000000000000000000000000000000000007fE;
+    address internal immutable BRIDGE = CeloPredeploys.CELO_GAS_BRIDGE_L2;
     bytes32 internal constant ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
     bytes32 internal constant IMPL_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
     bytes32 internal constant INITIALIZABLE_SLOT = 0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00;
@@ -60,7 +61,6 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
 
     function _config() internal pure returns (GenerateCgtV2NUTBundle.NetworkConfig memory) {
         return GenerateCgtV2NUTBundle.NetworkConfig({
-            bridgeProxy: BRIDGE,
             l1Bridge: L1_BRIDGE,
             l1Token: L1_TOKEN,
             owner: OWNER,
@@ -193,6 +193,7 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         assertEq(vm.parseJsonString(json, ".transactions[14].intent"), "CGTv2 flag enable");
         assertFalse(vm.keyExistsJson(json, ".transactions[15]"));
         assertEq(vm.parseJsonAddress(json, ".transactions[9].to"), Predeploys.LIQUIDITY_CONTROLLER);
+        assertEq(vm.parseJsonAddress(json, ".transactions[10].to"), CeloPredeploys.CELO_GAS_BRIDGE_L2);
         assertEq(vm.parseJsonBytes(json, ".transactions[9].data"), generator.transactions(_config())[9].data);
         assertEq(vm.parseJsonBytes(json, ".transactions[10].data"), generator.transactions(_config())[10].data);
         assertEq(vm.parseJsonBytes(json, ".transactions[11].data"), generator.transactions(_config())[11].data);
@@ -200,13 +201,11 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
     }
 
     function test_runProduction_invalidConfig_reverts() external {
-        for (uint256 i; i < 5; i++) {
+        for (uint256 i; i < 3; i++) {
             GenerateCgtV2NUTBundle.NetworkConfig memory config = _config();
-            if (i == 0) config.bridgeProxy = address(0);
-            if (i == 1) config.l1Bridge = address(0);
-            if (i == 2) config.l1Token = address(0);
-            if (i == 3) config.owner = address(0);
-            if (i == 4) config.bridgeProxy = Predeploys.L1_BLOCK_ATTRIBUTES;
+            if (i == 0) config.l1Bridge = address(0);
+            if (i == 1) config.l1Token = address(0);
+            if (i == 2) config.owner = address(0);
             vm.expectRevert("GenerateCgtV2NUTBundle: invalid configuration");
             generator.runProduction(config, ".testdata/cgtv2-invalid-entrypoint.json");
         }

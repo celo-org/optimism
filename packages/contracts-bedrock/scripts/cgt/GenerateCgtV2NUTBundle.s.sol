@@ -4,6 +4,7 @@ pragma solidity 0.8.15;
 import { Script } from "forge-std/Script.sol";
 import { LegacyCeloVaultFixture, LegacyCeloL1BlockFixture } from "test/fixtures/cgtv2/LegacyPredeploys.sol";
 import { Predeploys } from "src/libraries/Predeploys.sol";
+import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { Constants } from "src/libraries/Constants.sol";
 import { IProxy } from "interfaces/universal/IProxy.sol";
 import { Types } from "src/libraries/Types.sol";
@@ -18,7 +19,6 @@ import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
 /// @dev Does not broadcast. runFixture() uses synthetic configuration, never a production allocation.
 contract GenerateCgtV2NUTBundle is Script {
     struct NetworkConfig {
-        address bridgeProxy;
         address l1Bridge;
         address l1Token;
         address owner;
@@ -63,7 +63,7 @@ contract GenerateCgtV2NUTBundle is Script {
         );
         txs_[10] = _upgrade(
             "CeloGasBridgeL2 upgrade and initialize",
-            _config.bridgeProxy,
+            CeloPredeploys.CELO_GAS_BRIDGE_L2,
             _created(txs_[4]),
             abi.encodeCall(ICeloGasBridgeL2.initialize, (IStandardBridge(payable(_config.l1Bridge)), _config.l1Token))
         );
@@ -80,7 +80,7 @@ contract GenerateCgtV2NUTBundle is Script {
             "CeloGasBridgeL2 minter authorization",
             Constants.DEPOSITOR_ACCOUNT,
             Predeploys.LIQUIDITY_CONTROLLER,
-            abi.encodeCall(ILiquidityController.authorizeMinter, (_config.bridgeProxy))
+            abi.encodeCall(ILiquidityController.authorizeMinter, (CeloPredeploys.CELO_GAS_BRIDGE_L2))
         );
         txs_[13] = _call(
             "LiquidityController ownership transfer",
@@ -128,9 +128,7 @@ contract GenerateCgtV2NUTBundle is Script {
 
     function _validateConfig(NetworkConfig memory _config) internal pure {
         require(
-            Predeploys.isPredeployNamespace(_config.bridgeProxy) && !Predeploys.notProxied(_config.bridgeProxy)
-                && !Predeploys.isSupportedPredeploy(_config.bridgeProxy, type(uint256).max, true, true)
-                && _config.l1Bridge != address(0) && _config.l1Token != address(0) && _config.owner != address(0),
+            _config.l1Bridge != address(0) && _config.l1Token != address(0) && _config.owner != address(0),
             "GenerateCgtV2NUTBundle: invalid configuration"
         );
     }
@@ -155,7 +153,6 @@ contract GenerateCgtV2NUTBundle is Script {
     /// @notice Writes a reproducible synthetic-network bundle. All mint/value fields are implicit zero.
     function runFixture() external {
         NetworkConfig memory config = NetworkConfig({
-            bridgeProxy: 0x42000000000000000000000000000000000007fE,
             l1Bridge: address(0xcc),
             l1Token: address(0xbb),
             owner: address(0xaa),
@@ -184,7 +181,6 @@ contract GenerateCgtV2NUTBundle is Script {
     function runProductionFromJson(string memory _configPath, string memory _outputPath) external {
         string memory json = vm.readFile(_configPath);
         NetworkConfig memory config = NetworkConfig({
-            bridgeProxy: vm.parseJsonAddress(json, ".bridgeProxy"),
             l1Bridge: vm.parseJsonAddress(json, ".l1Bridge"),
             l1Token: vm.parseJsonAddress(json, ".l1Token"),
             owner: vm.parseJsonAddress(json, ".owner"),
@@ -253,7 +249,7 @@ contract GenerateCgtV2NUTBundle is Script {
             Predeploys.NATIVE_ASSET_LIQUIDITY,
             Predeploys.LIQUIDITY_CONTROLLER,
             Predeploys.SEQUENCER_FEE_WALLET,
-            _config.bridgeProxy
+            CeloPredeploys.CELO_GAS_BRIDGE_L2
         ];
         string memory json = "{";
         for (uint256 i; i < proxies.length; i++) {
