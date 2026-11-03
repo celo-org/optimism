@@ -321,6 +321,8 @@ func GenesisL2(l2Host *script.Host, cfg *L2Config, deployment *L2Deployment, mul
 		L1CrossDomainMessengerProxy:              deployment.L1CrossDomainMessengerProxy,
 		L1StandardBridgeProxy:                    deployment.L1StandardBridgeProxy,
 		L1ERC721BridgeProxy:                      deployment.L1ERC721BridgeProxy,
+		CeloGasBridgeL1Proxy:                     common.Address{},
+		CeloTokenL1:                              common.Address{},
 		OpChainProxyAdminOwner:                   cfg.ProxyAdminOwner,
 		SequencerFeeVaultRecipient:               cfg.SequencerFeeVaultRecipient,
 		SequencerFeeVaultMinimumWithdrawalAmount: cfg.SequencerFeeVaultMinimumWithdrawalAmount.ToInt(),

@@ -71,9 +71,6 @@ parameters:
   github-event-base64:
     type: string
     default: "__not_set__"
-  devnet-metrics-collect:
-    type: boolean
-    default: false
   flake-shake-dispatch:
     type: boolean
     default: false
@@ -99,6 +96,38 @@ orbs:
   github-cli: circleci/github-cli@2.7.0
 
 commands:
+  checkout-with-mise:
+    description: "Checkout and install the mise version required by this repository"
+    parameters:
+      checkout-method:
+        type: enum
+        enum: [blobless, full]
+        default: full
+    steps:
+      - checkout:
+          method: << parameters.checkout-method >>
+      - run:
+          name: Select pinned mise version
+          command: |
+            mise_version=$(sed -n 's/^min_version = "\([^"]*\)"$/\1/p' mise.toml)
+            test -n "$mise_version"
+            printf 'export MISE_VERSION=v%s\n' "$mise_version" >> "$BASH_ENV"
+      - utils/install-mise
+      - run:
+          name: Verify mise and contract tools
+          command: |
+            : "${MISE_VERSION:?Pinned mise version is missing}"
+            installed_mise_version=$(mise --version)
+            case "$installed_mise_version" in
+              "${MISE_VERSION#v} "*) ;;
+              *)
+                printf 'Expected mise %s, got %s\n' "$MISE_VERSION" "$installed_mise_version" >&2
+                exit 1
+                ;;
+            esac
+            forge --version
+            svm --version
+
   gcp-oidc-authenticate:
     description: "Authenticate with GCP using a CircleCI OIDC token."
     parameters:
@@ -382,7 +411,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker:
           docker_layer_caching: true
@@ -503,7 +532,7 @@ jobs:
         type: boolean
         default: false
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -555,7 +584,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Check `RISCV.sol` bytecode
@@ -605,7 +634,7 @@ jobs:
         type: string
         default: ci
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-zstd
       - install-contracts-dependencies
@@ -641,7 +670,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - attach_workspace:
           at: .
       - install-contracts-dependencies
@@ -703,7 +732,7 @@ jobs:
       resource_class: "<<parameters.resource_class>>"
       docker_layer_caching: true # we rely on this for faster builds, and actively warm it up for builds with common stages
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -931,7 +960,7 @@ jobs:
         type: string
         default: ""
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: full
       - install-zstd
       - run:
@@ -995,7 +1024,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: celo-org/2xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: full
       - install-contracts-dependencies
       - install-zstd
@@ -1044,7 +1073,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: medium
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Check Python version
@@ -1103,7 +1132,7 @@ jobs:
         type: string
         default: ""
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: full
       - install-contracts-dependencies
       - install-zstd
@@ -1198,7 +1227,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: celo-org/2xlarge
     steps:
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - install-contracts-dependencies
       - install-zstd
       - attach_workspace:
@@ -1275,7 +1304,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - install-contracts-dependencies
       - attach_workspace:
           at: .
@@ -1322,7 +1351,7 @@ jobs:
     machine:
       image: <<pipeline.parameters.base_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Install ripgrep
@@ -1348,7 +1377,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - check-changed:
           patterns: "<<parameters.package_name>>"
@@ -1380,7 +1409,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           key: golangci-v1-{{ checksum ".golangci.yaml" }}
@@ -1425,11 +1454,10 @@ jobs:
         default: 1
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
-    circleci_ip_ranges: true
+    resource_class: celo-org/2xlarge
     parallelism: <<parameters.parallelism>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1504,7 +1532,7 @@ jobs:
     machine: true
     resource_class: <<parameters.resource_class>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1568,7 +1596,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     circleci_ip_ranges: true
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       # Restore cached Go modules
       - restore_cache:
@@ -1663,10 +1691,9 @@ jobs:
         default: 30m
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    circleci_ip_ranges: true
-    resource_class: 2xlarge+
+    resource_class: celo-org/2xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1760,7 +1787,7 @@ jobs:
     resource_class: xlarge
     parallelism: << pipeline.parameters.flake-shake-workers >>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           keys:
@@ -1807,7 +1834,7 @@ jobs:
       image: ubuntu-2404:current
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1858,7 +1885,7 @@ jobs:
       image: ubuntu-2404:current
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Lint/Vet/Build op-acceptance-tests/cmd
@@ -1937,7 +1964,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Install tools
@@ -1960,7 +1987,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           name: Restore cannon prestate cache
@@ -1988,7 +2015,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker
       - run:
@@ -2004,7 +2031,7 @@ jobs:
     machine:
       docker_layer_caching: true # we rely on this for faster builds, and actively warm it up for builds with common stages
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           name: Restore kona cache
@@ -2027,7 +2054,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           name: Restore kona host cache
@@ -2056,7 +2083,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: "."
@@ -2117,7 +2144,7 @@ jobs:
     machine: true
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Verify reproducibility
@@ -2132,7 +2159,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker
       - run:
@@ -2146,14 +2173,13 @@ jobs:
 
   semgrep-scan:
     parameters:
-      diff_branch:
-        type: string
-        default: develop
+      diff_aware:
+        type: boolean
+        default: true
       scan_command:
         type: string
         default: semgrep ci --timeout=100
     environment:
-      TEMPORARY_BASELINE_REF: << parameters.diff_branch >>
       SEMGREP_REPO_URL: << pipeline.project.git_url >>
       SEMGREP_BRANCH: << pipeline.git.branch >>
       SEMGREP_COMMIT: << pipeline.git.revision >>
@@ -2162,16 +2188,15 @@ jobs:
     resource_class: xlarge
     steps:
       - checkout # no need to use mise here since the docker image contains the only dependency
-      - unless:
-          condition:
-            equal: ["develop", << pipeline.git.branch >>]
+      - when:
+          condition: << parameters.diff_aware >>
           steps:
             - run:
-                # Scan changed files in PRs, block on new issues only (existing issues ignored)
-                # Do a full scan when scanning develop, otherwise do an incremental scan.
-                name: "Conditionally set BASELINE env var"
-                command: |
-                  echo 'export SEMGREP_BASELINE_REF=${TEMPORARY_BASELINE_REF}' >> $BASH_ENV
+                name: Test Semgrep baseline selection
+                command: python3 -m unittest discover -s .circleci -p 'test_semgrep_baseline.py'
+            - run:
+                name: Resolve Semgrep baseline from the PR base
+                command: python3 .circleci/semgrep_baseline.py
       - run:
           name: "Set environment variables" # for PR comments and in-app hyperlinks to findings
           command: |
@@ -2200,7 +2225,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker
       - run:
@@ -2214,7 +2239,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Verify Compatibility
@@ -2227,7 +2252,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - check-changed:
           patterns: op-node
@@ -2240,7 +2265,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - check-changed:
           patterns: op-service
@@ -2252,7 +2277,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           command: just check-forge-version
@@ -2263,7 +2288,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-contracts-dependencies
       - check-changed:
@@ -2302,7 +2327,7 @@ jobs:
           oidc_token_file_path: /tmp/oidc_token.json
           project_id: GCP_TOOLS_ARTIFACTS_PROJECT_ID
           service_account_email: GCP_CONTRACTS_PUBLISHER_SERVICE_ACCOUNT_EMAIL
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-contracts-dependencies
       - install-zstd
@@ -2340,7 +2365,7 @@ jobs:
       - gcp-oidc-authenticate:
           gcp_cred_config_file_path: /tmp/gcp_cred_config.json
           oidc_token_file_path: /tmp/oidc_token.json
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - attach_workspace: { at: "." }
       - run:
           name: Configure Docker
@@ -2356,7 +2381,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: medium
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-contracts-dependencies
       - run:
@@ -2417,35 +2442,11 @@ jobs:
             MESSAGE: << parameters.message >>
             LABEL_NAME: << parameters.label_name >>
 
-  devnet-metrics-collect-authorship:
-    docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    steps:
-      - utils/checkout-with-mise:
-          checkout-method: blobless
-      - run:
-          name: Collect devnet metrics for op-acceptance-tests
-          command: |
-            ./devnet-sdk/scripts/metrics-collect-authorship.sh op-acceptance-tests/tests > .metrics--authorship--op-acceptance-tests
-            echo "Wrote file .metrics--authorship--op-acceptance-tests"
-      - gcp-cli/install
-      - gcp-oidc-authenticate:
-          gcp_cred_config_file_path: /tmp/gcp_cred_config.json
-          oidc_token_file_path: /tmp/oidc_token.json
-      - run:
-          name: Store artifact in Bucket
-          command: |
-            CURRENT_DATE=$(date '+%Y-%m-%d')
-            FOLDER_NAME="dt=$CURRENT_DATE"
-
-            # Upload to the date-partitioned folder structure
-            gsutil cp .metrics--authorship--op-acceptance-tests gs://oplabs-tools-data-public-metrics/metrics-authorship/$FOLDER_NAME/metrics-$CIRCLE_SHA1.csv
-
   generate-flaky-report:
     machine: true
     resource_class: medium
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Generate flaky acceptance tests report
@@ -2628,6 +2629,7 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
       - semgrep-scan:
           name: semgrep-test
+          diff_aware: false
           scan_command: semgrep scan --test --config .semgrep/rules/ .semgrep/tests/
           context:
             - slack
@@ -3287,19 +3289,6 @@ workflows:
             This issue will be closed now."
           context:
             - circleci-repo-optimism
-
-  devnet-metrics-collect:
-    when:
-      or:
-        - equal: [<< pipeline.trigger_source >>, "webhook"]
-        - and:
-            - equal: [true, << pipeline.parameters.devnet-metrics-collect >>]
-            - equal: [<< pipeline.trigger_source >>, "api"]
-    jobs:
-      - devnet-metrics-collect-authorship:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - oplabs-tools-data-public-metrics-bucket
 
   ai-contracts-test-workflow:
     when:
