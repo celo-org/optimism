@@ -62,7 +62,7 @@
   {
     "intent": "Cgtv2 10: CeloGasBridgeL2 upgrade and initialize",
     "sourceHash": "0x59f475cc82ad3fc51ed5a079d0568681d8b1a4166810891d26a89e443872d927",
-    "transactionHash": "0x1e6758df65da37ffa8500854b80f0f385d8cc654e759156523e0580862681eee",
+    "transactionHash": "0xd85c2b82b3e9b8021cedbda8354092ef9b8360bad690c97824b156a9f495e45e",
     "file": "cgtv2-10.rlp"
   },
   {
@@ -74,7 +74,7 @@
   {
     "intent": "Cgtv2 12: CeloGasBridgeL2 minter authorization",
     "sourceHash": "0x4ed5f219c86547a3862a43fc53722e3c078fe614a1189cc93d1dec43cff54f43",
-    "transactionHash": "0x70d529f82199235e3809088e3adf3d1d3aeee4231a9fd2fb0de9de0b57d108da",
+    "transactionHash": "0x0f7b9a00bbbfb2ad95efaed9d241e6ca79b02a2bdc6b32d908bb5c41cb1c0bd7",
     "file": "cgtv2-12.rlp"
   },
   {
