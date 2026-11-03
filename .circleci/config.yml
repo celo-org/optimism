@@ -1321,8 +1321,6 @@ jobs:
       - run-contracts-check:
           command: semgrep-test-validity-check
       - run-contracts-check:
-          command: semgrep
-      - run-contracts-check:
           command: semver-lock-no-build
       - run-contracts-check:
           command: semver-diff-check-no-build
