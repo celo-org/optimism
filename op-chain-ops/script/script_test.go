@@ -364,23 +364,35 @@ func TestCallPanicBehavior(t *testing.T) {
 		return host, evm
 	}
 
-	t.Run("panic with revision id 1 error", func(t *testing.T) {
-		host, evm := getHostEVM()
-		evm.On(
-			"Call",
-			common.Address{'I'},
-			common.Address{'O'},
-			mock.Anything,
-			mock.Anything,
-			mock.Anything,
-		).Panic("revision id 1 cannot be reverted")
+	for _, tc := range []struct {
+		name  string
+		value any
+	}{
+		{"revision id 1 string", "revision id 1 cannot be reverted"},
+		{"revision id 1 error", errors.New("revision id 1 cannot be reverted")},
+		{"revision id 36 string", "revision id 36 cannot be reverted"},
+		{"revision id 36 error", errors.New("revision id 36 cannot be reverted")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			host, evm := getHostEVM()
+			evm.On(
+				"Call",
+				common.Address{'I'},
+				common.Address{'O'},
+				mock.Anything,
+				mock.Anything,
+				mock.Anything,
+			).Run(func(mock.Arguments) { panic(tc.value) })
 
-		ret, gas, err := host.Call(common.Address{'I'}, common.Address{'O'}, []byte{}, 0, nil)
-		require.Nil(t, ret)
-		require.Equal(t, uint64(0), gas)
-		require.ErrorContains(t, err, "execution reverted")
-		evm.AssertExpectations(t)
-	})
+			require.NotPanics(t, func() {
+				ret, gas, err := host.Call(common.Address{'I'}, common.Address{'O'}, []byte{}, 0, nil)
+				require.Nil(t, ret)
+				require.Equal(t, uint64(0), gas)
+				require.ErrorContains(t, err, "execution reverted")
+			})
+			evm.AssertExpectations(t)
+		})
+	}
 
 	t.Run("panic with some other message", func(t *testing.T) {
 		host, evm := getHostEVM()
@@ -408,7 +420,7 @@ func TestCallPanicBehavior(t *testing.T) {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
-		).Panic("revision id 1 cannot be reverted")
+		).Run(func(mock.Arguments) { panic(errors.New("revision id 36 cannot be reverted")) })
 		errMsg := "max code size exceeded"
 		host.evmRevertErr = errors.New(errMsg)
 
@@ -416,6 +428,7 @@ func TestCallPanicBehavior(t *testing.T) {
 		require.Nil(t, ret)
 		require.Equal(t, uint64(0), gas)
 		require.ErrorContains(t, err, errMsg)
+		require.Nil(t, host.evmRevertErr)
 		evm.AssertExpectations(t)
 	})
 }

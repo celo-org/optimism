@@ -12,6 +12,8 @@ import (
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/broadcaster"
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/testutil"
 	"github.com/ethereum-optimism/optimism/op-deployer/pkg/env"
+	opbindings "github.com/ethereum-optimism/optimism/op-e2e/bindings"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
@@ -114,13 +116,20 @@ func TestInitLiveStrategy_OPCMReuseLogicSepolia(t *testing.T) {
 			require.NoError(t, err)
 			proxyAdmin, err := standard.SuperchainProxyAdminAddrFor(l1ChainID)
 			require.NoError(t, err)
+			proxyAdminContract, err := opbindings.NewProxyAdmin(proxyAdmin, client)
+			require.NoError(t, err)
+			superchainConfigImpl, err := proxyAdminContract.GetProxyImplementation(
+				&bind.CallOpts{Context: ctx},
+				superCfg.SuperchainConfigAddr,
+			)
+			require.NoError(t, err)
 
 			expDeployment := &addresses.SuperchainContracts{
 				SuperchainProxyAdminImpl: proxyAdmin,
 				ProtocolVersionsProxy:    superCfg.ProtocolVersionsAddr,
 				ProtocolVersionsImpl:     common.HexToAddress("0x37E15e4d6DFFa9e5E320Ee1eC036922E563CB76C"),
 				SuperchainConfigProxy:    superCfg.SuperchainConfigAddr,
-				SuperchainConfigImpl:     common.HexToAddress("0xb08Cc720F511062537ca78BdB0AE691F04F5a957"),
+				SuperchainConfigImpl:     superchainConfigImpl,
 			}
 
 			// Tagged locator will reuse the existing superchain and OPCM

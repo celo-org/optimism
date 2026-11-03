@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"regexp"
 	"strings"
 
 	"github.com/ethereum-optimism/optimism/op-chain-ops/script/addresses"
@@ -348,17 +349,36 @@ func (h *Host) prelude(from common.Address, to *common.Address) {
 	h.env.StateDB().Prepare(rules, from, evmC.Coinbase, to, activePrecompiles, nil)
 }
 
+// expectedRevertPanicRe matches the panic go-ethereum's state journal raises when a
+// snapshot revision cannot be reverted, e.g. "revision id 36 cannot be reverted".
+// Forge scripts trigger this as ordinary control flow, so Host.Call swallows it into
+// a regular revert error.
+var expectedRevertPanicRe = regexp.MustCompile(`revision id \d+ cannot be reverted`)
+
+// isExpectedRevertPanic reports whether a recovered panic value is the expected
+// state-snapshot revert that Host.Call turns into an "execution reverted" error
+// rather than re-panicking. The panic value may be a string or an error.
+func isExpectedRevertPanic(r any) bool {
+	var msg string
+	switch v := r.(type) {
+	case string:
+		msg = v
+	case error:
+		msg = v.Error()
+	default:
+		return false
+	}
+	return expectedRevertPanicRe.MatchString(strings.ToLower(msg))
+}
+
 // Call calls a contract in the EVM. The state changes persist.
 func (h *Host) Call(from common.Address, to common.Address, input []byte, gas uint64, value *uint256.Int) (returnData []byte, leftOverGas uint64, err error) {
 	h.prelude(from, &to)
 
 	defer func() {
 		if r := recover(); r != nil {
-			// Cast to a string to check the error message. If it's not a string it's
-			// an unexpected panic and we should re-raise it.
-			rStr, ok := r.(string)
-			if !ok || !strings.Contains(strings.ToLower(rStr), "revision id 1") {
-				fmt.Println("panic", rStr)
+			if !isExpectedRevertPanic(r) {
+				fmt.Println("panic", r)
 				panic(r)
 			}
 

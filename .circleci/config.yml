@@ -71,9 +71,6 @@ parameters:
   github-event-base64:
     type: string
     default: "__not_set__"
-  devnet-metrics-collect:
-    type: boolean
-    default: false
   flake-shake-dispatch:
     type: boolean
     default: false
@@ -93,12 +90,43 @@ orbs:
   gcp-cli: circleci/gcp-cli@3.0.1
   slack: circleci/slack@6.0.0
   shellcheck: circleci/shellcheck@3.2.0
-  codecov: codecov/codecov@5.0.3
-  utils: ethereum-optimism/circleci-utils@1.0.22
+  utils: karlb/circleci-utils@1.0.22
   docker: circleci/docker@2.8.2
   github-cli: circleci/github-cli@2.7.0
 
 commands:
+  checkout-with-mise:
+    description: "Checkout and install the mise version required by this repository"
+    parameters:
+      checkout-method:
+        type: enum
+        enum: [blobless, full]
+        default: full
+    steps:
+      - checkout:
+          method: << parameters.checkout-method >>
+      - run:
+          name: Select pinned mise version
+          command: |
+            mise_version=$(sed -n 's/^min_version = "\([^"]*\)"$/\1/p' mise.toml)
+            test -n "$mise_version"
+            printf 'export MISE_VERSION=v%s\n' "$mise_version" >> "$BASH_ENV"
+      - utils/install-mise
+      - run:
+          name: Verify mise and contract tools
+          command: |
+            : "${MISE_VERSION:?Pinned mise version is missing}"
+            installed_mise_version=$(mise --version)
+            case "$installed_mise_version" in
+              "${MISE_VERSION#v} "*) ;;
+              *)
+                printf 'Expected mise %s, got %s\n' "$MISE_VERSION" "$installed_mise_version" >&2
+                exit 1
+                ;;
+            esac
+            forge --version
+            svm --version
+
   gcp-oidc-authenticate:
     description: "Authenticate with GCP using a CircleCI OIDC token."
     parameters:
@@ -382,7 +410,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker:
           docker_layer_caching: true
@@ -503,7 +531,7 @@ jobs:
         type: boolean
         default: false
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -535,10 +563,6 @@ jobs:
             gotestsum --format=testname --junitfile=../tmp/test-results/cannon-64.xml --jsonfile=../tmp/testlogs/log-64.json \
             -- -timeout=$TIMEOUT -parallel=$(nproc) -coverpkg=github.com/ethereum-optimism/optimism/cannon/... -coverprofile=coverage-64.out ./...
           working_directory: cannon
-      - codecov/upload:
-          disable_search: true
-          files: ./cannon/coverage-64.out
-          flags: cannon-go-tests-64
       - store_test_results:
           path: ./tmp/test-results
       - store_artifacts:
@@ -555,7 +579,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Check `RISCV.sol` bytecode
@@ -594,7 +618,7 @@ jobs:
   contracts-bedrock-build:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/xlarge
     parameters:
       build_args:
         description: Forge build arguments
@@ -605,7 +629,7 @@ jobs:
         type: string
         default: ci
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-zstd
       - install-contracts-dependencies
@@ -641,7 +665,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - attach_workspace:
           at: .
       - install-contracts-dependencies
@@ -703,7 +727,7 @@ jobs:
       resource_class: "<<parameters.resource_class>>"
       docker_layer_caching: true # we rely on this for faster builds, and actively warm it up for builds with common stages
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -899,10 +923,9 @@ jobs:
             docker run $image_name <<parameters.op_component>> --version || exit 1
 
   contracts-bedrock-tests:
-    circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -918,7 +941,7 @@ jobs:
       test_timeout:
         description: Timeout for running tests
         type: string
-        default: 15m
+        default: 30m
       test_profile:
         description: Profile to use for testing
         type: string
@@ -932,7 +955,7 @@ jobs:
         type: string
         default: ""
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: full
       - install-zstd
       - run:
@@ -979,12 +1002,23 @@ jobs:
           working_directory: packages/contracts-bedrock
           no_output_timeout: <<parameters.test_timeout>>
       - run:
-          name: Print failed test traces
-          command: just test-rerun
+          name: Save failed test diagnostics
+          command: |
+            mkdir -p .testdata/ci-failures
+            if forge test --rerun -vv > .testdata/ci-failures/failed-tests.log 2>&1; then
+              result=0
+            else
+              result=$?
+            fi
+            tail -n 200 .testdata/ci-failures/failed-tests.log
+            exit "$result"
           environment:
-            FOUNDRY_PROFILE: ci
+            FOUNDRY_PROFILE: <<parameters.test_profile>>
           working_directory: packages/contracts-bedrock
           when: on_fail
+      - store_artifacts:
+          path: packages/contracts-bedrock/.testdata/ci-failures
+          when: always
       - run:
           name: Lint forge test names
           command: just lint-forge-tests-check-no-build
@@ -992,12 +1026,11 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-heavy-fuzz-nightly:
-    circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: full
       - install-contracts-dependencies
       - install-zstd
@@ -1046,7 +1079,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: medium
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Check Python version
@@ -1084,10 +1117,9 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-coverage:
-    circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     parameters:
       test_flags:
         description: Additional flags to pass to the test command
@@ -1106,7 +1138,7 @@ jobs:
         type: string
         default: ""
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: full
       - install-contracts-dependencies
       - install-zstd
@@ -1165,10 +1197,6 @@ jobs:
             ETH_RPC_URL: https://ci-mainnet-l1-archive.optimism.io
           working_directory: packages/contracts-bedrock
           when: on_fail
-      - codecov/upload:
-          disable_search: true
-          files: ./packages/contracts-bedrock/lcov-all.info
-          flags: contracts-bedrock-tests
       - save_cache:
           name: Save forked state
           key: forked-state-contracts-bedrock-tests-upgrade-{{ checksum "packages/contracts-bedrock/pinnedBlockNumber.txt" }}
@@ -1181,7 +1209,6 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-tests-upgrade:
-    circleci_ip_ranges: true
     parameters:
       fork_op_chain:
         description: Fork OP Chain
@@ -1200,9 +1227,9 @@ jobs:
         default: ""
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - install-contracts-dependencies
       - install-zstd
       - attach_workspace:
@@ -1279,7 +1306,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - install-contracts-dependencies
       - attach_workspace:
           at: .
@@ -1293,8 +1320,6 @@ jobs:
           command: check-kontrol-summaries-unchanged
       - run-contracts-check:
           command: semgrep-test-validity-check
-      - run-contracts-check:
-          command: semgrep
       - run-contracts-check:
           command: semver-lock-no-build
       - run-contracts-check:
@@ -1326,7 +1351,7 @@ jobs:
     machine:
       image: <<pipeline.parameters.base_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Install ripgrep
@@ -1352,7 +1377,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - check-changed:
           patterns: "<<parameters.package_name>>"
@@ -1384,7 +1409,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           key: golangci-v1-{{ checksum ".golangci.yaml" }}
@@ -1429,11 +1454,10 @@ jobs:
         default: 1
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
-    circleci_ip_ranges: true
+    resource_class: celo-org/2xlarge
     parallelism: <<parameters.parallelism>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1508,7 +1532,7 @@ jobs:
     machine: true
     resource_class: <<parameters.resource_class>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1530,9 +1554,6 @@ jobs:
             <<parameters.environment_overrides>>
             export TEST_TIMEOUT=<<parameters.test_timeout>>
             make go-tests-fraud-proofs-ci
-      - codecov/upload:
-          disable_search: true
-          files: ./coverage.out
       - store_test_results:
           path: ./tmp/test-results
       - run:
@@ -1572,7 +1593,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     circleci_ip_ranges: true
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       # Restore cached Go modules
       - restore_cache:
@@ -1667,10 +1688,9 @@ jobs:
         default: 30m
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    circleci_ip_ranges: true
-    resource_class: 2xlarge+
+    resource_class: celo-org/2xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1764,7 +1784,7 @@ jobs:
     resource_class: xlarge
     parallelism: << pipeline.parameters.flake-shake-workers >>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           keys:
@@ -1811,7 +1831,7 @@ jobs:
       image: ubuntu-2404:current
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: .
@@ -1862,7 +1882,7 @@ jobs:
       image: ubuntu-2404:current
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Lint/Vet/Build op-acceptance-tests/cmd
@@ -1941,7 +1961,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Install tools
@@ -1964,7 +1984,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           name: Restore cannon prestate cache
@@ -1992,7 +2012,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker
       - run:
@@ -2008,7 +2028,7 @@ jobs:
     machine:
       docker_layer_caching: true # we rely on this for faster builds, and actively warm it up for builds with common stages
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           name: Restore kona cache
@@ -2031,7 +2051,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - restore_cache:
           name: Restore kona host cache
@@ -2060,7 +2080,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - attach_workspace:
           at: "."
@@ -2121,7 +2141,7 @@ jobs:
     machine: true
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Verify reproducibility
@@ -2136,7 +2156,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker
       - run:
@@ -2150,32 +2170,30 @@ jobs:
 
   semgrep-scan:
     parameters:
-      diff_branch:
-        type: string
-        default: develop
+      diff_aware:
+        type: boolean
+        default: true
       scan_command:
         type: string
         default: semgrep ci --timeout=100
     environment:
-      TEMPORARY_BASELINE_REF: << parameters.diff_branch >>
       SEMGREP_REPO_URL: << pipeline.project.git_url >>
       SEMGREP_BRANCH: << pipeline.git.branch >>
       SEMGREP_COMMIT: << pipeline.git.revision >>
     docker:
-      - image: returntocorp/semgrep
+      - image: returntocorp/semgrep:1.137.0
     resource_class: xlarge
     steps:
       - checkout # no need to use mise here since the docker image contains the only dependency
-      - unless:
-          condition:
-            equal: ["develop", << pipeline.git.branch >>]
+      - when:
+          condition: << parameters.diff_aware >>
           steps:
             - run:
-                # Scan changed files in PRs, block on new issues only (existing issues ignored)
-                # Do a full scan when scanning develop, otherwise do an incremental scan.
-                name: "Conditionally set BASELINE env var"
-                command: |
-                  echo 'export SEMGREP_BASELINE_REF=${TEMPORARY_BASELINE_REF}' >> $BASH_ENV
+                name: Test Semgrep baseline selection
+                command: python3 -m unittest discover -s .circleci -p 'test_semgrep_baseline.py'
+            - run:
+                name: Resolve Semgrep baseline from the PR base
+                command: python3 .circleci/semgrep_baseline.py
       - run:
           name: "Set environment variables" # for PR comments and in-app hyperlinks to findings
           command: |
@@ -2204,7 +2222,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - setup_remote_docker
       - run:
@@ -2218,7 +2236,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Verify Compatibility
@@ -2231,7 +2249,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - check-changed:
           patterns: op-node
@@ -2244,7 +2262,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: large
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - check-changed:
           patterns: op-service
@@ -2256,7 +2274,7 @@ jobs:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           command: just check-forge-version
@@ -2267,7 +2285,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: xlarge
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-contracts-dependencies
       - check-changed:
@@ -2306,7 +2324,7 @@ jobs:
           oidc_token_file_path: /tmp/oidc_token.json
           project_id: GCP_TOOLS_ARTIFACTS_PROJECT_ID
           service_account_email: GCP_CONTRACTS_PUBLISHER_SERVICE_ACCOUNT_EMAIL
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-contracts-dependencies
       - install-zstd
@@ -2344,7 +2362,7 @@ jobs:
       - gcp-oidc-authenticate:
           gcp_cred_config_file_path: /tmp/gcp_cred_config.json
           oidc_token_file_path: /tmp/oidc_token.json
-      - utils/checkout-with-mise
+      - checkout-with-mise
       - attach_workspace: { at: "." }
       - run:
           name: Configure Docker
@@ -2360,7 +2378,7 @@ jobs:
       - image: <<pipeline.parameters.default_docker_image>>
     resource_class: medium
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - install-contracts-dependencies
       - run:
@@ -2421,35 +2439,11 @@ jobs:
             MESSAGE: << parameters.message >>
             LABEL_NAME: << parameters.label_name >>
 
-  devnet-metrics-collect-authorship:
-    docker:
-      - image: <<pipeline.parameters.default_docker_image>>
-    steps:
-      - utils/checkout-with-mise:
-          checkout-method: blobless
-      - run:
-          name: Collect devnet metrics for op-acceptance-tests
-          command: |
-            ./devnet-sdk/scripts/metrics-collect-authorship.sh op-acceptance-tests/tests > .metrics--authorship--op-acceptance-tests
-            echo "Wrote file .metrics--authorship--op-acceptance-tests"
-      - gcp-cli/install
-      - gcp-oidc-authenticate:
-          gcp_cred_config_file_path: /tmp/gcp_cred_config.json
-          oidc_token_file_path: /tmp/oidc_token.json
-      - run:
-          name: Store artifact in Bucket
-          command: |
-            CURRENT_DATE=$(date '+%Y-%m-%d')
-            FOLDER_NAME="dt=$CURRENT_DATE"
-
-            # Upload to the date-partitioned folder structure
-            gsutil cp .metrics--authorship--op-acceptance-tests gs://oplabs-tools-data-public-metrics/metrics-authorship/$FOLDER_NAME/metrics-$CIRCLE_SHA1.csv
-
   generate-flaky-report:
     machine: true
     resource_class: medium
     steps:
-      - utils/checkout-with-mise:
+      - checkout-with-mise:
           checkout-method: blobless
       - run:
           name: Generate flaky acceptance tests report
@@ -2576,38 +2570,7 @@ workflows:
           context:
             - circleci-repo-readonly-authenticated-github-token
           check_changed_patterns: contracts-bedrock,op-node
-      - contracts-bedrock-coverage:
-          # Generate coverage reports.
-          name: contracts-bedrock-coverage <<matrix.features>>
-          test_timeout: 1h
-          test_profile: cicoverage
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-tests-upgrade:
-          name: contracts-bedrock-tests-upgrade op-mainnet <<matrix.features>>
-          fork_op_chain: op
-          fork_base_chain: mainnet
-          fork_base_rpc: https://ci-mainnet-l1-archive.optimism.io
-          features: <<matrix.features>>
-          matrix:
-            parameters:
-              features: *features_matrix
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-      - contracts-bedrock-tests-upgrade:
-          name: contracts-bedrock-tests-upgrade <<matrix.fork_op_chain>>-mainnet
-          fork_op_chain: <<matrix.fork_op_chain>>
-          fork_base_chain: mainnet
-          fork_base_rpc: https://ci-mainnet-l1-archive.optimism.io
-          matrix:
-            parameters:
-              fork_op_chain: ["base", "ink", "unichain"]
-          context:
-            - circleci-repo-readonly-authenticated-github-token
+      # Celo does not run upstream OP mainnet upgrade tests or Codecov coverage jobs.
       - contracts-bedrock-checks:
           requires:
             - contracts-bedrock-build
@@ -2632,6 +2595,7 @@ workflows:
             - circleci-repo-readonly-authenticated-github-token
       - semgrep-scan:
           name: semgrep-test
+          diff_aware: false
           scan_command: semgrep scan --test --config .semgrep/rules/ .semgrep/tests/
           context:
             - slack
@@ -2680,6 +2644,7 @@ workflows:
             - cannon-prestate-quick
           context:
             - circleci-repo-readonly-authenticated-github-token
+            - circleci-repo-rpc-secrets
           filters:
             branches:
               ignore: develop # Run on all branches EXCEPT develop (PR branches only)
@@ -2698,6 +2663,7 @@ workflows:
             - cannon-prestate-quick
           context:
             - circleci-repo-readonly-authenticated-github-token
+            - circleci-repo-rpc-secrets
             - slack
       - analyze-op-program-client:
           context:
@@ -3017,6 +2983,7 @@ workflows:
           context:
             - slack
             - circleci-repo-readonly-authenticated-github-token
+            - circleci-repo-rpc-secrets
           requires:
             - contracts-bedrock-build
             - cannon-prestate
@@ -3291,19 +3258,6 @@ workflows:
             This issue will be closed now."
           context:
             - circleci-repo-optimism
-
-  devnet-metrics-collect:
-    when:
-      or:
-        - equal: [<< pipeline.trigger_source >>, "webhook"]
-        - and:
-            - equal: [true, << pipeline.parameters.devnet-metrics-collect >>]
-            - equal: [<< pipeline.trigger_source >>, "api"]
-    jobs:
-      - devnet-metrics-collect-authorship:
-          context:
-            - circleci-repo-readonly-authenticated-github-token
-            - oplabs-tools-data-public-metrics-bucket
 
   ai-contracts-test-workflow:
     when:
