@@ -94,7 +94,7 @@ orbs:
   slack: circleci/slack@6.0.0
   shellcheck: circleci/shellcheck@3.2.0
   codecov: codecov/codecov@5.0.3
-  utils: ethereum-optimism/circleci-utils@1.0.22
+  utils: karlb/circleci-utils@1.0.22
   docker: circleci/docker@2.8.2
   github-cli: circleci/github-cli@2.7.0
 
@@ -594,7 +594,7 @@ jobs:
   contracts-bedrock-build:
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/xlarge
     parameters:
       build_args:
         description: Forge build arguments
@@ -899,10 +899,9 @@ jobs:
             docker run $image_name <<parameters.op_component>> --version || exit 1
 
   contracts-bedrock-tests:
-    circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/xlarge
     parameters:
       test_list:
         description: List of test files to run
@@ -918,7 +917,7 @@ jobs:
       test_timeout:
         description: Timeout for running tests
         type: string
-        default: 15m
+        default: 30m
       test_profile:
         description: Profile to use for testing
         type: string
@@ -992,10 +991,9 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-heavy-fuzz-nightly:
-    circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise:
           checkout-method: full
@@ -1084,10 +1082,9 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-coverage:
-    circleci_ip_ranges: true
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     parameters:
       test_flags:
         description: Additional flags to pass to the test command
@@ -1181,7 +1178,6 @@ jobs:
       - notify-failures-on-develop
 
   contracts-bedrock-tests-upgrade:
-    circleci_ip_ranges: true
     parameters:
       fork_op_chain:
         description: Fork OP Chain
@@ -1200,7 +1196,7 @@ jobs:
         default: ""
     docker:
       - image: <<pipeline.parameters.default_docker_image>>
-    resource_class: 2xlarge
+    resource_class: celo-org/2xlarge
     steps:
       - utils/checkout-with-mise
       - install-contracts-dependencies
