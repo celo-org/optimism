@@ -1,8 +1,12 @@
 name: TEE batcher upgrade
 
-# Keep this workflow manual while the upgrade tests are being validated.
-# The AWS OIDC role trusts only refs/heads/upgrade-test-ci.
+# Run on the integration branch and this PR branch while validating the workflow.
+# AWS OIDC trust is restricted to the same two branch refs.
 on:
+  push:
+    branches:
+      - espresso/batcher
+      - upgrade-test-ci
   workflow_dispatch:
     inputs:
       base-ref:
@@ -11,7 +15,6 @@ on:
 
 permissions:
   contents: read
-  id-token: write
 
 env:
   # Dedicated EC2 runner role assumed through GitHub OIDC.
@@ -19,11 +22,15 @@ env:
 
 concurrency:
   group: tee-batcher-upgrade-${{ github.ref }}
-  cancel-in-progress: true
+  # Let active runs finish so their EC2 runner cleanup can complete.
+  cancel-in-progress: false
 
 jobs:
   start-runner:
-    if: github.ref == 'refs/heads/upgrade-test-ci'
+    if: github.ref == 'refs/heads/espresso/batcher' || github.ref == 'refs/heads/upgrade-test-ci'
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 15
     outputs:
@@ -96,14 +103,24 @@ jobs:
           curl -sSfL https://github.com/enclaver-io/enclaver/releases/download/v0.6.1/enclaver-linux-x86_64-v0.6.1.tar.gz \
             | sudo tar xz --strip-components=1 -C /usr/local/bin enclaver-linux-x86_64-v0.6.1/enclaver
 
-      - uses: actions/checkout@v4
+      - name: Check out candidate
+        uses: actions/checkout@v4
         with:
+          ref: ${{ github.sha }}
           submodules: recursive
 
-      - uses: actions/checkout@v4
+      - name: Check out baseline
+        uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.base-ref }}
+          # Integration pushes use the previous tip; this PR branch uses espresso/batcher.
+          # Manual runs can supply an explicit baseline.
+          ref: ${{ inputs.base-ref || (github.ref == 'refs/heads/espresso/batcher' && github.event.before) || 'espresso/batcher' }}
           path: base
+
+      - name: Report tested revisions
+        run: |
+          printf 'Candidate: %s\n' "$(git rev-parse HEAD)"
+          printf 'Baseline: %s\n' "$(git -C base rev-parse HEAD)"
 
       - name: Build base and candidate batcher images
         run: |
@@ -125,6 +142,9 @@ jobs:
   stop-runner:
     needs: [start-runner, test-upgrade]
     if: ${{ always() && needs.start-runner.outputs.instance-id != '' }}
+    permissions:
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
