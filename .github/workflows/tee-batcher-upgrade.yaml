@@ -1,12 +1,13 @@
 name: TEE batcher upgrade
 
-# Run on the integration branch and this PR branch while validating the workflow.
-# AWS OIDC trust is restricted to the same two branch refs.
+# AWS trusts repo:celo-org/optimism:pull_request for PRs and
+# repo:celo-org/optimism:ref:refs/heads/espresso/batcher for manual runs.
 on:
-  push:
+  pull_request:
     branches:
       - espresso/batcher
-      - upgrade-test-ci
+      # PR #545 is currently stacked on this branch.
+      - espresso/e2e-tests-2
   workflow_dispatch:
     inputs:
       base-ref:
@@ -27,7 +28,11 @@ concurrency:
 
 jobs:
   start-runner:
-    if: github.ref == 'refs/heads/espresso/batcher' || github.ref == 'refs/heads/upgrade-test-ci'
+    if: >-
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'workflow_dispatch' &&
+       github.ref == 'refs/heads/espresso/batcher')
     permissions:
       contents: read
       id-token: write
@@ -112,9 +117,9 @@ jobs:
       - name: Check out baseline
         uses: actions/checkout@v4
         with:
-          # Integration pushes use the previous tip; this PR branch uses espresso/batcher.
-          # Manual runs can supply an explicit baseline.
-          ref: ${{ inputs.base-ref || (github.ref == 'refs/heads/espresso/batcher' && github.event.before) || 'espresso/batcher' }}
+          # PRs compare the base commit with the pinned merge candidate.
+          # Manual runs supply an explicit baseline.
+          ref: ${{ inputs.base-ref || github.event.pull_request.base.sha }}
           path: base
 
       - name: Report tested revisions
