@@ -70,6 +70,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	var l1Info eth.BlockInfo
 	var depositTxs []hexutil.Bytes
 	var seqNumber uint64
+	var cgtUpgrades []hexutil.Bytes
 
 	sysConfig, err := ba.l2.SystemConfigByL2Hash(ctx, l2Parent.Hash)
 	if err != nil {
@@ -84,12 +85,16 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		if err != nil {
 			return nil, NewTemporaryError(fmt.Errorf("failed to fetch L1 block info and receipts: %w", err))
 		}
+
 		if l2Parent.L1Origin.Hash != info.ParentHash() {
 			return nil, NewResetError(
 				fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
 					epoch, info.ParentHash(), l2Parent.L1Origin))
 		}
-
+		cgtUpgrades, err = cgtV2UpgradeTransactionsFromReceipts(ba.rollupCfg, receipts)
+		if err != nil {
+			return nil, NewCriticalError(err)
+		}
 		deposits, err := DeriveDeposits(receipts.Geth(), ba.rollupCfg.DepositContractAddress)
 		if err != nil {
 			// deposits may never be ignored. Failing to process them is a critical error.
@@ -182,6 +187,18 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		upgradeGas += lagoonGas
 	}
 
+	if len(cgtUpgrades) > 0 {
+		upgradeTxs = append(upgradeTxs, cgtUpgrades...)
+		gas, err := CgtV2UpgradeGas(ba.rollupCfg.L2ChainID)
+		if err != nil {
+			return nil, NewCriticalError(err)
+		}
+		if gas > ^uint64(0)-upgradeGas {
+			return nil, NewCriticalError(fmt.Errorf("CGTv2 upgrade gas overflow"))
+		}
+		upgradeGas += gas
+	}
+
 	l1InfoTx, err := L1InfoDepositBytes(ba.rollupCfg, ba.l1ChainConfig, sysConfig, seqNumber, l1Info, nextL2Time)
 	if err != nil {
 		return nil, NewCriticalError(fmt.Errorf("failed to create l1InfoTx: %w", err))
@@ -206,6 +223,9 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	}
 
 	gasLimit := sysConfig.GasLimit + upgradeGas
+	if gasLimit < sysConfig.GasLimit {
+		return nil, NewCriticalError(fmt.Errorf("CGTv2 upgrade gas overflows block gas limit"))
+	}
 
 	r := &eth.PayloadAttributes{
 		Timestamp:             hexutil.Uint64(nextL2Time),

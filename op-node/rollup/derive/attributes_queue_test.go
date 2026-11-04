@@ -2,6 +2,8 @@ package derive
 
 import (
 	"context"
+	"errors"
+	"io"
 	"math/big"
 	"math/rand"
 	"testing"
@@ -9,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/params"
 
 	"github.com/ethereum-optimism/optimism/op-core/predeploys"
@@ -86,4 +89,44 @@ func TestAttributesQueue(t *testing.T) {
 
 	require.NoError(t, err)
 	require.Equal(t, attrs, *actual)
+}
+
+func TestCgtV2AttributesQueueDropsBatchAfterReceiptRetry(t *testing.T) {
+	for _, retry := range []bool{false, true} {
+		t.Run(map[bool]string{false: "immediate", true: "RPC retry"}[retry], func(t *testing.T) {
+			receipts := cgtSeededReceipts()
+			header, parent, origin := cgtTestOrigin(t, receipts)
+			cfg := cgtTestConfig()
+			cfg.HoloceneTime = new(uint64)
+			cfg.MaxSequencerDrift = 600
+			cfg.SeqWindowSize = 10
+			base := eth.L1BlockRef{Hash: parent.L1Origin.Hash, Number: parent.L1Origin.Number, Time: 88}
+			head := eth.L1BlockRef{Hash: origin.Hash, ParentHash: base.Hash, Number: origin.Number, Time: 100}
+			batch := &SingularBatch{ParentHash: parent.Hash, EpochHash: origin.Hash, EpochNum: rollup.Epoch(origin.Number), Timestamp: 102, Transactions: []hexutil.Bytes{{0xc0}}}
+			prev := &fakeBatchQueueInput{batches: []Batch{batch}, errors: []error{nil}, origin: head}
+			mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, nil)
+			require.ErrorIs(t, mux.Reset(context.Background(), base, eth.SystemConfig{}), io.EOF)
+			l1 := &testutils.MockL1Source{}
+			defer l1.AssertExpectations(t)
+			if retry {
+				l1.ExpectFetchReceipts(origin.Hash, nil, nil, errors.New("offline"))
+			}
+			l1.ExpectFetchReceipts(origin.Hash, eth.HeaderBlockInfo(header), receipts, nil)
+			builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, l1, cgtL2Stub{})
+			queue := NewAttributesQueue(testlog.Logger(t, log.LevelError), cfg, builder, mux)
+			if retry {
+				_, err := queue.NextAttributes(context.Background(), parent)
+				require.ErrorIs(t, err, ErrTemporary)
+				require.Same(t, batch, queue.batch)
+				require.Equal(t, 1, prev.i)
+			}
+			attrs, err := queue.NextAttributes(context.Background(), parent)
+			require.ErrorIs(t, err, NotEnoughData)
+			require.Nil(t, attrs)
+			require.Nil(t, queue.batch)
+			require.Empty(t, prev.batches)
+			_, err = queue.NextAttributes(context.Background(), parent)
+			require.ErrorIs(t, err, io.EOF, "the rejected batch must not be retried")
+		})
+	}
 }

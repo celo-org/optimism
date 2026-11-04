@@ -45,3 +45,6 @@ rust/.git
 
 # Re-include rust/bin which is excluded by **/bin above
 !/rust/**/bin
+
+# Runtime Go code embeds the synthetic CGTv2 bundle as well as production bundles.
+!/op-node/rollup/derive/testdata/cgtv2/cgtv2-fixture-nut-bundle.json

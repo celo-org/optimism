@@ -125,6 +125,14 @@ func (aq *AttributesQueue) createNextAttributes(ctx context.Context, batch *Sing
 		return nil, err
 	}
 
+	if ContainsCgtV2Activation(attrs.Transactions) && len(batch.Transactions) > 0 {
+		aq.log.Warn("Dropping batch with user transactions in CGTv2 activation block")
+		aq.prev.FlushChannel()
+		aq.batch = nil
+		aq.concluding = false
+		return nil, NotEnoughData
+	}
+
 	// we are verifying, not sequencing, we've got all transactions and do not pull from the tx-pool
 	// (that would make the block derivation non-deterministic)
 	attrs.NoTxPool = true

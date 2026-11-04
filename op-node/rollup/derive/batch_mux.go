@@ -74,3 +74,13 @@ func (b *BatchMux) TransformHolocene() {
 		panic(fmt.Sprintf("unknown batch stage type: %T", bp))
 	}
 }
+
+// FlushChannel discards buffered span blocks in either batch stage. The legacy
+// queue has no channel-flush operation; its unrelated queued batches remain valid.
+func (b *BatchMux) FlushChannel() {
+	if queue, ok := b.SingularBatchProvider.(*BatchQueue); ok {
+		queue.nextSpan = nil
+		return
+	}
+	b.SingularBatchProvider.FlushChannel()
+}
