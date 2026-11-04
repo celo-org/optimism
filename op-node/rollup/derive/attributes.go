@@ -36,25 +36,17 @@ type FetchingAttributesBuilder struct {
 	rollupCfg     *rollup.Config
 	l1ChainConfig *params.ChainConfig
 	depSet        DependencySet
-	cgt           *cgtV2Derivation
 	l1            L1ReceiptsFetcher
 	l2            SystemConfigL2Fetcher
 	// whether to skip the L1 origin timestamp check - only for testing purposes
 	testSkipL1OriginCheck bool
 }
 
-func NewFetchingAttributesBuilder(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, depSet DependencySet, l1 L1ReceiptsFetcher, l2 SystemConfigL2Fetcher, cgtSources ...CgtV2InputSource) *FetchingAttributesBuilder {
+func NewFetchingAttributesBuilder(rollupCfg *rollup.Config, l1ChainConfig *params.ChainConfig, depSet DependencySet, l1 L1ReceiptsFetcher, l2 SystemConfigL2Fetcher) *FetchingAttributesBuilder {
 	if rollupCfg.LagoonTime != nil && depSet == nil {
 		panic("FetchingAttributesBuilder requires a dependency set when Lagoon fork is scheduled")
 	}
-	var cgt *cgtV2Derivation
-	source, _ := l1.(CgtV2InputSource)
-	if len(cgtSources) > 0 {
-		source = cgtSources[0]
-	}
-	cgt = newCgtV2Derivation(rollupCfg, source)
 	return &FetchingAttributesBuilder{
-		cgt:           cgt,
 		rollupCfg:     rollupCfg,
 		l1ChainConfig: l1ChainConfig,
 		depSet:        depSet,
@@ -94,20 +86,16 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 			return nil, NewTemporaryError(fmt.Errorf("failed to fetch L1 block info and receipts: %w", err))
 		}
 
-		var deposits []hexutil.Bytes
-		if ba.cgt != nil {
-			info, deposits, cgtUpgrades, err = ba.cgt.originDeposits(ctx, l2Parent, epoch, receipts)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			if l2Parent.L1Origin.Hash != info.ParentHash() {
-				return nil, NewResetError(
-					fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
-						epoch, info.ParentHash(), l2Parent.L1Origin))
-			}
-			deposits, err = DeriveDeposits(receipts.Geth(), ba.rollupCfg.DepositContractAddress)
+		if l2Parent.L1Origin.Hash != info.ParentHash() {
+			return nil, NewResetError(
+				fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
+					epoch, info.ParentHash(), l2Parent.L1Origin))
 		}
+		cgtUpgrades, err = cgtV2UpgradeTransactionsFromReceipts(ba.rollupCfg, receipts)
+		if err != nil {
+			return nil, NewCriticalError(err)
+		}
+		deposits, err := DeriveDeposits(receipts.Geth(), ba.rollupCfg.DepositContractAddress)
 		if err != nil {
 			// deposits may never be ignored. Failing to process them is a critical error.
 			return nil, NewCriticalError(fmt.Errorf("failed to derive some deposits: %w", err))
@@ -124,9 +112,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		if l2Parent.L1Origin.Hash != epoch.Hash {
 			return nil, NewResetError(fmt.Errorf("cannot create new block with L1 origin %s in conflict with L1 origin %s", epoch, l2Parent.L1Origin))
 		}
-		var info eth.BlockInfo
-		var err error
-		info, err = ba.l1.InfoByHash(ctx, epoch.Hash)
+		info, err := ba.l1.InfoByHash(ctx, epoch.Hash)
 		if err != nil {
 			return nil, NewTemporaryError(fmt.Errorf("failed to fetch L1 block info: %w", err))
 		}

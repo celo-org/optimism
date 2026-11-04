@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"math/big"
 	"os"
 	"testing"
@@ -25,34 +24,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type cgtInputStub struct {
-	header      *types.Header
-	info        eth.BlockInfo
-	err         error
-	headerReads int
-}
-
-func (s *cgtInputStub) HeaderByHash(context.Context, common.Hash) (*types.Header, error) {
-	s.headerReads++
-	return s.header, s.err
-}
 func cgtPortalLog(t *testing.T, portal common.Address, nonce byte) *types.Log {
 	t.Helper()
 	target := common.Address{nonce}
 	event, err := MarshalDepositLogEvent(portal, &optypes.DepositTx{From: common.Address{0x11}, To: &target, Mint: big.NewInt(0), Value: big.NewInt(0), Gas: 100000})
 	require.NoError(t, err)
-	event.BlockHash, event.Index, event.TxIndex = common.Hash{0xee}, 777, 888
 	return event
 }
 func cgtTestConfig() *rollup.Config {
 	return &rollup.Config{BlockTime: 2, L1ChainID: big.NewInt(1), L2ChainID: big.NewInt(1337), L1SystemConfigAddress: common.Address{0x33}, DepositContractAddress: common.Address{0x44}}
 }
-func cgtTestDeriver(t *testing.T, receipts optypes.Receipts) (*cgtV2Derivation, *cgtInputStub, eth.L2BlockRef, eth.BlockID) {
+func cgtTestOrigin(t *testing.T, receipts optypes.Receipts) (*types.Header, eth.L2BlockRef, eth.BlockID) {
 	t.Helper()
 	parent := eth.L2BlockRef{Hash: common.Hash{1}, Number: 100, Time: 100, L1Origin: eth.BlockID{Hash: common.Hash{2}, Number: 10}}
 	header := &types.Header{Number: big.NewInt(11), ParentHash: parent.L1Origin.Hash, Time: 100, BaseFee: big.NewInt(1), ReceiptHash: types.DeriveSha(receipts, trie.NewStackTrie(nil))}
-	source := &cgtInputStub{header: header, info: eth.HeaderBlockInfo(header)}
-	return newCgtV2Derivation(cgtTestConfig(), source), source, parent, eth.ToBlockID(source.info)
+	var index uint
+	for _, receipt := range receipts {
+		for _, log := range receipt.Logs {
+			log.BlockHash, log.Index = header.Hash(), index
+			index++
+		}
+	}
+	return header, parent, eth.BlockID{Hash: header.Hash(), Number: 11}
 }
 func cgtSeededReceipts() optypes.Receipts {
 	return optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{cgtEscrowLog(common.HexToAddress("0xcc"), common.Address{0x44}, 600)}}})
@@ -78,9 +71,9 @@ func (cgtL2Stub) SystemConfigByL2Hash(context.Context, common.Hash) (eth.SystemC
 
 func TestCgtV2AttributesBuilderWiring(t *testing.T) {
 	receipts := cgtSeededReceipts()
-	_, source, parent, origin := cgtTestDeriver(t, receipts)
+	header, parent, origin := cgtTestOrigin(t, receipts)
 	cfg := cgtTestConfig()
-	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
+	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
 	require.Len(t, attrs.Transactions, 17)
@@ -96,7 +89,7 @@ func TestCgtV2AttributesBuilderWiring(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, attrs.Transactions, safe.Transactions)
 	// Rebuilding on the same valid parent requires no process-local migration state.
-	fresh := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
+	fresh := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 	replay, err := fresh.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
 	require.Equal(t, attrs, replay)
@@ -104,33 +97,32 @@ func TestCgtV2AttributesBuilderWiring(t *testing.T) {
 
 func TestCgtV2SameOriginAndReorgReplay(t *testing.T) {
 	receipts := cgtSeededReceipts()
-	d, source, parent, origin := cgtTestDeriver(t, receipts)
-	_, _, first, err := d.originDeposits(context.Background(), parent, origin, receipts)
+	header, parent, origin := cgtTestOrigin(t, receipts)
+	l1 := &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}
+	builder := NewFetchingAttributesBuilder(cgtTestConfig(), params.MergedTestChainConfig, nil, l1, cgtL2Stub{})
+	first, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.Len(t, first, 16)
+	require.Len(t, first.Transactions, 17)
 	child := eth.L2BlockRef{Hash: common.Hash{3}, ParentHash: parent.Hash, Number: 101, Time: 102, L1Origin: origin}
-	builder := NewFetchingAttributesBuilder(cgtTestConfig(), params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
-	reads := source.headerReads
-	active, err := builder.CgtV2ActivationBlock(context.Background(), child, origin)
+	same, err := builder.PreparePayloadAttributes(context.Background(), child, origin)
 	require.NoError(t, err)
-	require.False(t, active)
-	require.Equal(t, reads, source.headerReads)
-	original := source.header
-	source.header = &types.Header{Number: big.NewInt(12), ParentHash: origin.Hash, ReceiptHash: types.EmptyReceiptsHash}
-	_, _, later, err := d.originDeposits(context.Background(), child, eth.BlockID{Hash: source.header.Hash(), Number: 12}, nil)
+	require.False(t, ContainsCgtV2Activation(same.Transactions))
+	laterHeader := &types.Header{Number: big.NewInt(12), ParentHash: origin.Hash, Time: 102, BaseFee: big.NewInt(1), ReceiptHash: types.EmptyReceiptsHash}
+	l1.info, l1.receipts = eth.HeaderBlockInfo(laterHeader), nil
+	later, err := builder.PreparePayloadAttributes(context.Background(), child, eth.ToBlockID(l1.info))
 	require.NoError(t, err)
-	require.Empty(t, later)
-	source.header = original
-	_, _, replay, err := d.originDeposits(context.Background(), parent, origin, receipts)
+	require.False(t, ContainsCgtV2Activation(later.Transactions))
+	l1.info, l1.receipts = eth.HeaderBlockInfo(header), receipts
+	replay, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
 	require.Equal(t, first, replay)
 }
 
 func TestCgtV2UpgradeGasRoundTrip(t *testing.T) {
 	receipts := cgtSeededReceipts()
-	_, source, parent, origin := cgtTestDeriver(t, receipts)
+	header, parent, origin := cgtTestOrigin(t, receipts)
 	cfg := cgtTestConfig()
-	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
+	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
 	payload := &eth.ExecutionPayload{BlockNumber: 101, Timestamp: attrs.Timestamp, GasLimit: *attrs.GasLimit, Transactions: attrs.Transactions}
@@ -146,17 +138,16 @@ func TestCgtV2DeprecatedChainsAreNotEnabled(t *testing.T) {
 	for _, id := range []int64{44787, 62320} {
 		cfg := cgtTestConfig()
 		cfg.L2ChainID = big.NewInt(id)
-		require.Nil(t, newCgtV2Derivation(cfg, &cgtInputStub{}))
+		upgrades, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
+		require.NoError(t, err)
+		require.Empty(t, upgrades)
 	}
 }
 
 func TestCgtV2IgnoresForeignEscrowEmitter(t *testing.T) {
-	receipts := cgtSeededReceipts()
-	d, _, parent, origin := cgtTestDeriver(t, receipts)
 	cfg := cgtTestConfig()
 	cfg.L2ChainID = big.NewInt(params.CeloMainnetChainID)
-	d = newCgtV2Derivation(cfg, d.source)
-	_, _, group, err := d.originDeposits(context.Background(), parent, origin, receipts)
+	group, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
 	require.NoError(t, err)
 	require.Empty(t, group)
 }
@@ -169,48 +160,11 @@ func TestAttributesParentMismatchPrecedesMalformedDeposit(t *testing.T) {
 			deposit := cgtPortalLog(t, cfg.DepositContractAddress, 1)
 			deposit.Data = nil
 			receipts := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{deposit}}})
-			_, source, parent, origin := cgtTestDeriver(t, receipts)
+			header, parent, origin := cgtTestOrigin(t, receipts)
 			parent.L1Origin.Hash = common.Hash{0xff}
-			builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{source.info, receipts}, cgtL2Stub{}, source)
+			builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 			_, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 			require.ErrorIs(t, err, ErrReset)
-		})
-	}
-}
-
-func TestCgtV2HeaderBinding(t *testing.T) {
-	for _, name := range []string{"valid", "wrong hash", "wrong number", "nil number", "nil header", "RPC error", "missing RPC", "oversized number"} {
-		t.Run(name, func(t *testing.T) {
-			_, source, _, origin := cgtTestDeriver(t, nil)
-			var rpc CgtV2InputSource = source
-			switch name {
-			case "wrong hash":
-				source.header.Extra = []byte{1}
-			case "wrong number":
-				source.header.Number = big.NewInt(12)
-			case "nil number":
-				source.header.Number = nil
-			case "nil header":
-				source.header = nil
-			case "RPC error":
-				source.err = errors.New("offline")
-			case "missing RPC":
-				rpc = nil
-			case "oversized number":
-				source.header.Number = new(big.Int).Lsh(big.NewInt(1), 65)
-			}
-			header, err := cgtV2Header(context.Background(), rpc, origin)
-			if name == "valid" {
-				require.NoError(t, err)
-				require.IsType(t, &types.Header{}, header)
-			} else {
-				require.Error(t, err)
-				if name == "RPC error" {
-					require.ErrorIs(t, err, ErrTemporary)
-				} else {
-					require.ErrorIs(t, err, ErrCritical)
-				}
-			}
 		})
 	}
 }
@@ -272,36 +226,25 @@ func TestCgtV2EscrowAppendsGroupAfterAllOriginDeposits(t *testing.T) {
 	receipts := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{
 		cgtPortalLog(t, portal, 1), cgtEscrowLog(common.HexToAddress("0xcc"), portal, 600), cgtPortalLog(t, portal, 2),
 	}}})
-	d, _, parent, origin := cgtTestDeriver(t, receipts)
-	_, deposits, upgrades, err := d.originDeposits(context.Background(), parent, origin, receipts)
-	txs := append(deposits, upgrades...)
+	header, parent, origin := cgtTestOrigin(t, receipts)
+	builder := NewFetchingAttributesBuilder(cgtTestConfig(), params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
+	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.NotEmpty(t, upgrades)
-	require.Len(t, txs, 18)
+	require.Len(t, attrs.Transactions, 19)
 	for i, index := range []uint64{0, 2} {
-		tx, err := optypes.UnmarshalDepositTx(txs[i])
+		tx, err := optypes.UnmarshalDepositTx(attrs.Transactions[i+1])
 		require.NoError(t, err)
 		require.Equal(t, (&UserDepositSource{L1BlockHash: origin.Hash, LogIndex: index}).SourceHash(), tx.SourceHash)
 	}
-	require.False(t, containsCgtV2Group(txs[:2]))
-	require.True(t, containsCgtV2Group(txs[2:]))
+	require.False(t, containsCgtV2Group(attrs.Transactions[:3]))
+	require.True(t, containsCgtV2Group(attrs.Transactions[3:]))
 }
 
-func TestCgtV2AuthenticatedDerivation(t *testing.T) {
-	for _, name := range []string{"valid", "forged amount", "missing event", "forged header", "wrong parent", "nil receipt", "nil log", "noncanonical success", "noncanonical poststate"} {
+func TestCgtV2CanonicalReceiptFields(t *testing.T) {
+	for _, name := range []string{"valid", "nil receipt", "nil log", "noncanonical success", "noncanonical poststate", "invalid receipt after event"} {
 		t.Run(name, func(t *testing.T) {
 			receipts := cgtSeededReceipts()
-			d, source, parent, origin := cgtTestDeriver(t, receipts)
 			switch name {
-			case "forged amount":
-				receipts[0].Logs[0].Data[31]++
-			case "missing event":
-				receipts = nil
-			case "forged header":
-				source.header.ReceiptHash = types.EmptyReceiptsHash
-			case "wrong parent":
-				source.header.ParentHash = common.Hash{9}
-				origin.Hash = source.header.Hash()
 			case "nil receipt":
 				receipts[0] = nil
 			case "nil log":
@@ -310,9 +253,10 @@ func TestCgtV2AuthenticatedDerivation(t *testing.T) {
 				receipts[0].Status = 2
 			case "noncanonical poststate":
 				receipts[0].PostState = []byte{1}
-				receipts[0].Status = 0
+			case "invalid receipt after event":
+				receipts = append(receipts, optypes.FromGethReceipt(&types.Receipt{Status: 2}))
 			}
-			_, _, group, err := d.originDeposits(context.Background(), parent, origin, receipts)
+			group, err := cgtV2UpgradeTransactionsFromReceipts(cgtTestConfig(), receipts)
 			if name != "valid" {
 				require.Error(t, err)
 				return
@@ -324,32 +268,6 @@ func TestCgtV2AuthenticatedDerivation(t *testing.T) {
 			require.EqualValues(t, 400, bigs.Uint64Strict(fund.Mint))
 		})
 	}
-}
-
-func TestCgtV2RetryReceiptsCannotChangeSystemConfig(t *testing.T) {
-	receipts := cgtSeededReceipts()
-	_, source, parent, origin := cgtTestDeriver(t, receipts)
-	cfg := cgtTestConfig()
-	l1 := &cgtL1Stub{source.info, receipts}
-	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, l1, cgtL2Stub{}, source)
-	active, err := builder.CgtV2ActivationBlock(context.Background(), parent, origin)
-	require.NoError(t, err)
-	require.True(t, active)
-	data := make([]byte, 96)
-	data[31] = 32
-	data[63] = 32
-	binary.BigEndian.PutUint64(data[88:], 9_000_000)
-	forged := &types.Log{Address: cfg.L1SystemConfigAddress, Topics: []common.Hash{ConfigUpdateEventABIHash, ConfigUpdateEventVersion0, SystemConfigUpdateGasLimit}, Data: data}
-	l1.receipts = optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{receipts[0].Logs[0], forged}}})
-	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
-	require.ErrorIs(t, err, ErrCritical)
-	require.Nil(t, attrs)
-	l1.receipts = receipts
-	attrs, err = builder.PreparePayloadAttributes(context.Background(), parent, origin)
-	require.NoError(t, err)
-	require.EqualValues(t, 30_000_000+cgtV2UpgradeGas, *attrs.GasLimit)
-	// L1 data authentication remains required on every retry, not only on first detection.
-	require.Equal(t, 3, source.headerReads)
 }
 
 type cgtConfigL2 struct{ config eth.SystemConfig }
@@ -368,10 +286,10 @@ func TestCgtV2GasUpdateAndFollowingOrigin(t *testing.T) {
 	cfg := cgtTestConfig()
 	receipts := cgtSeededReceipts()
 	receipts[0].Logs = append(receipts[0].Logs, cgtGasUpdate(cfg, 9_000_000))
-	_, source, parent, origin := cgtTestDeriver(t, receipts)
-	l1 := &cgtL1Stub{source.info, receipts}
+	header, parent, origin := cgtTestOrigin(t, receipts)
+	l1 := &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}
 	l2 := &cgtConfigL2{eth.SystemConfig{GasLimit: 30_000_000}}
-	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, l1, l2, source)
+	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, l1, l2)
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
 	require.EqualValues(t, 9_000_000+cgtV2UpgradeGas, *attrs.GasLimit)
@@ -381,8 +299,8 @@ func TestCgtV2GasUpdateAndFollowingOrigin(t *testing.T) {
 	require.EqualValues(t, 9_000_000, l2.config.GasLimit)
 	// A later L1 gas update overrides the recovered normal limit, without retaining group gas.
 	nextReceipts := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{cgtGasUpdate(cfg, 12_000_000)}}})
-	source.header = &types.Header{Number: big.NewInt(12), ParentHash: origin.Hash, Time: 102, BaseFee: big.NewInt(1), ReceiptHash: types.DeriveSha(nextReceipts, trie.NewStackTrie(nil))}
-	l1.info, l1.receipts = eth.HeaderBlockInfo(source.header), nextReceipts
+	header = &types.Header{Number: big.NewInt(12), ParentHash: origin.Hash, Time: 102, BaseFee: big.NewInt(1), ReceiptHash: types.DeriveSha(nextReceipts, trie.NewStackTrie(nil))}
+	l1.info, l1.receipts = eth.HeaderBlockInfo(header), nextReceipts
 	child := eth.L2BlockRef{Hash: common.Hash{3}, Number: 101, Time: 102, L1Origin: origin}
 	next, err := builder.PreparePayloadAttributes(context.Background(), child, eth.ToBlockID(l1.info))
 	require.NoError(t, err)
@@ -391,9 +309,9 @@ func TestCgtV2GasUpdateAndFollowingOrigin(t *testing.T) {
 	// Overflow of the temporary gas allowance is a critical error.
 	l2.config.GasLimit = ^uint64(0)
 	overflowReceipts := cgtSeededReceipts()
-	source.header = &types.Header{Number: big.NewInt(11), ParentHash: parent.L1Origin.Hash, Time: 100, BaseFee: big.NewInt(1), ReceiptHash: types.DeriveSha(overflowReceipts, trie.NewStackTrie(nil))}
-	l1.info, l1.receipts = eth.HeaderBlockInfo(source.header), overflowReceipts
-	_, err = builder.PreparePayloadAttributes(context.Background(), parent, eth.ToBlockID(eth.HeaderBlockInfo(source.header)))
+	header = &types.Header{Number: big.NewInt(11), ParentHash: parent.L1Origin.Hash, Time: 100, BaseFee: big.NewInt(1), ReceiptHash: types.DeriveSha(overflowReceipts, trie.NewStackTrie(nil))}
+	l1.info, l1.receipts = eth.HeaderBlockInfo(header), overflowReceipts
+	_, err = builder.PreparePayloadAttributes(context.Background(), parent, eth.ToBlockID(eth.HeaderBlockInfo(header)))
 	require.ErrorIs(t, err, ErrCritical)
 }
 
@@ -409,9 +327,7 @@ func TestCgtV2FullOriginMatchesNativeProofClient(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(raw, &vector))
 	var header types.Header
-	var receipt types.Receipt
 	require.NoError(t, rlp.DecodeBytes(vector.HeaderRlp, &header))
-	require.NoError(t, rlp.DecodeBytes(vector.ReceiptRlp, &receipt))
 	cfg := cgtTestConfig()
 	cfg.DepositContractAddress = common.HexToAddress("0x44")
 	cfg.L1SystemConfigAddress = common.Address{}
@@ -419,10 +335,10 @@ func TestCgtV2FullOriginMatchesNativeProofClient(t *testing.T) {
 	cfg.RegolithTime, cfg.CanyonTime, cfg.DeltaTime = &zero, &zero, &zero
 	cfg.EcotoneTime, cfg.FjordTime, cfg.GraniteTime = &zero, &zero, &zero
 	info := eth.HeaderBlockInfo(&header)
-	source := &cgtInputStub{header: &header, info: info}
-	receipts := optypes.FromGethReceipts(types.Receipts{&receipt})
+	receipts, err := eth.DecodeRawReceipts(eth.ToBlockID(info), []hexutil.Bytes{vector.ReceiptRlp}, []common.Hash{{1}})
+	require.NoError(t, err)
 	parent := eth.L2BlockRef{Hash: vector.ParentL2Hash, Time: 100, L1Origin: eth.BlockID{Hash: header.ParentHash, Number: 10}}
-	builder := NewFetchingAttributesBuilder(cfg, params.MainnetChainConfig, nil, &cgtL1Stub{info, receipts}, cgtL2Stub{}, source)
+	builder := NewFetchingAttributesBuilder(cfg, params.MainnetChainConfig, nil, &cgtL1Stub{info, receipts}, cgtL2Stub{})
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, eth.BlockID{Hash: header.Hash(), Number: 11})
 	require.NoError(t, err)
 	require.Equal(t, vector.Transactions, attrs.Transactions)

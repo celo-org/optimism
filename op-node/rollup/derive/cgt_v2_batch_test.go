@@ -20,15 +20,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-type cgtDetectorStub struct {
+type cgtAttributesBuilderStub struct {
 	active bool
 	err    error
-	calls  int
 }
 
-func (d *cgtDetectorStub) CgtV2ActivationBlock(context.Context, eth.L2BlockRef, eth.BlockID) (bool, error) {
-	d.calls++
-	return d.active, d.err
+func (d *cgtAttributesBuilderStub) PreparePayloadAttributes(_ context.Context, parent eth.L2BlockRef, _ eth.BlockID) (*eth.PayloadAttributes, error) {
+	if d.err != nil {
+		return nil, d.err
+	}
+	attrs := &eth.PayloadAttributes{Timestamp: eth.Uint64Quantity(parent.Time + 2)}
+	if d.active {
+		upgrades, _, err := CgtV2UpgradeTransactions(big.NewInt(1337), big.NewInt(600))
+		if err != nil {
+			return nil, err
+		}
+		attrs.Transactions = upgrades
+	}
+	return attrs, nil
 }
 
 func TestCgtV2BatchRejection(t *testing.T) {
@@ -56,10 +65,11 @@ func TestCgtV2BatchRejection(t *testing.T) {
 					input = sp
 				}
 				prev := &fakeBatchQueueInput{batches: []Batch{input}, errors: []error{nil}, origin: h}
-				detector := &cgtDetectorStub{active: true}
-				mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, newFakeSafeBlockFetcher(), detector)
+				builder := &cgtAttributesBuilderStub{active: true}
+				mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, newFakeSafeBlockFetcher())
 				require.ErrorIs(t, mux.Reset(context.Background(), b, eth.SystemConfig{}), io.EOF)
-				got, _, err := mux.NextBatch(context.Background(), parent)
+				queue := NewAttributesQueue(testlog.Logger(t, log.LevelError), cfg, builder, mux)
+				got, err := queue.NextAttributes(context.Background(), parent)
 				if kind != "empty" {
 					require.ErrorIs(t, err, NotEnoughData)
 					require.Nil(t, got)
@@ -80,35 +90,33 @@ func TestCgtV2BatchRPCErrorRetriesCandidate(t *testing.T) {
 	cfg := &rollup.Config{BlockTime: 2, MaxSequencerDrift: 600, SeqWindowSize: 10, HoloceneTime: new(uint64)}
 	batch := &SingularBatch{ParentHash: parent.Hash, EpochHash: h.Hash, EpochNum: 11, Timestamp: 102, Transactions: []hexutil.Bytes{{0xc0}}}
 	prev := &fakeBatchQueueInput{batches: []Batch{batch}, errors: []error{nil}, origin: h}
-	detector := &cgtDetectorStub{err: NewTemporaryError(errors.New("offline"))}
-	mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, nil, detector)
+	builder := &cgtAttributesBuilderStub{err: NewTemporaryError(errors.New("offline"))}
+	mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, nil)
 	require.ErrorIs(t, mux.Reset(context.Background(), b, eth.SystemConfig{}), io.EOF)
-	_, _, err := mux.NextBatch(context.Background(), parent)
+	queue := NewAttributesQueue(testlog.Logger(t, log.LevelError), cfg, builder, mux)
+	_, err := queue.NextAttributes(context.Background(), parent)
 	require.ErrorIs(t, err, ErrTemporary)
-	detector.err = nil
-	got, _, err := mux.NextBatch(context.Background(), parent)
+	builder.err = nil
+	got, err := queue.NextAttributes(context.Background(), parent)
 	require.NoError(t, err)
-	require.Equal(t, batch, got)
+	require.Equal(t, batch.Transactions, got.Attributes.Transactions)
 	require.Equal(t, 1, prev.i, "retry must not read another batch")
 }
 
 func TestCgtV2PipelineConstructorWiring(t *testing.T) {
 	rs := cgtSeededReceipts()
-	_, s, parent, origin := cgtTestDeriver(t, rs)
+	header, parent, origin := cgtTestOrigin(t, rs)
 	cfg := &rollup.Config{BlockTime: 2, L1ChainID: big.NewInt(1), L2ChainID: big.NewInt(1337), L1SystemConfigAddress: common.Address{0x33}, DepositContractAddress: common.Address{0x44}}
 	l1 := &testutils.MockL1Source{}
-	l1.ExpectFetchReceipts(origin.Hash, s.info, rs, nil)
+	l1.ExpectFetchReceipts(origin.Hash, eth.HeaderBlockInfo(header), rs, nil)
 	l2 := &testutils.MockL2Client{}
 	l2.ExpectSystemConfigByL2Hash(parent.Hash, eth.SystemConfig{GasLimit: 30000000}, nil)
-	pipeline := NewDerivationPipeline(testlog.Logger(t, log.LevelError), cfg, nil, l1, nil, nil, l2, nil, params.MergedTestChainConfig, s)
-	builder := pipeline.attrib.builder.(*FetchingAttributesBuilder)
+	pipeline := NewDerivationPipeline(testlog.Logger(t, log.LevelError), cfg, nil, l1, nil, nil, l2, nil, params.MergedTestChainConfig)
 	batch := &SingularBatch{ParentHash: parent.Hash, EpochHash: origin.Hash, EpochNum: rollup.Epoch(origin.Number), Timestamp: 102}
 	attrs, err := pipeline.attrib.createNextAttributes(context.Background(), batch, parent)
 	require.NoError(t, err)
 	require.True(t, ContainsCgtV2Activation(attrs.Transactions))
 	require.True(t, attrs.NoTxPool)
-	mux := pipeline.attrib.prev.(*BatchMux)
-	require.Same(t, builder, mux.cgt, "batch validation and attributes must use the same authenticated derivation")
 	pipeline.attrib.reset()
 	l1.AssertExpectations(t)
 	l2.AssertExpectations(t)
@@ -126,17 +134,30 @@ func TestCgtV2SpanPreservesValidPrefix(t *testing.T) {
 	copy(sp.ParentCheck[:], parent.Hash[:20])
 	copy(sp.L1OriginCheck[:], h.Hash[:20])
 	prev := &fakeBatchQueueInput{batches: []Batch{sp}, errors: []error{nil}, origin: h}
-	detector := &cgtDetectorStub{}
-	mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, nil, detector)
+	builder := &cgtAttributesBuilderStub{}
+	mux := NewBatchMux(testlog.Logger(t, log.LevelError), cfg, prev, nil)
 	require.ErrorIs(t, mux.Reset(context.Background(), b, eth.SystemConfig{}), io.EOF)
-	first, _, err := mux.NextBatch(context.Background(), parent)
+	queue := NewAttributesQueue(testlog.Logger(t, log.LevelError), cfg, builder, mux)
+	first, err := queue.NextAttributes(context.Background(), parent)
 	require.NoError(t, err)
-	require.Equal(t, uint64(102), first.Timestamp)
-	detector.active = true
+	require.EqualValues(t, 102, first.Attributes.Timestamp)
+	builder.active = true
 	child := eth.L2BlockRef{Hash: common.Hash{4}, ParentHash: parent.Hash, Number: 101, Time: 102, L1Origin: b.ID()}
-	next, _, err := mux.NextBatch(context.Background(), child)
+	next, err := queue.NextAttributes(context.Background(), child)
 	require.ErrorIs(t, err, NotEnoughData)
 	require.Nil(t, next)
-	require.Equal(t, uint64(102), first.Timestamp, "dropping the activation block must preserve the accepted prefix")
+	require.EqualValues(t, 102, first.Attributes.Timestamp, "dropping the activation block must preserve the accepted prefix")
 	require.Empty(t, mux.SingularBatchProvider.(*BatchStage).nextSpan)
+	retry, err := queue.DepositsOnlyAttributes(parent.ID(), first.DerivedFrom)
+	require.NoError(t, err, "rejecting a later batch must preserve the last returned attributes")
+	require.EqualValues(t, 102, retry.Attributes.Timestamp)
+}
+
+func TestBatchMuxFlushPreservesLegacyQueuedBatches(t *testing.T) {
+	queue := &BatchQueue{batches: []*BatchWithL1InclusionBlock{{}}}
+	queue.nextSpan = []*SingularBatch{{Timestamp: 102}, {Timestamp: 104}}
+	mux := &BatchMux{SingularBatchProvider: queue}
+	mux.FlushChannel()
+	require.Empty(t, queue.nextSpan)
+	require.Len(t, queue.batches, 1)
 }

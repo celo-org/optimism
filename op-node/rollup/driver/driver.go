@@ -29,10 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-// Keep the driver's raw L1 client compatible with the header interface;
-// the wrappers installed later do not expose these methods.
-var _ derive.CgtV2InputSource = (*sources.L1Client)(nil)
-
 // NewDriver composes an events handler that tracks L1 state, triggers L2 Derivation, and optionally sequences new L2 blocks.
 func NewDriver(
 	sys event.Registry,
@@ -57,9 +53,6 @@ func NewDriver(
 ) *Driver {
 	driverCtx, driverCancel := context.WithCancel(context.Background())
 
-	// Keep raw header access before confirmation-depth and metrics wrappers.
-	cgtSource, _ := l1.(derive.CgtV2InputSource)
-
 	statusTracker := status.NewStatusTracker(log, metrics)
 	sys.Register("status", statusTracker)
 
@@ -83,7 +76,7 @@ func NewDriver(
 	attrHandler := attributes.NewAttributesHandler(log, cfg, driverCtx, l2, ec)
 	sys.Register("attributes-handler", attrHandler)
 
-	derivationPipeline := derive.NewDerivationPipeline(log, cfg, depSet, verifConfDepth, l1Blobs, altDA, l2, metrics, l1ChainConfig, cgtSource)
+	derivationPipeline := derive.NewDerivationPipeline(log, cfg, depSet, verifConfDepth, l1Blobs, altDA, l2, metrics, l1ChainConfig)
 
 	pipelineDeriver := derive.NewPipelineDeriver(driverCtx, derivationPipeline)
 	sys.Register("pipeline", pipelineDeriver)
@@ -115,7 +108,7 @@ func NewDriver(
 	var sequencer sequencing.SequencerIface
 	if driverCfg.SequencerEnabled {
 		asyncGossiper := async.NewAsyncGossiper(driverCtx, network, log, metrics)
-		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ChainConfig, depSet, l1, l2, cgtSource)
+		attrBuilder := derive.NewFetchingAttributesBuilder(cfg, l1ChainConfig, depSet, l1, l2)
 		var seqL1Blocks sequencing.L1Blocks
 		if driverCfg.SequencerUseFinalized {
 			seqL1Blocks = finalized.NewFinalized(statusTracker.L1Finalized, l1, log)
