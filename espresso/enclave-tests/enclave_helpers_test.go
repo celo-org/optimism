@@ -254,8 +254,15 @@ func buildEif(t *testing.T, appImage, eif string) {
 func waitForEnclaveReady(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
+	dialer := net.Dialer{Timeout: 5 * time.Second}
 	for {
-		if conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", enclaveReadyPort), 5*time.Second); err == nil {
+		if conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", enclaveReadyPort)); err == nil {
+			// The bridge may accept and then stall, so bound each read and retry.
+			deadline := time.Now().Add(5 * time.Second)
+			if ctxDeadline, ok := ctx.Deadline(); ok && ctxDeadline.Before(deadline) {
+				deadline = ctxDeadline
+			}
+			_ = conn.SetReadDeadline(deadline)
 			buf := make([]byte, 16)
 			n, _ := conn.Read(buf)
 			conn.Close()
