@@ -24,6 +24,15 @@ var l2GenesisBlockBaseFeePerGas = hexutil.Big(*(big.NewInt(1000000000)))
 func CombineDeployConfig(intent *Intent, chainIntent *ChainIntent, state *State, chainState *ChainState) (genesis.DeployConfig, error) {
 	upgradeSchedule := standard.DefaultHardforkSchedule()
 
+	// Activate the Espresso upgrade at genesis for Espresso-enabled chains, unless an offset is
+	// already configured. This makes the in-memory e2e devnet run with Espresso (event-based)
+	// derivation from block 0. Production chains that want to stage Espresso onto an existing
+	// chain set L2GenesisEspressoTimeOffset explicitly upstream of this.
+	if chainIntent.EspressoEnabled && upgradeSchedule.L2GenesisEspressoTimeOffset == nil {
+		espressoOffset := hexutil.Uint64(0)
+		upgradeSchedule.L2GenesisEspressoTimeOffset = &espressoOffset
+	}
+
 	cfg := genesis.DeployConfig{
 		L1DependenciesConfig: genesis.L1DependenciesConfig{
 			L1StandardBridgeProxy:       chainState.L1StandardBridgeProxy,
@@ -31,6 +40,7 @@ func CombineDeployConfig(intent *Intent, chainIntent *ChainIntent, state *State,
 			L1ERC721BridgeProxy:         chainState.L1Erc721BridgeProxy,
 			SystemConfigProxy:           chainState.SystemConfigProxy,
 			OptimismPortalProxy:         chainState.OptimismPortalProxy,
+			BatchAuthenticatorAddress:   chainState.BatchAuthenticatorAddress,
 		},
 		L2InitializationConfig: genesis.L2InitializationConfig{
 			DevDeployConfig: genesis.DevDeployConfig{
