@@ -49,18 +49,34 @@ type DropEigenDACommitmentError struct {
 	Msg string
 }
 
+// maxErrorMsgSize is the number of bytes of a DropEigenDACommitmentError's Msg that its error text shows.
+// The Msg can hold a whole cert in hex, which is too long to log.
+const maxErrorMsgSize = 1000
+
 func (e DropEigenDACommitmentError) Error() string {
-	return fmt.Sprintf("Invalid AltDA Commitment: cert verification failed with status code %v: %v", e.StatusCode, e.Msg)
+	msg := e.Msg
+	if len(msg) > maxErrorMsgSize {
+		msg = fmt.Sprintf("%s... (%d more bytes)", msg[:maxErrorMsgSize], len(msg)-maxErrorMsgSize)
+	}
+	return fmt.Sprintf("Invalid AltDA Commitment: cert verification failed with status code %v: %v", e.StatusCode, msg)
 }
 
-// Validate that the status code is an integer between 1 and 4, and panics if it is not.
-func (e DropEigenDACommitmentError) Validate() {
+// Validate that the status code is an integer between 1 and 4, and returns an error if it is not.
+// The returned error is not a DropEigenDACommitmentError and does not wrap one,
+// so that a malformed 418 TEAPOT body can never cause a cert to be dropped from the derivation pipeline.
+func (e DropEigenDACommitmentError) Validate() error {
 	if e.StatusCode < 1 || e.StatusCode > 4 {
-		panic(fmt.Sprintf("DropEigenDACommitmentError: invalid status code %d, must be between 1 and 4", e.StatusCode))
+		return fmt.Errorf("DropEigenDACommitmentError: invalid status code %d, must be between 1 and 4", e.StatusCode)
 	}
 	// The Msg field should ideally be a human-readable string that explains the error,
 	// but we don't enforce it.
+	return nil
 }
+
+// maxTeapotBodySize is the largest 418 TEAPOT body that GetInput reads, to bound the memory an error response can take.
+// The proxy's message for a cert it fails to parse contains that cert in hex,
+// so the body can be more than twice as long as the commitment.
+const maxTeapotBodySize = 2 << 20
 
 // DAClient is an HTTP client to communicate with a DA storage service.
 // It creates commitments and retrieves input data + verifies if needed.
@@ -99,14 +115,19 @@ func (c *DAClient) GetInput(ctx context.Context, comm CommitmentData, l1Inclusio
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		return nil, ErrNotFound
 	}
 	if resp.StatusCode == http.StatusTeapot {
-		defer resp.Body.Close()
-		// Limit the body to 5000 bytes to prevent being DDoSed with a large error message.
-		bytesLimitedBody := io.LimitReader(resp.Body, 5000)
-		bodyBytes, _ := io.ReadAll(bytesLimitedBody)
+		// Read one byte past the limit to tell a body of exactly the limit from a longer one.
+		bodyBytes, err := io.ReadAll(io.LimitReader(resp.Body, maxTeapotBodySize+1))
+		if err != nil {
+			return nil, fmt.Errorf("failed to read 418 TEAPOT HTTP error body: %w", err)
+		}
+		if len(bodyBytes) > maxTeapotBodySize {
+			return nil, fmt.Errorf("418 TEAPOT HTTP error body exceeds %d bytes", maxTeapotBodySize)
+		}
 
 		var invalidCommitmentErr DropEigenDACommitmentError
 		if err := json.Unmarshal(bodyBytes, &invalidCommitmentErr); err != nil {
@@ -114,13 +135,14 @@ func (c *DAClient) GetInput(ctx context.Context, comm CommitmentData, l1Inclusio
 				"Consider updating proxy to a more recent version that contains https://github.com/Layr-Labs/eigenda/pull/1736: "+
 				"%w", err)
 		}
-		invalidCommitmentErr.Validate()
+		if err := invalidCommitmentErr.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid 418 TEAPOT HTTP error body: %w", err)
+		}
 		return nil, invalidCommitmentErr
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("failed to get preimage: %v", resp.StatusCode)
 	}
-	defer resp.Body.Close()
 	input, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, err
