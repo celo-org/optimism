@@ -10,6 +10,7 @@ import (
 	env "github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -89,7 +90,7 @@ func TestE2eDevnetWithUnattestedBatcherKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to fetch L2 safe head: %v", err)
 	}
-	if have, want := safeHead.Number.Uint64(), uint64(0); have != want {
+	if have, want := bigs.Uint64Strict(safeHead.Number), uint64(0); have != want {
 		t.Fatalf("L2 safe head advanced with an unattested batcher key:\nhave:\n\t%d\nwant:\n\t%d\n", have, want)
 	}
 }
