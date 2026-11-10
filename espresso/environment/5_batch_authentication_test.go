@@ -2,6 +2,7 @@ package environment_test
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/e2eutils/geth"
 	"github.com/ethereum-optimism/optimism/op-e2e/system/e2esys"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // TestE2eDevnetWithInvalidAttestation verifies that the batcher correctly
@@ -73,8 +75,21 @@ func TestE2eDevnetWithUnattestedBatcherKey(t *testing.T) {
 		t.Fatalf("failed to wait for unsafe block 15: %v", err)
 	}
 
-	// ...but safe L2 is not.
-	if _, err := geth.WaitForBlockToBeSafe(big.NewInt(1), l2Seq, 2*time.Minute); err == nil {
+	// ...but safe L2 is not. Only a timeout proves the safe head stalled; any
+	// other error (e.g. the sequencer RPC going away) must fail the test.
+	_, err = geth.WaitForBlockToBeSafe(big.NewInt(1), l2Seq, 2*time.Minute)
+	switch {
+	case err == nil:
 		t.Fatalf("L2 block 1 became safe even though the batcher key is unattested")
+	case !errors.Is(err, context.DeadlineExceeded):
+		t.Fatalf("unexpected error while waiting for L2 block 1 to be safe: %v", err)
+	}
+
+	safeHead, err := l2Seq.HeaderByNumber(ctx, big.NewInt(rpc.SafeBlockNumber.Int64()))
+	if err != nil {
+		t.Fatalf("failed to fetch L2 safe head: %v", err)
+	}
+	if have, want := safeHead.Number.Uint64(), uint64(0); have != want {
+		t.Fatalf("L2 safe head advanced with an unattested batcher key:\nhave:\n\t%d\nwant:\n\t%d\n", have, want)
 	}
 }
