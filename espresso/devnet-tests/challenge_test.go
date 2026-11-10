@@ -9,8 +9,7 @@ import "testing"
 // not run the succinct proposer/challenger.
 //
 // TODO: port TestChallengeGame from optimism-espresso-integration
-// espresso/devnet-tests/challenge_test.go once the compose devnet harness
-// (including the succinct-proposer service) is in place.
+// espresso/devnet-tests/challenge_test.go. Needs WithProofs.
 func TestChallengeGame(t *testing.T) {
 	t.Skip(skipNotPorted)
 }

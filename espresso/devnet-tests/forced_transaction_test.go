@@ -9,8 +9,7 @@ import "testing"
 // transaction tests.
 //
 // TODO: port TestForcedTransaction from optimism-espresso-integration
-// espresso/devnet-tests/forced_transaction_test.go once the compose devnet
-// harness is in place.
+// espresso/devnet-tests/forced_transaction_test.go.
 func TestForcedTransaction(t *testing.T) {
 	t.Skip(skipNotPorted)
 }

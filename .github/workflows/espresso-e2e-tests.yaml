@@ -35,9 +35,11 @@ jobs:
           # devnet test tier (espresso/devnet-tests, see its package doc).
           # Stubs whose names already match another group's filter
           # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
+          # Ported devnet tests (TestSmoke) need the compose devnet and run in
+          # espresso-devnet-tests.yaml instead.
           - group: core
             needs_prestate: false
-            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
           - group: integrity
             needs_prestate: false
             tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
