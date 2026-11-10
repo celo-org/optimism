@@ -19,16 +19,10 @@ import (
 // fails to register when provided with an invalid attestation, ensuring the
 // BatchAuthenticator contract properly validates attestations.
 //
-// Its original implementation gated on the SP1 zk attestation-verifier Docker
-// container, which the in-memory mock Espresso dev node does not emulate, so
-// it was dropped when the suite moved off the dockerized espresso-dev-node
-// (see commit acfa2e13c0 for the removed body and the
-// attestation_verifier_service_helpers.go it depended on).
-//
 // TODO: restore TestE2eDevnetWithInvalidAttestation (original body in git
-// history at acfa2e13c0^) once the attestation verifier service is restored.
+// history at acfa2e13c0^).
 func TestE2eDevnetWithInvalidAttestation(t *testing.T) {
-	t.Skip("attestation test not ported: the in-memory mock Espresso dev node does not emulate the SP1 zk attestation verifier")
+	t.Skip("TestE2eDevnetWithInvalidAttestation is not ported yet")
 }
 
 // unattestedBatcherKeyHex is the private key for
@@ -40,13 +34,6 @@ const unattestedBatcherKeyHex = "841c29acb9520a7ea8a48e7686cd825b93e8a3ecd966b62
 // TestE2eDevnetWithUnattestedBatcherKey verifies that when a batcher key is
 // not properly attested, the L2 chain can still produce unsafe blocks but
 // cannot progress to safe L2 blocks.
-//
-// This test does not need the SP1 attestation verifier service: outside a
-// Nitro enclave the batcher has no attestation, so registerBatcher returns
-// before ever contacting the service. The rejection comes from the mock TEE
-// verifier deployed by DeployEspresso (no NITRO_ENCLAVE_VERIFIER_ADDRESS),
-// which refuses every batch signature produced by the unattested key, so the
-// BatchAuthenticator never authenticates a batch and safe L2 stays put.
 func TestE2eDevnetWithUnattestedBatcherKey(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
