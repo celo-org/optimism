@@ -69,7 +69,7 @@ services:
   # one slot per epoch finalizes head - 2, so L1 finality takes seconds. It
   # continues the chain that espresso/devnet/prepare.sh deployed the contracts on.
   l1-anvil:
-    image: ghcr.io/foundry-rs/foundry:v1.5.1
+    image: ${ANVIL_IMAGE}
     healthcheck:
       test: ["CMD-SHELL", "cast bn --rpc-url http://localhost:${L1_HTTP_PORT} > /dev/null 2>&1"]
       interval: 3s

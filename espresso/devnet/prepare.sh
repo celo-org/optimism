@@ -16,7 +16,10 @@
 # BatchAuthenticator's batcher history, and derivation's batch-auth lookback
 # over L1 ancestors.
 #
-# Requires: go, anvil, cast, jq, and compiled contracts in
+# anvil runs from ANVIL_IMAGE, the devnet L1's image: anvil's state format
+# changes across releases, so the dump must come from the anvil that loads it.
+#
+# Requires: go, docker, cast, jq, and compiled contracts in
 # packages/contracts-bedrock/forge-artifacts (`just build-contracts`).
 set -euo pipefail
 
@@ -37,7 +40,7 @@ ARTIFACTS_DIR="file://${OP_ROOT}/packages/contracts-bedrock/forge-artifacts"
 ANVIL_PORT=${PREPARE_ANVIL_PORT:-28545}
 ANVIL_URL="http://127.0.0.1:${ANVIL_PORT}"
 
-for tool in go anvil cast jq; do
+for tool in go docker cast jq; do
     command -v "${tool}" >/dev/null || { echo "missing required tool: ${tool}" >&2; exit 1; }
 done
 if [[ ! -d "${OP_ROOT}/packages/contracts-bedrock/forge-artifacts" ]]; then
@@ -57,16 +60,22 @@ DASEL="${BIN_DIR}/dasel"
 
 ESPRESSO_ALLOCS="${ESPRESSO_DIR}/environment/allocs.json"
 
-anvil --port "${ANVIL_PORT}" --chain-id "${L1_CHAIN_ID}" \
+ANVIL_CONTAINER="espresso-prepare-anvil-$$"
+docker run -d --rm --name "${ANVIL_CONTAINER}" \
+    --user "$(id -u):$(id -g)" \
+    -v "${DEPLOYMENT_DIR}:/deployment" \
+    -p "127.0.0.1:${ANVIL_PORT}:${ANVIL_PORT}" \
+    --entrypoint anvil "${ANVIL_IMAGE}" \
+    --host 0.0.0.0 --port "${ANVIL_PORT}" --chain-id "${L1_CHAIN_ID}" \
     --disable-gas-limit --disable-code-size-limit \
-    --dump-state "${ANVIL_STATE_FILE}" >"${DEPLOYMENT_DIR}/anvil.log" 2>&1 &
-ANVIL_PID=$!
-trap 'kill "${ANVIL_PID}" 2>/dev/null || true' EXIT
+    --dump-state "/deployment/$(basename "${ANVIL_STATE_FILE}")" >/dev/null
+trap 'docker rm -f "${ANVIL_CONTAINER}" >/dev/null 2>&1 || true' EXIT
 
-for _ in $(seq 1 50); do
+for _ in $(seq 1 100); do
     cast bn --rpc-url "${ANVIL_URL}" >/dev/null 2>&1 && break
     sleep 0.2
 done
+cast bn --rpc-url "${ANVIL_URL}" >/dev/null || { docker logs "${ANVIL_CONTAINER}" >&2; exit 1; }
 
 anvil_rpc() { cast rpc --rpc-url "${ANVIL_URL}" "$@" >/dev/null; }
 
@@ -171,8 +180,8 @@ ANCHOR_STATE_REGISTRY_ADDRESS=$(deployment AnchorStateRegistryProxy)
 EOF
 
 # Stop anvil; it writes its state to ANVIL_STATE_FILE on SIGTERM.
-kill -TERM "${ANVIL_PID}"
-wait "${ANVIL_PID}" || true
+docker logs "${ANVIL_CONTAINER}" >"${DEPLOYMENT_DIR}/anvil.log" 2>&1 || true
+docker stop --timeout 30 "${ANVIL_CONTAINER}" >/dev/null
 trap - EXIT
 mv "${ANVIL_STATE_FILE}" "${L1_CONFIG_DIR}/state.json"
 

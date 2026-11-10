@@ -41,10 +41,10 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up mise (forge, anvil, cast, go, just, jq)
+      - name: Set up mise (forge, cast, go, just, jq)
         uses: jdx/mise-action@v2
         with:
-          install_args: go just jq forge cast anvil
+          install_args: go just jq forge cast
 
       # Same key as espresso-e2e-tests.yaml, so the two workflows share it.
       - name: Restore forge-artifacts cache
