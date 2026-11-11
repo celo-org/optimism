@@ -26,7 +26,8 @@ set -euo pipefail
 ESPRESSO_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 OP_ROOT=$(cd "${ESPRESSO_DIR}/.." && pwd)
 
-# shellcheck source-path=SCRIPTDIR source=../.env
+# .env only holds variable assignments; CI runs shellcheck without -x.
+# shellcheck disable=SC1091
 source "${ESPRESSO_DIR}/.env"
 
 DEPLOYMENT_DIR="${ESPRESSO_DIR}/deployment"
