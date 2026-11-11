@@ -3,6 +3,7 @@ package devnet_tests
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"errors"
 	"fmt"
 	"math/big"
@@ -15,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -23,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
+	hdwallet "github.com/ethereum-optimism/go-ethereum-hdwallet"
 	"github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-e2e/bindings"
 	"github.com/ethereum-optimism/optimism/op-e2e/config/secrets"
@@ -41,6 +44,7 @@ const opSuccinctGameType = 42
 type Devnet struct {
 	ctx         context.Context
 	secrets     secrets.Secrets
+	operator    *ecdsa.PrivateKey
 	composeFile string
 	profiles    []string
 	outageTime  time.Duration
@@ -86,10 +90,15 @@ func NewDevnet(ctx context.Context, t *testing.T, opts ...DevnetOption) *Devnet 
 	if err != nil {
 		t.Fatalf("failed to create default secrets: %v", err)
 	}
+	operator, err := operatorKey()
+	if err != nil {
+		t.Fatalf("failed to derive the operator key: %v", err)
+	}
 
 	d := &Devnet{
 		ctx:         ctx,
 		secrets:     *s,
+		operator:    operator,
 		composeFile: filepath.Join(espressoDir, "docker-compose.yml"),
 		outageTime:  durationFromEnv(t, "ESPRESSO_DEVNET_TESTS_OUTAGE_PERIOD", 10*time.Second),
 		successTime: durationFromEnv(t, "ESPRESSO_DEVNET_TESTS_LIVENESS_PERIOD", 10*time.Second),
@@ -329,11 +338,23 @@ func (d *Devnet) SystemConfig(ctx context.Context) (*bindings.SystemConfig, *bin
 	if err != nil {
 		return nil, nil, err
 	}
-	owner, err := bind.NewKeyedTransactorWithChainID(d.secrets.Deployer, config.L1ChainID)
+	owner, err := bind.NewKeyedTransactorWithChainID(d.operator, config.L1ChainID)
 	if err != nil {
 		return nil, nil, err
 	}
 	return contract, owner, nil
+}
+
+// operatorKey derives OPERATOR_PRIVATE_KEY from espresso/.env: HD index 0 of
+// the default test mnemonic, which espresso/devnet/prepare.sh makes the owner
+// of SystemConfig and the other chain roles. secrets.Secrets has no field for
+// that index.
+func operatorKey() (*ecdsa.PrivateKey, error) {
+	wallet, err := hdwallet.NewFromMnemonic(secrets.DefaultMnemonicConfig.Mnemonic)
+	if err != nil {
+		return nil, err
+	}
+	return wallet.PrivateKey(accounts.Account{URL: accounts.URL{Path: "m/44'/60'/0'/0/0"}})
 }
 
 // SubmitL2Tx sends a transaction from Alice to the sequencer and waits until
