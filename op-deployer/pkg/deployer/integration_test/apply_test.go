@@ -170,7 +170,9 @@ func TestEndToEndBootstrapApplyWithUpgrade(t *testing.T) {
 
 	lgr := testlog.Logger(t, slog.LevelDebug)
 
-	forkedL1, stopL1, err := devnet.NewForkedSepolia(lgr)
+	// Keep the chain on OPCM 8.0.1 so this tests an upgrade to the embedded OPCM,
+	// rather than an invalid downgrade after a newer OPCM is deployed on Sepolia.
+	forkedL1, stopL1, err := devnet.NewForkedSepoliaFromBlock(lgr, 12_077_011)
 	require.NoError(t, err)
 	pkHex, _, _ := shared.DefaultPrivkey(t)
 	t.Cleanup(func() {
