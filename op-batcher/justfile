@@ -8,13 +8,17 @@ _LDFLAGSSTRING := "'" + trim(
     "") + "'"
 
 BINARY := "./bin/op-batcher"
+ENCLAVE_TOOLS_BINARY := "./bin/enclave-tools"
 
 # Build op-batcher binary
 op-batcher: (go_build BINARY "./cmd" "-ldflags" _LDFLAGSSTRING)
 
+# Build enclave-tools binary: builds, registers and runs the op-batcher Nitro enclave EIF
+enclave-tools: (go_build ENCLAVE_TOOLS_BINARY "./enclave-tools/cmd")
+
 # Clean build artifacts
 clean:
-    rm -f {{BINARY}}
+    rm -f {{BINARY}} {{ENCLAVE_TOOLS_BINARY}}
 
 # Run tests
 test: (go_test "./...")

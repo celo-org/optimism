@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/http"
 	"net/url"
 	"regexp"
 	"time"
@@ -177,6 +178,10 @@ func CheckAndDial(ctx context.Context, log log.Logger, addr string, connectTimeo
 	defer cancel()
 
 	if !IsURLAvailable(ctx, addr, connectTimeout) {
+		if proxy := proxyAddrFor(addr); proxy != "" {
+			log.Warn("failed to dial proxy, but may connect later", "proxy", proxy, "addr", addr)
+			return nil, fmt.Errorf("proxy unavailable (%s) for %s", proxy, addr)
+		}
 		log.Warn("failed to dial address, but may connect later", "addr", addr)
 		return nil, fmt.Errorf("address unavailable (%s)", addr)
 	}
@@ -192,18 +197,26 @@ func IsURLAvailable(ctx context.Context, address string, timeout time.Duration) 
 	if err != nil {
 		return false
 	}
-	addr := u.Host
-	if u.Port() == "" {
-		switch u.Scheme {
-		case "http", "ws":
-			addr += ":80"
-		case "https", "wss":
-			addr += ":443"
-		default:
-			// Fail open if we can't figure out what the port should be
+	addr := hostPort(u)
+	if addr == "" {
+		// Fail open if we can't figure out what the port should be
+		return true
+	}
+
+	// With a proxy configured the RPC client dials the proxy, not the target,
+	// so probe that instead. Inside a Nitro enclave there is no direct route
+	// at all, and probing the target would fail for every address. This only
+	// proves the proxy is up; a target that isn't listening yet fails on the
+	// first RPC rather than here.
+	if proxyURL := proxyFor(u); proxyURL != nil {
+		addr = hostPort(proxyURL)
+		if addr == "" {
+			// Proxy scheme without a known default port (e.g. socks5://):
+			// fail open rather than fall back to probing the target.
 			return true
 		}
 	}
+
 	dialer := net.Dialer{Timeout: timeout}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
@@ -211,6 +224,68 @@ func IsURLAvailable(ctx context.Context, address string, timeout time.Duration) 
 	}
 	conn.Close()
 	return true
+}
+
+// proxyForRequest resolves the proxy for a request from the environment.
+// Indirected so tests can supply a proxy without mutating process env, which
+// net/http reads only once per process.
+var proxyForRequest = http.ProxyFromEnvironment
+
+// proxyFor returns the proxy the RPC client would use for u, or nil.
+func proxyFor(u *url.URL) *url.URL {
+	proxyURL, err := proxyForRequest(&http.Request{URL: proxyLookupURL(u)})
+	if err != nil {
+		return nil
+	}
+	return proxyURL
+}
+
+// proxyAddrFor returns the host:port the probe dials for address when a proxy
+// applies, or "" when it dials the target directly.
+func proxyAddrFor(address string) string {
+	u, err := url.Parse(address)
+	if err != nil {
+		return ""
+	}
+	if proxyURL := proxyFor(u); proxyURL != nil {
+		return hostPort(proxyURL)
+	}
+	return ""
+}
+
+// proxyLookupURL maps ws/wss to http/https for proxy resolution. net/http only
+// selects a proxy for http and https URLs, and the WebSocket client resolves
+// its proxy the same way. Other URLs are returned unchanged.
+func proxyLookupURL(u *url.URL) *url.URL {
+	var scheme string
+	switch u.Scheme {
+	case "ws":
+		scheme = "http"
+	case "wss":
+		scheme = "https"
+	default:
+		return u
+	}
+	lookup := *u
+	lookup.Scheme = scheme
+	return &lookup
+}
+
+// hostPort returns u's host with an explicit port, defaulting the port from the
+// scheme. It returns "" when the scheme implies no well-known port.
+func hostPort(u *url.URL) string {
+	port := u.Port()
+	if port == "" {
+		switch u.Scheme {
+		case "http", "ws":
+			port = "80"
+		case "https", "wss":
+			port = "443"
+		default:
+			return ""
+		}
+	}
+	return net.JoinHostPort(u.Hostname(), port)
 }
 
 // BaseRPCClient is a wrapper around a concrete *rpc.Client instance to make it compliant
