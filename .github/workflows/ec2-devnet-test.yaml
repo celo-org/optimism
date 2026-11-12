@@ -1,0 +1,174 @@
+# TODO: enable this workflow — ported (disabled) from optimism-espresso-integration
+# (.github/workflows/ec2-devnet-test.yaml @ celo-integration-rebase-17). It drives the espresso/devnet-tests
+# tier, which currently contains only skipped stubs in this repo. Before enabling:
+#   - port the espresso/ docker-compose devnet and the devnet_tools.go test harness
+#     (replace the espresso/devnet-tests stubs with the real test bodies)
+#   - port .github/workflows/compile-contracts.yaml and .github/actions/cache-submodules
+#   - set up the EC2/Nitro-enclave runner infrastructure used by ec2-devnet-test.yaml:
+#     the EspressoSystems/ec2-github-runner enclave fork, repository secrets
+#     (GH_PERSONAL_ACCESS_TOKEN, AWS_EC2_SUBNET_ID, AWS_EC2_SECURITY_GROUP_ID), the IAM
+#     role, and the Nix+Docker+nitro-cli AMI (ami-0d259f3ae020af5f9 in the reference repo)
+#
+# Reusable (workflow_call only) — inert until a caller invokes it, so its triggers are unchanged.
+name: EC2 Devnet Test (reusable)
+
+on:
+  workflow_call:
+    inputs:
+      tests:
+        description: "Go test -run regex pattern"
+        required: true
+        type: string
+      group-name:
+        description: "Human-readable name for this test group"
+        required: true
+        type: string
+    # Secrets (GH_PERSONAL_ACCESS_TOKEN, AWS_EC2_SUBNET_ID, AWS_EC2_SECURITY_GROUP_ID)
+    # are repository-level secrets. The run-tests job on the EC2 self-hosted runner
+    # does not reference them — only start-runner and stop-runner (on GitHub-hosted
+    # runners) use them.
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  start-runner:
+    name: Start EC2 runner (${{ inputs.group-name }})
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::324783324287:role/github-optimism-espresso-integration-access
+          role-duration-seconds: 10800
+          aws-region: us-east-2
+
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: EspressoSystems/ec2-github-runner@v2-enclave
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-0d259f3ae020af5f9
+          ec2-instance-type: m6a.2xlarge
+          subnet-id: ${{ secrets.AWS_EC2_SUBNET_ID }}
+          security-group-id: ${{ secrets.AWS_EC2_SECURITY_GROUP_ID }}
+          enclave-options: true
+          ec2-volume-size: 100
+          ec2-volume-type: gp3
+          run-runner-as-user: ec2-user
+          startup-timeout-minutes: 10
+          pre-runner-script: |
+            # Safety net: self-terminate after 50 minutes in case the
+            # stop-runner job never fires (workflow cancelled, GitHub outage, etc.).
+            # InstanceInitiatedShutdownBehavior=terminate ensures shutdown = termination.
+            sudo shutdown -h +50
+
+            # Install libicu — required by the GitHub Actions runner (.NET Core dependency)
+            sudo dnf install -y libicu
+
+            # Configure Nitro Enclaves allocator (4 GiB, 2 vCPUs)
+            sudo systemctl stop nitro-enclaves-allocator.service || true
+            echo -e '---\nmemory_mib: 4096\ncpu_count: 2' | sudo tee /etc/nitro_enclaves/allocator.yaml
+            sudo systemctl start nitro-enclaves-allocator.service
+          aws-resource-tags: >
+            [
+              {"Key": "Name", "Value": "tee-devnet-${{ inputs.group-name }}"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
+
+  run-tests:
+    name: Run tests (${{ inputs.group-name }})
+    needs: start-runner
+    runs-on: ${{ needs.start-runner.outputs.label }}
+    timeout-minutes: 40
+    env:
+      ESPRESSO_RUN_ENCLAVE_TESTS: "true"
+      ESPRESSO_DEVNET_TESTS_LIVENESS_PERIOD: "1m"
+      ESPRESSO_DEVNET_TESTS_OUTAGE_PERIOD: "1m"
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache submodules
+        uses: ./.github/actions/cache-submodules
+
+      - name: Set up Docker
+        run: |
+          # Ensure Docker is running and accessible
+          sudo systemctl enable --now docker
+          sudo usermod -aG docker ec2-user
+          sudo chown ec2-user /var/run/docker.sock
+
+          # Install docker compose plugin (not available in AL2023 repos)
+          sudo mkdir -p /usr/libexec/docker/cli-plugins
+          sudo curl -SL "https://github.com/docker/compose/releases/download/v2.32.4/docker-compose-linux-x86_64" \
+            -o /usr/libexec/docker/cli-plugins/docker-compose
+          sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+
+          docker compose version
+
+      # Nix is pre-installed on the AMI for ec2-user. We use
+      # `nix develop --command` to run commands inside the dev shell
+      # rather than trying to export the environment into GITHUB_PATH/ENV,
+      # which is fragile on self-hosted runners.
+      - name: Warm up Nix dev shell
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          export NIX_CONFIG="extra-experimental-features = nix-command flakes"
+          nix develop --command echo "Nix dev shell ready"
+
+      - name: Download forge-artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-artifacts
+          path: packages/contracts-bedrock/forge-artifacts/
+
+      - name: Download deployment artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: devnet-deployment
+          path: espresso/deployment/
+
+      - name: Build Docker images (TEE profile)
+        run: |
+          cd espresso
+          COMPOSE_PROFILES=tee docker compose build
+          COMPOSE_PROFILES=tee docker compose pull --ignore-buildable
+
+      - name: Run tests (${{ inputs.group-name }})
+        run: |
+          . /nix/var/nix/profiles/default/etc/profile.d/nix-daemon.sh
+          export NIX_CONFIG="extra-experimental-features = nix-command flakes"
+          nix develop --command bash -c '
+            export PATH="$(go env GOPATH)/bin:$PATH"
+            go install gotest.tools/gotestsum@latest
+            gotestsum --format github-actions -- -timeout 35m -p 1 -count 1 -run '"'"'${{ inputs.tests }}'"'"' ./espresso/devnet-tests/...
+          '
+
+  stop-runner:
+    name: Stop EC2 runner (${{ inputs.group-name }})
+    needs:
+      - start-runner
+      - run-tests
+    runs-on: ubuntu-latest
+    if: ${{ always() }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::324783324287:role/github-optimism-espresso-integration-access
+          role-duration-seconds: 10800
+          aws-region: us-east-2
+
+      - name: Stop EC2 runner
+        uses: EspressoSystems/ec2-github-runner@v2-enclave
+        with:
+          mode: stop
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          label: ${{ needs.start-runner.outputs.label }}
+          ec2-instance-id: ${{ needs.start-runner.outputs.ec2-instance-id }}

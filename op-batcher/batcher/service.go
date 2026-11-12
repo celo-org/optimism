@@ -106,6 +106,16 @@ type BatcherService struct {
 
 type DriverSetupOption func(setup *DriverSetup)
 
+// WithEspressoClientOverride returns a DriverSetupOption that replaces the Espresso
+// query-service client built from --espresso.query-service-urls with the provided
+// client. It is intended for tests that inject an in-memory Espresso fake in place of
+// a real espresso-dev-node; production code never sets it.
+func WithEspressoClientOverride(client espressoRuntimeClient) DriverSetupOption {
+	return func(setup *DriverSetup) {
+		setup.Espresso.Client = client
+	}
+}
+
 // BatcherServiceFromCLIConfig creates a new BatcherService from a CLIConfig.
 // The service components are fully started, except for the driver,
 // which will not be submitting batches (if it was configured to) until the Start part of the lifecycle.
