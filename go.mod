@@ -282,7 +282,7 @@ require (
 )
 
 // Use this command to find the pseudoversion for an op-geth commit `go list -m github.com/celo-org/op-geth@<commit-hash>`
-replace github.com/ethereum/go-ethereum => github.com/celo-org/op-geth v1.101411.1-0.20260608133158-d79195cac4da
+replace github.com/ethereum/go-ethereum => github.com/celo-org/op-geth v1.101411.1-0.20261110142831-58a428a04504
 
 // replace github.com/ethereum/go-ethereum => ../op-geth
 
