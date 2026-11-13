@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -49,6 +50,12 @@ type Devnet struct {
 	profiles    []string
 	outageTime  time.Duration
 	successTime time.Duration
+
+	// Teardown runs at most once per instance: Down is called by the test, by
+	// Up on failure and when ctx ends. A repeated `docker compose down` could
+	// otherwise remove the containers of a devnet started after this one.
+	downOnce sync.Once
+	downErr  error
 
 	L1            *ethclient.Client
 	L2Seq         *ethclient.Client
@@ -157,7 +164,9 @@ func (d *Devnet) isRunning() bool {
 // down when ctx ends, or immediately if Up fails.
 func (d *Devnet) Up() (err error) {
 	if d.isRunning() {
-		if err := d.Down(); err != nil {
+		// A leftover devnet, not this instance's: tear it down without
+		// consuming this instance's Down.
+		if err := d.down(); err != nil {
 			return err
 		}
 		return errors.New("devnet was already running; it has been shut down, start from a clean state")
@@ -225,8 +234,14 @@ func (d *Devnet) dumpLogs() {
 	_ = cmd.Run()
 }
 
-// Down stops the devnet and deletes its volumes.
+// Down stops the devnet and deletes its volumes. Only the first call does the
+// work; later calls return its result.
 func (d *Devnet) Down() error {
+	d.downOnce.Do(func() { d.downErr = d.down() })
+	return d.downErr
+}
+
+func (d *Devnet) down() error {
 	for _, c := range []*ethclient.Client{d.L1, d.L2Seq, d.L2Verif} {
 		if c != nil {
 			c.Close()
