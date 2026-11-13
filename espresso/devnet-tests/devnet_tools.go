@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -319,13 +320,26 @@ func (d *Devnet) callBatcherRPC(service Service, method string) error {
 		"exec", "-T", string(service),
 		"wget", "-q", "-O-", "--header=Content-Type: application/json", "--post-data="+body, "http://localhost:8545",
 	)
-	buf := new(bytes.Buffer)
-	cmd.Stdout = buf
-	cmd.Stderr = buf
+	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to call %s (%w): %s", method, err, buf.String())
+		return fmt.Errorf("failed to call %s (%w): %s%s", method, err, stdout.String(), stderr.String())
 	}
-	log.Info("RPC call successful", "service", service, "method", method, "response", buf.String())
+	// A JSON-RPC error comes with HTTP 200, so wget succeeds: check the body.
+	var resp struct {
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(stdout.Bytes(), &resp); err != nil {
+		return fmt.Errorf("failed to decode the %s response (%w): %s", method, err, stdout.String())
+	}
+	if resp.Error != nil {
+		return fmt.Errorf("%s failed: %s (code %d)", method, resp.Error.Message, resp.Error.Code)
+	}
+	log.Info("RPC call successful", "service", service, "method", method, "response", stdout.String())
 	return nil
 }
 
