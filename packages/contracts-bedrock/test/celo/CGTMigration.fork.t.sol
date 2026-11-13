@@ -20,7 +20,7 @@ import { StorageSetter } from "src/universal/StorageSetter.sol";
 
 // Libraries
 import { Constants } from "src/libraries/Constants.sol";
-import { GameType, GameTypes, OP_SUCCINCT_FAULT_DISPUTE_GAME_TYPE } from "src/dispute/lib/Types.sol";
+import { GameTypes } from "src/dispute/lib/Types.sol";
 import { Claim } from "src/dispute/lib/LibUDT.sol";
 
 // Interfaces
@@ -135,7 +135,6 @@ abstract contract CGTMigrationFork_TestInit is Test, CeloForkSafeExec {
             bridgeL1Proxy: address(bridge),
             storageSetter: address(new StorageSetter()),
             externalSuperchainConfig: EXTERNAL_SUPERCHAIN_CONFIG,
-            succinctGameImpl: makeAddr("redeployedSuccinctGame"),
             celoTokenL1: celoTokenL1,
             legacyPortalBalance: legacyPortalBalance,
             cannonPrestate: cannonPrestate,
@@ -229,8 +228,8 @@ abstract contract CGTMigrationFork_TestInit is Test, CeloForkSafeExec {
 /// @title CGTMigrationFork_Test
 contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
     /// @notice Drives the whole migration bundle through the real Safe and asserts the end-to-end
-    ///         post-state: drain, escrow seed, OPCM v6 upgrade, pause, CGT v2 flag, game type 42
-    ///         swap, then a live deposit once unpaused.
+    ///         post-state: drain, escrow seed, OPCM v6 upgrade, pause, CGT v2 flag, then a live deposit
+    ///         once unpaused.
     function testFork_mainnetBundle_executesEndToEnd() external {
         migrator.preflight(input);
 
@@ -241,16 +240,13 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
         string memory versionBeforeTx2 = systemConfig.version();
         MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
 
-        // Mainnet has a legacy CANNON impl, so the bundle carries the extra clear task at index 2
-        // and everything after it shifts.
         IDisputeGameFactory dgf = IDisputeGameFactory(systemConfig.disputeGameFactory());
-        bool hasClear = address(dgf.gameImpls(GameTypes.CANNON)) != address(0);
-        uint256 iOpcm = hasClear ? 3 : 2;
+        assertEq(tasks.length, 5);
         assertEq(tasks[0].target, MULTICALL3);
         assertEq(tasks[1].target, MULTICALL3);
-        assertEq(tasks[iOpcm].target, address(opcm));
-        assertEq(tasks[iOpcm + 1].target, MULTICALL3);
-        assertEq(tasks[iOpcm + 2].target, MULTICALL3);
+        assertEq(tasks[2].target, address(opcm));
+        assertEq(tasks[3].target, MULTICALL3);
+        assertEq(tasks[4].target, MULTICALL3);
 
         _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[0].target, tasks[0].calldata_);
 
@@ -267,21 +263,11 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
         assertEq(systemConfig.minBaseFee(), minBaseFeeBeforeTx2);
         assertEq(_hash(systemConfig.version()), _hash(versionBeforeTx2));
 
-        // Retiring the legacy CANNON type must precede OPCM, so OPCM skips it instead of
-        // installing a fresh v6 impl (and registering CANNON_KONA) that we would zero again.
-        if (hasClear) {
-            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[2].target, tasks[2].calldata_);
-            assertEq(address(dgf.gameImpls(GameTypes.CANNON)), address(0));
-        }
-
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm].target, tasks[iOpcm].calldata_);
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[2].target, tasks[2].calldata_);
 
         assertTrue(_hash(systemConfig.version()) != _hash(versionBeforeTx2));
         assertTrue(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)) != ORIGINAL_PORTAL_IMPL);
-        // OPCM left CANNON cleared and never registered CANNON_KONA.
-        assertEq(address(dgf.gameImpls(GameTypes.CANNON)), address(0));
-        assertEq(address(dgf.gameImpls(GameTypes.CANNON_KONA)), address(0));
-        // PERMISSIONED_CANNON is still required by OPCM, so it must remain set.
+        // PERMISSIONED_CANNON is required by OPCM, so it must remain set.
         assertTrue(address(dgf.gameImpls(GameTypes.PERMISSIONED_CANNON)) != address(0));
 
         vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotCgtMode.selector);
@@ -293,7 +279,7 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
 
         // The pause task carries that state onto SystemConfig's own slot, where the superchainConfig
         // repoint cannot reach it.
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm + 1].target, tasks[iOpcm + 1].calldata_);
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[3].target, tasks[3].calldata_);
 
         assertTrue(systemConfig.paused());
         assertTrue(systemConfig.celoPaused());
@@ -302,14 +288,10 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
 
         // CGT then flips on an already-frozen system. setFeature only rejects a paused system for
         // ETH_LOCKBOX, so CUSTOM_GAS_TOKEN goes through.
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm + 2].target, tasks[iOpcm + 2].calldata_);
+        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[4].target, tasks[4].calldata_);
 
         assertTrue(systemConfig.isCustomGasToken());
         assertTrue(systemConfig.paused());
-
-        // Finally the game type 42 swap, which is last wherever the chain runs that type.
-        _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[iOpcm + 3].target, tasks[iOpcm + 3].calldata_);
-        assertEq(address(dgf.gameImpls(GameType.wrap(OP_SUCCINCT_FAULT_DISPUTE_GAME_TYPE))), input.succinctGameImpl);
 
         migrator.verify(input);
 
@@ -440,40 +422,6 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
         assertEq(celoTokenL1.balanceOf(address(bridge)), 0);
         assertEq(proxyAdmin.getProxyImplementation(payable(PORTAL_PROXY)), ORIGINAL_PORTAL_IMPL);
         assertFalse(bridge.escrowSeeded());
-    }
-
-    /// @notice On a chain without game type 42 (Havoc), the swap task is absent and supplying an
-    ///         impl is rejected, so a mainnet address cannot be wired into a Havoc bundle.
-    function testFork_noSuccinctGameType_omitsSwap() external {
-        IDisputeGameFactory dgf = IDisputeGameFactory(systemConfig.disputeGameFactory());
-        uint256 withSwap = migrator.buildBundle(input).length;
-
-        vm.mockCall(
-            address(dgf),
-            abi.encodeCall(IDisputeGameFactory.gameImpls, (GameType.wrap(OP_SUCCINCT_FAULT_DISPUTE_GAME_TYPE))),
-            abi.encode(address(0))
-        );
-
-        vm.expectRevert(bytes("MigrateV1V2: succinctGameImpl set, but chain has no game type 42"));
-        migrator.buildBundle(input);
-
-        input.succinctGameImpl = address(0);
-        MigrateV1V2.Task[] memory tasks = migrator.buildBundle(input);
-        assertEq(tasks.length, withSwap - 1, "swap task dropped");
-
-        for (uint256 i; i < tasks.length; i++) {
-            _execSafeDelegateCall(vm, PARENT_SAFE, safeOwner, tasks[i].target, tasks[i].calldata_);
-        }
-        assertTrue(systemConfig.isCustomGasToken());
-        assertTrue(systemConfig.paused());
-        migrator.verify(input);
-    }
-
-    /// @notice A chain that does run game type 42 must be given a replacement impl.
-    function testFork_succinctGameTypePresentWithoutImpl_reverts() external {
-        input.succinctGameImpl = address(0);
-        vm.expectRevert(bytes("MigrateV1V2: succinctGameImpl required, chain runs game type 42"));
-        migrator.buildBundle(input);
     }
 
     /// @notice Executes every task in the bundle through the real Safe; ends paused.

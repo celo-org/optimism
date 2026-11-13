@@ -12,8 +12,6 @@ import { PortalMigrator } from "src/celo/PortalMigrator.sol";
 
 // Libraries
 import { Claim } from "src/dispute/lib/LibUDT.sol";
-import { GameType, GameTypes } from "src/dispute/lib/Types.sol";
-import { IDisputeGameFactory } from "interfaces/dispute/IDisputeGameFactory.sol";
 
 // Interfaces
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -38,7 +36,6 @@ struct MigrateV1V2Input {
     address bridgeL1Proxy;
     address storageSetter;
     address externalSuperchainConfig;
-    address succinctGameImpl;
     IERC20 celoTokenL1;
     uint256 legacyPortalBalance;
     bytes32 cannonPrestate;
@@ -48,7 +45,7 @@ struct MigrateV1V2Input {
 /// @title MigrateV1V2
 /// @notice CGT v1 → v2 migration, in three phases. Never broadcasts.
 ///         preflight()   reverts if any precondition fails.
-///         buildBundle() returns the 5 to 7 Safe tasks for CeloSuperchainOps to sign.
+///         buildBundle() returns the 5 Safe tasks for CeloSuperchainOps to sign.
 ///         verify()      asserts the post-state, after the Safe has executed.
 /// @dev Each phase takes an input struct, which is how the tests drive it. Operators use the run*
 ///      wrappers, which read the same values from env; runBuildBundle batches every task into one
@@ -87,9 +84,6 @@ contract MigrateV1V2 is Script {
 
     /// @notice superchain-ops' OPCM batching multicall
     address internal constant MULTICALL3_DELEGATECALL = 0x93dc480940585D9961bfcEab58124fFD3d60f76a;
-
-    /// @notice OP-Succinct fault dispute game type, the respected type on Celo mainnet.
-    uint32 internal constant OP_SUCCINCT_GAME_TYPE = 42;
 
     // ---------- Env entry points ----------
 
@@ -216,34 +210,19 @@ contract MigrateV1V2 is Script {
     // ---------- Phase 2: Build Safe tasks ----------
 
     /// @notice Builds the Safe tasks in execution order; does NOT broadcast or write to disk.
-    /// @notice Every task is a DELEGATECALL (operation = 1) and the order matters. Two tasks are
-    ///         conditional, so the bundle holds 5 to 7 and the numbering shifts with them:
+    /// @notice Every task is a DELEGATECALL (operation = 1) and the order matters:
     ///           1. drain the portal into CeloGasBridgeL1
     ///           2. repoint SystemConfig.superchainConfig to the external SuperchainConfig
-    ///           3. retire the legacy CANNON game type      (only where the chain runs it)
-    ///           4. OPCM.upgrade, installing the v6 impls   (requires step 2)
-    ///           5. restore the pause by writing celoPaused (requires step 4's impl to read it)
-    ///           6. enable the CUSTOM_GAS_TOKEN feature     (requires step 4's SystemConfig impl)
-    ///           7. point game type 42 at a new impl        (only where the chain runs it)
+    ///           3. OPCM.upgrade, installing the v6 impls   (requires step 2)
+    ///           4. restore the pause by writing celoPaused (requires step 3's impl to read it)
+    ///           5. enable the CUSTOM_GAS_TOKEN feature     (requires step 3's SystemConfig impl)
+    ///         Game type changes (retiring CANNON, repointing game type 42) are a separate hotfix that must run
+    ///         first, or OPCM upgrades CANNON and registers CANNON_KONA.
     function buildBundle(MigrateV1V2Input memory _input) public view returns (Task[] memory tasks_) {
         console.log("--- MigrateV1V2: Phase 2 build tasks ---");
         _validate(_input);
 
-        // Both game-type tasks are driven by what the chain actually runs, never by operator
-        // choice: Havoc has neither CANNON nor game type 42, mainnet has both.
-        bool clearLegacyCannon = _gameImpl(_input, GameTypes.CANNON) != address(0);
-        bool swapSuccinctGame = _gameImpl(_input, GameType.wrap(OP_SUCCINCT_GAME_TYPE)) != address(0);
-        if (swapSuccinctGame) {
-            require(
-                _input.succinctGameImpl != address(0), "MigrateV1V2: succinctGameImpl required, chain runs game type 42"
-            );
-        } else {
-            require(
-                _input.succinctGameImpl == address(0),
-                "MigrateV1V2: succinctGameImpl set, but chain has no game type 42"
-            );
-        }
-        tasks_ = new Task[](5 + (clearLegacyCannon ? 1 : 0) + (swapSuccinctGame ? 1 : 0));
+        tasks_ = new Task[](5);
         uint256 n;
 
         tasks_[n++] = Task({ target: MULTICALL3, calldata_: _buildDrainTask(_input) });
@@ -251,12 +230,6 @@ contract MigrateV1V2 is Script {
 
         tasks_[n++] = Task({ target: MULTICALL3, calldata_: _buildRepointTask(_input) });
         _logStep(n, "aggregate3[repoint superchainConfig CSC -> external SC via StorageSetter]");
-
-        // Must precede OPCM: a zero CANNON impl makes OPCM skip its permissionless branch.
-        if (clearLegacyCannon) {
-            tasks_[n++] = Task({ target: MULTICALL3, calldata_: _buildClearLegacyCannonTask(_input) });
-            _logStep(n, "aggregate3[DGF.setImplementation(CANNON, address(0))]");
-        }
 
         tasks_[n++] = Task({ target: _input.opcm, calldata_: _buildOpcmTask(_input) });
         _logStep(n, "OPCM.upgrade(opChainConfigs) [direct delegatecall]");
@@ -268,11 +241,6 @@ contract MigrateV1V2 is Script {
 
         tasks_[n++] = Task({ target: MULTICALL3, calldata_: _buildCgtFlagTask(_input) });
         _logStep(n, "aggregate3[SystemConfig.setFeature(CUSTOM_GAS_TOKEN, true)]");
-
-        if (swapSuccinctGame) {
-            tasks_[n++] = Task({ target: MULTICALL3, calldata_: _buildSuccinctGameSwapTask(_input) });
-            _logStep(n, "aggregate3[DGF.setImplementation(42, redeployed impl)]");
-        }
 
         require(n == tasks_.length, "MigrateV1V2: task count mismatch");
         for (uint256 i; i < tasks_.length; i++) {
@@ -363,7 +331,6 @@ contract MigrateV1V2 is Script {
             bridgeL1Proxy: vm.envAddress("BRIDGE_L1_PROXY"),
             storageSetter: vm.envAddress("STORAGE_SETTER"),
             externalSuperchainConfig: vm.envAddress("EXTERNAL_SUPERCHAIN_CONFIG"),
-            succinctGameImpl: vm.envOr("SUCCINCT_GAME_IMPL", address(0)),
             celoTokenL1: celoTokenL1,
             // Live read is only correct pre-drain; set explicitly when verifying after the drain.
             legacyPortalBalance: vm.envOr("LEGACY_PORTAL_BALANCE", celoTokenL1.balanceOf(portalProxy)),
@@ -404,12 +371,6 @@ contract MigrateV1V2 is Script {
         }
         vm.writeFile(_path, string.concat(json, "]"));
         console.log("Bundle written to:", _path);
-    }
-
-    /// @notice Live implementation for a game type, or address(0) when the chain does not run it.
-    function _gameImpl(MigrateV1V2Input memory _input, GameType _gameType) internal view returns (address) {
-        IDisputeGameFactory dgf = IDisputeGameFactory(ISystemConfig(_input.systemConfig).disputeGameFactory());
-        return address(dgf.gameImpls(_gameType));
     }
 
     /// @notice Logs a task's one-based position and what it does.
@@ -462,32 +423,6 @@ contract MigrateV1V2 is Script {
                 "upgrade(address,address)",
                 _input.systemConfig,
                 address(uint160(uint256(vm.load(_input.systemConfig, EIP1967_IMPL_SLOT))))
-            )
-        });
-        return _encodeAggregate3(calls);
-    }
-
-    /// @notice Retires the unused legacy CANNON game type by zeroing its implementation.
-    /// @notice Only CANNON is safe to clear; OPCM reads PERMISSIONED_CANNON unconditionally.
-    function _buildClearLegacyCannonTask(MigrateV1V2Input memory _input) internal view returns (bytes memory) {
-        IMulticall3.Call3[] memory calls = new IMulticall3.Call3[](1);
-        calls[0] = IMulticall3.Call3({
-            target: ISystemConfig(_input.systemConfig).disputeGameFactory(),
-            allowFailure: false,
-            callData: abi.encodeWithSignature("setImplementation(uint32,address)", GameTypes.CANNON.raw(), address(0))
-        });
-        return _encodeAggregate3(calls);
-    }
-
-    /// @notice Repoints game type 42 at the redeployed OPSuccinctFaultDisputeGame.
-    /// @notice Required when the AccessManager is redeployed; existing games keep their old impl.
-    function _buildSuccinctGameSwapTask(MigrateV1V2Input memory _input) internal view returns (bytes memory) {
-        IMulticall3.Call3[] memory calls = new IMulticall3.Call3[](1);
-        calls[0] = IMulticall3.Call3({
-            target: ISystemConfig(_input.systemConfig).disputeGameFactory(),
-            allowFailure: false,
-            callData: abi.encodeWithSignature(
-                "setImplementation(uint32,address)", OP_SUCCINCT_GAME_TYPE, _input.succinctGameImpl
             )
         });
         return _encodeAggregate3(calls);
