@@ -4,13 +4,17 @@ name: Espresso E2E tests
 # + op-e2e in-process L1/L2, no docker devnet, so it runs on free runners.
 on:
   pull_request:
+    # The suite runs op-e2e's in-process L1/L2, which imports Go code from most
+    # of the monorepo (op-service, op-core, ...): match all Go files rather
+    # than a list of directories that would drift.
     paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
       - "espresso/**"
-      - "op-batcher/**"
-      - "op-challenger/**"
-      - "op-e2e/**"
-      - "op-node/**"
       - "packages/contracts-bedrock/**"
+      - "justfile"
+      - "mise.toml"
       - ".github/workflows/espresso-e2e-tests.yaml"
   workflow_dispatch:
 
@@ -35,9 +39,11 @@ jobs:
           # devnet test tier (espresso/devnet-tests, see its package doc).
           # Stubs whose names already match another group's filter
           # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
+          # Ported devnet tests (TestSmoke) need the compose devnet and run in
+          # espresso-devnet-tests.yaml instead.
           - group: core
             needs_prestate: false
-            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestSmoke|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
           - group: integrity
             needs_prestate: false
             tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
@@ -63,12 +69,19 @@ jobs:
       - name: Set up mise (forge, go, just, ...)
         uses: jdx/mise-action@v2
 
+      # Every forge build input is in the cache key: library revisions
+      # (submodule commits, which .gitmodules does not track), the test/
+      # mocks the deploy scripts import, and the forge version (mise.toml).
+      - name: Hash forge build inputs
+        id: forge-inputs
+        run: echo "submodules=$(git submodule status --recursive | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
       - name: Restore forge-artifacts cache
         id: forge-cache
         uses: actions/cache@v4
         with:
           path: packages/contracts-bedrock/forge-artifacts
-          key: forge-artifacts-${{ hashFiles('packages/contracts-bedrock/foundry.toml', 'packages/contracts-bedrock/src/**/*.sol', 'packages/contracts-bedrock/interfaces/**/*.sol', 'packages/contracts-bedrock/scripts/**/*.sol', '.gitmodules') }}
+          key: forge-artifacts-${{ steps.forge-inputs.outputs.submodules }}-${{ hashFiles('mise.toml', 'packages/contracts-bedrock/foundry.toml', 'packages/contracts-bedrock/src/**/*.sol', 'packages/contracts-bedrock/interfaces/**/*.sol', 'packages/contracts-bedrock/scripts/**/*.sol', 'packages/contracts-bedrock/test/**/*.sol', '.gitmodules') }}
 
       - name: Compile contracts
         if: steps.forge-cache.outputs.cache-hit != 'true'
