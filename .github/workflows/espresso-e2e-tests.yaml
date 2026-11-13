@@ -34,9 +34,9 @@ jobs:
           # In-memory groups (contracts only).
           #
           # The core group additionally matches the not-yet-ported stub
-          # TestE2eDevnetWithInvalidAttestation
-          # (espresso/environment/5_batch_authentication_test.go) so it is
-          # visible as SKIP in CI output. The devnet test tier
+          # TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions
+          # (espresso/enclave-tests) so it is visible as SKIP in CI output.
+          # The devnet test tier
           # (espresso/devnet-tests) needs the compose devnet and runs in
           # espresso-devnet-tests.yaml instead.
           - group: core
