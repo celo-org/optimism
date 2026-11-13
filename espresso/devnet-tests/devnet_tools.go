@@ -436,12 +436,10 @@ func (d *Devnet) SubmitL2Tx(applyTxOpts helpers.TxOptsFn) (*types.Receipt, error
 		return nil, fmt.Errorf("sending L2 tx: %w", err)
 	}
 
-	receipt, err := wait.ForReceiptOK(ctx, d.L2Seq, tx.Hash())
+	// Wait for the expected status, so a deliberately reverted tx passes.
+	receipt, err := wait.ForReceipt(ctx, d.L2Seq, tx.Hash(), opts.ExpectedStatus)
 	if err != nil {
 		return nil, fmt.Errorf("waiting for L2 tx: %w", err)
-	}
-	if opts.ExpectedStatus != receipt.Status {
-		return nil, fmt.Errorf("wrong status: have %d, want %d", receipt.Status, opts.ExpectedStatus)
 	}
 	return receipt, nil
 }
@@ -452,7 +450,8 @@ func (d *Devnet) VerifyL2Tx(receipt *types.Receipt) error {
 	ctx, cancel := context.WithTimeout(d.ctx, 5*time.Minute)
 	defer cancel()
 
-	verified, err := wait.ForReceiptOK(ctx, d.L2Verif, receipt.TxHash)
+	// The verifier must reach the sequencer's status, failed or not.
+	verified, err := wait.ForReceipt(ctx, d.L2Verif, receipt.TxHash, receipt.Status)
 	if err != nil {
 		return fmt.Errorf("waiting for L2 tx on verification client: %w", err)
 	}
