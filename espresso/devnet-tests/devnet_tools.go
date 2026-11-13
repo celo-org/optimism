@@ -210,19 +210,19 @@ func (d *Devnet) Up() (err error) {
 		}()
 	}
 
-	if d.L2Seq, err = d.serviceClient(OpGethSequencer, 8546); err != nil {
+	if d.L2Seq, err = d.serviceClient(OpGethSequencer); err != nil {
 		return err
 	}
-	if d.L2SeqRollup, err = d.rollupClient(OpNodeSequencer, 9545); err != nil {
+	if d.L2SeqRollup, err = d.rollupClient(OpNodeSequencer); err != nil {
 		return err
 	}
-	if d.L2Verif, err = d.serviceClient(OpGethVerifier, 8546); err != nil {
+	if d.L2Verif, err = d.serviceClient(OpGethVerifier); err != nil {
 		return err
 	}
-	if d.L2VerifRollup, err = d.rollupClient(OpNodeVerifier, 9546); err != nil {
+	if d.L2VerifRollup, err = d.rollupClient(OpNodeVerifier); err != nil {
 		return err
 	}
-	if d.L1, err = d.serviceClient(L1Anvil, 8545); err != nil {
+	if d.L1, err = d.serviceClient(L1Anvil); err != nil {
 		return err
 	}
 	return nil
@@ -602,30 +602,42 @@ func (d *Devnet) ListChallengeGames() ([]ChallengeGame, error) {
 	return games, nil
 }
 
-// hostPort returns the host port that privatePort of a service is published on.
-func (d *Devnet) hostPort(service Service, privatePort uint16) (uint16, error) {
+// hostPort returns the host port that a service publishes its RPC on. It reads
+// the port from the resolved compose config rather than assuming a container
+// port, since the .env port variables (OP_HTTP_PORT, ...) set both sides of
+// the mapping. Each service it is used on publishes exactly one port.
+func (d *Devnet) hostPort(service Service) (uint16, error) {
 	stdout, stderr := new(bytes.Buffer), new(bytes.Buffer)
-	cmd := d.composeCommand("port", string(service), strconv.Itoa(int(privatePort)))
+	cmd := d.composeCommand("config", "--format", "json", string(service))
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	if err := cmd.Run(); err != nil {
-		return 0, fmt.Errorf("docker compose port (%w): %s", err, stderr.String())
+		return 0, fmt.Errorf("docker compose config (%w): %s", err, stderr.String())
 	}
-	out := strings.TrimSpace(stdout.String())
-	_, portStr, found := strings.Cut(out, ":")
-	if !found {
-		return 0, fmt.Errorf("invalid output from docker compose port: %q", out)
+	var config struct {
+		Services map[string]struct {
+			Ports []struct {
+				Published string `json:"published"`
+			} `json:"ports"`
+		} `json:"services"`
 	}
-	port, err := strconv.ParseUint(portStr, 10, 16)
+	if err := json.Unmarshal(stdout.Bytes(), &config); err != nil {
+		return 0, fmt.Errorf("invalid output from docker compose config (%w)", err)
+	}
+	ports := config.Services[string(service)].Ports
+	if len(ports) != 1 {
+		return 0, fmt.Errorf("expected %s to publish one port, got %d", service, len(ports))
+	}
+	port, err := strconv.ParseUint(ports[0].Published, 10, 16)
 	if err != nil {
-		return 0, fmt.Errorf("invalid output from docker compose port: %q (%w)", out, err)
+		return 0, fmt.Errorf("invalid published port %q of %s (%w)", ports[0].Published, service, err)
 	}
 	return uint16(port), nil
 }
 
 // serviceClient opens an Ethereum RPC client on a service's RPC port.
-func (d *Devnet) serviceClient(service Service, port uint16) (*ethclient.Client, error) {
-	hostPort, err := d.hostPort(service, port)
+func (d *Devnet) serviceClient(service Service) (*ethclient.Client, error) {
+	hostPort, err := d.hostPort(service)
 	if err != nil {
 		return nil, fmt.Errorf("could not get %s port: %w", service, err)
 	}
@@ -637,8 +649,8 @@ func (d *Devnet) serviceClient(service Service, port uint16) (*ethclient.Client,
 }
 
 // rollupClient opens an op-node rollup RPC client on a service's RPC port.
-func (d *Devnet) rollupClient(service Service, port uint16) (*sources.RollupClient, error) {
-	hostPort, err := d.hostPort(service, port)
+func (d *Devnet) rollupClient(service Service) (*sources.RollupClient, error) {
+	hostPort, err := d.hostPort(service)
 	if err != nil {
 		return nil, fmt.Errorf("could not get %s port: %w", service, err)
 	}
