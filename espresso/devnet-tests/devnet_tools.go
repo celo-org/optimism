@@ -371,6 +371,7 @@ func (d *Devnet) SystemConfig(ctx context.Context) (*bindings.SystemConfig, *bin
 	if err != nil {
 		return nil, nil, err
 	}
+	owner.Context = ctx
 	return contract, owner, nil
 }
 
@@ -560,7 +561,9 @@ func (d *Devnet) ListChallengeGames() ([]ChallengeGame, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get system config: %w", err)
 	}
-	factoryAddr, err := systemConfig.DisputeGameFactory(&bind.CallOpts{})
+	// Bound every read by d.ctx, so a stalled L1 RPC cannot outlive the test.
+	callOpts := &bind.CallOpts{Context: d.ctx}
+	factoryAddr, err := systemConfig.DisputeGameFactory(callOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get dispute game factory address: %w", err)
 	}
@@ -568,14 +571,14 @@ func (d *Devnet) ListChallengeGames() ([]ChallengeGame, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to bind to dispute game factory: %w", err)
 	}
-	gameCount, err := factory.GameCount(&bind.CallOpts{})
+	gameCount, err := factory.GameCount(callOpts)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get game count: %w", err)
 	}
 
 	var games []ChallengeGame
 	for i := range bigs.Uint64Strict(gameCount) {
-		gameInfo, err := factory.GameAtIndex(&bind.CallOpts{}, new(big.Int).SetUint64(i))
+		gameInfo, err := factory.GameAtIndex(callOpts, new(big.Int).SetUint64(i))
 		if err != nil {
 			return nil, fmt.Errorf("failed to get game at index %d: %w", i, err)
 		}
@@ -587,7 +590,7 @@ func (d *Devnet) ListChallengeGames() ([]ChallengeGame, error) {
 		if err != nil {
 			return nil, fmt.Errorf("failed to bind to dispute game %s: %w", gameInfo.Proxy, err)
 		}
-		rootClaim, err := game.RootClaim(&bind.CallOpts{})
+		rootClaim, err := game.RootClaim(callOpts)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get root claim of %s: %w", gameInfo.Proxy, err)
 		}
