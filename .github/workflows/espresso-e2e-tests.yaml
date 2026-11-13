@@ -30,7 +30,7 @@ jobs:
           # In-memory groups (contracts only).
           #
           # The core group additionally matches the not-yet-ported stubs so
-          # they are visible as SKIP in CI output: the attestation tests
+          # they are visible as SKIP in CI output: TestE2eDevnetWithInvalidAttestation
           # (espresso/environment/5_batch_authentication_test.go) and the
           # devnet test tier (espresso/devnet-tests, see its package doc).
           # Stubs whose names already match another group's filter
