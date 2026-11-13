@@ -65,12 +65,19 @@ jobs:
       - name: Set up mise (forge, go, just, ...)
         uses: jdx/mise-action@v2
 
+      # Every forge build input is in the cache key: library revisions
+      # (submodule commits, which .gitmodules does not track), the test/
+      # mocks the deploy scripts import, and the forge version (mise.toml).
+      - name: Hash forge build inputs
+        id: forge-inputs
+        run: echo "submodules=$(git submodule status --recursive | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
       - name: Restore forge-artifacts cache
         id: forge-cache
         uses: actions/cache@v4
         with:
           path: packages/contracts-bedrock/forge-artifacts
-          key: forge-artifacts-${{ hashFiles('packages/contracts-bedrock/foundry.toml', 'packages/contracts-bedrock/src/**/*.sol', 'packages/contracts-bedrock/interfaces/**/*.sol', 'packages/contracts-bedrock/scripts/**/*.sol', '.gitmodules') }}
+          key: forge-artifacts-${{ steps.forge-inputs.outputs.submodules }}-${{ hashFiles('mise.toml', 'packages/contracts-bedrock/foundry.toml', 'packages/contracts-bedrock/src/**/*.sol', 'packages/contracts-bedrock/interfaces/**/*.sol', 'packages/contracts-bedrock/scripts/**/*.sol', 'packages/contracts-bedrock/test/**/*.sol', '.gitmodules') }}
 
       - name: Compile contracts
         if: steps.forge-cache.outputs.cache-hit != 'true'
