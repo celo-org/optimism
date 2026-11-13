@@ -10,14 +10,19 @@ name: Espresso Devnet tests
 # runner, set the ESPRESSO_DEVNET_RUNNER repository variable to its label.
 on:
   pull_request:
+    # The harness, op-deployer and the devnet images (op-node, op-batcher)
+    # import Go code from most of the monorepo (op-service, op-e2e, op-core,
+    # ...), so any Go change can break the devnet: match all Go files rather
+    # than a list of directories that would drift.
     paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
       - "espresso/**"
-      - "op-batcher/**"
-      - "op-node/**"
-      - "op-deployer/**"
       - "packages/contracts-bedrock/**"
       - "ops/docker/op-stack-go/**"
-      - "go.mod"
+      - "justfile"
+      - "mise.toml"
       - ".github/workflows/espresso-devnet-tests.yaml"
   workflow_dispatch:
 

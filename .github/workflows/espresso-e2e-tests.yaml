@@ -4,13 +4,17 @@ name: Espresso E2E tests
 # + op-e2e in-process L1/L2, no docker devnet, so it runs on free runners.
 on:
   pull_request:
+    # The suite runs op-e2e's in-process L1/L2, which imports Go code from most
+    # of the monorepo (op-service, op-core, ...): match all Go files rather
+    # than a list of directories that would drift.
     paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
       - "espresso/**"
-      - "op-batcher/**"
-      - "op-challenger/**"
-      - "op-e2e/**"
-      - "op-node/**"
       - "packages/contracts-bedrock/**"
+      - "justfile"
+      - "mise.toml"
       - ".github/workflows/espresso-e2e-tests.yaml"
   workflow_dispatch:
 
