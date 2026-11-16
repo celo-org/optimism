@@ -32,6 +32,12 @@ func (s *stopRecordingStreamer) Stop() {
 	}
 }
 
+func (s *stopRecordingStreamer) SetBatchPosition(position eth.L2BlockRef) {
+	if s.espressoStreamer != nil {
+		s.espressoStreamer.SetBatchPosition(position)
+	}
+}
+
 func newEspressoLifecycleTestBatcher(t *testing.T) *BatchSubmitter {
 	t.Helper()
 	batcher, endpoints := setup(t, nil)
