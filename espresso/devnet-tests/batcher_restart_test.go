@@ -8,8 +8,7 @@ import "testing"
 // keeps progressing.
 //
 // TODO: port TestBatcherRestart from optimism-espresso-integration
-// espresso/devnet-tests/batcher_restart_test.go once the compose devnet
-// harness is in place.
+// espresso/devnet-tests/batcher_restart_test.go.
 func TestBatcherRestart(t *testing.T) {
 	t.Skip(skipNotPorted)
 }

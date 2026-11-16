@@ -8,8 +8,7 @@ import "testing"
 // that BatchAuthenticator.activeIsEspresso designates as active.
 //
 // TODO: port TestBatcherActivePublishOnly from optimism-espresso-integration
-// espresso/devnet-tests/batcher_active_publish_test.go once the compose
-// devnet harness is in place.
+// espresso/devnet-tests/batcher_active_publish_test.go.
 func TestBatcherActivePublishOnly(t *testing.T) {
 	t.Skip(skipNotPorted)
 }

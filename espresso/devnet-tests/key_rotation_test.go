@@ -8,8 +8,7 @@ import "testing"
 // devnet keeps progressing.
 //
 // TODO: port TestChangeBatchAuthenticatorOwner from
-// optimism-espresso-integration espresso/devnet-tests/key_rotation_test.go
-// once the compose devnet harness is in place.
+// optimism-espresso-integration espresso/devnet-tests/key_rotation_test.go.
 func TestChangeBatchAuthenticatorOwner(t *testing.T) {
 	t.Skip(skipNotPorted)
 }

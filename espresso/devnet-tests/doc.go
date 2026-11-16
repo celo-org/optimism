@@ -1,29 +1,34 @@
 // Package devnet_tests holds the Espresso devnet test tier from
 // EspressoSystems/optimism-espresso-integration (espresso/devnet-tests).
 //
-// Unlike espresso/environment — which runs in-process against an in-memory
-// mock Espresso client — this tier drives a docker-compose devnet and, in the
-// TEE profile, a batcher running inside a real AWS Nitro enclave with the SP1
-// zk attestation verifier. Every test in this package is currently a stub
-// that skips immediately; the real bodies live in the reference repo and
-// cannot run here until the supporting infrastructure is ported:
+// Unlike espresso/environment, which runs in-process against an in-memory mock
+// Espresso client, this tier drives the docker-compose devnet in
+// espresso/docker-compose.yml: anvil as L1, op-geth and op-node for a
+// sequencer and a verifier, the Espresso batcher and the fallback batcher, a
+// real espresso-dev-node, and EigenDA in memstore mode. Devnet (devnet_tools.go)
+// starts and stops it and wraps common interactions.
 //
-//   - the espresso/ docker-compose devnet (compose profiles, including `tee`)
-//     and the devnet_tools.go harness (NewDevnet, per-service up/down,
-//     liveness/outage tuning via ESPRESSO_DEVNET_TESTS_{LIVENESS,OUTAGE}_PERIOD)
-//   - .github/workflows/espresso-devnet-tests.yaml — the standard profile on
-//     GitHub-hosted runners
-//   - .github/workflows/espresso-devnet-tests-tee.yaml plus the reusable
-//     .github/workflows/ec2-devnet-test.yaml — each test group on an
-//     ephemeral AWS Nitro-enclave-enabled EC2 runner
-//     (ESPRESSO_RUN_ENCLAVE_TESTS=true, COMPOSE_PROFILES=tee). Requires the
-//     EspressoSystems/ec2-github-runner enclave fork, repository AWS secrets
-//     (IAM role, subnet, security group) and the Nix+Docker+nitro-cli AMI.
+// Running locally, from the repository root:
+//
+//	just build-contracts
+//	espresso/devnet/prepare.sh
+//	docker compose -f espresso/docker-compose.yml build
+//	go test -v -run TestSmoke ./espresso/devnet-tests/...
+//
+// ESPRESSO_DEVNET_TESTS_LIVENESS_PERIOD and ESPRESSO_DEVNET_TESTS_OUTAGE_PERIOD
+// trade test duration for strictness: how long the devnet must stay healthy
+// before a run counts as a success, and how long an unhealthy state is left
+// before recovery (default 10s each). CI runs
+// .github/workflows/espresso-devnet-tests.yaml.
+//
+// TestSmoke is ported. The other tests are stubs that skip immediately; their
+// bodies are in the reference repo. TestWithdrawal and TestChallengeGame need
+// the op-succinct services, started with WithProofs. The TEE compose profile
+// (a batcher inside an AWS Nitro enclave) is not ported.
 //
 // Reference:
 // https://github.com/EspressoSystems/optimism-espresso-integration/tree/celo-integration-rebase-17/espresso/devnet-tests
 package devnet_tests
 
-// skipNotPorted is the reason every stub in this package skips; see the
-// package doc for the full porting checklist.
-const skipNotPorted = "devnet test tier not ported yet: needs the docker-compose devnet and the EC2/TEE workflows from optimism-espresso-integration (see package doc)"
+// skipNotPorted is the reason every not-yet-ported test in this package skips.
+const skipNotPorted = "devnet test not ported yet: its body is in optimism-espresso-integration espresso/devnet-tests (see package doc)"

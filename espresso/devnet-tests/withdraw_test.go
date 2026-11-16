@@ -7,8 +7,7 @@ import "testing"
 // prove against its output root, and finalize on L1 after the proof window.
 //
 // TODO: port TestWithdrawal from optimism-espresso-integration
-// espresso/devnet-tests/withdraw_test.go once the compose devnet harness
-// (including the succinct-proposer service) is in place.
+// espresso/devnet-tests/withdraw_test.go. Needs WithProofs.
 func TestWithdrawal(t *testing.T) {
 	t.Skip(skipNotPorted)
 }

@@ -9,8 +9,7 @@ import "testing"
 // op-batcher-fallback (initially stopped) run as separate containers.
 //
 // TODO: port TestBatcherSwitching from optimism-espresso-integration
-// espresso/devnet-tests/batcher_switching_test.go once the compose devnet
-// harness is in place.
+// espresso/devnet-tests/batcher_switching_test.go.
 func TestBatcherSwitching(t *testing.T) {
 	t.Skip(skipNotPorted)
 }
