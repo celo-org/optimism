@@ -21,14 +21,10 @@
 // before recovery (default 10s each). CI runs
 // .github/workflows/espresso-devnet-tests.yaml.
 //
-// TestSmoke is ported. The other tests are stubs that skip immediately; their
-// bodies are in the reference repo. TestWithdrawal and TestChallengeGame need
-// the op-succinct services, started with WithProofs. The TEE compose profile
-// (a batcher inside an AWS Nitro enclave) is not ported.
+// TestWithdrawal and TestChallengeGame also need the op-succinct services,
+// started with WithProofs. The TEE compose profile (a batcher inside an AWS
+// Nitro enclave) is not ported, so neither are the reference tests' TEE runs.
 //
 // Reference:
 // https://github.com/EspressoSystems/optimism-espresso-integration/tree/celo-integration-rebase-17/espresso/devnet-tests
 package devnet_tests
-
-// skipNotPorted is the reason every not-yet-ported test in this package skips.
-const skipNotPorted = "devnet test not ported yet: its body is in optimism-espresso-integration espresso/devnet-tests (see package doc)"

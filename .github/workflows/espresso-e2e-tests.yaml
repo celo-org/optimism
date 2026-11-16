@@ -33,17 +33,14 @@ jobs:
         include:
           # In-memory groups (contracts only).
           #
-          # The core group additionally matches the not-yet-ported stubs so
-          # they are visible as SKIP in CI output: the attestation tests
-          # (espresso/environment/5_batch_authentication_test.go) and the
-          # devnet test tier (espresso/devnet-tests, see its package doc).
-          # Stubs whose names already match another group's filter
-          # (TestBatcherSwitching, TestForcedTransaction) skip there instead.
-          # Ported devnet tests (TestSmoke) need the compose devnet and run in
+          # The core group additionally matches the not-yet-ported attestation
+          # stubs (espresso/environment/5_batch_authentication_test.go) so
+          # they are visible as SKIP in CI output. The devnet test tier
+          # (espresso/devnet-tests) needs the compose devnet and runs in
           # espresso-devnet-tests.yaml instead.
           - group: core
             needs_prestate: false
-            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestBatcherActivePublishOnly|TestBatcherRestart|TestChallengeGame|TestChangeBatchAuthenticatorOwner|TestWithdrawal|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
+            tests: "TestE2eDevnetWithEspressoSimpleTransactions|TestE2eDevnetWithEspressoAndAltDaSimpleTransactions|TestE2eDevnetWithoutEspressoSimpleTransaction|TestE2eDevnetWithoutAuthenticatingBatches|TestStatelessBatcher|TestAnsiEscapeCodeLineReader|TestEspressoDevNodeLogEntry|TestEspressoDeployedContractLogEntryReader|TestE2eDevnetWithInvalidAttestation|TestE2eDevnetWithUnattestedBatcherKey|TestE2eDevnetWithEspressoAndEnclaveSimpleTransactions"
           - group: integrity
             needs_prestate: false
             tests: "TestSequencerFeedConsistency|TestSequencerFeedConsistencyWithAttackOnEspresso|TestDeterministicDerivationExecutionStateWithInvalidTransaction|TestValidEspressoTransactionCreation|TestConfirmationIntegrityWithReorgs"
@@ -101,4 +98,4 @@ jobs:
           gotestsum --format github-actions -- \
             -timeout 45m -p 1 -count 1 \
             -run '${{ matrix.tests }}' \
-            ./espresso/environment/... ./espresso/devnet-tests/... ./espresso/enclave-tests/...
+            ./espresso/environment/... ./espresso/enclave-tests/...

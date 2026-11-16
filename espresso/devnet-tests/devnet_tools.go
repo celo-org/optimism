@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-e2e/system/helpers"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-service/bigs"
+	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	opclient "github.com/ethereum-optimism/optimism/op-service/client"
 	"github.com/ethereum-optimism/optimism/op-service/sources"
 )
@@ -368,6 +369,26 @@ func (d *Devnet) SystemConfig(ctx context.Context) (*bindings.SystemConfig, *bin
 		return nil, nil, err
 	}
 	owner, err := bind.NewKeyedTransactorWithChainID(d.operator, config.L1ChainID)
+	if err != nil {
+		return nil, nil, err
+	}
+	owner.Context = ctx
+	return contract, owner, nil
+}
+
+// BatchAuthenticator returns the L1 BatchAuthenticator contract and a
+// transactor for its owner, BATCH_AUTHENTICATOR_OWNER in espresso/.env: HD
+// index 3 of the default test mnemonic, which secrets.Secrets calls Deployer.
+func (d *Devnet) BatchAuthenticator(ctx context.Context) (*batchauthenticator.BatchAuthenticator, *bind.TransactOpts, error) {
+	config, err := d.RollupConfig(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	contract, err := batchauthenticator.NewBatchAuthenticator(config.BatchAuthenticatorAddress, d.L1)
+	if err != nil {
+		return nil, nil, err
+	}
+	owner, err := bind.NewKeyedTransactorWithChainID(d.secrets.Deployer, config.L1ChainID)
 	if err != nil {
 		return nil, nil, err
 	}
