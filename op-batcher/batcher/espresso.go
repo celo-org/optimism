@@ -567,14 +567,18 @@ func (l *BatchSubmitter) queueBlockToEspresso(ctx context.Context, block *types.
 }
 
 // espressoSyncChannelManager reconciles the channel manager with the latest sync
-// status, reporting whether the sequencer is out of sync (malformed status or
-// reversed CurrentL1). The streamer no longer needs pumping here: it refreshes L1
-// finality and fetches HotShot blocks from its own poll loops.
-func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus) (outOfSync bool) {
+// status, reporting whether to skip draining because the snapshot is stale or
+// the sequencer is out of sync (malformed status or reversed CurrentL1). The
+// streamer refreshes L1 finality and fetches HotShot blocks from its own poll loops.
+func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatus, epoch uint64) (skipDrain bool) {
 	// Lock order: streamer before channelMgr so the clear + re-anchor below stay atomic
 	// without deadlocking.
 	l.espressoStreamerMutex.Lock()
 	defer l.espressoStreamerMutex.Unlock()
+	if l.espressoClearEpoch != epoch {
+		l.Log.Info("State cleared before syncing the channel manager, refreshing sync status next tick")
+		return true
+	}
 	l.channelMgrMutex.Lock()
 	defer l.channelMgrMutex.Unlock()
 	syncActions, outOfSync := computeSyncActions(*newSyncStatus, l.prevCurrentL1, l.channelMgr.blocks, l.channelMgr.channelQueue, l.Log)
@@ -595,6 +599,72 @@ func (l *BatchSubmitter) espressoSyncChannelManager(newSyncStatus *eth.SyncStatu
 		l.channelMgr.PruneChannels(syncActions.channelsToPrune)
 	}
 	return false
+}
+
+type espressoLoadResult uint8
+
+const (
+	espressoLoadStop espressoLoadResult = iota
+	espressoLoadAdded
+	espressoLoadReset
+)
+
+// espressoLoadBatch handles one batch atomically with respect to resets. A reset
+// result asks the caller to clear state after this function releases the lock.
+func (l *BatchSubmitter) espressoLoadBatch(ctx context.Context, status *eth.SyncStatus, epoch uint64) espressoLoadResult {
+	// Hold the lock across Peek -> AddL2Block -> AdvancePosition so clearState
+	// cannot desync the streamer position from the channel manager mid-batch.
+	l.espressoStreamerMutex.Lock()
+	defer l.espressoStreamerMutex.Unlock()
+
+	if l.espressoClearEpoch != epoch {
+		l.Log.Info("State cleared during the drain, refreshing sync status next tick")
+		return espressoLoadStop
+	}
+
+	// Peek may read the batcher address from L1 for an undecided batch. Bound
+	// it so a stalled endpoint cannot hold the lock indefinitely. On timeout,
+	// the batch stays undecided and the next tick retries.
+	peekCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
+	batch := l.espressoSession.streamer.Peek(peekCtx)
+	cancel()
+	if batch == nil {
+		return espressoLoadStop
+	}
+
+	// A batch at or below the local-safe head is already derived from L1.
+	// Jump past the whole stale range using the canonical sync-status ref,
+	// rather than promoting a stale candidate's hash to the streamer's tip.
+	if batch.Number() <= status.LocalSafeL2.Number {
+		l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
+			"batchNr", batch.Number(), "localSafeL2", status.LocalSafeL2)
+		l.espressoSession.streamer.SetBatchPosition(status.LocalSafeL2)
+		return espressoLoadStop
+	}
+
+	// ToBlock must not fail transiently. Advancing past a malformed batch
+	// would promote a block the channel manager never received to the tip,
+	// stalling later batches, so reset instead of skipping it.
+	block, err := batch.ToBlock(l.RollupConfig)
+	if err != nil {
+		l.Log.Error("failed to convert singular batch to block", "err", err)
+		return espressoLoadReset
+	}
+
+	l.Log.Info("Received block from Espresso",
+		"blockNr", block.NumberU64(), "blockHash", block.Hash(), "parentHash", block.ParentHash())
+
+	l.channelMgrMutex.Lock()
+	err = l.channelMgr.AddL2Block(block)
+	l.channelMgrMutex.Unlock()
+	if err != nil {
+		l.Log.Error("failed to add L2 block to channel manager", "err", err)
+		return espressoLoadReset
+	}
+
+	l.espressoSession.streamer.AdvancePosition()
+	l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
+	return espressoLoadAdded
 }
 
 // Periodically refreshes the sync status and drains the Espresso streamer of any
@@ -628,99 +698,35 @@ func (l *BatchSubmitter) espressoBatchLoadingLoop(ctx context.Context, wg *sync.
 
 			// An out-of-sync status (zeroed fields or reversed CurrentL1) cannot
 			// be trusted as the drain floor: with LocalSafeL2 zeroed, the
-			// stale-batch re-anchor check below never fires and already-derived
-			// blocks would be republished. Skip the tick, mirroring how the base
-			// driver skips loading when computeSyncActions reports out-of-sync.
-			if l.espressoSyncChannelManager(newSyncStatus) {
+			// stale-batch re-anchor check never fires and already-derived blocks
+			// would be republished. Skip loading, but keep signaling publication
+			// of existing work as the base driver does while out of sync.
+			if l.espressoSyncChannelManager(newSyncStatus, epoch) {
+				l.tryPublishSignal(publishSignal, pubInfo{})
 				continue
 			}
 
 			blocksAdded := 0
 
+		drain:
 			for {
-				// Hold the streamer lock across the whole Peek -> AddL2Block ->
-				// AdvancePosition sequence so clearState cannot interleave mid-batch
-				// and desync the streamer position from the channel manager.
-				l.espressoStreamerMutex.Lock()
-
-				// Another goroutine cleared state since this tick's snapshot was
-				// taken. Stop and refresh the next tick.
-				if l.espressoClearEpoch != epoch {
-					l.espressoStreamerMutex.Unlock()
-					l.Log.Info("State cleared during the drain, refreshing sync status next tick")
-					break
-				}
-
-				// Peek may read the batcher address from L1 for an undecided batch.
-				// Bound it so a stalled endpoint cannot hold the lock indefinitely.
-				// On timeout, the batch stays undecided and the next tick retries.
-				peekCtx, cancel := context.WithTimeout(ctx, l.Config.NetworkTimeout)
-				batch := l.espressoSession.streamer.Peek(peekCtx)
-				cancel()
-				if batch == nil {
-					l.espressoStreamerMutex.Unlock()
-					break
-				}
-
-				// A batch at or below the local-safe head is already derived from L1,
-				// and adding it would make the publish path resubmit it. The cursor
-				// falls behind the safe head when previously submitted channels finish
-				// deriving while the streamer backfills (e.g. after a restart), and an
-				// empty channel manager gives computeSyncActions nothing to reconcile.
-				// Jump past the whole stale range in one re-anchor: the sync status ref
-				// is canonical, unlike a stale candidate's own hash, which advancing
-				// batch-by-batch would promote to the streamer's tip.
-				if batch.Number() <= newSyncStatus.LocalSafeL2.Number {
-					l.Log.Info("Peeked batch at or below the local-safe head, re-anchoring the streamer",
-						"batchNr", batch.Number(), "localSafeL2", newSyncStatus.LocalSafeL2)
-					l.espressoSession.streamer.SetBatchPosition(newSyncStatus.LocalSafeL2)
-					l.espressoStreamerMutex.Unlock()
-					break
-				}
-
-				// This should happen ONLY if the batch is malformed. ToBlock has to guarantee no
-				// transient errors. Advancing past it would promote a block the channel manager
-				// never received to the streamer's tip, stalling every later batch, so re-anchor
-				// instead of skipping.
-				block, err := batch.ToBlock(l.RollupConfig)
-				if err != nil {
-					l.espressoStreamerMutex.Unlock()
-					l.Log.Error("failed to convert singular batch to block", "err", err)
+				switch l.espressoLoadBatch(ctx, newSyncStatus, epoch) {
+				case espressoLoadStop:
+					break drain
+				case espressoLoadReset:
+					// The helper releases the streamer lock before clearState
+					// acquires it again to clear and re-anchor.
 					l.clearState(ctx)
-					break
-				}
-
-				l.Log.Info(
-					"Received block from Espresso",
-					"blockNr", block.NumberU64(),
-					"blockHash", block.Hash(),
-					"parentHash", block.ParentHash(),
-				)
-
-				l.channelMgrMutex.Lock()
-				err = l.channelMgr.AddL2Block(block)
-				l.channelMgrMutex.Unlock()
-
-				if err != nil {
-					l.espressoStreamerMutex.Unlock()
-					l.Log.Error("failed to add L2 block to channel manager", "err", err)
-					// clearState re-anchors the streamer to the safe head.
-					l.clearState(ctx)
-					break
-				}
-
-				l.espressoSession.streamer.AdvancePosition()
-				l.espressoStreamerMutex.Unlock()
-				l.Log.Info("Added L2 block to channel manager", "blockNr", block.NumberU64())
-
-				// During a large drain, signal periodically so throttling can engage
-				// before the whole backlog is consumed (mirrors loadBlocksIntoState).
-				blocksAdded++
-				if blocksAdded%100 == 0 {
-					l.sendToThrottlingLoop(unsafeBytesUpdated)
+					break drain
+				case espressoLoadAdded:
+					// During a large drain, signal periodically so throttling can
+					// engage before the whole backlog is consumed.
+					blocksAdded++
+					if blocksAdded%100 == 0 {
+						l.sendToThrottlingLoop(unsafeBytesUpdated)
+					}
 				}
 			}
-
 			l.sendToThrottlingLoop(unsafeBytesUpdated)
 			l.tryPublishSignal(publishSignal, pubInfo{})
 
@@ -738,7 +744,8 @@ type BlockLoader struct {
 }
 
 // reset drops the loader's queued-block state and clears the channel manager,
-// re-anchoring the streamer to the safe head.
+// re-anchoring the streamer to the safe head. It blocks until the clear succeeds
+// or ctx is cancelled, pausing queueing and loading while reset RPCs retry.
 func (l *BlockLoader) reset(ctx context.Context) {
 	l.prevSyncStatus = nil
 	l.queuedBlocks = nil
@@ -851,6 +858,7 @@ func (l *BlockLoader) nextBlockRange(newSyncStatus *eth.SyncStatus) (inclusiveBl
 
 	if lastQueuedBlock.Number < safeL2.Number {
 		// derivation pipeline is somehow ahead of us, reset
+		l.batcher.Log.Warn("safe head above newest queued block, resetting loader", "safeL2", safeL2, "lastQueuedBlock", lastQueuedBlock)
 		return inclusiveBlockRange{}, ActionReset
 	}
 

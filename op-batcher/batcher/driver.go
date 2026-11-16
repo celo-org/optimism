@@ -140,10 +140,7 @@ type BatchSubmitter struct {
 
 	channelMgrMutex sync.Mutex // guards channelMgr and prevCurrentL1
 	channelMgr      *channelManager
-
-	espressoStreamerMutex sync.Mutex     // guards espressoStreamer's position and espressoClearEpoch
-	espressoClearEpoch    uint64         // bumped by every clearState; lets the loading loop spot a clear mid-drain
-	prevCurrentL1         eth.L1BlockRef // cached CurrentL1 from the last syncStatus
+	prevCurrentL1   eth.L1BlockRef // cached CurrentL1 from the last syncStatus
 
 	throttleController *throttler.ThrottleController
 
@@ -160,6 +157,12 @@ type BatchSubmitter struct {
 
 	// espressoSession is the current run's Espresso session; nil when not running.
 	espressoSession *espressoSession
+
+	// espressoStreamerMutex guards espressoSession.streamer's position and
+	// espressoClearEpoch. It is acquired before channelMgrMutex and held across
+	// RPCs and reset retry waits; channelMgrMutex only covers in-memory work.
+	espressoStreamerMutex sync.Mutex
+	espressoClearEpoch    uint64 // bumped by every clearState; invalidates stale loading snapshots
 
 	// batchAuth is the binding to the BatchAuthenticator contract, shared by
 	// registerBatcher, resolveTEEVerifierAddress, the checkBatcherActive gate
@@ -911,16 +914,27 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 	defer l.espressoStreamerMutex.Unlock()
 
 	clearStateWithL1Origin := func() bool {
-		l1SafeOrigin, err := l.safeL1Origin(ctx)
-		if err != nil {
-			l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
-			return false
-		}
 		// Fetch the re-anchor target before mutating anything so the clear and
 		// the re-anchor happen together or not at all; see espressoReanchorTarget.
 		reanchorTarget, ok := l.espressoReanchorTarget(ctx)
 		if !ok {
 			return false
+		}
+		var l1SafeOrigin eth.BlockID
+		if reanchorTarget != nil {
+			// Derive both reset positions from one sync-status snapshot.
+			l1SafeOrigin = reanchorTarget.L1Origin
+			if l1SafeOrigin.Number == 0 {
+				l1SafeOrigin = l.RollupConfig.Genesis.L1
+			}
+		} else {
+			// Without an Espresso session, retain the upstream origin lookup.
+			var err error
+			l1SafeOrigin, err = l.safeL1Origin(ctx)
+			if err != nil {
+				l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
+				return false
+			}
 		}
 		l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
 		l.channelMgrMutex.Lock()

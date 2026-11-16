@@ -1,7 +1,13 @@
 package batcher
 
+// These tests cover block-range selection, sync reconciliation, and safe-head
+// re-anchoring during resets. Draining is covered in espresso_loading_test.go;
+// session lifecycle and setup are covered in espresso_driver_test.go.
+
 import (
+	"context"
 	"errors"
+	"math/big"
 	"testing"
 	"time"
 
@@ -15,6 +21,15 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 )
+
+type reanchorTestStreamer struct {
+	espressoStreamer
+	positions []eth.L2BlockRef
+}
+
+func (s *reanchorTestStreamer) SetBatchPosition(position eth.L2BlockRef) {
+	s.positions = append(s.positions, position)
+}
 
 func newTestBlockLoader(t *testing.T) *BlockLoader {
 	return &BlockLoader{
@@ -89,7 +104,7 @@ func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 
 	t.Run("fully populated status is in sync", func(t *testing.T) {
 		l := newTestSubmitter(t)
-		require.False(t, l.espressoSyncChannelManager(&populated))
+		require.False(t, l.espressoSyncChannelManager(&populated, 0))
 		require.Equal(t, populated.CurrentL1, l.prevCurrentL1)
 	})
 
@@ -97,7 +112,7 @@ func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 		l := newTestSubmitter(t)
 		status := populated
 		status.LocalSafeL2 = eth.L2BlockRef{}
-		require.True(t, l.espressoSyncChannelManager(&status))
+		require.True(t, l.espressoSyncChannelManager(&status, 0))
 		require.Zero(t, l.prevCurrentL1,
 			"an out-of-sync status must not advance the CurrentL1 baseline")
 	})
@@ -105,8 +120,38 @@ func TestEspressoSyncChannelManagerReportsOutOfSync(t *testing.T) {
 	t.Run("reversed CurrentL1 is out of sync", func(t *testing.T) {
 		l := newTestSubmitter(t)
 		l.prevCurrentL1 = eth.L1BlockRef{Number: 3, Hash: common.Hash{0x06}}
-		require.True(t, l.espressoSyncChannelManager(&populated))
+		require.True(t, l.espressoSyncChannelManager(&populated, 0))
 	})
+}
+
+func TestEspressoSyncChannelManagerRejectsStaleEpoch(t *testing.T) {
+	l, _ := setup(t, nil)
+	block := newMiniL2BlockWithChainIDAndNumberParent(0, l.RollupConfig.L2ChainID, big.NewInt(20), common.Hash{})
+	require.NoError(t, l.channelMgr.AddL2Block(block))
+	streamer := &reanchorTestStreamer{}
+	l.espressoSession = &espressoSession{streamer: streamer}
+	l.espressoClearEpoch = 1
+	l.prevCurrentL1 = eth.L1BlockRef{Number: 5}
+	status := &eth.SyncStatus{
+		HeadL1:      eth.L1BlockRef{Number: 6},
+		CurrentL1:   eth.L1BlockRef{Number: 6},
+		LocalSafeL2: eth.L2BlockRef{Number: 1, L1Origin: eth.BlockID{Number: 4}},
+		UnsafeL2:    eth.L2BlockRef{Number: 21},
+	}
+
+	// This old safe head would clear the nonempty manager if the epoch were
+	// ignored. A stale snapshot must leave both state and its baseline intact.
+	require.True(t, l.espressoSyncChannelManager(status, 0))
+	require.Equal(t, eth.L1BlockRef{Number: 5}, l.prevCurrentL1)
+	require.Equal(t, 1, l.channelMgr.blocks.Len())
+	require.Equal(t, block.Hash(), l.channelMgr.blocks[0].Hash())
+	require.Empty(t, streamer.positions)
+
+	// A snapshot taken in the current epoch can reconcile normally.
+	require.False(t, l.espressoSyncChannelManager(status, 1))
+	require.Equal(t, status.CurrentL1, l.prevCurrentL1)
+	require.Zero(t, l.channelMgr.blocks.Len())
+	require.Equal(t, []eth.L2BlockRef{status.LocalSafeL2}, streamer.positions)
 }
 
 // clearState must not clear the channel manager unless the streamer re-anchor
@@ -163,4 +208,71 @@ func TestEspressoReanchorTarget(t *testing.T) {
 		require.NotNil(t, target)
 		require.Equal(t, localSafe, *target)
 	})
+}
+
+func TestEspressoClearStateUsesOneSyncSnapshot(t *testing.T) {
+	origin := eth.BlockID{Number: 7, Hash: common.Hash{7}}
+	localSafe := eth.L2BlockRef{Number: 10, Hash: common.Hash{10}, L1Origin: origin}
+	for _, scenario := range []struct {
+		name      string
+		session   bool
+		localSafe eth.L2BlockRef
+	}{
+		{name: "active session", session: true, localSafe: localSafe},
+		{name: "active session at genesis origin", session: true, localSafe: eth.L2BlockRef{Number: 10, Hash: common.Hash{10}}},
+		{name: "no session", localSafe: localSafe},
+		{name: "no session before local-safe head", localSafe: eth.L2BlockRef{}},
+	} {
+		t.Run(scenario.name, func(t *testing.T) {
+			batcher, endpoints := setup(t, nil)
+			batcher.Config.NetworkTimeout = time.Second
+			streamer := &reanchorTestStreamer{}
+			if scenario.session {
+				batcher.espressoSession = &espressoSession{streamer: streamer}
+			}
+			endpoints.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
+				HeadL1:      eth.L1BlockRef{Number: 20},
+				LocalSafeL2: scenario.localSafe,
+			}, nil)
+			require.NoError(t, batcher.channelMgr.AddL2Block(newMiniL2Block(0)))
+
+			batcher.clearState(t.Context())
+
+			wantOrigin := scenario.localSafe.L1Origin
+			if wantOrigin.Number == 0 {
+				wantOrigin = batcher.RollupConfig.Genesis.L1
+			}
+			require.Equal(t, wantOrigin, batcher.channelMgr.l1OriginLastSubmittedChannel)
+			require.Zero(t, batcher.channelMgr.blocks.Len())
+			require.Zero(t, batcher.channelMgr.tip)
+			require.EqualValues(t, 1, batcher.espressoClearEpoch)
+			if scenario.session {
+				require.Equal(t, []eth.L2BlockRef{scenario.localSafe}, streamer.positions)
+			}
+			endpoints.rollupClient.AssertNumberOfCalls(t, "SyncStatus", 1)
+		})
+	}
+}
+
+func TestEspressoClearStateRejectsZeroLocalSafeHead(t *testing.T) {
+	batcher, endpoints := setup(t, nil)
+	batcher.Config.NetworkTimeout = time.Second
+	streamer := &reanchorTestStreamer{}
+	batcher.espressoSession = &espressoSession{streamer: streamer}
+	endpoints.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
+		HeadL1: eth.L1BlockRef{Number: 20},
+	}, nil)
+	require.NoError(t, batcher.channelMgr.AddL2Block(newMiniL2Block(0)))
+
+	// Cancel the retry immediately. The invalid attempt must not re-anchor;
+	// only the cancellation fallback may clear the manager to an empty origin.
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	batcher.clearState(ctx)
+
+	require.Empty(t, streamer.positions)
+	require.Zero(t, batcher.channelMgr.l1OriginLastSubmittedChannel)
+	require.Zero(t, batcher.channelMgr.blocks.Len())
+	require.EqualValues(t, 1, batcher.espressoClearEpoch)
+	endpoints.rollupClient.AssertNumberOfCalls(t, "SyncStatus", 1)
 }

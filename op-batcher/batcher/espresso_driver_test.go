@@ -1,5 +1,10 @@
 package batcher
 
+// Espresso driver tests cover starting and stopping a batcher session and
+// creating its streamer, including setup failures and RPC deadlines. Batch
+// draining is covered in espresso_loading_test.go; range selection, channel
+// reconciliation, and resets are covered in espresso_block_loader_test.go.
+
 import (
 	"context"
 	"math/big"
@@ -9,7 +14,6 @@ import (
 
 	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
-	"github.com/EspressoSystems/espresso-streamers/op/derivation"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/stretchr/testify/require"
@@ -123,59 +127,6 @@ func TestStopBatchSubmittingDropsEspressoSession(t *testing.T) {
 
 	require.NoError(t, l.StopBatchSubmitting(context.Background()))
 	require.Nil(t, l.espressoSession)
-}
-
-// stalledPeekStreamer waits for the caller to cancel or time out each Peek.
-type stalledPeekStreamer struct {
-	espressoStreamer
-	calls chan context.Context
-}
-
-func (s *stalledPeekStreamer) Peek(ctx context.Context) *derivation.EspressoBatch {
-	s.calls <- ctx
-	<-ctx.Done()
-	return nil
-}
-func (*stalledPeekStreamer) SetBatchPosition(eth.L2BlockRef) {}
-
-func TestEspressoLoadingLoopBoundsPeekAndRetries(t *testing.T) {
-	batcher, endpoints := setup(t, nil)
-	batcher.Config.NetworkTimeout = 20 * time.Millisecond
-	batcher.Config.Espresso.PollInterval = time.Millisecond
-	endpoints.rollupClient.Mock.On("SyncStatus").Return(&eth.SyncStatus{
-		HeadL1:      eth.L1BlockRef{Number: genesisL1Origin},
-		CurrentL1:   eth.L1BlockRef{Number: genesisL1Origin},
-		LocalSafeL2: eth.L2BlockRef{Number: 1},
-		SafeL2:      eth.L2BlockRef{Number: 1},
-		UnsafeL2:    eth.L2BlockRef{Number: 1},
-	}, nil)
-	streamer := &stalledPeekStreamer{calls: make(chan context.Context, 4)}
-	batcher.espressoSession = &espressoSession{streamer: streamer}
-	ctx, cancel := context.WithCancel(t.Context())
-	var wg sync.WaitGroup
-	wg.Add(1)
-	started := time.Now()
-	go batcher.espressoBatchLoadingLoop(ctx, &wg, make(chan pubInfo, 1), make(chan int64, 1))
-	t.Cleanup(func() { cancel(); wg.Wait() })
-	var previous context.Context
-	for range 2 {
-		callCtx := receiveTestValue(t, streamer.calls)
-		deadline, ok := callCtx.Deadline()
-		require.True(t, ok)
-		if previous == nil {
-			require.False(t, deadline.Before(started.Add(batcher.Config.NetworkTimeout)), "Peek must receive the full configured budget")
-		} else {
-			previousDeadline, _ := previous.Deadline()
-			require.True(t, deadline.After(previousDeadline), "each Peek needs a fresh deadline")
-		}
-		require.LessOrEqual(t, time.Until(deadline), batcher.Config.NetworkTimeout, "deadline must not exceed the configured timeout")
-		if previous != nil {
-			require.ErrorIs(t, previous.Err(), context.DeadlineExceeded)
-		}
-		require.NoError(t, ctx.Err())
-		previous = callCtx
-	}
-	cancel()
 }
 
 // stalledAnchorClient exposes the context that NewStreamer passes through the
