@@ -285,7 +285,7 @@ services:
   # One-shot: deploy the OPSuccinctFaultDisputeGame (game type 42).
   fdg-deployer:
     profiles: ["proofs"]
-    image: ghcr.io/espressosystems/op-succinct/op-succinct-fdg-deployer-celo:sha-075e0fe
+    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-fdg-deployer:pr-168
     depends_on:
       op-node-sequencer:
         condition: service_healthy
@@ -313,7 +313,7 @@ services:
 
   succinct-proposer:
     profiles: ["proofs"]
-    image: ghcr.io/espressosystems/op-succinct/op-succinct-lite-proposer-celo:sha-075e0fe
+    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-proposer:sha-08a155c
     restart: unless-stopped
     depends_on:
       fdg-deployer:
@@ -332,12 +332,11 @@ services:
       PROPOSAL_INTERVAL_IN_BLOCKS: "30"
       FETCH_INTERVAL: "1"
       MOCK_MODE: "true"
-      USE_SAFE_HEAD_FOR_PROPOSALS: "false"
       RUST_LOG: info
 
   succinct-challenger:
     profiles: ["proofs"]
-    image: ghcr.io/espressosystems/op-succinct/op-succinct-lite-challenger-celo:sha-075e0fe
+    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-challenger:sha-08a155c
     restart: unless-stopped
     depends_on:
       fdg-deployer:
