@@ -14,6 +14,7 @@ import (
 	nodebindings "github.com/ethereum-optimism/optimism/op-node/bindings"
 	nodepreview "github.com/ethereum-optimism/optimism/op-node/bindings/preview"
 	"github.com/ethereum-optimism/optimism/op-node/withdrawals"
+	"github.com/ethereum-optimism/optimism/op-service/bigs"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -226,7 +227,7 @@ func TestWithdrawal(t *testing.T) {
 	require.NoError(t, err)
 	proveBlock, err := d.L1.HeaderByNumber(ctx, proveReceipt.BlockNumber)
 	require.NoError(t, err)
-	targetTime := proveBlock.Time + maturityDelay.Uint64() + finalityDelay.Uint64() + 10
+	targetTime := proveBlock.Time + bigs.Uint64Strict(maturityDelay) + bigs.Uint64Strict(finalityDelay) + 10
 
 	t.Log("waiting for the proof maturity and dispute game finality delays")
 	require.Eventually(t, func() bool {
