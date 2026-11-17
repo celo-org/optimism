@@ -9,7 +9,6 @@ import (
 	"math/big"
 	_ "net/http/pprof"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -159,8 +158,11 @@ type BatchSubmitter struct {
 	// espressoSession is the current run's Espresso session; nil when not running.
 	espressoSession *espressoSession
 
-	// clearStateRequested asks the espresso batch loading loop to run clearState
-	clearStateRequested atomic.Bool
+	// espressoStreamerMutex guards espressoSession.streamer's position and
+	// espressoClearEpoch. It is acquired before channelMgrMutex and held across
+	// RPCs and reset retry waits; channelMgrMutex only covers in-memory work.
+	espressoStreamerMutex sync.Mutex
+	espressoClearEpoch    uint64 // bumped by every clearState; invalidates stale loading snapshots
 
 	// batchAuth is the binding to the BatchAuthenticator contract, shared by
 	// registerBatcher, resolveTEEVerifierAddress, the checkBatcherActive gate
@@ -905,18 +907,34 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 	l.Log.Info("Clearing state")
 	defer l.Log.Info("State cleared")
 
+	// Held for the whole clear, retries included, so the loading loop stops at
+	// its next batch as soon as a clear is pending rather than once it lands.
+	// Locked before the channelMgr everywhere both are held, so no deadlock.
+	l.espressoStreamerMutex.Lock()
+	defer l.espressoStreamerMutex.Unlock()
+
 	clearStateWithL1Origin := func() bool {
-		l1SafeOrigin, err := l.safeL1Origin(ctx)
-		if err != nil {
-			l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
-			return false
-		}
-		// Fetch the streamer re-anchor target before mutating anything so the
-		// channel-manager clear and the streamer re-anchor happen together or
-		// not at all; see espressoReanchorTarget for the partial-clear hazard.
+		// Fetch the re-anchor target before mutating anything so the clear and
+		// the re-anchor happen together or not at all; see espressoReanchorTarget.
 		reanchorTarget, ok := l.espressoReanchorTarget(ctx)
 		if !ok {
 			return false
+		}
+		var l1SafeOrigin eth.BlockID
+		if reanchorTarget != nil {
+			// Derive both reset positions from one sync-status snapshot.
+			l1SafeOrigin = reanchorTarget.L1Origin
+			if l1SafeOrigin.Number == 0 {
+				l1SafeOrigin = l.RollupConfig.Genesis.L1
+			}
+		} else {
+			// Without an Espresso session, retain the upstream origin lookup.
+			var err error
+			l1SafeOrigin, err = l.safeL1Origin(ctx)
+			if err != nil {
+				l.Log.Warn("Failed to query L1 safe origin, will retry", "err", err)
+				return false
+			}
 		}
 		l.Log.Info("Clearing state with safe L1 origin", "origin", l1SafeOrigin)
 		l.channelMgrMutex.Lock()
@@ -925,6 +943,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 		if reanchorTarget != nil {
 			l.espressoSession.streamer.SetBatchPosition(*reanchorTarget)
 		}
+		l.espressoClearEpoch++
 		return true
 	}
 
@@ -947,6 +966,7 @@ func (l *BatchSubmitter) clearState(ctx context.Context) {
 			l.channelMgrMutex.Lock()
 			defer l.channelMgrMutex.Unlock()
 			l.channelMgr.Clear(eth.BlockID{})
+			l.espressoClearEpoch++
 			return
 		}
 	}

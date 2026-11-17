@@ -795,7 +795,7 @@ func TestEspressoQueueLoopRetriesWithoutReplayingOtherBlocks(t *testing.T) {
 			require.True(t, client.failed.Load(), "the injected transient error must have been exercised")
 			require.Equal(t, scenario.wantSubmissions, client.submissions.Load())
 			require.EqualValues(t, 1, client.otherSubmissions.Load(), "the healthy in-flight block must not be replayed")
-			require.False(t, batcher.clearStateRequested.Load(), "an SDK error must not reset unrelated work")
+			require.Zero(t, batcher.espressoClearEpoch, "an SDK error must not reset unrelated work")
 			require.Nil(t, batcher.espressoSession)
 		})
 	}
