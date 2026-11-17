@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
 	"os"
 	"os/exec"
@@ -58,6 +59,10 @@ type Devnet struct {
 	// otherwise remove the containers of a devnet started after this one.
 	downOnce sync.Once
 	downErr  error
+
+	// stopLogs ends the log stream started by Up in verbose mode and waits for
+	// it to exit; nil when no stream is running.
+	stopLogs func()
 
 	L1            *ethclient.Client
 	L2Seq         *ethclient.Client
@@ -146,7 +151,11 @@ const (
 // composeCommand returns a `docker compose` invocation on the devnet's compose
 // file with the devnet's profiles enabled.
 func (d *Devnet) composeCommand(args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(d.ctx, "docker", append([]string{"compose", "-f", d.composeFile}, args...)...)
+	return d.composeCommandContext(d.ctx, args...)
+}
+
+func (d *Devnet) composeCommandContext(ctx context.Context, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"compose", "-f", d.composeFile}, args...)...)
 	cmd.Env = append(os.Environ(), "COMPOSE_PROFILES="+strings.Join(d.profiles, ","))
 	return cmd
 }
@@ -195,21 +204,18 @@ func (d *Devnet) Up() (err error) {
 		return fmt.Errorf("failed to start docker compose (%w): %s", upErr, buf.String())
 	}
 
+	// Start the log stream before the goroutine that may call Down, which
+	// reads stopLogs.
+	if testing.Verbose() {
+		d.streamLogs()
+	}
+
 	go func() {
 		<-d.ctx.Done()
 		if err := d.Down(); err != nil {
 			log.Error("error shutting down devnet asynchronously", "error", err)
 		}
 	}()
-
-	if testing.Verbose() {
-		// Stream logs while the test runs; the command ends with ctx.
-		go func() {
-			cmd := d.composeCommand("logs", "-f")
-			cmd.Stdout = os.Stdout
-			_ = cmd.Run()
-		}()
-	}
 
 	if d.L2Seq, err = d.serviceClient(OpGethSequencer); err != nil {
 		return err
@@ -227,6 +233,29 @@ func (d *Devnet) Up() (err error) {
 		return err
 	}
 	return nil
+}
+
+// streamLogs streams the devnet's logs to stdout until Down.
+//
+// `docker` runs `docker compose` as a separate plugin process, so cancelling
+// the command kills `docker` but not the plugin. Had the plugin inherited the
+// test binary's stdout, it would outlive the test and keep `go test` waiting
+// for the output to close ("Test I/O incomplete"). Wrapping os.Stdout hands
+// the command a pipe instead, which WaitDelay closes once `docker` is gone.
+func (d *Devnet) streamLogs() {
+	ctx, cancel := context.WithCancel(d.ctx)
+	cmd := d.composeCommandContext(ctx, "logs", "-f")
+	cmd.Stdout = struct{ io.Writer }{os.Stdout}
+	cmd.WaitDelay = 5 * time.Second
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_ = cmd.Run()
+	}()
+	d.stopLogs = func() {
+		cancel()
+		<-done
+	}
 }
 
 func (d *Devnet) dumpLogs() {
@@ -262,7 +291,12 @@ func (d *Devnet) down() error {
 	cmd := exec.CommandContext(ctx, "docker", args...)
 	// Every profile, so that services of any profile are removed.
 	cmd.Env = append(os.Environ(), "COMPOSE_PROFILES=*")
-	if out, err := cmd.CombinedOutput(); err != nil {
+	out, err := cmd.CombinedOutput()
+	if d.stopLogs != nil {
+		d.stopLogs()
+		d.stopLogs = nil
+	}
+	if err != nil {
 		return fmt.Errorf("docker compose down (%w): %s", err, out)
 	}
 	return nil
@@ -338,7 +372,7 @@ func (d *Devnet) callBatcherRPC(service Service, method string) error {
 		return fmt.Errorf("failed to decode the %s response (%w): %s", method, err, stdout.String())
 	}
 	if resp.Error != nil {
-		return fmt.Errorf("%s failed: %s (code %d)", method, resp.Error.Message, resp.Error.Code)
+		return &batcherRPCError{method: method, code: resp.Error.Code, message: resp.Error.Message}
 	}
 	log.Info("RPC call successful", "service", service, "method", method, "response", stdout.String())
 	return nil
@@ -350,8 +384,41 @@ func (d *Devnet) StartBatcherSubmitting(service Service) error {
 }
 
 // StopBatcherSubmitting stops batch submission on a running batcher service.
+//
+// The batcher waits for its in-flight transactions to confirm before it stops,
+// which can outlast the RPC server's request timeout. The timeout cancels that
+// wait, so the batcher still stops; confirm it with a second call, which blocks
+// until the first stop completes.
 func (d *Devnet) StopBatcherSubmitting(service Service) error {
-	return d.callBatcherRPC(service, "admin_stopBatcher")
+	err := d.callBatcherRPC(service, "admin_stopBatcher")
+	var rpcErr *batcherRPCError
+	if !errors.As(err, &rpcErr) || rpcErr.code != rpcTimeoutCode {
+		return err
+	}
+	log.Warn("admin_stopBatcher timed out, checking that the batcher stopped", "service", service)
+	err = d.callBatcherRPC(service, "admin_stopBatcher")
+	if errors.As(err, &rpcErr) && rpcErr.message == batcherNotRunning {
+		return nil
+	}
+	return err
+}
+
+// rpcTimeoutCode is the JSON-RPC error code of a request that outlasted the
+// server's timeout.
+const rpcTimeoutCode = -32002
+
+// batcherNotRunning is the message of batcher.ErrBatcherNotRunning.
+const batcherNotRunning = "batcher is not running"
+
+// batcherRPCError is a JSON-RPC error returned by a batcher admin method.
+type batcherRPCError struct {
+	method  string
+	code    int
+	message string
+}
+
+func (e *batcherRPCError) Error() string {
+	return fmt.Sprintf("%s failed: %s (code %d)", e.method, e.message, e.code)
 }
 
 func (d *Devnet) RollupConfig(ctx context.Context) (*rollup.Config, error) {
