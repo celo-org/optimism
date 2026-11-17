@@ -50,6 +50,7 @@ func NewSignerClient(logger log.Logger, endpoint string, headers http.Header, tl
 
 		httpClient = &http.Client{
 			Transport: &http.Transport{
+				Proxy: http.ProxyFromEnvironment,
 				TLSClientConfig: &tls.Config{
 					MinVersion: tls.VersionTLS13,
 					RootCAs:    caCertPool,

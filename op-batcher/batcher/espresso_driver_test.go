@@ -1,0 +1,196 @@
+package batcher
+
+// Espresso driver tests cover starting and stopping a batcher session and
+// creating its streamer, including setup failures and RPC deadlines. Batch
+// draining is covered in espresso_loading_test.go; range selection, channel
+// reconciliation, and resets are covered in espresso_block_loader_test.go.
+
+import (
+	"context"
+	"math/big"
+	"sync"
+	"testing"
+	"time"
+
+	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
+	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum-optimism/optimism/op-service/dial"
+	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum-optimism/optimism/op-service/testutils"
+)
+
+// stopRecordingStreamer records calls while delegating to the wrapped streamer.
+type stopRecordingStreamer struct {
+	espressoStreamer
+	stopCalls int
+}
+
+func (s *stopRecordingStreamer) Stop() {
+	s.stopCalls++
+	if s.espressoStreamer != nil {
+		s.espressoStreamer.Stop()
+	}
+}
+
+func (s *stopRecordingStreamer) SetBatchPosition(position eth.L2BlockRef) {
+	if s.espressoStreamer != nil {
+		s.espressoStreamer.SetBatchPosition(position)
+	}
+}
+
+func newEspressoLifecycleTestBatcher(t *testing.T) *BatchSubmitter {
+	t.Helper()
+	batcher, endpoints := setup(t, nil)
+	rollupConfig := *batcher.RollupConfig
+	rollupConfig.BatchAuthenticatorAddress = testAuthAddr
+	batcher.RollupConfig = &rollupConfig
+	batcher.Config.NetworkTimeout = time.Second
+	batcher.Config.PollInterval = time.Hour
+	batcher.Config.Espresso = EspressoBatcherConfig{
+		Enabled:                    true,
+		PollInterval:               time.Hour,
+		VerifyReceiptMaxBlocks:     10,
+		VerifyReceiptSafetyTimeout: time.Minute,
+		VerifyReceiptRetryDelay:    time.Hour,
+	}
+	batcher.L1Client = &fakeL1Client{}
+	batcher.Txmgr = testutils.NewFakeTxMgr(batcher.Log, common.Address{}, eth.ChainIDFromUInt64(1))
+	batcher.Espresso.Client = &contextErrorEspressoClient{}
+
+	backend := newMockAuthBackend(t)
+	backend.teeVerifier = common.Address{1}
+	batcher.batchAuth = newTestBatchAuthenticator(t, backend)
+	lightClient, err := espressoLightClient.NewLightclientCaller(common.Address{2}, backend)
+	require.NoError(t, err)
+	batcher.Espresso.LightClient = lightClient
+
+	block := types.NewBlockWithHeader(&types.Header{Number: big.NewInt(1)})
+	endpoints.ethClient.Mock.On("BlockByNumber", big.NewInt(1)).Return(block, nil)
+	endpoints.rollupClient.Mock.On("SyncStatus").Return(&eth.SyncStatus{
+		HeadL1: eth.L1BlockRef{Number: genesisL1Origin},
+		LocalSafeL2: eth.L2BlockRef{
+			Hash:     block.Hash(),
+			Number:   1,
+			L1Origin: batcher.RollupConfig.Genesis.L1,
+		},
+	}, nil)
+	return batcher
+}
+
+func TestBatchSubmitterEspressoStopStart(t *testing.T) {
+	batcher := newEspressoLifecycleTestBatcher(t)
+
+	var previous espressoStreamer
+	for range 2 {
+		require.NoError(t, batcher.StartBatchSubmitting())
+		require.NotNil(t, batcher.espressoSession)
+		require.Equal(t, batcher.Config.NetworkTimeout, batcher.espressoSession.submitter.networkTimeout)
+		require.Equal(t, batcher.Log, batcher.espressoSession.submitter.logger)
+		require.Equal(t, batcher.Metr, batcher.espressoSession.submitter.metr)
+		current := batcher.espressoSession.streamer
+		require.NotNil(t, current)
+		if previous != nil {
+			require.NotSame(t, previous, current, "restart must construct a fresh streamer")
+		}
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = batcher.StopBatchSubmittingIfRunning(ctx)
+			current.Stop()
+		})
+		recorder := &stopRecordingStreamer{espressoStreamer: current}
+		batcher.espressoSession.streamer = recorder
+		require.True(t, batcher.running)
+
+		require.NoError(t, batcher.StopBatchSubmitting(t.Context()))
+		require.Equal(t, 1, recorder.stopCalls, "driver stop must call streamer Stop")
+		require.Nil(t, batcher.espressoSession, "driver stop must drop the session")
+		require.False(t, batcher.running)
+		previous = current
+	}
+}
+
+// Stopping drops the whole session (streamer, submitter and verifier address),
+// so no per-start Espresso state survives into the next start. A zero-value
+// Streamer is Stop()-safe, which makes this directly testable.
+func TestStopBatchSubmittingDropsEspressoSession(t *testing.T) {
+	l := newAuthSubmitter(t)
+	l.shutdownCtx, l.cancelShutdownCtx = context.WithCancel(context.Background())
+	l.killCtx, l.cancelKillCtx = context.WithCancel(context.Background())
+	l.wg = &sync.WaitGroup{}
+	l.running = true
+	l.espressoSession = &espressoSession{streamer: &espressoStreamers.Streamer{}}
+
+	require.NoError(t, l.StopBatchSubmitting(context.Background()))
+	require.Nil(t, l.espressoSession)
+}
+
+// stalledAnchorClient exposes the context that NewStreamer passes through the
+// L2 adapter, then stalls until that context expires or its parent is canceled.
+type stalledAnchorClient struct {
+	dial.EthClientInterface
+	calls chan context.Context
+}
+
+func (c *stalledAnchorClient) BlockByNumber(ctx context.Context, _ *big.Int) (*types.Block, error) {
+	c.calls <- ctx
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+type anchorEndpointProvider struct {
+	dial.L2EndpointProvider
+	client dial.EthClientInterface
+}
+
+func (p *anchorEndpointProvider) EthClient(context.Context) (dial.EthClientInterface, error) {
+	return p.client, nil
+}
+
+func TestSetupEspressoStreamerBoundsAnchorLookup(t *testing.T) {
+	batcher := newEspressoLifecycleTestBatcher(t)
+	batcher.Config.NetworkTimeout = 20 * time.Millisecond
+	calls := make(chan context.Context, 1)
+	batcher.EndpointProvider = &anchorEndpointProvider{
+		L2EndpointProvider: batcher.EndpointProvider,
+		client:             &stalledAnchorClient{calls: calls},
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	results := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	started := time.Now()
+	var streamer *espressoStreamers.Streamer
+	go func() {
+		defer wg.Done()
+		var err error
+		streamer, err = batcher.setupEspressoStreamer(ctx)
+		results <- err
+	}()
+	t.Cleanup(func() { cancel(); wg.Wait() })
+	callCtx := receiveTestValue(t, calls)
+	deadline, ok := callCtx.Deadline()
+	require.True(t, ok, "the anchor lookup must have a deadline")
+	require.False(t, deadline.Before(started.Add(batcher.Config.NetworkTimeout)))
+	require.LessOrEqual(t, time.Until(deadline), batcher.Config.NetworkTimeout, "deadline must not exceed the configured timeout")
+	require.ErrorIs(t, receiveTestValue(t, results), context.DeadlineExceeded)
+	require.NoError(t, ctx.Err(), "the lookup timeout must not cancel its caller")
+	require.Nil(t, streamer, "a failed lookup must not return a streamer")
+	require.Nil(t, batcher.espressoSession, "a failed lookup must not publish a session")
+}
+
+// TestSetupEspressoStreamer_NoAuthenticator guards the nil binding case: the
+// streamer filters batches by the BatchAuthenticator address, so without one it
+// must fail before it waits for the local-safe head.
+func TestSetupEspressoStreamer_NoAuthenticator(t *testing.T) {
+	batcher := newEspressoLifecycleTestBatcher(t)
+	batcher.batchAuth = nil
+
+	streamer, err := batcher.setupEspressoStreamer(t.Context())
+	require.ErrorContains(t, err, "no BatchAuthenticator configured")
+	require.Nil(t, streamer)
+}

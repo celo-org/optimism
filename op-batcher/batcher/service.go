@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
+	espressoLightClient "github.com/EspressoSystems/espresso-network/sdks/go/light-client"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/cliapp"
+	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
 	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/httputil"
@@ -52,6 +53,11 @@ type BatcherConfig struct {
 
 	// For throttling DA. See CLIConfig in config.go for details on these parameters.
 	ThrottleParams config.ThrottleParams
+
+	// Espresso groups all TEE-batcher-specific configuration. Defined in
+	// espresso_service.go to keep the upstream Optimism field block compact.
+	// Zero-valued when --espresso.enabled=false.
+	Espresso EspressoBatcherConfig
 }
 
 // BatcherService represents a full batch-submitter instance and its resources,
@@ -82,6 +88,20 @@ type BatcherService struct {
 	stopped         atomic.Bool
 
 	NotSubmittingOnStart bool
+
+	// Espresso runtime state. Defined in espresso_service.go to keep the
+	// upstream Optimism field block compact. EspressoClient and
+	// EspressoLightClient are nil when --espresso.enabled=false.
+	EspressoClient      espressoRuntimeClient
+	EspressoLightClient *espressoLightClient.LightclientCaller
+	// EspressoL1Client backs the light-client reads; non-nil only when
+	// --espresso.l1-url points at a different RPC than --l1-eth-rpc.
+	EspressoL1Client *ethclient.Client
+	opcrypto.ChainSigner
+	Attestation []byte
+	// batchAuth is the binding to the BatchAuthenticator contract, built from
+	// the rollup config by initBatchAuthenticator. Nil when the chain has none.
+	batchAuth *batchAuthenticator
 }
 
 type DriverSetupOption func(setup *DriverSetup)
@@ -171,7 +191,13 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	if err := bs.initRollupConfig(ctx); err != nil {
 		return fmt.Errorf("failed to load rollup config: %w", err)
 	}
+	if err := bs.initBatchAuthenticator(); err != nil {
+		return err
+	}
 	if err := bs.checkEspressoDataAvailability(cfg); err != nil {
+		return err
+	}
+	if err := bs.checkEspressoBatchAuthenticator(cfg); err != nil {
 		return err
 	}
 	if err := bs.checkFallbackAuthConfirmations(cfg); err != nil {
@@ -193,6 +219,9 @@ func (bs *BatcherService) initFromCLIConfig(ctx context.Context, closeApp contex
 	}
 	if err := bs.initPProf(cfg); err != nil {
 		return fmt.Errorf("failed to init profiling: %w", err)
+	}
+	if err := bs.initEspresso(ctx, cfg); err != nil {
+		return fmt.Errorf("failed to init Espresso: %w", err)
 	}
 	bs.initDriver(opts...)
 	if err := bs.initRPCServer(cfg); err != nil {
@@ -286,6 +315,24 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 	return nil
 }
 
+// checkEspressoBatchAuthenticator refuses to start an Espresso (TEE) batcher
+// on a chain with no BatchAuthenticator: without one it would sign and send
+// every authentication to the zero address, where it succeeds as a no-op, so
+// each batch pays gas for an authentication that does nothing.
+//
+// The fallback batcher is exempt. Pre-fork it runs as a vanilla upstream
+// batcher, so a zero address there is legitimate.
+func (bs *BatcherService) checkEspressoBatchAuthenticator(cfg *CLIConfig) error {
+	if !cfg.Espresso.Enabled {
+		return nil
+	}
+	if bs.batchAuth == nil {
+		return errors.New("--espresso.enabled requires a BatchAuthenticator, but the rollup config has none " +
+			"(BatchAuthenticatorAddress is zero)")
+	}
+	return nil
+}
+
 // checkFallbackAuthConfirmations validates that the configured number of L1
 // confirmations leaves enough headroom inside BatchAuthLookbackWindow for the
 // batch tx to land after its auth tx (see sendTxWithFallbackAuth). The bound
@@ -297,7 +344,7 @@ func (bs *BatcherService) checkEspressoDataAvailability(cfg *CLIConfig) error {
 // applies to, a scheduled EspressoTime with a non-calldata DA type. It is kept as a
 // second line of defence and applies again if the restriction is ever lifted.
 func (bs *BatcherService) checkFallbackAuthConfirmations(cfg *CLIConfig) error {
-	if bs.RollupConfig.BatchAuthenticatorAddress == (common.Address{}) {
+	if bs.batchAuth == nil {
 		return nil
 	}
 	// Fallback auth is gated behind the EspressoTime hardfork
@@ -479,6 +526,7 @@ func (bs *BatcherService) initDriver(opts ...DriverSetupOption) {
 		ChannelConfig:    bs.ChannelConfig,
 		AltDA:            bs.AltDA,
 	}
+	bs.applyEspressoDriverSetup(&ds)
 	for _, opt := range opts {
 		opt(&ds)
 	}
@@ -589,6 +637,9 @@ func (bs *BatcherService) Stop(ctx context.Context) error {
 
 	if bs.L1Client != nil {
 		bs.L1Client.Close()
+	}
+	if bs.EspressoL1Client != nil {
+		bs.EspressoL1Client.Close()
 	}
 	if bs.EndpointProvider != nil {
 		bs.EndpointProvider.Close()
