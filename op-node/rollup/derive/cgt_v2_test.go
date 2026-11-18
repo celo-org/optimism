@@ -69,6 +69,59 @@ func (cgtL2Stub) SystemConfigByL2Hash(context.Context, common.Hash) (eth.SystemC
 	return eth.SystemConfig{GasLimit: 30000000}, nil
 }
 
+func TestCgtV2RetryAttributesUseEventAmountWithoutPreflight(t *testing.T) {
+	cfg := cgtTestConfig()
+	expected, gas, err := CgtV2UpgradeTransactions(cfg.L2ChainID, big.NewInt(987))
+	require.NoError(t, err)
+	static, err := rlp.EncodeToBytes(expected[:len(expected)-1])
+	require.NoError(t, err)
+	bundleHash := crypto.Keccak256Hash(static)
+	require.Equal(t, common.HexToHash("0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"), bundleHash)
+	network, ok := cgtV2Params(bigs.Uint64Strict(cfg.L2ChainID))
+	require.True(t, ok)
+
+	for _, tc := range []struct {
+		name        string
+		hash        common.Hash
+		wantUpgrade bool
+	}{
+		{name: "authorized", hash: bundleHash, wantUpgrade: true},
+		{name: "unknown bundle", hash: common.Hash{1}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			receipts := optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{{
+				Address: network.bridge,
+				Topics:  []common.Hash{cgtV2RetryEvent, tc.hash},
+				Data:    common.BigToHash(big.NewInt(987)).Bytes(),
+			}, cgtPortalLog(t, cfg.DepositContractAddress, 0x55)}}})
+			header, parent, origin := cgtTestOrigin(t, receipts)
+			builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
+			attrs, err := builder.PreparePayloadAttributes(t.Context(), parent, origin)
+			require.NoError(t, err)
+			require.True(t, attrs.NoTxPool)
+			if tc.wantUpgrade {
+				require.Equal(t, expected, attrs.Transactions[2:])
+				require.EqualValues(t, 30_000_000+gas, *attrs.GasLimit)
+			} else {
+				require.Len(t, attrs.Transactions, 2)
+				require.EqualValues(t, 30_000_000, *attrs.GasLimit)
+			}
+
+			batch := &SingularBatch{ParentHash: parent.Hash, EpochNum: rollup.Epoch(origin.Number), EpochHash: origin.Hash, Timestamp: 102, Transactions: []hexutil.Bytes{{0xc0}}}
+			logger := testlog.Logger(t, log.LevelError)
+			queue := NewAttributesQueue(logger, cfg, builder, NewBatchStage(logger, cfg, &fakeBatchQueueInput{}, nil))
+			safe, err := queue.createNextAttributes(t.Context(), batch, parent)
+			if tc.wantUpgrade {
+				// The batch rule is independent of the execution engine's parent-state decision.
+				require.ErrorIs(t, err, NotEnoughData)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, batch.Transactions, safe.Transactions[2:])
+			}
+		})
+	}
+}
+
 func TestCgtV2AttributesBuilderWiring(t *testing.T) {
 	receipts := cgtSeededReceipts()
 	header, parent, origin := cgtTestOrigin(t, receipts)
@@ -270,7 +323,9 @@ func TestCgtV2CanonicalReceiptFields(t *testing.T) {
 	}
 }
 
-type cgtConfigL2 struct{ config eth.SystemConfig }
+type cgtConfigL2 struct {
+	config eth.SystemConfig
+}
 
 func (s *cgtConfigL2) SystemConfigByL2Hash(context.Context, common.Hash) (eth.SystemConfig, error) {
 	return s.config, nil
@@ -288,7 +343,7 @@ func TestCgtV2GasUpdateAndFollowingOrigin(t *testing.T) {
 	receipts[0].Logs = append(receipts[0].Logs, cgtGasUpdate(cfg, 9_000_000))
 	header, parent, origin := cgtTestOrigin(t, receipts)
 	l1 := &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}
-	l2 := &cgtConfigL2{eth.SystemConfig{GasLimit: 30_000_000}}
+	l2 := &cgtConfigL2{config: eth.SystemConfig{GasLimit: 30_000_000}}
 	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, l1, l2)
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)

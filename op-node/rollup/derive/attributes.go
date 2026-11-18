@@ -95,6 +95,12 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 		if err != nil {
 			return nil, NewCriticalError(err)
 		}
+		if len(cgtUpgrades) == 0 {
+			cgtUpgrades, err = cgtV2RetryTransactions(ba.rollupCfg, receipts)
+			if err != nil {
+				return nil, err
+			}
+		}
 		deposits, err := DeriveDeposits(receipts.Geth(), ba.rollupCfg.DepositContractAddress)
 		if err != nil {
 			// deposits may never be ignored. Failing to process them is a critical error.
