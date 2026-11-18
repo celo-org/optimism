@@ -19,7 +19,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -28,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
-	hdwallet "github.com/ethereum-optimism/go-ethereum-hdwallet"
 	"github.com/ethereum-optimism/optimism/espresso/environment"
 	"github.com/ethereum-optimism/optimism/op-e2e/bindings"
 	"github.com/ethereum-optimism/optimism/op-e2e/config/secrets"
@@ -39,6 +37,7 @@ import (
 	"github.com/ethereum-optimism/optimism/op-service/bindings/batchauthenticator"
 	opclient "github.com/ethereum-optimism/optimism/op-service/client"
 	"github.com/ethereum-optimism/optimism/op-service/sources"
+	"github.com/stretchr/testify/require"
 )
 
 // opSuccinctGameType is the dispute game type of OPSuccinctFaultDisputeGame.
@@ -104,15 +103,13 @@ func NewDevnet(ctx context.Context, t *testing.T, opts ...DevnetOption) *Devnet 
 	if err != nil {
 		t.Fatalf("failed to create default secrets: %v", err)
 	}
-	operator, err := operatorKey()
-	if err != nil {
-		t.Fatalf("failed to derive the operator key: %v", err)
-	}
-
 	d := &Devnet{
-		ctx:         ctx,
-		secrets:     *s,
-		operator:    operator,
+		ctx:     ctx,
+		secrets: *s,
+		// OPERATOR_PRIVATE_KEY in espresso/.env, which prepare.sh makes the
+		// owner of SystemConfig and the other chain roles. secrets.Secrets
+		// has no field for its HD index.
+		operator:    s.AccountAtIdx(0),
 		composeFile: filepath.Join(espressoDir, "docker-compose.yml"),
 		outageTime:  durationFromEnv(t, "ESPRESSO_DEVNET_TESTS_OUTAGE_PERIOD", 10*time.Second),
 		successTime: durationFromEnv(t, "ESPRESSO_DEVNET_TESTS_LIVENESS_PERIOD", 10*time.Second),
@@ -133,6 +130,22 @@ func durationFromEnv(t *testing.T, name string, fallback time.Duration) time.Dur
 		t.Fatalf("invalid value for %s: %v", name, err)
 	}
 	return d
+}
+
+// StartDevnet starts the devnet for a test and waits until the verifier has
+// derived a first batch. The returned context ends after timeout; the devnet is
+// shut down when the test ends.
+func StartDevnet(t *testing.T, timeout time.Duration, opts ...DevnetOption) (context.Context, *Devnet) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	t.Cleanup(cancel)
+
+	d := NewDevnet(ctx, t, opts...)
+	require.NoError(t, d.Up())
+	t.Cleanup(func() { require.NoError(t, d.Down()) })
+
+	require.NoError(t, d.WaitForBatcher(ctx))
+	return ctx, d
 }
 
 // Service identifies a Docker Compose service of the devnet.
@@ -435,11 +448,10 @@ func (d *Devnet) SystemConfig(ctx context.Context) (*bindings.SystemConfig, *bin
 	if err != nil {
 		return nil, nil, err
 	}
-	owner, err := bind.NewKeyedTransactorWithChainID(d.operator, config.L1ChainID)
+	owner, err := d.L1Transactor(ctx, d.operator)
 	if err != nil {
 		return nil, nil, err
 	}
-	owner.Context = ctx
 	return contract, owner, nil
 }
 
@@ -455,24 +467,25 @@ func (d *Devnet) BatchAuthenticator(ctx context.Context) (*batchauthenticator.Ba
 	if err != nil {
 		return nil, nil, err
 	}
-	owner, err := bind.NewKeyedTransactorWithChainID(d.secrets.Deployer, config.L1ChainID)
+	owner, err := d.L1Transactor(ctx, d.secrets.Deployer)
 	if err != nil {
 		return nil, nil, err
 	}
-	owner.Context = ctx
 	return contract, owner, nil
 }
 
-// operatorKey derives OPERATOR_PRIVATE_KEY from espresso/.env: HD index 0 of
-// the default test mnemonic, which espresso/devnet/prepare.sh makes the owner
-// of SystemConfig and the other chain roles. secrets.Secrets has no field for
-// that index.
-func operatorKey() (*ecdsa.PrivateKey, error) {
-	wallet, err := hdwallet.NewFromMnemonic(secrets.DefaultMnemonicConfig.Mnemonic)
+// L1Transactor returns a transactor that signs L1 transactions with key.
+func (d *Devnet) L1Transactor(ctx context.Context, key *ecdsa.PrivateKey) (*bind.TransactOpts, error) {
+	chainID, err := d.L1.ChainID(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return wallet.PrivateKey(accounts.Account{URL: accounts.URL{Path: "m/44'/60'/0'/0/0"}})
+	opts, err := bind.NewKeyedTransactorWithChainID(key, chainID)
+	if err != nil {
+		return nil, err
+	}
+	opts.Context = ctx
+	return opts, nil
 }
 
 // SubmitL2Tx sends a transaction from Alice to the sequencer and waits until

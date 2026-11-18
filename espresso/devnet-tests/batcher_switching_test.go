@@ -1,7 +1,6 @@
 package devnet_tests
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -21,16 +20,7 @@ import (
 // BatchAuthenticator to the fallback batcher and checks that the chain keeps
 // being batched.
 func TestBatcherSwitching(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t)
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 20*time.Minute)
 
 	// Send an initial transaction to check that everything has started up ok.
 	require.NoError(t, d.RunSimpleL2Burn())

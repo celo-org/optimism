@@ -49,16 +49,7 @@ func hasBatchTransactions(ctx context.Context, client *ethclient.Client, batchIn
 // BatchAuthenticator marks active posts batches to L1, before and after a
 // switch. Both batchers run throughout.
 func TestBatcherActivePublishOnly(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t)
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 20*time.Minute)
 
 	// Send an initial transaction to check that everything has started up ok.
 	require.NoError(t, d.RunSimpleL2Burn())

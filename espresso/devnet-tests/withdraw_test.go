@@ -1,7 +1,6 @@
 package devnet_tests
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"strings"
@@ -42,25 +41,13 @@ func l2BlockFromExtraData(extraData []byte) (*big.Int, error) {
 // the game (the mock verifier accepts an empty proof) and the withdrawal, then
 // finalizes the withdrawal once the game resolves and the delays pass.
 func TestWithdrawal(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 35*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t, WithProofs())
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 35*time.Minute, WithProofs())
 
 	alice := crypto.PubkeyToAddress(d.secrets.Alice.PublicKey)
 	callOpts := &bind.CallOpts{Context: ctx}
 
-	l1ChainID, err := d.L1.ChainID(ctx)
+	aliceL1, err := d.L1Transactor(ctx, d.secrets.Alice)
 	require.NoError(t, err)
-	aliceL1, err := bind.NewKeyedTransactorWithChainID(d.secrets.Alice, l1ChainID)
-	require.NoError(t, err)
-	aliceL1.Context = ctx
 	// l1Transactor returns a fresh copy of Alice's L1 transactor, so that
 	// setting Value or GasLimit for one transaction does not leak into others.
 	l1Transactor := func() *bind.TransactOpts {

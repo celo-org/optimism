@@ -1,7 +1,6 @@
 package devnet_tests
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -20,16 +19,7 @@ import (
 // ownership is independent of the BatchAuthenticator's: the test checks that
 // it is left unchanged rather than transferring it too.
 func TestChangeBatchAuthenticatorOwner(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t)
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 20*time.Minute)
 
 	// Send a transaction just to check that everything has started up ok.
 	require.NoError(t, d.RunSimpleL2Burn())
@@ -59,11 +49,8 @@ func TestChangeBatchAuthenticatorOwner(t *testing.T) {
 	require.Equal(t, bob, pendingOwner)
 
 	// Step 2: Bob accepts.
-	l1ChainID, err := d.L1.ChainID(ctx)
+	bobOpts, err := d.L1Transactor(ctx, d.secrets.Bob)
 	require.NoError(t, err)
-	bobOpts, err := bind.NewKeyedTransactorWithChainID(d.secrets.Bob, l1ChainID)
-	require.NoError(t, err)
-	bobOpts.Context = ctx
 	tx, err = batchAuthenticator.AcceptOwnership(bobOpts)
 	require.NoError(t, err)
 	_, err = wait.ForReceiptOK(ctx, d.L1, tx.Hash())

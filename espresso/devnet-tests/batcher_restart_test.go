@@ -1,7 +1,6 @@
 package devnet_tests
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -13,16 +12,7 @@ import (
 // submitted meanwhile is not derived by the verifier, then restarts the batcher
 // and checks that the transaction is derived.
 func TestBatcherRestart(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t)
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 20*time.Minute)
 
 	// Send a transaction just to check that everything has started up ok.
 	require.NoError(t, d.RunSimpleL2Burn())

@@ -1,7 +1,6 @@
 package devnet_tests
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -16,16 +15,7 @@ import (
 // proposer wins them. The succinct proposer needs finalized L2 blocks before
 // creating games.
 func TestChallengeGame(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t, WithProofs())
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 30*time.Minute, WithProofs())
 
 	// Check that the devnet works and generate some L2 activity.
 	require.NoError(t, d.RunSimpleL2Burn())

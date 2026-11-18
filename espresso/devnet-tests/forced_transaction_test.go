@@ -1,7 +1,6 @@
 package devnet_tests
 
 import (
-	"context"
 	"math/big"
 	"testing"
 	"time"
@@ -21,16 +20,7 @@ import (
 // derives it once the sequencing window expires: that would take too long on
 // this devnet, and shrinking the sequencing window breaks the other tests.
 func TestForcedTransaction(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
-
-	d := NewDevnet(ctx, t)
-	require.NoError(t, d.Up())
-	defer func() {
-		require.NoError(t, d.Down())
-	}()
-
-	require.NoError(t, d.WaitForBatcher(ctx))
+	ctx, d := StartDevnet(t, 15*time.Minute)
 
 	alice := crypto.PubkeyToAddress(d.secrets.Alice.PublicKey)
 	initialBalance, err := d.L2Verif.BalanceAt(ctx, alice, nil)
@@ -44,17 +34,14 @@ func TestForcedTransaction(t *testing.T) {
 	require.NoError(t, err)
 	portalAddr, err := systemConfig.OptimismPortal(&bind.CallOpts{Context: ctx})
 	require.NoError(t, err)
-	l1ChainID, err := d.L1.ChainID(ctx)
-	require.NoError(t, err)
 
 	t.Log("stopping the sequencer to force inclusion through L1")
 	require.NoError(t, d.ServiceDown(OpNodeSequencer))
 
 	portal, err := bindings.NewOptimismPortal(portalAddr, d.L1)
 	require.NoError(t, err)
-	opts, err := bind.NewKeyedTransactorWithChainID(d.secrets.Alice, l1ChainID)
+	opts, err := d.L1Transactor(ctx, d.secrets.Alice)
 	require.NoError(t, err)
-	opts.Context = ctx
 	// No msg.value: the deposit spends Alice's existing L2 balance rather
 	// than minting new ETH. An explicit gas limit avoids estimation issues in
 	// ResourceMetering.
