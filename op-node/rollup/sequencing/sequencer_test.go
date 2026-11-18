@@ -1495,7 +1495,10 @@ type cgtAttributesBuilder struct {
 
 func (b *cgtAttributesBuilder) PreparePayloadAttributes(ctx context.Context, p eth.L2BlockRef, h eth.BlockID) (*eth.PayloadAttributes, error) {
 	attrs, err := b.AttributesBuilder.PreparePayloadAttributes(ctx, p, h)
-	if err != nil || !b.active {
+	if err != nil {
+		return nil, err
+	}
+	if !b.active {
 		return attrs, err
 	}
 	group, _, err := derive.CgtV2UpgradeTransactions(big.NewInt(1337), big.NewInt(600))
