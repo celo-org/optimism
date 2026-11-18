@@ -71,8 +71,12 @@ func TestBatcherActivePublishOnly(t *testing.T) {
 	verifyPublishing := func(expectEspressoActive bool) {
 		t.Logf("verifying publishing with expectEspressoActive = %v", expectEspressoActive)
 
-		startBlock, err := d.L1.BlockNumber(ctx)
+		// Only count blocks mined after this point: the current head may
+		// hold batches posted before this check (e.g. by a batcher that was
+		// just deactivated).
+		head, err := d.L1.BlockNumber(ctx)
 		require.NoError(t, err)
+		startBlock := head + 1
 
 		// Generate L2 traffic for the active batcher to post.
 		burn, err := d.SubmitSimpleL2Burn()
