@@ -213,6 +213,7 @@ contract CeloGasBridgeL1_SeedEscrowGenesis_Test is CeloGasBridgeL1_TestInit {
         bridge.seedEscrowGenesis();
 
         assertTrue(bridge.escrowSeeded());
+        assertEq(bridge.migratedAmount(), amount);
         assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
         assertEq(bridge.deposits(address(celoTokenL1), address(0)), celoTokenL1.balanceOf(address(bridge)));
     }
@@ -300,6 +301,56 @@ contract CeloGasBridgeL1_Paused_Test is CeloGasBridgeL1_TestInit {
 
         systemConfig.setPaused(true);
         assertTrue(bridge.paused());
+    }
+}
+
+contract CeloGasBridgeL1_RequestCgtV2Retry_Test is CeloGasBridgeL1_TestInit {
+    event CgtV2RetryRequested(bytes32 indexed bundleHash, uint256 migratedAmount);
+
+    function test_requestCgtV2Retry_succeeds() external {
+        _seedEscrow(bridge, 42);
+
+        celoTokenL1.mint(bob, 7);
+        vm.startPrank(bob);
+        celoTokenL1.approve(address(bridge), 7);
+        bridge.deposit(alice, 7, 250_000, hex"");
+        vm.stopPrank();
+
+        systemConfig.setPaused(true);
+        vm.mockCall(address(systemConfig), abi.encodeCall(ISystemConfig.owner, ()), abi.encode(alice));
+        bytes32 bundleHash = keccak256("bundle");
+
+        vm.expectEmit(true, false, false, true, address(bridge));
+        emit CgtV2RetryRequested(bundleHash, 42);
+        vm.prank(alice);
+        bridge.requestCgtV2Retry(bundleHash);
+        assertEq(bridge.migratedAmount(), 42);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), 49);
+    }
+
+    function test_requestCgtV2Retry_unauthorized_reverts() external {
+        _seedEscrow(bridge, 42);
+        systemConfig.setPaused(true);
+        vm.mockCall(address(systemConfig), abi.encodeCall(ISystemConfig.owner, ()), abi.encode(alice));
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_UnauthorizedRetry.selector);
+        vm.prank(proxyAdminOwnerAddr);
+        bridge.requestCgtV2Retry(bytes32(uint256(1)));
+    }
+
+    function test_requestCgtV2Retry_unseeded_reverts() external {
+        systemConfig.setPaused(true);
+        vm.mockCall(address(systemConfig), abi.encodeCall(ISystemConfig.owner, ()), abi.encode(alice));
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotActivated.selector);
+        vm.prank(alice);
+        bridge.requestCgtV2Retry(bytes32(uint256(1)));
+    }
+
+    function test_requestCgtV2Retry_unpaused_reverts() external {
+        _seedEscrow(bridge, 42);
+        vm.mockCall(address(systemConfig), abi.encodeCall(ISystemConfig.owner, ()), abi.encode(alice));
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotPaused.selector);
+        vm.prank(alice);
+        bridge.requestCgtV2Retry(bytes32(uint256(1)));
     }
 }
 
