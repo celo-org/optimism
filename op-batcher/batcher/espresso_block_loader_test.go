@@ -1,21 +1,29 @@
 package batcher
 
-// These tests cover block-range selection, sync reconciliation, and safe-head
-// re-anchoring during resets. Draining is covered in espresso_loading_test.go;
-// session lifecycle and setup are covered in espresso_driver_test.go.
+// These tests cover block-range selection, queueing, sync reconciliation, and
+// safe-head re-anchoring, RPC recovery, and reset cancellation. Draining is
+// covered in espresso_loading_test.go; session lifecycle and setup are covered
+// in espresso_driver_test.go.
 
 import (
 	"context"
 	"errors"
 	"math/big"
+	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
+	espressoClient "github.com/EspressoSystems/espresso-network/sdks/go/client"
+	espressoCommon "github.com/EspressoSystems/espresso-network/sdks/go/types/common"
 	espressoStreamers "github.com/EspressoSystems/espresso-streamers/op"
 	"github.com/ethereum-optimism/optimism/op-batcher/metrics"
 	"github.com/ethereum-optimism/optimism/op-node/rollup"
+	opcrypto "github.com/ethereum-optimism/optimism/op-service/crypto"
+	"github.com/ethereum-optimism/optimism/op-service/dial"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	oplog "github.com/ethereum-optimism/optimism/op-service/log"
+	"github.com/ethereum-optimism/optimism/op-service/signer"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
@@ -29,6 +37,64 @@ type reanchorTestStreamer struct {
 
 func (s *reanchorTestStreamer) SetBatchPosition(position eth.L2BlockRef) {
 	s.positions = append(s.positions, position)
+}
+
+// resetTestRollupClient lets reset tests control each RPC response and observe
+// the actual RPC context, including caller cancellation.
+type resetTestRollupClient struct {
+	dial.RollupClientInterface
+	syncStatus func(context.Context) (*eth.SyncStatus, error)
+}
+
+func (c *resetTestRollupClient) SyncStatus(ctx context.Context) (*eth.SyncStatus, error) {
+	return c.syncStatus(ctx)
+}
+
+// resetTestEndpointProvider replaces only the rollup client in the usual fixture.
+type resetTestEndpointProvider struct {
+	dial.L2EndpointProvider
+	client dial.RollupClientInterface
+}
+
+func (p *resetTestEndpointProvider) RollupClient(context.Context) (dial.RollupClientInterface, error) {
+	return p.client, nil
+}
+
+type resetTestSyncResult struct {
+	status *eth.SyncStatus
+	err    error
+}
+
+// newResetRPCTest exposes RPC requests and replies without using the network.
+// It is called inside a synctest bubble so retries and deadlines use fake time.
+func newResetRPCTest(t *testing.T) (*BatchSubmitter, *reanchorTestStreamer, <-chan context.Context, chan<- resetTestSyncResult) {
+	t.Helper()
+	batcher, _ := setup(t, nil)
+	batcher.Config.NetworkTimeout = time.Second
+	batcher.espressoClearEpoch = 7
+	batcher.channelMgr.l1OriginLastSubmittedChannel = eth.BlockID{Number: 30, Hash: common.Hash{30}}
+	require.NoError(t, batcher.channelMgr.AddL2Block(newMiniL2Block(0)))
+	streamer := &reanchorTestStreamer{}
+	batcher.espressoSession = &espressoSession{streamer: streamer}
+	requests := make(chan context.Context, 4)
+	replies := make(chan resetTestSyncResult)
+	client := &resetTestRollupClient{
+		syncStatus: func(ctx context.Context) (*eth.SyncStatus, error) {
+			select {
+			case requests <- ctx:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			select {
+			case result := <-replies:
+				return result.status, result.err
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		},
+	}
+	batcher.EndpointProvider = &resetTestEndpointProvider{L2EndpointProvider: batcher.EndpointProvider, client: client}
+	return batcher, streamer, requests, replies
 }
 
 func newTestBlockLoader(t *testing.T) *BlockLoader {
@@ -78,6 +144,69 @@ func TestNextBlockRangeZeroStatusFields(t *testing.T) {
 				"a zeroed status must not become the comparison baseline for later ticks")
 		})
 	}
+}
+
+func TestEnqueueBlocksReorgClearsState(t *testing.T) {
+	batcher, endpoints := setup(t, nil)
+	batcher.Config.NetworkTimeout = time.Second
+	factory, address, err := opcrypto.ChainSignerFactoryFromConfig(batcher.Log,
+		"0000000000000000000000000000000000000000000000000000000000000001",
+		"", "", signer.CLIConfig{})
+	require.NoError(t, err)
+	batcher.Espresso.ChainSigner = factory(batcher.RollupConfig.L2ChainID, address)
+
+	var submissions atomic.Int64
+	submitter, _ := newControlledSubmitter(t, &controlledEspressoClient{
+		submit: func(context.Context, espressoCommon.Transaction) (*espressoCommon.TaggedBase64, error) {
+			submissions.Add(1)
+			// Finish any admitted job immediately; receipt retries are outside
+			// this test's scope.
+			return nil, espressoClient.ErrPermanent
+		},
+	})
+	streamer := &reanchorTestStreamer{}
+	batcher.espressoSession = &espressoSession{streamer: streamer, submitter: submitter}
+	const initialEpoch = uint64(7)
+	batcher.espressoClearEpoch = initialEpoch
+
+	safe := eth.L2BlockRef{
+		Number:   100,
+		Hash:     common.Hash{0x10},
+		L1Origin: eth.BlockID{Number: 50, Hash: common.Hash{0x50}},
+	}
+	orphaned := newMiniL2BlockWithChainIDAndNumberParent(0, batcher.RollupConfig.L2ChainID, big.NewInt(101), safe.Hash)
+	require.NoError(t, batcher.channelMgr.AddL2Block(orphaned))
+	loader := &BlockLoader{
+		batcher:        batcher,
+		queuedBlocks:   []eth.L2BlockRef{{Number: 101, Hash: orphaned.Hash()}},
+		prevSyncStatus: &eth.SyncStatus{LocalSafeL2: safe},
+	}
+	// This otherwise valid block extends a replacement for our queued tip.
+	mismatching := newMiniL2BlockWithChainIDAndNumberParent(0, batcher.RollupConfig.L2ChainID, big.NewInt(102), common.Hash{0xff})
+	endpoints.ethClient.ExpectBlockByNumber(mismatching.Number(), mismatching, nil)
+	endpoints.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
+		HeadL1:      eth.L1BlockRef{Number: 60},
+		LocalSafeL2: safe,
+	}, nil)
+
+	loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{102, 102})
+	// Join any incorrectly admitted job before checking the submission count.
+	waitEspressoGroup(t, submitter)
+
+	require.Empty(t, loader.queuedBlocks, "the reorg must discard the queued fork")
+	require.Nil(t, loader.prevSyncStatus, "the reorg must discard the old sync-status baseline")
+	require.Empty(t, batcher.channelMgr.blocks, "the loader reset must clear the channel manager synchronously")
+	require.Zero(t, batcher.channelMgr.tip)
+	require.Equal(t, safe.L1Origin, batcher.channelMgr.l1OriginLastSubmittedChannel)
+	require.Equal(t, initialEpoch+1, batcher.espressoClearEpoch, "the reset must invalidate stale loading snapshots")
+	require.Equal(t, []eth.L2BlockRef{safe}, streamer.positions)
+	require.Zero(t, submissions.Load(), "the mismatching block must not be submitted")
+
+	// Prove the exact fetched block can convert, sign, and reach a live client
+	// when the loader's parent check is bypassed.
+	require.NoError(t, batcher.queueBlockToEspresso(t.Context(), mismatching))
+	waitEspressoGroup(t, submitter)
+	require.EqualValues(t, 1, submissions.Load())
 }
 
 // espressoSyncChannelManager must report an out-of-sync status so that
@@ -254,25 +383,114 @@ func TestEspressoClearStateUsesOneSyncSnapshot(t *testing.T) {
 	}
 }
 
-func TestEspressoClearStateRejectsZeroLocalSafeHead(t *testing.T) {
-	batcher, endpoints := setup(t, nil)
-	batcher.Config.NetworkTimeout = time.Second
-	streamer := &reanchorTestStreamer{}
-	batcher.espressoSession = &espressoSession{streamer: streamer}
-	endpoints.rollupClient.ExpectSyncStatus(&eth.SyncStatus{
-		HeadL1: eth.L1BlockRef{Number: 20},
-	}, nil)
-	require.NoError(t, batcher.channelMgr.AddL2Block(newMiniL2Block(0)))
+func TestEspressoClearStateRetriesWithoutPartialReset(t *testing.T) {
+	for _, failure := range []string{"RPC error", "zero local-safe head", "RPC deadline"} {
+		t.Run(failure, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				batcher, streamer, requests, replies := newResetRPCTest(t)
+				oldTip := batcher.channelMgr.tip
+				oldOrigin := batcher.channelMgr.l1OriginLastSubmittedChannel
+				oldEpoch := batcher.espressoClearEpoch
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					batcher.clearState(ctx)
+				}()
+				defer func() { cancel(); <-done }()
 
-	// Cancel the retry immediately. The invalid attempt must not re-anchor;
-	// only the cancellation fallback may clear the manager to an empty origin.
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	batcher.clearState(ctx)
+				rpcCtx := <-requests
+				synctest.Wait()
+				requireEspressoStreamerLocked(t, batcher)
+				require.Equal(t, oldTip, batcher.channelMgr.tip)
+				require.Len(t, batcher.channelMgr.blocks, 1)
+				require.Empty(t, streamer.positions)
 
-	require.Empty(t, streamer.positions)
-	require.Zero(t, batcher.channelMgr.l1OriginLastSubmittedChannel)
-	require.Zero(t, batcher.channelMgr.blocks.Len())
-	require.EqualValues(t, 1, batcher.espressoClearEpoch)
-	endpoints.rollupClient.AssertNumberOfCalls(t, "SyncStatus", 1)
+				switch failure {
+				case "RPC deadline":
+					time.Sleep(batcher.Config.NetworkTimeout)
+				case "zero local-safe head":
+					replies <- resetTestSyncResult{status: &eth.SyncStatus{HeadL1: eth.L1BlockRef{Number: 60}}}
+				default:
+					replies <- resetTestSyncResult{err: errors.New("temporary RPC failure")}
+				}
+				synctest.Wait()
+				if failure == "RPC deadline" {
+					require.ErrorIs(t, rpcCtx.Err(), context.DeadlineExceeded)
+					require.NoError(t, ctx.Err(), "an RPC deadline must not cancel the whole reset")
+				}
+				requireEspressoStreamerLocked(t, batcher)
+				require.Equal(t, oldTip, batcher.channelMgr.tip)
+				require.Len(t, batcher.channelMgr.blocks, 1)
+				require.Equal(t, oldOrigin, batcher.channelMgr.l1OriginLastSubmittedChannel)
+				require.Equal(t, oldEpoch, batcher.espressoClearEpoch)
+				require.Empty(t, streamer.positions, "a failed attempt must not move the cursor")
+
+				// Advance the real retry ticker without waiting five wall-clock seconds.
+				time.Sleep(5 * time.Second)
+				<-requests
+				safe := eth.L2BlockRef{
+					Number: 100, Hash: common.Hash{100},
+					L1Origin: eth.BlockID{Number: 50, Hash: common.Hash{50}},
+				}
+				replies <- resetTestSyncResult{status: &eth.SyncStatus{
+					HeadL1: eth.L1BlockRef{Number: 60}, LocalSafeL2: safe,
+				}}
+				<-done
+
+				require.Empty(t, batcher.channelMgr.blocks)
+				require.Zero(t, batcher.channelMgr.tip)
+				require.Equal(t, safe.L1Origin, batcher.channelMgr.l1OriginLastSubmittedChannel)
+				require.Equal(t, []eth.L2BlockRef{safe}, streamer.positions)
+				require.Equal(t, oldEpoch+1, batcher.espressoClearEpoch)
+				require.Empty(t, requests, "the reset must succeed on its first retry")
+				requireEspressoStreamerUnlocked(t, batcher)
+			})
+		})
+	}
+}
+
+func TestEspressoClearStateCancellationReleasesStreamer(t *testing.T) {
+	for _, phase := range []string{"during RPC", "between retries"} {
+		t.Run(phase, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				batcher, streamer, requests, replies := newResetRPCTest(t)
+				oldTip := batcher.channelMgr.tip
+				oldOrigin := batcher.channelMgr.l1OriginLastSubmittedChannel
+				oldEpoch := batcher.espressoClearEpoch
+				ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+				done := make(chan struct{})
+				go func() {
+					defer close(done)
+					batcher.clearState(ctx)
+				}()
+				defer func() { cancel(); <-done }()
+
+				rpcCtx := <-requests
+				if phase == "between retries" {
+					replies <- resetTestSyncResult{err: errors.New("temporary RPC failure")}
+				}
+				synctest.Wait()
+				requireEspressoStreamerLocked(t, batcher)
+				require.Equal(t, oldTip, batcher.channelMgr.tip)
+				require.Len(t, batcher.channelMgr.blocks, 1)
+				require.Equal(t, oldOrigin, batcher.channelMgr.l1OriginLastSubmittedChannel)
+				require.Equal(t, oldEpoch, batcher.espressoClearEpoch)
+				require.Empty(t, streamer.positions)
+
+				cancel()
+				<-done
+				if phase == "during RPC" {
+					require.ErrorIs(t, rpcCtx.Err(), context.Canceled)
+				}
+				require.Empty(t, batcher.channelMgr.blocks)
+				require.Zero(t, batcher.channelMgr.tip)
+				require.Zero(t, batcher.channelMgr.l1OriginLastSubmittedChannel)
+				require.Equal(t, oldEpoch+1, batcher.espressoClearEpoch, "cancellation must invalidate stale snapshots")
+				require.Empty(t, streamer.positions, "cancellation must not invent a re-anchor target")
+				require.Empty(t, requests, "cancellation must stop retries")
+				requireEspressoStreamerUnlocked(t, batcher)
+			})
+		})
+	}
 }
