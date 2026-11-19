@@ -285,7 +285,7 @@ services:
   # One-shot: deploy the OPSuccinctFaultDisputeGame (game type 42).
   fdg-deployer:
     profiles: ["proofs"]
-    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-fdg-deployer:pr-168
+    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-fdg-deployer:sha-249382b
     depends_on:
       op-node-sequencer:
         condition: service_healthy
@@ -313,7 +313,7 @@ services:
 
   succinct-proposer:
     profiles: ["proofs"]
-    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-proposer:sha-08a155c
+    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-proposer:sha-249382b
     restart: unless-stopped
     depends_on:
       fdg-deployer:
@@ -336,7 +336,7 @@ services:
 
   succinct-challenger:
     profiles: ["proofs"]
-    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-challenger:sha-08a155c
+    image: us-west1-docker.pkg.dev/devopsre/dev-images/op-succinct-challenger:sha-249382b
     restart: unless-stopped
     depends_on:
       fdg-deployer:
