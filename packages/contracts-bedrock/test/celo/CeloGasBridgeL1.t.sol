@@ -102,8 +102,11 @@ abstract contract CeloGasBridgeL1_TestInit is Test {
     }
 
     function _seedEscrow(ICeloGasBridgeL1 _bridge, uint256 _amount) internal {
+        bool wasPaused = systemConfig.paused();
+        systemConfig.setPaused(true);
         vm.prank(systemConfig.optimismPortal());
         _bridge.seedEscrow(_amount);
+        systemConfig.setPaused(wasPaused);
     }
 }
 
@@ -160,11 +163,13 @@ contract CeloGasBridgeL1_Initialize_Test is CeloGasBridgeL1_TestInit {
 contract CeloGasBridgeL1_SeedEscrow_Test is CeloGasBridgeL1_TestInit {
     function test_seedEscrow_succeeds() external {
         uint256 amount = 500;
+        systemConfig.setPaused(true);
 
         vm.expectEmit(address(bridge));
         emit EscrowSeeded(optimismPortal, amount);
 
-        _seedEscrow(bridge, amount);
+        vm.prank(optimismPortal);
+        bridge.seedEscrow(amount);
 
         assertEq(bridge.deposits(address(celoTokenL1), address(0)), amount);
         assertTrue(bridge.escrowSeeded());
@@ -184,6 +189,16 @@ contract CeloGasBridgeL1_SeedEscrow_Test is CeloGasBridgeL1_TestInit {
 /// @title CeloGasBridgeL1_SeedEscrow_TestFail
 /// @notice Tests revert cases for the `seedEscrow` function of the `CeloGasBridgeL1` contract.
 contract CeloGasBridgeL1_SeedEscrow_TestFail is CeloGasBridgeL1_TestInit {
+    function test_seedEscrow_unpaused_reverts() external {
+        vm.prank(optimismPortal);
+        vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_NotPaused.selector);
+        bridge.seedEscrow(500);
+
+        assertFalse(bridge.escrowSeeded());
+        assertEq(bridge.migratedAmount(), 0);
+        assertEq(bridge.deposits(address(celoTokenL1), address(0)), 0);
+    }
+
     function test_seedEscrow_unauthorizedSeeder_reverts() external {
         vm.prank(alice);
         vm.expectRevert(ICeloGasBridgeL1.CeloGasBridgeL1_UnauthorizedSeeder.selector);

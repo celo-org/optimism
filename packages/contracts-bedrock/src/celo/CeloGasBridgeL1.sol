@@ -133,6 +133,7 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         address portal = systemConfig.optimismPortal();
         if (msg.sender != portal) revert CeloGasBridgeL1_UnauthorizedSeeder();
         if (escrowSeeded) revert CeloGasBridgeL1_EscrowAlreadySeeded();
+        if (!paused()) revert CeloGasBridgeL1_NotPaused();
 
         escrowSeeded = true;
         migratedAmount = _amount;
