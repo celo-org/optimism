@@ -300,7 +300,7 @@ func numberedRefs(from, to uint64) []eth.L2BlockRef {
 // TestNextBlockRangeBranches locks the reset/reorg/prune branches of
 // nextBlockRange. The safe-chain-reorg hash check is the sole defense against
 // re-queueing orphaned blocks to Espresso, and every reset branch feeds
-// loader.reset() -> requestClearState, so a silently wrong action here either
+// loader.reset() -> clearState, so a silently wrong action here either
 // resubmits derived history or drops blocks.
 func TestNextBlockRangeBranches(t *testing.T) {
 	newStatus := func(localSafe eth.L2BlockRef, unsafeNum uint64) *eth.SyncStatus {
@@ -417,10 +417,11 @@ func (fakeChainSigner) Sign(context.Context, []byte) ([]byte, error) {
 	return make([]byte, 65), nil
 }
 
-// enqueueTest is a BatchSubmitter that can run EnqueueBlocks end to end: fetch
-// a block from the (mock) sequencer, convert it, sign it, and hand it to the
+// enqueueTest is a BlockLoader that can run EnqueueBlocks end to end: fetch a
+// block from the (mock) sequencer, convert it, sign it, and hand it to the
 // Espresso transaction submitter, which reports each submission on submitted.
 type enqueueTest struct {
+	loader    *BlockLoader
 	bs        *BatchSubmitter
 	ep        *mockL2EndpointProvider
 	streamer  *reanchorTestStreamer
@@ -441,7 +442,7 @@ func newEnqueueTest(t *testing.T) *enqueueTest {
 	})
 	streamer := &reanchorTestStreamer{}
 	bs.espressoSession = &espressoSession{submitter: submitter, streamer: streamer}
-	return &enqueueTest{bs: bs, ep: ep, streamer: streamer, submitted: submitted}
+	return &enqueueTest{loader: &BlockLoader{batcher: bs}, bs: bs, ep: ep, streamer: streamer, submitted: submitted}
 }
 
 // TestEnqueueBlocksReorgDetection locks EnqueueBlocks' parent-hash check — the
@@ -455,9 +456,8 @@ func TestEnqueueBlocksReorgDetection(t *testing.T) {
 
 	t.Run("a reorged block resets the loader and clears state", func(t *testing.T) {
 		et := newEnqueueTest(t)
-		loader := &BlockLoader{batcher: et.bs}
-		loader.queuedBlocks = orphanedTip
-		loader.prevSyncStatus = &eth.SyncStatus{}
+		et.loader.queuedBlocks = orphanedTip
+		et.loader.prevSyncStatus = &eth.SyncStatus{}
 		block := derivetest.RandomL2BlockWithChainId(rng, 1, defaultTestRollupConfig.L2ChainID)
 		et.ep.ethClient.ExpectBlockByNumber(new(big.Int).SetUint64(106), block, nil)
 		localSafe := eth.L2BlockRef{Number: 104, Hash: common.Hash{0x04}, L1Origin: eth.BlockID{Number: 40}}
@@ -466,10 +466,10 @@ func TestEnqueueBlocksReorgDetection(t *testing.T) {
 			LocalSafeL2: localSafe,
 		}, nil)
 
-		loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 106})
+		et.loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 106})
 
-		require.Nil(t, loader.queuedBlocks, "reorg must drop the queued chain")
-		require.Nil(t, loader.prevSyncStatus, "reorg must drop the sync-status baseline")
+		require.Nil(t, et.loader.queuedBlocks, "reorg must drop the queued chain")
+		require.Nil(t, et.loader.prevSyncStatus, "reorg must drop the sync-status baseline")
 		require.EqualValues(t, 1, et.bs.espressoClearEpoch, "reorg must clear the channel manager")
 		require.Equal(t, []eth.L2BlockRef{localSafe}, et.streamer.positions,
 			"reorg must re-anchor the streamer to the local-safe head")
@@ -479,14 +479,13 @@ func TestEnqueueBlocksReorgDetection(t *testing.T) {
 	t.Run("a block extending the queue is signed, submitted to espresso, and appended", func(t *testing.T) {
 		et := newEnqueueTest(t)
 		block := derivetest.RandomL2BlockWithChainId(rng, 1, defaultTestRollupConfig.L2ChainID)
-		loader := &BlockLoader{batcher: et.bs}
-		loader.queuedBlocks = []eth.L2BlockRef{{Number: block.NumberU64() - 1, Hash: block.ParentHash()}}
+		et.loader.queuedBlocks = []eth.L2BlockRef{{Number: block.NumberU64() - 1, Hash: block.ParentHash()}}
 		et.ep.ethClient.ExpectBlockByNumber(new(big.Int).SetUint64(106), block, nil)
 
-		loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 106})
+		et.loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 106})
 
-		require.Len(t, loader.queuedBlocks, 2)
-		appended := loader.queuedBlocks[1]
+		require.Len(t, et.loader.queuedBlocks, 2)
+		appended := et.loader.queuedBlocks[1]
 		require.Equal(t, block.Hash(), appended.Hash)
 		require.Equal(t, block.NumberU64(), appended.Number)
 		require.Zero(t, et.bs.espressoClearEpoch)
@@ -495,15 +494,14 @@ func TestEnqueueBlocksReorgDetection(t *testing.T) {
 
 	t.Run("a fetch failure stops the scan without resetting", func(t *testing.T) {
 		et := newEnqueueTest(t)
-		loader := &BlockLoader{batcher: et.bs}
-		loader.queuedBlocks = orphanedTip
+		et.loader.queuedBlocks = orphanedTip
 		et.ep.ethClient.ExpectBlockByNumber(new(big.Int).SetUint64(106), (*types.Block)(nil), errors.New("rpc down"))
 
 		// The range spans two blocks; the mock would reject a fetch of 107,
 		// so completing without a mock failure also proves the scan stopped.
-		loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 107})
+		et.loader.EnqueueBlocks(t.Context(), inclusiveBlockRange{106, 107})
 
-		require.Equal(t, orphanedTip, loader.queuedBlocks,
+		require.Equal(t, orphanedTip, et.loader.queuedBlocks,
 			"a transient fetch failure must keep the queue for the next tick")
 		require.Zero(t, et.bs.espressoClearEpoch)
 		require.Empty(t, et.submitted)

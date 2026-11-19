@@ -303,10 +303,9 @@ func TestWaitForLocalSafeHead(t *testing.T) {
 // a later start attempt is not rejected with "batcher is already running", and
 // cancel both contexts so nothing keeps running behind the failed start.
 func TestRollbackFailedStart(t *testing.T) {
-	l := newAuthSubmitter(t)
+	l := &BatchSubmitter{running: true}
 	l.shutdownCtx, l.cancelShutdownCtx = context.WithCancel(context.Background())
 	l.killCtx, l.cancelKillCtx = context.WithCancel(context.Background())
-	l.running = true
 
 	l.rollbackFailedStart()
 
