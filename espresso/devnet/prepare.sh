@@ -162,6 +162,8 @@ jq '.create2Salt = "0xaecea4f57fadb2097ccd56594f2f22715ac52f92971c5913b70a7f1134
     "${DEPLOYER_DIR}/state.json" >"${DEPLOYER_DIR}/state.json.tmp"
 mv "${DEPLOYER_DIR}/state.json.tmp" "${DEPLOYER_DIR}/state.json"
 
+# The devnet has no Nitro enclave verifier, so it opts into the mock TEE verifiers.
+ESPRESSO_ALLOW_MOCK_TEE_VERIFIER=true \
 BATCH_AUTHENTICATOR_OWNER_ADDRESS="${BATCH_AUTHENTICATOR_OWNER_ADDRESS}" "${OP_DEPLOYER}" apply \
     --l1-rpc-url "${ANVIL_URL}" \
     --workdir "${DEPLOYER_DIR}" \
