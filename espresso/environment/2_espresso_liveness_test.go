@@ -49,13 +49,12 @@ func TestE2eDevnetWithEspressoDegradedLiveness(t *testing.T) {
 
 	launcher := new(env.EspressoDevNodeLauncherDocker)
 
-	// Start a Server to proxy requests to Espresso
-	_, server, option := env.SetupQueryServiceIntercept(
-		// This decider will randomly report successful submissions of
-		// transactions to Espresso, but will not actually submit them.
-		// This will approximately occur 10% of the time, given the
-		// criteria to roll a number 0-9 and only to occur if the rolled
-		// number is 0.
+	// Intercept the batcher's submissions to Espresso
+	intercept, option := env.SetupQueryServiceIntercept(
+		// This decider rolls a number 0-9 per submission. On 0 (~10%) it
+		// reports a successful submission to Espresso without actually
+		// submitting it; on 1 (~10%) it fails the submission as if the
+		// service were unavailable. Otherwise the submission goes through.
 		env.SetDecider(env.NewRandomRollFakeSubmitTransactionSuccess(
 			10,
 			0,
@@ -64,7 +63,6 @@ func TestE2eDevnetWithEspressoDegradedLiveness(t *testing.T) {
 		)),
 	)
 
-	defer server.Close()
 	system, espressoDevNode, err := launcher.StartE2eDevnet(ctx, t, option)
 
 	// Signal the testnet to shut down
@@ -122,5 +120,11 @@ func TestE2eDevnetWithEspressoDegradedLiveness(t *testing.T) {
 		if balanceAliceFinal.Cmp(expectedBalance) != 0 {
 			t.Fatalf("Alice's balance did not increase as expected:\nhave:\n\t\"%v\"\nwant:\n\t\"%v\"\n", balanceAliceFinal, expectedBalance)
 		}
+	}
+
+	// Make sure the degraded liveness was actually exercised.
+	t.Logf("espresso intercept: dropped=%d unavailable=%d", intercept.Dropped(), intercept.Unavailable())
+	if intercept.Dropped()+intercept.Unavailable() == 0 {
+		t.Fatalf("no Espresso submissions were intercepted; the test did not exercise degraded liveness")
 	}
 }
