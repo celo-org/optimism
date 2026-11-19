@@ -3,9 +3,26 @@ package pipeline
 import (
 	"testing"
 
+	"github.com/ethereum-optimism/optimism/op-deployer/pkg/deployer/state"
+	"github.com/ethereum-optimism/optimism/op-service/testlog"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/stretchr/testify/require"
 )
+
+// TestDeployEspressoSkipsWhenAlreadyDeployed checks that re-applying an intent keeps the
+// existing BatchAuthenticator. The Env has no script host, so any deployment attempt would panic.
+func TestDeployEspressoSkipsWhenAlreadyDeployed(t *testing.T) {
+	chainID := common.HexToHash("0x01")
+	existing := common.HexToAddress("0xba7c4a0000000000000000000000000000000001")
+
+	intent := &state.Intent{Chains: []*state.ChainIntent{{ID: chainID, EspressoEnabled: true}}}
+	st := &state.State{Chains: []*state.ChainState{{ID: chainID, BatchAuthenticatorAddress: existing}}}
+	env := &Env{Logger: testlog.Logger(t, log.LevelInfo)}
+
+	require.NoError(t, DeployEspresso(env, intent, st, chainID))
+	require.Equal(t, existing, st.Chains[0].BatchAuthenticatorAddress)
+}
 
 func TestNitroEnclaveVerifier(t *testing.T) {
 	verifier := common.HexToAddress("0x1234567890123456789012345678901234567890")

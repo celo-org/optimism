@@ -33,6 +33,14 @@ func DeployEspresso(env *Env, intent *state.Intent, st *state.State, chainID com
 		return nil
 	}
 
+	// On re-apply (e.g. when adding another chain), keep the existing deployment: redeploying
+	// would orphan the prior contracts and repoint the chain at an authenticator whose history
+	// does not cover earlier batches.
+	if chainState.BatchAuthenticatorAddress != (common.Address{}) {
+		lgr.Info("espresso contracts already deployed, skipping", "batchAuthenticator", chainState.BatchAuthenticatorAddress)
+		return nil
+	}
+
 	lgr.Info("deploying espresso contracts")
 
 	nitroEnclaveVerifierAddress, err := nitroEnclaveVerifier(env)
