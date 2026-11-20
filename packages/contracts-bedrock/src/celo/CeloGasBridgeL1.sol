@@ -57,12 +57,21 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @notice Thrown when depositing before the CGT v2 migration has seeded the escrow.
     error CeloGasBridgeL1_NotActivated();
 
+    /// @notice Thrown when an account other than the SystemConfig owner requests a retry.
+    error CeloGasBridgeL1_UnauthorizedRetry();
+
+    /// @notice Thrown when requesting a retry while the bridge is unpaused.
+    error CeloGasBridgeL1_NotPaused();
+
     // ================================================================
     //                            EVENTS
     // ================================================================
 
     /// @notice Emitted when escrow is seeded from the drained portal amount.
     event EscrowSeeded(address indexed portal, uint256 amount);
+
+    /// @notice Requests another L2 migration attempt with the selected bundle and seeded escrow.
+    event CgtV2RetryRequested(bytes32 indexed bundleHash, uint256 migratedAmount);
 
     // ================================================================
     //                            STORAGE
@@ -78,9 +87,12 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @notice True once escrow was seeded.
     bool public escrowSeeded;
 
+    /// @notice Original CELO amount recorded when escrow was seeded.
+    uint256 public migratedAmount;
+
     /// @notice Reserved storage slots for future upgrades. Sized to leave the parent's storage
     ///         contiguous and to allow new state in subsequent versions without layout shifts.
-    uint256[48] private __gap;
+    uint256[47] private __gap;
 
     /// @notice Semantic version.
     /// @custom:semver 1.0.0
@@ -121,8 +133,10 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         address portal = systemConfig.optimismPortal();
         if (msg.sender != portal) revert CeloGasBridgeL1_UnauthorizedSeeder();
         if (escrowSeeded) revert CeloGasBridgeL1_EscrowAlreadySeeded();
+        if (!paused()) revert CeloGasBridgeL1_NotPaused();
 
         escrowSeeded = true;
+        migratedAmount = _amount;
         deposits[address(celoTokenL1)][address(0)] = _amount;
 
         emit EscrowSeeded(portal, _amount);
@@ -137,6 +151,7 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
         uint256 amount = celoTokenL1.balanceOf(address(this));
 
         escrowSeeded = true;
+        migratedAmount = amount;
         deposits[address(celoTokenL1)][address(0)] = amount;
 
         emit EscrowSeeded(msg.sender, amount);
@@ -145,6 +160,16 @@ contract CeloGasBridgeL1 is StandardBridge, ProxyAdminOwnedBase, Reinitializable
     /// @notice Pause state is delegated to SystemConfig.
     function paused() public view override returns (bool) {
         return systemConfig.paused();
+    }
+
+    /// @notice Requests an L2 migration retry without changing escrow accounting.
+    /// @dev Keep the bridge paused from escrow seeding until the L2 migration succeeds.
+    /// @param _bundleHash Hash of the static upgrade deposits to use for the retry.
+    function requestCgtV2Retry(bytes32 _bundleHash) external {
+        if (msg.sender != systemConfig.owner()) revert CeloGasBridgeL1_UnauthorizedRetry();
+        if (!escrowSeeded) revert CeloGasBridgeL1_NotActivated();
+        if (!paused()) revert CeloGasBridgeL1_NotPaused();
+        emit CgtV2RetryRequested(_bundleHash, migratedAmount);
     }
 
     /// @notice Deposits CELO into escrow for later L2 finalization.

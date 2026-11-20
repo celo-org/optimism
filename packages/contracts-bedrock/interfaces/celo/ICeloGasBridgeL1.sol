@@ -20,14 +20,19 @@ interface ICeloGasBridgeL1 is IStandardBridge, IProxyAdminOwnedBase, IReinitiali
     error CeloGasBridgeL1_UnauthorizedSeeder();
     error CeloGasBridgeL1_EscrowAlreadySeeded();
     error CeloGasBridgeL1_NotActivated();
+    error CeloGasBridgeL1_UnauthorizedRetry();
+    error CeloGasBridgeL1_NotPaused();
 
     event EscrowSeeded(address indexed portal, uint256 amount);
+    event CgtV2RetryRequested(bytes32 indexed bundleHash, uint256 migratedAmount);
 
     function celoTokenL1() external view returns (IERC20);
     function systemConfig() external view returns (ISystemConfig);
     function escrowSeeded() external view returns (bool);
+    function migratedAmount() external view returns (uint256);
     function seedEscrow(uint256 _amount) external;
     function seedEscrowGenesis() external;
+    function requestCgtV2Retry(bytes32 _bundleHash) external;
 
     function initialize(
         ICrossDomainMessenger _messenger,
@@ -41,5 +46,6 @@ interface ICeloGasBridgeL1 is IStandardBridge, IProxyAdminOwnedBase, IReinitiali
 
     function finalizeWithdrawal(address _from, address _to, uint256 _amount, bytes memory _extraData) external;
 
-    function __constructor__() external override(IReinitializableBase, IStandardBridge); // Disables interface inheritance error
+    // Disables interface inheritance error.
+    function __constructor__() external override(IReinitializableBase, IStandardBridge);
 }
