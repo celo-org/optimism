@@ -140,6 +140,12 @@ abstract contract CGTMigrationFork_TestInit is Test, CeloForkSafeExec {
             cannonPrestate: cannonPrestate,
             cannonKonaPrestate: cannonKonaPrestate
         });
+
+        // Ceremony order: the guardian pauses the CeloSuperchainConfig before any migration step.
+        address celoSuperchainConfig = address(systemConfig.superchainConfig());
+        vm.prank(ISuperchainConfig(celoSuperchainConfig).guardian());
+        (bool ok,) = celoSuperchainConfig.call(abi.encodeWithSignature("pause(string)", "cgt-v2"));
+        require(ok && systemConfig.paused(), "guardian pause failed");
     }
 
     function _deployBridge() internal returns (ICeloGasBridgeL1 bridge_) {
@@ -354,6 +360,20 @@ contract CGTMigrationFork_Test is CGTMigrationFork_TestInit {
         vm.store(PORTAL_PROXY, EIP1967_IMPL_SLOT, bytes32(uint256(uint160(input.portalMigratorImpl))));
 
         vm.expectRevert(bytes("MigrateV1V2: current portal impl != originalPortalImpl"));
+        migrator.preflight(input);
+    }
+
+    /// @notice Preflight rejects a bridge wired to a foreign messenger or proxy admin.
+    function testFork_preflightRejectsRogueBridge() external {
+        vm.mockCall(
+            address(bridge), abi.encodeCall(IStandardBridge.messenger, ()), abi.encode(makeAddr("fakeMessenger"))
+        );
+        vm.expectRevert(bytes("MigrateV1V2: bridge messenger != L1CrossDomainMessenger"));
+        migrator.preflight(input);
+        vm.clearMockedCalls();
+
+        vm.store(address(bridge), Constants.PROXY_OWNER_ADDRESS, bytes32(uint256(uint160(makeAddr("rogueAdmin")))));
+        vm.expectRevert(bytes("MigrateV1V2: bridge proxy admin != ProxyAdmin"));
         migrator.preflight(input);
     }
 

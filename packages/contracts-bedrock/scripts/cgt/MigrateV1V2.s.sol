@@ -82,6 +82,9 @@ contract MigrateV1V2 is Script {
     /// @notice EIP-1967 implementation slot.
     bytes32 internal constant EIP1967_IMPL_SLOT = bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1);
 
+    /// @notice EIP-1967 admin slot.
+    bytes32 internal constant EIP1967_ADMIN_SLOT = bytes32(uint256(keccak256("eip1967.proxy.admin")) - 1);
+
     /// @notice superchain-ops' OPCM batching multicall
     address internal constant MULTICALL3_DELEGATECALL = 0x93dc480940585D9961bfcEab58124fFD3d60f76a;
 
@@ -170,7 +173,14 @@ contract MigrateV1V2 is Script {
             address(bridge.celoTokenL1()) == address(_input.celoTokenL1), "MigrateV1V2: bridge celoTokenL1 mismatch"
         );
         require(address(bridge.systemConfig()) == _input.systemConfig, "MigrateV1V2: bridge systemConfig not wired");
-        require(address(bridge.messenger()) != address(0), "MigrateV1V2: bridge messenger not wired");
+        require(
+            address(bridge.messenger()) == ISystemConfig(_input.systemConfig).l1CrossDomainMessenger(),
+            "MigrateV1V2: bridge messenger != L1CrossDomainMessenger"
+        );
+        require(
+            address(uint160(uint256(vm.load(_input.bridgeL1Proxy, EIP1967_ADMIN_SLOT)))) == _input.proxyAdmin,
+            "MigrateV1V2: bridge proxy admin != ProxyAdmin"
+        );
         require(
             address(bridge.otherBridge()) == CeloPredeploys.CELO_GAS_BRIDGE_L2,
             "MigrateV1V2: bridge otherBridge != CeloGasBridgeL2 predeploy"
