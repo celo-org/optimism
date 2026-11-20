@@ -7,6 +7,7 @@ import { ReinitializableBase } from "src/universal/ReinitializableBase.sol";
 import { CrossDomainMessenger } from "src/universal/CrossDomainMessenger.sol";
 
 // Libraries
+import "src/libraries/GasConstants.sol" as GasConstants;
 import { Predeploys } from "src/libraries/Predeploys.sol";
 
 // Interfaces
@@ -36,8 +37,20 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ProxyAdminOwnedBase, Re
     address private spacer_253_0_20;
 
     /// @notice Semantic version.
-    /// @custom:semver 2.11.0
-    string public constant version = "2.11.0";
+    /// @custom:semver 2.11.0-celo
+    string public constant version = "2.11.0-celo";
+
+    /// @notice See `GasConstants.L1_RELAY_RESERVED_GAS`.
+    uint64 internal constant LOCAL_RELAY_RESERVED_GAS = GasConstants.L1_RELAY_RESERVED_GAS;
+
+    /// @notice See `GasConstants.L1_RELAY_GAS_CHECK_BUFFER`.
+    uint64 internal constant LOCAL_RELAY_GAS_CHECK_BUFFER = GasConstants.L1_RELAY_GAS_CHECK_BUFFER;
+
+    /// @notice See `GasConstants.L2_RELAY_RESERVED_GAS`.
+    uint64 public constant override RELAY_RESERVED_GAS = GasConstants.L2_RELAY_RESERVED_GAS;
+
+    /// @notice See `GasConstants.L2_RELAY_GAS_CHECK_BUFFER`.
+    uint64 public constant override RELAY_GAS_CHECK_BUFFER = GasConstants.L2_RELAY_GAS_CHECK_BUFFER;
 
     /// @notice Contract of the SystemConfig.
     ISystemConfig public systemConfig;
@@ -98,5 +111,20 @@ contract L1CrossDomainMessenger is CrossDomainMessenger, ProxyAdminOwnedBase, Re
     /// @inheritdoc CrossDomainMessenger
     function _isUnsafeTarget(address _target) internal view override returns (bool) {
         return _target == address(this) || _target == address(portal);
+    }
+
+    /// @inheritdoc CrossDomainMessenger
+    function baseGas(bytes memory _message, uint32 _minGasLimit) public pure override returns (uint64) {
+        return _baseGas(_message, _minGasLimit, RELAY_RESERVED_GAS, RELAY_GAS_CHECK_BUFFER);
+    }
+
+    /// @inheritdoc CrossDomainMessenger
+    function _localRelayReservedGas() internal pure override returns (uint64) {
+        return LOCAL_RELAY_RESERVED_GAS;
+    }
+
+    /// @inheritdoc CrossDomainMessenger
+    function _localRelayGasCheckBuffer() internal pure override returns (uint64) {
+        return LOCAL_RELAY_GAS_CHECK_BUFFER;
     }
 }

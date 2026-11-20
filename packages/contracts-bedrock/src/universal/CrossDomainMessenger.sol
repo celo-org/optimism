@@ -109,12 +109,15 @@ abstract contract CrossDomainMessenger is
     /// @notice Gas reserved for performing the external call in `relayMessage`.
     uint64 public constant RELAY_CALL_OVERHEAD = 40_000;
 
-    /// @notice Gas reserved for finalizing the execution of `relayMessage` after the safe call.
-    uint64 public constant RELAY_RESERVED_GAS = 40_000;
+    /// @notice Gas the OTHER chain reserves for finishing `relayMessage` after the safe call.
+    ///         `baseGas` budgets with this; `relayMessage` uses `_localRelayReservedGas()`.
+    /// @return Gas added to the base gas for a message.
+    function RELAY_RESERVED_GAS() external view virtual returns (uint64);
 
-    /// @notice Gas reserved for the execution between the `hasMinGas` check and the external
-    ///         call in `relayMessage`.
-    uint64 public constant RELAY_GAS_CHECK_BUFFER = 5_000;
+    /// @notice Gas the OTHER chain reserves between the `hasMinGas` check and the external call.
+    ///         `baseGas` budgets with this; `relayMessage` uses `_localRelayGasCheckBuffer()`.
+    /// @return Gas added to the base gas for a message.
+    function RELAY_GAS_CHECK_BUFFER() external view virtual returns (uint64);
 
     /// @notice Base gas required for any transaction in the EVM.
     uint64 public constant TX_BASE_GAS = 21_000;
@@ -269,14 +272,14 @@ abstract contract CrossDomainMessenger is
         // If there is not enough gas left to perform the external call and finish the execution,
         // return early and assign the message to the failedMessages mapping.
         // We are asserting that we have enough gas to:
-        // 1. Call the target contract (_minGasLimit + RELAY_CALL_OVERHEAD + RELAY_GAS_CHECK_BUFFER)
+        // 1. Call the target contract (_minGasLimit + RELAY_CALL_OVERHEAD + local gas check buffer)
         //   1.a. The RELAY_CALL_OVERHEAD is included in `hasMinGas`.
-        // 2. Finish the execution after the external call (RELAY_RESERVED_GAS).
+        // 2. Finish the execution after the external call (local reserved gas).
         //
         // If `xDomainMsgSender` is not the default L2 sender, this function
         // is being re-entered. This marks the message as failed to allow it to be replayed.
         if (
-            !SafeCall.hasMinGas(_minGasLimit, RELAY_RESERVED_GAS + RELAY_GAS_CHECK_BUFFER)
+            !SafeCall.hasMinGas(_minGasLimit, _localRelayReservedGas() + _localRelayGasCheckBuffer())
                 || xDomainMsgSender != Constants.DEFAULT_L2_SENDER
         ) {
             failedMessages[versionedHash] = true;
@@ -295,7 +298,7 @@ abstract contract CrossDomainMessenger is
         }
 
         xDomainMsgSender = _sender;
-        bool success = SafeCall.call(_target, gasleft() - RELAY_RESERVED_GAS, _value, _message);
+        bool success = SafeCall.call(_target, gasleft() - _localRelayReservedGas(), _value, _message);
         xDomainMsgSender = Constants.DEFAULT_L2_SENDER;
 
         if (success) {
@@ -354,7 +357,24 @@ abstract contract CrossDomainMessenger is
     /// @param _message     Message to compute the amount of required gas for.
     /// @param _minGasLimit Minimum desired gas limit when message goes to target.
     /// @return Amount of gas required to guarantee message receipt.
-    function baseGas(bytes memory _message, uint32 _minGasLimit) public pure returns (uint64) {
+    function baseGas(bytes memory _message, uint32 _minGasLimit) public pure virtual returns (uint64);
+
+    /// @notice Computes `baseGas` from the relay budgets of the other chain's messenger.
+    /// @param _message             Message to compute the amount of required gas for.
+    /// @param _minGasLimit         Minimum desired gas limit when message goes to target.
+    /// @param _relayReservedGas    Gas the other chain reserves to finish `relayMessage`.
+    /// @param _relayGasCheckBuffer Gas the other chain spends between `hasMinGas` and the CALL.
+    /// @return Amount of gas required to guarantee message receipt.
+    function _baseGas(
+        bytes memory _message,
+        uint32 _minGasLimit,
+        uint64 _relayReservedGas,
+        uint64 _relayGasCheckBuffer
+    )
+        internal
+        pure
+        returns (uint64)
+    {
         // Base gas should really be computed on the fully encoded message but that would break the
         // expected API, so we instead just add the encoding overhead to the message length inside
         // of this function.
@@ -369,9 +389,9 @@ abstract contract CrossDomainMessenger is
             // Covers dynamic parts of the CALL opcode
             + RELAY_CALL_OVERHEAD
             // Ensures execution of relayMessage completes after call
-            + RELAY_RESERVED_GAS
+            + _relayReservedGas
             // Buffer between hasMinGas check and the CALL
-            + RELAY_GAS_CHECK_BUFFER
+            + _relayGasCheckBuffer
             // Minimum gas limit, multiplied by 64/63 to account for EIP-150.
             + ((_minGasLimit * MIN_GAS_DYNAMIC_OVERHEAD_NUMERATOR) / MIN_GAS_DYNAMIC_OVERHEAD_DENOMINATOR)
         );
@@ -431,6 +451,14 @@ abstract contract CrossDomainMessenger is
     /// @param _target Address of the contract to check.
     /// @return Whether or not the address is an unsafe system address.
     function _isUnsafeTarget(address _target) internal view virtual returns (bool);
+
+    /// @notice Gas THIS chain reserves for finishing `relayMessage` after the safe call.
+    /// @return Gas reserved after the external call.
+    function _localRelayReservedGas() internal pure virtual returns (uint64);
+
+    /// @notice Gas THIS chain spends between the `hasMinGas` check and the external call.
+    /// @return Gas reserved before the external call.
+    function _localRelayGasCheckBuffer() internal pure virtual returns (uint64);
 
     /// @notice This function should return true if the contract is paused.
     ///         On L1 this function will check the SuperchainConfig for its paused status.
