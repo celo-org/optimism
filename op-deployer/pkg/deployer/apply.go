@@ -460,6 +460,8 @@ func ApplyPipeline(
 		L1RPCUrl:     opts.L1RPCUrl,
 		PrivateKey:   opts.PrivateKey,
 		Context:      ctx,
+		// Genesis deployments are in-memory only, so the mock TEE verifiers cannot reach a live chain.
+		AllowMockTEEVerifier: opts.DeploymentTarget == DeploymentTargetGenesis,
 	}
 
 	pline := []pipelineStage{

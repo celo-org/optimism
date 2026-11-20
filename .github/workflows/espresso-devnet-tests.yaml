@@ -104,18 +104,24 @@ jobs:
       fail-fast: false
       matrix:
         # One devnet per test, so a shard's duration is the sum of its
-        # tests'. As the remaining stubs are ported, group them as in
-        # optimism-espresso-integration:
-        #   TestChallengeGame|TestChangeBatchAuthenticatorOwner
-        #   TestSmoke|TestBatcherRestart
-        #   TestWithdrawal|TestBatcherSwitching
-        #   TestForcedTransaction
-        #   TestBatcherActivePublishOnly
+        # tests'. Grouped as in optimism-espresso-integration.
         # `profiles` lists the compose profiles whose images the shard pulls:
         # "proofs" for tests using WithProofs (TestWithdrawal, TestChallengeGame).
         include:
-          - group: smoke
-            tests: "TestSmoke"
+          - group: smoke-restart
+            tests: "^(TestSmoke|TestBatcherRestart)$"
+            profiles: ""
+          - group: challenge-owner
+            tests: "^(TestChallengeGame|TestChangeBatchAuthenticatorOwner)$"
+            profiles: "proofs"
+          - group: withdrawal-switching
+            tests: "^(TestWithdrawal|TestBatcherSwitching)$"
+            profiles: "proofs"
+          - group: forced-transaction
+            tests: "^TestForcedTransaction$"
+            profiles: ""
+          - group: active-publish
+            tests: "^TestBatcherActivePublishOnly$"
             profiles: ""
     env:
       ESPRESSO_DEVNET_TESTS_LIVENESS_PERIOD: "1m"

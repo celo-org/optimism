@@ -603,6 +603,11 @@ type StartOption struct {
 
 	// Batcher CLIConfig modifications to apply before starting the batcher.
 	BatcherMod func(*bss.CLIConfig, *System)
+
+	// BatcherDriverSetupOpts returns extra driver setup options for the primary batcher.
+	// They are applied after the default ones, so e.g. a WithEspressoClientOverride here
+	// replaces the shared mock Espresso client for the primary batcher.
+	BatcherDriverSetupOpts func(*System) []bss.DriverSetupOption
 }
 
 type startOptions struct {
@@ -1108,9 +1113,13 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 	}
 
 	// Apply batcher cli modifications
+	batcherDriverOpts := slices.Clone(espressoOverrideOpts)
 	for _, opt := range startOpts {
 		if opt.BatcherMod != nil {
 			opt.BatcherMod(batcherCLIConfig, sys)
+		}
+		if opt.BatcherDriverSetupOpts != nil {
+			batcherDriverOpts = append(batcherDriverOpts, opt.BatcherDriverSetupOpts(sys)...)
 		}
 	}
 
@@ -1120,7 +1129,7 @@ func (cfg SystemConfig) Start(t *testing.T, startOpts ...StartOption) (*System, 
 		t.Fatalf("closeAppFn called, batcher hit a critical error: %v", cause)
 		batcherCancel()
 	}
-	batcher, err := bss.BatcherServiceFromCLIConfig(batcherContext, closeAppFn, "0.0.1", batcherCLIConfig, sys.Cfg.Loggers["batcher"], espressoOverrideOpts...)
+	batcher, err := bss.BatcherServiceFromCLIConfig(batcherContext, closeAppFn, "0.0.1", batcherCLIConfig, sys.Cfg.Loggers["batcher"], batcherDriverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup batch submitter: %w", err)
 	}

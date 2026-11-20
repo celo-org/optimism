@@ -33,16 +33,24 @@ func DeployEspresso(env *Env, intent *state.Intent, st *state.State, chainID com
 		return nil
 	}
 
+	// On re-apply (e.g. when adding another chain), keep the existing deployment: redeploying
+	// would orphan the prior contracts and repoint the chain at an authenticator whose history
+	// does not cover earlier batches.
+	if chainState.BatchAuthenticatorAddress != (common.Address{}) {
+		lgr.Info("espresso contracts already deployed, skipping", "batchAuthenticator", chainState.BatchAuthenticatorAddress)
+		return nil
+	}
+
 	lgr.Info("deploying espresso contracts")
 
-	// Read the underlying AWS NitroEnclaveVerifier address (from Automata).
-	// If not set, the zero address triggers mock verifier deployment — dev/test only.
-	var nitroEnclaveVerifierAddress common.Address
-	if envVar := os.Getenv("NITRO_ENCLAVE_VERIFIER_ADDRESS"); envVar != "" {
-		nitroEnclaveVerifierAddress = common.HexToAddress(envVar)
-		lgr.Info("using nitro enclave verifier from NITRO_ENCLAVE_VERIFIER_ADDRESS", "address", nitroEnclaveVerifierAddress.Hex())
+	nitroEnclaveVerifierAddress, err := nitroEnclaveVerifier(env)
+	if err != nil {
+		return err
+	}
+	if nitroEnclaveVerifierAddress == (common.Address{}) {
+		lgr.Warn("NITRO_ENCLAVE_VERIFIER_ADDRESS not set — deploying mock TEE verifiers (dev/test only)")
 	} else {
-		lgr.Info("NITRO_ENCLAVE_VERIFIER_ADDRESS not set — deploying mock TEE verifiers")
+		lgr.Info("using nitro enclave verifier from NITRO_ENCLAVE_VERIFIER_ADDRESS", "address", nitroEnclaveVerifierAddress.Hex())
 	}
 
 	// The application-level owner gating operational setters. Defaults to the deployer.
@@ -78,4 +86,30 @@ func DeployEspresso(env *Env, intent *state.Intent, st *state.State, chainID com
 		"nitroTEEVerifier", eo.NitroTEEVerifier,
 	)
 	return nil
+}
+
+// allowMockTEEVerifierEnv opts a non-genesis deployment into the mock TEE verifiers.
+const allowMockTEEVerifierEnv = "ESPRESSO_ALLOW_MOCK_TEE_VERIFIER"
+
+// nitroEnclaveVerifier returns the underlying AWS NitroEnclaveVerifier address (from Automata)
+// read from NITRO_ENCLAVE_VERIFIER_ADDRESS. The zero address makes DeployEspresso.s.sol deploy
+// permissive mock verifiers, which disables the Nitro attestation check; it is only returned
+// when the variable is unset and either the deployment is in-memory (genesis target) or
+// ESPRESSO_ALLOW_MOCK_TEE_VERIFIER=true. A malformed or zero address is always an error.
+func nitroEnclaveVerifier(env *Env) (common.Address, error) {
+	raw := os.Getenv("NITRO_ENCLAVE_VERIFIER_ADDRESS")
+	if raw == "" {
+		if env.AllowMockTEEVerifier || os.Getenv(allowMockTEEVerifierEnv) == "true" {
+			return common.Address{}, nil
+		}
+		return common.Address{}, fmt.Errorf("NITRO_ENCLAVE_VERIFIER_ADDRESS is not set; set it to the Nitro enclave verifier address, or set %s=true to deploy mock TEE verifiers (dev/test only)", allowMockTEEVerifierEnv)
+	}
+	if !common.IsHexAddress(raw) {
+		return common.Address{}, fmt.Errorf("NITRO_ENCLAVE_VERIFIER_ADDRESS is not a valid address: %q", raw)
+	}
+	addr := common.HexToAddress(raw)
+	if addr == (common.Address{}) {
+		return common.Address{}, fmt.Errorf("NITRO_ENCLAVE_VERIFIER_ADDRESS must not be the zero address; unset it and set %s=true to deploy mock TEE verifiers", allowMockTEEVerifierEnv)
+	}
+	return addr, nil
 }
