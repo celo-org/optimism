@@ -481,6 +481,24 @@ func launchEspressoDevNodeStartOption(ct *E2eDevnetLauncherContext) e2esys.Start
 	}
 }
 
+// WithAttestationService points the batcher at the attestation verifier service
+// at url, replacing the placeholder set by launchEspressoDevNodeStartOption.
+// Registration only dials it once the batcher also has a non-empty attestation.
+func WithAttestationService(url string) E2eDevnetLauncherOption {
+	return func(ct *E2eDevnetLauncherContext) E2eSystemOption {
+		return E2eSystemOption{
+			StartOptions: []e2esys.StartOption{
+				{
+					Role: "set-attestation-service",
+					BatcherMod: func(c *batcher.CLIConfig, sys *e2esys.System) {
+						c.Espresso.EspressoAttestationService = url
+					},
+				},
+			},
+		}
+	}
+}
+
 // launchEspressoDevNode is an E2eDevnetLauncherOption that configures the system to
 // use the in-memory mock Espresso client in place of a dockerized espresso-dev-node.
 func launchEspressoDevNode() E2eDevnetLauncherOption {
