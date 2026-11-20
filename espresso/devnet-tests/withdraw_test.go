@@ -23,8 +23,8 @@ import (
 )
 
 // opSuccinctProveABI is the part of the OPSuccinctFaultDisputeGame ABI that
-// FaultDisputeGame lacks. Its status() and resolve() share FaultDisputeGame's
-// selectors, so the test uses that binding for them.
+// FaultDisputeGame lacks. Its status(), resolve() and resolvedAt() share
+// FaultDisputeGame's selectors, so the test uses that binding for them.
 const opSuccinctProveABI = `[{"type":"function","name":"prove","stateMutability":"nonpayable","inputs":[{"name":"proofBytes","type":"bytes"}],"outputs":[{"name":"","type":"uint8"}]}]`
 
 // l2BlockFromExtraData extracts the L2 block number from a dispute game's
@@ -214,7 +214,16 @@ func TestWithdrawal(t *testing.T) {
 	require.NoError(t, err)
 	proveBlock, err := d.L1.HeaderByNumber(ctx, proveReceipt.BlockNumber)
 	require.NoError(t, err)
-	targetTime := proveBlock.Time + bigs.Uint64Strict(maturityDelay) + bigs.Uint64Strict(finalityDelay) + 10
+	resolvedAt, err := game.ResolvedAt(callOpts)
+	require.NoError(t, err)
+	// The two delays run from different starting points: proof maturity from
+	// the withdrawal proof (OptimismPortal2), dispute game finality from the
+	// game's resolution (AnchorStateRegistry). Both checks are strict, so wait
+	// until the later deadline has passed, plus a small margin.
+	maturityDeadline := proveBlock.Time + bigs.Uint64Strict(maturityDelay)
+	finalityDeadline := resolvedAt + bigs.Uint64Strict(finalityDelay)
+	targetTime := max(maturityDeadline, finalityDeadline) + 10
+	t.Logf("proof maturity deadline %d, game finality deadline %d", maturityDeadline, finalityDeadline)
 
 	t.Log("waiting for the proof maturity and dispute game finality delays")
 	require.Eventually(t, func() bool {
