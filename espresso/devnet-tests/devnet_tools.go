@@ -652,7 +652,6 @@ type ChallengeGame struct {
 	Index      uint64
 	Address    common.Address
 	OutputRoot []byte
-	Claims     uint64
 }
 
 // ListChallengeGames lists the OPSuccinctFaultDisputeGame games of the
@@ -686,7 +685,6 @@ func (d *Devnet) ListChallengeGames() ([]ChallengeGame, error) {
 		if gameInfo.GameType != opSuccinctGameType {
 			continue
 		}
-		// OPSuccinctFaultDisputeGame only has a root claim, no claim tree.
 		game, err := bindings.NewFaultDisputeGame(gameInfo.Proxy, d.L1)
 		if err != nil {
 			return nil, fmt.Errorf("failed to bind to dispute game %s: %w", gameInfo.Proxy, err)
@@ -699,7 +697,6 @@ func (d *Devnet) ListChallengeGames() ([]ChallengeGame, error) {
 			Index:      i,
 			Address:    gameInfo.Proxy,
 			OutputRoot: rootClaim[:],
-			Claims:     1,
 		})
 	}
 	return games, nil

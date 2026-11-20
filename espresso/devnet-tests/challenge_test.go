@@ -33,8 +33,7 @@ func TestChallengeGame(t *testing.T) {
 	}, 5*time.Minute, 5*time.Second, "no dispute game created")
 
 	game := games[0]
-	t.Logf("game created: index=%d, address=%s, claims=%d", game.Index, game.Address, game.Claims)
-	require.GreaterOrEqual(t, game.Claims, uint64(1), "the game should have the proposer's root claim")
+	t.Logf("game created: index=%d, address=%s", game.Index, game.Address)
 
 	disputeGame, err := bindings.NewFaultDisputeGame(game.Address, d.L1)
 	require.NoError(t, err)
