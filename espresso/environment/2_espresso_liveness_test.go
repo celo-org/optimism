@@ -123,8 +123,14 @@ func TestE2eDevnetWithEspressoDegradedLiveness(t *testing.T) {
 	}
 
 	// Make sure the degraded liveness was actually exercised.
-	t.Logf("espresso intercept: dropped=%d unavailable=%d", intercept.Dropped(), intercept.Unavailable())
-	if intercept.Dropped()+intercept.Unavailable() == 0 {
-		t.Fatalf("no Espresso submissions were intercepted; the test did not exercise degraded liveness")
+	t.Logf("espresso intercept: dropped=%d unavailable=%d recovered=%d",
+		intercept.Dropped(), intercept.Unavailable(), intercept.Recovered())
+	if intercept.Unavailable() == 0 {
+		t.Fatalf("no Espresso submission failed as unavailable; the test did not exercise resubmission after errors")
+	}
+	// A dropped submission is reported as successful, so only a later
+	// successful resubmission of the same payload shows the batcher recovered.
+	if intercept.Recovered() == 0 {
+		t.Fatalf("no dropped Espresso submission was resubmitted successfully (dropped=%d)", intercept.Dropped())
 	}
 }

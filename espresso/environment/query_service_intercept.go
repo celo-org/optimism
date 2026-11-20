@@ -160,6 +160,15 @@ type EspressoClientIntercept struct {
 
 	dropped     atomic.Uint64
 	unavailable atomic.Uint64
+
+	// mu guards droppedCommits; the batcher submits concurrently.
+	mu sync.Mutex
+	// droppedCommits holds the commitments of dropped payloads that have not
+	// yet been successfully resubmitted.
+	droppedCommits map[[32]byte]struct{}
+	// recovered counts dropped payloads that were later resubmitted and
+	// forwarded successfully.
+	recovered atomic.Uint64
 }
 
 // SubmitTransaction intercepts the submission according to the decider.
@@ -167,12 +176,25 @@ func (e *EspressoClientIntercept) SubmitTransaction(ctx context.Context, tx espr
 	switch e.decider.DecideHowToHandleSubmission(tx) {
 	case DecisionReportSubmitSuccessWhileDropped:
 		e.dropped.Add(1)
+		e.mu.Lock()
+		e.droppedCommits[tx.Commit()] = struct{}{}
+		e.mu.Unlock()
 		return fakeSubmitTransactionCommit(tx)
 	case DecisionReportServerUnreachable:
 		e.unavailable.Add(1)
 		return nil, ErrEspressoServiceUnavailable
 	default:
-		return e.MockEspressoClient.SubmitTransaction(ctx, tx)
+		hash, err := e.MockEspressoClient.SubmitTransaction(ctx, tx)
+		if err == nil {
+			commit := tx.Commit()
+			e.mu.Lock()
+			if _, ok := e.droppedCommits[commit]; ok {
+				delete(e.droppedCommits, commit)
+				e.recovered.Add(1)
+			}
+			e.mu.Unlock()
+		}
+		return hash, err
 	}
 }
 
@@ -182,6 +204,10 @@ func (e *EspressoClientIntercept) Dropped() uint64 { return e.dropped.Load() }
 // Unavailable returns how many submissions failed with a simulated service
 // unavailable error.
 func (e *EspressoClientIntercept) Unavailable() uint64 { return e.unavailable.Load() }
+
+// Recovered returns how many dropped payloads were later resubmitted and
+// forwarded successfully, i.e. how many drops the batcher recovered from.
+func (e *EspressoClientIntercept) Recovered() uint64 { return e.recovered.Load() }
 
 // fakeSubmitTransactionCommit returns a hash for a dropped transaction. The
 // "FAKE" tag ensures it never collides with a hash the client reports for a
@@ -207,7 +233,8 @@ func SetDecider(decider InterceptHandlerDecider) EspressoClientInterceptOption {
 // to the system's mock Espresso client once the system starts.
 func SetupQueryServiceIntercept(options ...EspressoClientInterceptOption) (*EspressoClientIntercept, E2eDevnetLauncherOption) {
 	intercept := &EspressoClientIntercept{
-		decider: defaultInterceptHandlerDecider{},
+		decider:        defaultInterceptHandlerDecider{},
+		droppedCommits: make(map[[32]byte]struct{}),
 	}
 
 	for _, opt := range options {
