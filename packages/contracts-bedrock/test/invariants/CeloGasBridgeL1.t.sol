@@ -63,8 +63,11 @@ contract CeloGasBridgeL1_Handler is StdUtils {
         if (seeded) return;
         _amount = bound(_amount, 0, type(uint96).max);
         celoTokenL1.mint(address(bridge), _amount);
+        MockSystemConfig systemConfig = MockSystemConfig(address(bridge.systemConfig()));
+        systemConfig.setPaused(true);
         vm.prank(portal);
         bridge.seedEscrow(_amount);
+        systemConfig.setPaused(false);
         seedAmount = _amount;
         seeded = true;
     }

@@ -183,6 +183,10 @@
     "initCodeHash": "0x6af5b0e83b455aab8d0946c160a4dc049a4e03be69f8a2a9e87b574f27b25a66",
     "sourceCodeHash": "0x03c160168986ffc8d26a90c37366e7ad6da03f49d83449e1f8b3de0f4b590f6f"
   },
+  "src/celo/CeloGasBridgeL1.sol:CeloGasBridgeL1": {
+    "initCodeHash": "0x550740ac5a16495ec9c1eea7a98152251e36d4789d37f4d52b465b3a27b4a6ca",
+    "sourceCodeHash": "0xc93c9c6c2c08ba97c536265f5d5cd268739c4e9924c8ca38c08412a29d4630b6"
+  },
   "src/dispute/AnchorStateRegistry.sol:AnchorStateRegistry": {
     "initCodeHash": "0xc00fdb1a4ae0ec8d7a96ebaad38ffaee9d96b942ab2a56e0ce2f76639f79ae7c",
     "sourceCodeHash": "0xd2837ddf6992926ced31ef1916f95ebb8cc2006e94b82c2287997e5397edfeaf"
