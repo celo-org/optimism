@@ -1,0 +1,4 @@
+*
+!/go.mod
+!/go.sum
+!/espresso/devnet/op-geth/op-geth-init.sh

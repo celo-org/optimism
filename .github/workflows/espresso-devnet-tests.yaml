@@ -1,0 +1,173 @@
+name: Espresso Devnet tests
+
+# The espresso/devnet-tests tier: tests against the docker-compose devnet in
+# espresso/docker-compose.yml (see the espresso/devnet-tests package doc).
+#
+# `prepare` compiles the contracts, generates the devnet deployment and builds
+# the devnet images once; each test shard loads them instead of rebuilding.
+#
+# Runs on the standard GitHub-hosted runner by default. To move to a larger
+# runner, set the ESPRESSO_DEVNET_RUNNER repository variable to its label.
+on:
+  pull_request:
+    # The harness, op-deployer and the devnet images (op-node, op-batcher)
+    # import Go code from most of the monorepo (op-service, op-e2e, op-core,
+    # ...), so any Go change can break the devnet: match all Go files rather
+    # than a list of directories that would drift.
+    paths:
+      - "**/*.go"
+      - "go.mod"
+      - "go.sum"
+      - "espresso/**"
+      - "packages/contracts-bedrock/**"
+      - "ops/docker/op-stack-go/**"
+      - "justfile"
+      - "mise.toml"
+      - ".github/workflows/espresso-devnet-tests.yaml"
+  workflow_dispatch:
+
+concurrency:
+  group: espresso-devnet-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  prepare:
+    runs-on: ${{ vars.ESPRESSO_DEVNET_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 60
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up mise (forge, cast, go, just, jq)
+        uses: jdx/mise-action@v2
+        with:
+          install_args: go just jq forge cast
+
+      # Every forge build input is in the cache key: library revisions
+      # (submodule commits, which .gitmodules does not track), the test/
+      # mocks the deploy scripts import, and the forge version (mise.toml).
+      - name: Hash forge build inputs
+        id: forge-inputs
+        run: echo "submodules=$(git submodule status --recursive | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      # Same key as espresso-e2e-tests.yaml, so the two workflows share it.
+      - name: Restore forge-artifacts cache
+        id: forge-cache
+        uses: actions/cache@v4
+        with:
+          path: packages/contracts-bedrock/forge-artifacts
+          key: forge-artifacts-${{ steps.forge-inputs.outputs.submodules }}-${{ hashFiles('mise.toml', 'packages/contracts-bedrock/foundry.toml', 'packages/contracts-bedrock/src/**/*.sol', 'packages/contracts-bedrock/interfaces/**/*.sol', 'packages/contracts-bedrock/scripts/**/*.sol', 'packages/contracts-bedrock/test/**/*.sol', '.gitmodules') }}
+
+      - name: Compile contracts
+        if: steps.forge-cache.outputs.cache-hit != 'true'
+        run: mise exec -- just build-contracts
+
+      - name: Generate devnet deployment
+        run: mise exec -- espresso/devnet/prepare.sh
+
+      - name: Build devnet images
+        run: |
+          docker compose -f espresso/docker-compose.yml build
+          docker save op-geth:espresso op-node:espresso op-batcher:espresso | gzip -1 > devnet-images.tar.gz
+
+      - name: Upload devnet deployment
+        uses: actions/upload-artifact@v4
+        with:
+          name: devnet-deployment
+          path: |
+            espresso/deployment/l1-config/
+            espresso/deployment/l2-config/
+            espresso/deployment/deployer/
+          retention-days: 1
+
+      - name: Upload devnet images
+        uses: actions/upload-artifact@v4
+        with:
+          name: devnet-images
+          path: devnet-images.tar.gz
+          compression-level: 0
+          retention-days: 1
+
+  devnet-test:
+    needs: prepare
+    runs-on: ${{ vars.ESPRESSO_DEVNET_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        # One devnet per test, so a shard's duration is the sum of its
+        # tests'. Grouped as in optimism-espresso-integration.
+        # `profiles` lists the compose profiles whose images the shard pulls:
+        # "proofs" for tests using WithProofs (TestWithdrawal, TestChallengeGame).
+        include:
+          - group: smoke-restart
+            tests: "^(TestSmoke|TestBatcherRestart)$"
+            profiles: ""
+          - group: challenge-owner
+            tests: "^(TestChallengeGame|TestChangeBatchAuthenticatorOwner)$"
+            profiles: "proofs"
+          - group: withdrawal-switching
+            tests: "^(TestWithdrawal|TestBatcherSwitching)$"
+            profiles: "proofs"
+          - group: forced-transaction
+            tests: "^TestForcedTransaction$"
+            profiles: ""
+          - group: active-publish
+            tests: "^TestBatcherActivePublishOnly$"
+            profiles: ""
+    env:
+      ESPRESSO_DEVNET_TESTS_LIVENESS_PERIOD: "1m"
+      ESPRESSO_DEVNET_TESTS_OUTAGE_PERIOD: "1m"
+      # The devnet tests do not use op-e2e's in-process allocs, so skip
+      # generating them (it would also need the forge artifacts).
+      DISABLE_OP_E2E_LEGACY: "true"
+    steps:
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Download devnet deployment
+        uses: actions/download-artifact@v4
+        with:
+          name: devnet-deployment
+          path: espresso/deployment/
+
+      - name: Download devnet images
+        uses: actions/download-artifact@v4
+        with:
+          name: devnet-images
+
+      - name: Load devnet images
+        run: |
+          gunzip -c devnet-images.tar.gz | docker load
+          rm devnet-images.tar.gz
+          COMPOSE_PROFILES='${{ matrix.profiles }}' \
+            docker compose -f espresso/docker-compose.yml pull --ignore-buildable --quiet
+
+      - name: Install gotestsum
+        run: go install gotest.tools/gotestsum@v1.12.3
+
+      - name: Run ${{ matrix.group }} tests
+        run: |
+          gotestsum --format github-actions -- \
+            -timeout 40m -p 1 -count 1 \
+            -run '${{ matrix.tests }}' \
+            ./espresso/devnet-tests/...
