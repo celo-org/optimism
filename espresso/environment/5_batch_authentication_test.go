@@ -69,7 +69,7 @@ func TestE2eDevnetWithUnattestedBatcherKey(t *testing.T) {
 	switch {
 	case err == nil:
 		t.Fatalf("L2 block 1 became safe even though the batcher key is unattested")
-	case !errors.Is(err, context.DeadlineExceeded):
+	case !isTimeout(err):
 		t.Fatalf("unexpected error while waiting for L2 block 1 to be safe: %v", err)
 	}
 
@@ -80,4 +80,12 @@ func TestE2eDevnetWithUnattestedBatcherKey(t *testing.T) {
 	if have, want := bigs.Uint64Strict(safeHead.Number), uint64(0); have != want {
 		t.Fatalf("L2 safe head advanced with an unattested batcher key:\nhave:\n\t%d\nwant:\n\t%d\n", have, want)
 	}
+}
+
+// isTimeout reports whether err is a timeout. When the deadline expires during
+// an RPC call, the client reports its transport's timeout (e.g. "write pipe:
+// i/o timeout") rather than context.DeadlineExceeded.
+func isTimeout(err error) bool {
+	var timeout interface{ Timeout() bool }
+	return errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &timeout) && timeout.Timeout())
 }
