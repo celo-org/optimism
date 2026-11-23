@@ -460,6 +460,8 @@ func ApplyPipeline(
 		L1RPCUrl:     opts.L1RPCUrl,
 		PrivateKey:   opts.PrivateKey,
 		Context:      ctx,
+		// Genesis deployments are in-memory only, so the mock TEE verifiers cannot reach a live chain.
+		AllowMockTEEVerifier: opts.DeploymentTarget == DeploymentTargetGenesis,
 	}
 
 	pline := []pipelineStage{
@@ -489,6 +491,11 @@ func ApplyPipeline(
 			fmt.Sprintf("deploy-alt-da-%s", chainID.Hex()),
 			func() error {
 				return pipeline.DeployAltDA(pEnv, intent, st, chainID)
+			},
+		}, pipelineStage{
+			fmt.Sprintf("deploy-espresso-%s", chainID.Hex()),
+			func() error {
+				return pipeline.DeployEspresso(pEnv, intent, st, chainID)
 			},
 		}, pipelineStage{
 			fmt.Sprintf("deploy-additional-dispute-games-%s", chainID.Hex()),

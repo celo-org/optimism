@@ -117,6 +117,31 @@ func StartFaultDisputeSystem(t *testing.T, opts ...faultDisputeConfigOpts) (*e2e
 	return sys, sys.NodeClient("l1")
 }
 
+// GetFaultDisputeSystemConfigForEspresso returns a Fault Dispute System configuration, merging an
+// additional set of SystemConfigOpts (e.g. the Espresso alloc type) with the fault-dispute options.
+// Unlike StartFaultDisputeSystem it does not delete the verifier node and returns the config without
+// starting it, so Espresso e2e tests can layer further options before launch.
+func GetFaultDisputeSystemConfigForEspresso(t *testing.T, originalOpts []e2esys.SystemConfigOpt, opts ...faultDisputeConfigOpts) e2esys.SystemConfig {
+	fdc := new(faultDisputeConfig)
+	for _, opt := range opts {
+		opt(fdc)
+	}
+
+	cfg := e2esys.DefaultSystemConfig(t, append(originalOpts, fdc.sysOpts...)...)
+
+	cfg.Nodes["sequencer"].SafeDBPath = t.TempDir()
+	cfg.DeployConfig.SequencerWindowSize = 30
+	cfg.DeployConfig.FinalizationPeriodSeconds = 2
+	cfg.SupportL1TimeTravel = true
+	// Disable proposer creating fast games automatically - required games are manually created
+	cfg.DisableProposer = true
+	for _, opt := range fdc.cfgModifiers {
+		opt(&cfg)
+	}
+
+	return cfg
+}
+
 func SendKZGPointEvaluationTx(t *testing.T, sys *e2esys.System, l2Node string, privateKey *ecdsa.PrivateKey) *types.Receipt {
 	return helpers.SendL2Tx(t, sys.Cfg, sys.NodeClient(l2Node), privateKey, func(opts *helpers.TxOpts) {
 		precompile := common.BytesToAddress([]byte{0x0a})

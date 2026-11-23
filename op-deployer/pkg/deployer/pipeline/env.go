@@ -37,6 +37,9 @@ type Env struct {
 	L1RPCUrl     string
 	PrivateKey   string
 	Context      context.Context
+	// AllowMockTEEVerifier lets DeployEspresso fall back to mock TEE verifiers when no
+	// Nitro enclave verifier is configured. Only set for in-memory (genesis) deployments.
+	AllowMockTEEVerifier bool
 }
 
 type StateWriter interface {
