@@ -28,6 +28,8 @@ type cgtV2NetworkParams struct {
 	bridge      common.Address
 	totalSupply string
 	bundle      []byte
+	// The protocol hash is pinned independently of the embedded artifact.
+	retryBundleHash common.Hash
 }
 
 // Production profiles never select the synthetic NUT bundle.
@@ -41,8 +43,9 @@ var cgtV2Networks = map[uint64]cgtV2NetworkParams{
 const cgtV2FixtureChainID uint64 = 1337
 
 var cgtV2FixtureParams = cgtV2NetworkParams{
-	bridge:      common.HexToAddress("0xcc"),
-	totalSupply: "1000",
+	bridge:          common.HexToAddress("0xcc"),
+	totalSupply:     "1000",
+	retryBundleHash: common.HexToHash("0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"),
 }
 
 func cgtV2Params(chainID uint64) (cgtV2NetworkParams, bool) {
