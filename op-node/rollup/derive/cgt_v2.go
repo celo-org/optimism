@@ -98,7 +98,7 @@ func cgtV2EscrowAmount(receipts optypes.Receipts, bridge, portal common.Address,
 					return nil, false, fmt.Errorf("malformed CGTv2 retry event")
 				}
 				if retryBundleHash == (common.Hash{}) || log.Topics[1] != retryBundleHash {
-					oplog.Warn("Skipping CGTv2 retry request with an unrecognized bundle hash",
+					oplog.Error("Skipping CGTv2 retry request with an unrecognized bundle hash",
 						"l1_block_hash", log.BlockHash,
 						"l1_tx_hash", log.TxHash,
 						"requested_bundle_hash", log.Topics[1],
