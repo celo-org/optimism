@@ -2,9 +2,11 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/ethereum-optimism/optimism/op-service/eth"
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -47,6 +49,27 @@ func (e *EngineController) finalizePayload(ctx context.Context, ref eth.L2BlockR
 		return
 	}
 
+	// Derivation builds a block below the unsafe head when the existing block there did not
+	// match the derived attributes. The EL can still produce that same block when it makes a
+	// decision the attributes do not encode: celo-reth seals a deposits-only block when the
+	// CGTv2 upgrade fails, and skips the upgrade group when CGTv2 is already active. The
+	// derived block then is the existing block, so consolidate it in place and keep its
+	// descendants. Rewinding the unsafe head to it would make the sequencer rebuild blocks it
+	// has already gossiped.
+	if derivedFrom != (eth.L1BlockRef{}) && e.isCanonicalUnsafeAncestor(ref) {
+		e.log.Info("Derived block is already canonical below the unsafe head, keeping the unsafe chain",
+			"block", ref, "unsafe", e.unsafeHead)
+		e.tryUpdatePendingSafe(ctx, ref, concluding, derivedFrom)
+		e.tryUpdateLocalSafe(ctx, ref, concluding, derivedFrom)
+		// Starting the build announced its parent as the unsafe head, and the sequencer paused
+		// for the derived build. Announce the kept head so that the sequencer and the other
+		// listeners continue from it. The EL still has the unsafe head as canonical, so, as on
+		// the consolidation path, the new safe head reaches it with the next batched
+		// forkchoice update.
+		e.requestForkchoiceUpdate(ctx)
+		return
+	}
+
 	// TryUpdateUnsafe, TryUpdatePendingSafe, TryUpdateLocalSafe, tryUpdateEngine must be sequentially invoked
 	e.tryUpdateUnsafe(ctx, ref)
 	// If derived from L1, then it can be considered (pending) safe
@@ -62,6 +85,35 @@ func (e *EngineController) finalizePayload(ctx context.Context, ref eth.L2BlockR
 		updateEngineFinish := time.Now()
 		e.logBlockProcessingMetrics(updateEngineFinish, envelope, buildStarted, insertStarted)
 	}
+}
+
+// isCanonicalUnsafeAncestor reports whether ref is on the EL's canonical chain below the
+// unsafe head, with the unsafe head still canonical at its own height. A missing block or a
+// failed lookup reports false, so the caller falls back to replacing the unsafe chain.
+func (e *EngineController) isCanonicalUnsafeAncestor(ref eth.L2BlockRef) bool {
+	if ref.Number >= e.unsafeHead.Number {
+		return false
+	}
+	for _, block := range []eth.L2BlockRef{ref, e.unsafeHead} {
+		ok, _, err := e.isCanonical(block)
+		if errors.Is(err, ethereum.NotFound) {
+			// The EL has no canonical block at that height, for example because it unwound its
+			// tip to the build's parent or lost blocks it had not persisted. Replacing the
+			// unsafe chain is the expected outcome then.
+			e.log.Debug("No canonical block at the lookup height, replacing the unsafe chain",
+				"block", ref, "unsafe", e.unsafeHead, "lookup", block.ID())
+			return false
+		}
+		if err != nil {
+			e.log.Warn("Cannot check whether the unsafe chain builds on the derived block, replacing the unsafe chain",
+				"block", ref, "unsafe", e.unsafeHead, "lookup", block.ID(), "err", err)
+			return false
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (e *EngineController) logBlockProcessingMetrics(updateEngineFinish time.Time, envelope *eth.ExecutionPayloadEnvelope, buildStarted, insertStarted time.Time) {
