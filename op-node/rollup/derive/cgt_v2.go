@@ -42,91 +42,72 @@ func cgtV2UpgradeTransactionsFromReceipts(cfg *rollup.Config, receipts optypes.R
 			}
 		}
 	}
-	amount, err := cgtV2EscrowAmount(receipts, network.bridge, cfg.DepositContractAddress)
+	amount, retry, err := cgtV2EscrowAmount(receipts, network.bridge, cfg.DepositContractAddress, network.retryBundleHash)
 	if err != nil || amount == nil {
 		return nil, err
 	}
 	upgrades, _, err := CgtV2UpgradeTransactions(cfg.L2ChainID, amount)
-	return upgrades, err
+	if err != nil {
+		return nil, err
+	}
+	if retry {
+		// The static RLP artifact matches Kona. Funding is derived separately from the event.
+		static, err := rlp.EncodeToBytes(upgrades[:len(upgrades)-1])
+		if err != nil {
+			return nil, err
+		}
+		if crypto.Keccak256Hash(static) != network.retryBundleHash {
+			return nil, fmt.Errorf("local CGTv2 retry artifact does not match protocol hash %s", network.retryBundleHash)
+		}
+	}
+	return upgrades, nil
 }
 
 var cgtV2EscrowEvent = crypto.Keccak256Hash([]byte("EscrowSeeded(address,uint256)"))
 var cgtV2RetryEvent = crypto.Keccak256Hash([]byte("CgtV2RetryRequested(bytes32,uint256)"))
 
-// The initial activation scan validates the receipts before this call. A retry
-// is considered only at the first L2 block of a new origin.
-func cgtV2RetryTransactions(cfg *rollup.Config, receipts optypes.Receipts) ([]hexutil.Bytes, error) {
-	chainID := cfg.L2ChainID
-	if chainID == nil || !chainID.IsUint64() {
-		return nil, nil
-	}
-	network, ok := cgtV2Params(bigs.Uint64Strict(chainID))
-	if !ok {
-		return nil, nil
-	}
-	for _, receipt := range receipts {
-		if receipt.Status != types.ReceiptStatusSuccessful {
-			continue
-		}
-		for _, log := range receipt.Logs {
-			if log.Address != network.bridge || len(log.Topics) == 0 || log.Topics[0] != cgtV2RetryEvent {
-				continue
-			}
-			if len(log.Topics) != 2 || len(log.Data) != 32 {
-				return nil, NewCriticalError(fmt.Errorf("malformed CGTv2 retry event"))
-			}
-			if network.retryBundleHash == (common.Hash{}) || log.Topics[1] != network.retryBundleHash {
-				oplog.Warn("Skipping CGTv2 retry request with an unrecognized bundle hash",
-					"l1_block_hash", log.BlockHash,
-					"l1_tx_hash", log.TxHash,
-					"requested_bundle_hash", log.Topics[1],
-					"expected_bundle_hash", network.retryBundleHash)
-				continue
-			}
-			txs, _, err := CgtV2UpgradeTransactions(chainID, new(big.Int).SetBytes(log.Data))
-			if err != nil {
-				return nil, NewCriticalError(err)
-			}
-			// The static RLP artifact matches Kona. Funding is derived separately from the event.
-			static, err := rlp.EncodeToBytes(txs[:len(txs)-1])
-			if err != nil {
-				return nil, NewCriticalError(err)
-			}
-			if crypto.Keccak256Hash(static) != network.retryBundleHash {
-				return nil, NewCriticalError(fmt.Errorf("local CGTv2 retry artifact does not match protocol hash %s", network.retryBundleHash))
-			}
-			return txs, nil
-		}
-	}
-	return nil, nil
-}
-
 // Receipts must be authenticated before using this result. RPC log metadata is irrelevant.
 // seedEscrowGenesis emits a different indexed caller, so only the configured Portal matches.
-// The approved L1 migration seeds once; the first matching event supplies A.
-func cgtV2EscrowAmount(receipts optypes.Receipts, bridge, portal common.Address) (*big.Int, error) {
+// Retry requests must name the configured bundle hash. The first matching event supplies A.
+func cgtV2EscrowAmount(receipts optypes.Receipts, bridge, portal common.Address, retryBundleHash common.Hash) (amount *big.Int, retry bool, err error) {
 	expectedPortal := common.BytesToHash(portal.Bytes())
 	for _, receipt := range receipts {
 		if receipt == nil {
-			return nil, fmt.Errorf("CGTv2 missing origin receipt")
+			return nil, false, fmt.Errorf("CGTv2 missing origin receipt")
 		}
 		if receipt.Status != types.ReceiptStatusSuccessful {
 			continue
 		}
 		for _, log := range receipt.Logs {
 			if log == nil {
-				return nil, fmt.Errorf("CGTv2 missing origin log")
+				return nil, false, fmt.Errorf("CGTv2 missing origin log")
 			}
-			if log.Address != bridge || len(log.Topics) == 0 || log.Topics[0] != cgtV2EscrowEvent {
+			if log.Address != bridge || len(log.Topics) == 0 {
 				continue
 			}
-			if len(log.Topics) != 2 || len(log.Data) != 32 {
-				return nil, fmt.Errorf("malformed CGTv2 EscrowSeeded event")
-			}
-			if log.Topics[1] == expectedPortal {
-				return new(big.Int).SetBytes(log.Data), nil
+			switch log.Topics[0] {
+			case cgtV2EscrowEvent:
+				if len(log.Topics) != 2 || len(log.Data) != 32 {
+					return nil, false, fmt.Errorf("malformed CGTv2 EscrowSeeded event")
+				}
+				if log.Topics[1] == expectedPortal {
+					return new(big.Int).SetBytes(log.Data), false, nil
+				}
+			case cgtV2RetryEvent:
+				if len(log.Topics) != 2 || len(log.Data) != 32 {
+					return nil, false, fmt.Errorf("malformed CGTv2 retry event")
+				}
+				if retryBundleHash == (common.Hash{}) || log.Topics[1] != retryBundleHash {
+					oplog.Warn("Skipping CGTv2 retry request with an unrecognized bundle hash",
+						"l1_block_hash", log.BlockHash,
+						"l1_tx_hash", log.TxHash,
+						"requested_bundle_hash", log.Topics[1],
+						"expected_bundle_hash", retryBundleHash)
+					continue
+				}
+				return new(big.Int).SetBytes(log.Data), true, nil
 			}
 		}
 	}
-	return nil, nil
+	return nil, false, nil
 }
