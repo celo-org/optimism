@@ -471,3 +471,75 @@ func TestCgtV2FullOriginMatchesNativeProofClient(t *testing.T) {
 		}
 	}
 }
+
+// TestCgtV2ReceiptScanVectors runs the receipt scan against vectors shared with celo-kona.
+func TestCgtV2ReceiptScanVectors(t *testing.T) {
+	raw, err := os.ReadFile("testdata/cgtv2-receipt-scan.json")
+	require.NoError(t, err)
+	// The same file and hash live in celo-kona crates/kona/derive/testdata/; change both together.
+	require.Equal(t, common.HexToHash("0xf281a29ec2c2c611320df3795a5ee879418d6d0f9fba549845c127764a99a4a4"), crypto.Keccak256Hash(raw))
+
+	var vectors struct {
+		Bridge     common.Address `json:"bridge"`
+		Portal     common.Address `json:"portal"`
+		PinnedHash common.Hash    `json:"pinnedHash"`
+		Cases      []struct {
+			Name     string `json:"name"`
+			Pinned   bool   `json:"pinned"`
+			Receipts []struct {
+				Success bool `json:"success"`
+				Logs    []struct {
+					Address common.Address `json:"address"`
+					Topics  []common.Hash  `json:"topics"`
+					Data    hexutil.Bytes  `json:"data"`
+				} `json:"logs"`
+			} `json:"receipts"`
+			Expect struct {
+				Kind    string `json:"kind"`
+				Amount  string `json:"amount"`
+				Message string `json:"message"`
+			} `json:"expect"`
+		} `json:"cases"`
+	}
+	require.NoError(t, json.Unmarshal(raw, &vectors))
+	require.NotEmpty(t, vectors.Cases)
+
+	for _, tc := range vectors.Cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			receipts := make(types.Receipts, 0, len(tc.Receipts))
+			for _, r := range tc.Receipts {
+				receipt := &types.Receipt{Status: types.ReceiptStatusFailed}
+				if r.Success {
+					receipt.Status = types.ReceiptStatusSuccessful
+				}
+				for _, l := range r.Logs {
+					receipt.Logs = append(receipt.Logs, &types.Log{Address: l.Address, Topics: l.Topics, Data: l.Data})
+				}
+				receipts = append(receipts, receipt)
+			}
+			var pin common.Hash
+			if tc.Pinned {
+				pin = vectors.PinnedHash
+			}
+
+			amount, retry, err := cgtV2EscrowAmount(optypes.FromGethReceipts(receipts), vectors.Bridge, vectors.Portal, pin)
+			switch tc.Expect.Kind {
+			case "none":
+				require.NoError(t, err)
+				require.Nil(t, amount)
+				require.False(t, retry)
+			case "escrow", "retry":
+				require.NoError(t, err)
+				want, ok := new(big.Int).SetString(tc.Expect.Amount, 10)
+				require.True(t, ok)
+				require.NotNil(t, amount)
+				require.Zero(t, want.Cmp(amount), "amount %v, want %v", amount, want)
+				require.Equal(t, tc.Expect.Kind == "retry", retry)
+			case "error":
+				require.ErrorContains(t, err, tc.Expect.Message)
+			default:
+				t.Fatalf("unknown expect kind %q", tc.Expect.Kind)
+			}
+		})
+	}
+}
