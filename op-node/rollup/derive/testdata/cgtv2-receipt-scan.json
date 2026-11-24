@@ -1,0 +1,889 @@
+{
+  "bridge": "0x00000000000000000000000000000000000000cc",
+  "portal": "0x0000000000000000000000000000000000000044",
+  "pinnedHash": "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14",
+  "cases": [
+    {
+      "name": "empty",
+      "pinned": true,
+      "receipts": [],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "escrow",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "escrow",
+        "amount": "600"
+      }
+    },
+    {
+      "name": "escrow-zero-amount",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000000"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "escrow",
+        "amount": "0"
+      }
+    },
+    {
+      "name": "escrow-foreign-emitter",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000ee",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "escrow-non-portal-caller",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000055"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "escrow-failed-receipt",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": false,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "escrow-malformed-data",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 EscrowSeeded event"
+      }
+    },
+    {
+      "name": "escrow-malformed-topics",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 EscrowSeeded event"
+      }
+    },
+    {
+      "name": "retry",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "retry-unknown-hash",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x0100000000000000000000000000000000000000000000000000000000000000"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "unpinned-retry-any-hash",
+      "pinned": false,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "unpinned-retry-zero-hash",
+      "pinned": false,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x0000000000000000000000000000000000000000000000000000000000000000"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "retry-unknown-then-recognised",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x0100000000000000000000000000000000000000000000000000000000000000"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "retry-first-recognised-wins",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x000000000000000000000000000000000000000000000000000000000000006f"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "retry-failed-receipt",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": false,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "retry-foreign-emitter",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000ee",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "retry-malformed-data",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 retry event"
+      }
+    },
+    {
+      "name": "retry-malformed-topics",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 retry event"
+      }
+    },
+    {
+      "name": "escrow-then-retry-same-receipt",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "escrow",
+        "amount": "600"
+      }
+    },
+    {
+      "name": "escrow-then-retry-across-receipts",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        },
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "escrow",
+        "amount": "600"
+      }
+    },
+    {
+      "name": "retry-then-escrow-same-receipt",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "retry-then-escrow-across-receipts",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        },
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "malformed-retry-then-escrow",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 retry event"
+      }
+    },
+    {
+      "name": "retry-then-malformed-escrow",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "escrow-then-malformed-retry",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "escrow",
+        "amount": "600"
+      }
+    },
+    {
+      "name": "retry-then-malformed-retry",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "unknown-retry-then-escrow",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x0100000000000000000000000000000000000000000000000000000000000000"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "escrow",
+        "amount": "600"
+      }
+    },
+    {
+      "name": "non-portal-escrow-then-retry",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000055"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000000258"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x00000000000000000000000000000000000000000000000000000000000003db"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "retry",
+        "amount": "987"
+      }
+    },
+    {
+      "name": "bridge-log-other-topic",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x0000000000000000000000000000000000000000000000000000000000000001"
+              ],
+              "data": "0x"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "malformed-escrow-non-portal-caller",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000055"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 EscrowSeeded event"
+      }
+    },
+    {
+      "name": "malformed-retry-unknown-hash",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x0100000000000000000000000000000000000000000000000000000000000000"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 retry event"
+      }
+    },
+    {
+      "name": "unpinned-malformed-retry",
+      "pinned": false,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "error",
+        "message": "malformed CGTv2 retry event"
+      }
+    },
+    {
+      "name": "malformed-events-failed-receipt",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": false,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000cc",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    },
+    {
+      "name": "malformed-events-foreign-emitter",
+      "pinned": true,
+      "receipts": [
+        {
+          "success": true,
+          "logs": [
+            {
+              "address": "0x00000000000000000000000000000000000000ee",
+              "topics": [
+                "0x72912711e0dfcb1e457e32744afaae70f87ec629dbcd99f031d2f993c3a875fe",
+                "0x0000000000000000000000000000000000000000000000000000000000000044"
+              ],
+              "data": "0x"
+            },
+            {
+              "address": "0x00000000000000000000000000000000000000ee",
+              "topics": [
+                "0x6d93e9ece09f410b7248e3842e125e8a651ee10ed28ccb2d1c866d2e9616497c",
+                "0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"
+              ],
+              "data": "0x"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "kind": "none"
+      }
+    }
+  ]
+}
