@@ -1,6 +1,7 @@
 package opcmregistry
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -513,6 +514,50 @@ func TestGetResolvedOPCMs(t *testing.T) {
 		require.NoError(t, err)
 		require.True(t, sv.IsPrerelease())
 	})
+}
+
+func TestGetResolvedOPCMsQueryResults(t *testing.T) {
+	original := getGlobalRegistry()
+	globalRegistry = NewRegistry(nil)
+	t.Cleanup(func() { globalRegistry = original })
+	addr := common.HexToAddress("0x1000")
+	globalRegistry.memoryCache.Add(standardVersionsSepoliaURL, Versions{
+		"op-contracts/v6.0.0": {OPContractsManager: &ContractData{Address: addrPtr(addr.Hex())}},
+	})
+	queryErr := errors.New("state lookup failed")
+	for _, tc := range []struct {
+		name      string
+		version   string
+		queryErr  error
+		wantErr   string
+		wantCount int
+	}{
+		{name: "undeployed"},
+		{name: "deployed", version: "6.0.0", wantCount: 1},
+		{name: "query error", queryErr: queryErr, wantErr: "failed to query OPCM"},
+		{name: "malformed version", version: "invalid", wantErr: "invalid version for OPCM"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolved, err := GetResolvedOPCMs(SepoliaChainID, func(common.Address) (string, error) {
+				return tc.version, tc.queryErr
+			})
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+				require.ErrorContains(t, err, addr.Hex())
+				if tc.queryErr != nil {
+					require.ErrorIs(t, err, tc.queryErr)
+				}
+				require.Empty(t, resolved)
+				return
+			}
+			require.NoError(t, err)
+			require.Len(t, resolved, tc.wantCount)
+			if tc.wantCount > 0 {
+				require.Equal(t, addr, resolved[0].Address)
+				require.Equal(t, "6.0.0", resolved[0].OPCMVersion.Raw)
+			}
+		})
+	}
 }
 
 func TestNewRegistry(t *testing.T) {

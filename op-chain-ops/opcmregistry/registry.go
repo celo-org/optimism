@@ -432,7 +432,7 @@ func FilterOPCMsByReleaseVersion(opcms []OPCMInfo, lastVersion string) ([]OPCMIn
 }
 
 // OPCMVersionQuerier is a function that queries the OPCM contract's version() on-chain.
-// It takes an OPCM address and returns the OPCM semver string (e.g., "6.0.0", "7.0.0").
+// It returns the OPCM semver string, or an empty string if the OPCM has no code at the queried block.
 type OPCMVersionQuerier func(addr common.Address) (string, error)
 
 // ResolvedOPCM contains an OPCM with its on-chain version resolved via opcm.version().
@@ -455,14 +455,15 @@ func GetResolvedOPCMs(chainID uint64, queryOPCMVersion OPCMVersionQuerier) ([]Re
 	for _, opcm := range registryOPCMs {
 		opcmVersion, err := queryOPCMVersion(opcm.Address)
 		if err != nil {
-			// Skip OPCMs we can't query
+			return nil, fmt.Errorf("failed to query OPCM %s version: %w", opcm.Address, err)
+		}
+		if opcmVersion == "" {
 			continue
 		}
 
 		sv, err := ParseSemver(opcmVersion)
 		if err != nil {
-			// Skip OPCMs with invalid versions
-			continue
+			return nil, fmt.Errorf("invalid version for OPCM %s: %w", opcm.Address, err)
 		}
 
 		// Skip prerelease versions (rc, beta, alpha, etc.)
