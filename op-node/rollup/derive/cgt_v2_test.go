@@ -122,6 +122,70 @@ func TestCgtV2RetryAttributesUseEventAmountWithoutPreflight(t *testing.T) {
 	}
 }
 
+func TestCgtV2RetryUsesDistinctBundleAndGas(t *testing.T) {
+	cfg := cgtTestConfig()
+	bundle, err := cgtV2NUTBundle(cgtV2FixtureChainID)
+	require.NoError(t, err)
+	bundle.Transactions[3].GasLimit += 111
+	bundle.Transactions[9].GasLimit += 222
+	static, err := bundle.toDepositTransactions()
+	require.NoError(t, err)
+	raw, err := rlp.EncodeToBytes(static)
+	require.NoError(t, err)
+	hash := crypto.Keccak256Hash(raw)
+	require.Equal(t, common.HexToHash("0x90a1acc747b73e211612cc656db22ff1cc65ed6c9c8dc2bc22da40160fc7abc0"), hash)
+
+	original := cgtV2FixtureParams
+	t.Cleanup(func() { cgtV2FixtureParams = original })
+	artifact, err := json.Marshal(bundle)
+	require.NoError(t, err)
+	entry := cgtV2RetryBundle{hash: hash, bundle: artifact}
+	retry := func(hash common.Hash) optypes.Receipts {
+		return optypes.FromGethReceipts(types.Receipts{{Status: 1, Logs: []*types.Log{{
+			Address: original.bridge,
+			Topics:  []common.Hash{cgtV2RetryEvent, hash},
+			Data:    common.BigToHash(big.NewInt(987)).Bytes(),
+		}, cgtPortalLog(t, cfg.DepositContractAddress, 0x55)}}})
+	}
+	build := func(receipts optypes.Receipts) *eth.PayloadAttributes {
+		t.Helper()
+		header, parent, origin := cgtTestOrigin(t, receipts)
+		builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
+		attrs, err := builder.PreparePayloadAttributes(t.Context(), parent, origin)
+		require.NoError(t, err)
+		return attrs
+	}
+	oldInitial := build(cgtSeededReceipts())
+	oldRetry := build(retry(original.retryBundles[0].hash))
+	skipped := build(retry(hash))
+	require.Len(t, skipped.Transactions, 2)
+
+	cgtV2FixtureParams.retryBundles = append([]cgtV2RetryBundle{original.retryBundles[0]}, entry)
+	require.Equal(t, oldInitial, build(cgtSeededReceipts()))
+	require.Equal(t, oldRetry, build(retry(original.retryBundles[0].hash)))
+	retryThenEscrow := append(retry(hash), cgtSeededReceipts()...)
+	amount, selected, err := cgtV2EscrowAmount(retryThenEscrow, cgtV2FixtureParams, cfg.DepositContractAddress)
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(987), amount)
+	require.Equal(t, &entry, selected)
+
+	attrs := build(retry(hash))
+	require.True(t, attrs.NoTxPool)
+	require.Equal(t, static, attrs.Transactions[2:17])
+	funding, err := optypes.UnmarshalDepositTx(attrs.Transactions[17])
+	require.NoError(t, err)
+	require.Equal(t, big.NewInt(13), funding.Mint)
+	require.EqualValues(t, 70_600_333, *attrs.GasLimit)
+	payload := &eth.ExecutionPayload{BlockNumber: 101, Timestamp: attrs.Timestamp, GasLimit: *attrs.GasLimit, Transactions: attrs.Transactions}
+	system, err := PayloadToSystemConfig(cfg, payload)
+	require.NoError(t, err)
+	require.EqualValues(t, 30_000_000, system.GasLimit)
+	// Mixing one step from each artifact must not match either full group.
+	payload.Transactions[2+9] = oldRetry.Transactions[2+9]
+	_, err = PayloadToSystemConfig(cfg, payload)
+	require.ErrorContains(t, err, "does not match a pinned bundle")
+}
+
 func TestCgtV2OriginRetryEvents(t *testing.T) {
 	cfg := cgtTestConfig()
 	network, ok := cgtV2Params(bigs.Uint64Strict(cfg.L2ChainID))
@@ -139,16 +203,16 @@ func TestCgtV2OriginRetryEvents(t *testing.T) {
 		wantMint int64
 		wantErr  string
 	}{
-		{name: "recognized retry", logs: []*types.Log{retry(network.retryBundleHash)}, wantMint: 13},
+		{name: "recognized retry", logs: []*types.Log{retry(network.retryBundles[0].hash)}, wantMint: 13},
 		{name: "unknown retry", logs: []*types.Log{retry(common.Hash{1})}, wantMint: -1},
-		{name: "unknown then recognized retry", logs: []*types.Log{retry(common.Hash{1}), retry(network.retryBundleHash)}, wantMint: 13},
+		{name: "unknown then recognized retry", logs: []*types.Log{retry(common.Hash{1}), retry(network.retryBundles[0].hash)}, wantMint: 13},
 		{name: "unknown retry then escrow", logs: []*types.Log{retry(common.Hash{1}), cgtEscrowLog(network.bridge, cfg.DepositContractAddress, 600)}, wantMint: 400},
-		{name: "escrow then retry", logs: []*types.Log{cgtEscrowLog(network.bridge, cfg.DepositContractAddress, 600), retry(network.retryBundleHash)}, wantMint: 400},
-		{name: "malformed retry", logs: []*types.Log{{Address: network.bridge, Topics: []common.Hash{cgtV2RetryEvent, network.retryBundleHash}}}, wantErr: "malformed CGTv2 retry event"},
+		{name: "escrow then retry", logs: []*types.Log{cgtEscrowLog(network.bridge, cfg.DepositContractAddress, 600), retry(network.retryBundles[0].hash)}, wantMint: 400},
+		{name: "malformed retry", logs: []*types.Log{{Address: network.bridge, Topics: []common.Hash{cgtV2RetryEvent, network.retryBundles[0].hash}}}, wantErr: "malformed CGTv2 retry event"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			receipts := optypes.FromGethReceipts(types.Receipts{{Status: types.ReceiptStatusSuccessful, Logs: tc.logs}})
-			group, err := cgtV2UpgradeTransactionsFromReceipts(cfg, receipts)
+			group, _, err := cgtV2UpgradeTransactionsFromReceipts(cfg, receipts)
 			if tc.wantErr != "" {
 				require.ErrorContains(t, err, tc.wantErr)
 				return
@@ -166,21 +230,38 @@ func TestCgtV2OriginRetryEvents(t *testing.T) {
 	}
 }
 
-func TestCgtV2RetryArtifactMismatchIsCritical(t *testing.T) {
+func TestCgtV2InvalidSelectedRetryArtifactIsCritical(t *testing.T) {
 	original := cgtV2FixtureParams
 	t.Cleanup(func() { cgtV2FixtureParams = original })
-	cgtV2FixtureParams.retryBundleHash = common.Hash{1}
+	hash := common.Hash{1}
 	cfg := cgtTestConfig()
 	receipts := optypes.FromGethReceipts(types.Receipts{{Status: types.ReceiptStatusSuccessful, Logs: []*types.Log{{
-		Address: cgtV2FixtureParams.bridge,
-		Topics:  []common.Hash{cgtV2RetryEvent, cgtV2FixtureParams.retryBundleHash},
+		Address: original.bridge,
+		Topics:  []common.Hash{cgtV2RetryEvent, hash},
 		Data:    common.BigToHash(big.NewInt(987)).Bytes(),
 	}}}})
-	header, parent, origin := cgtTestOrigin(t, receipts)
-	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
-	_, err := builder.PreparePayloadAttributes(t.Context(), parent, origin)
-	require.ErrorIs(t, err, ErrCritical)
-	require.ErrorContains(t, err, "local CGTv2 retry artifact does not match protocol hash")
+	for _, tc := range []struct {
+		name     string
+		artifact []byte
+		wantErr  string
+	}{
+		{"missing", nil, "invalid local CGTv2 retry artifact"},
+		{"corrupt", []byte("malformed"), "invalid local CGTv2 retry artifact"},
+		{"mismatched", cgtV2FixtureBundle, "local CGTv2 retry artifact does not match protocol hash"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cgtV2FixtureParams.retryBundles = append([]cgtV2RetryBundle{original.retryBundles[0]}, cgtV2RetryBundle{hash: hash, bundle: tc.artifact})
+			header, parent, origin := cgtTestOrigin(t, receipts)
+			builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
+			_, err := builder.PreparePayloadAttributes(t.Context(), parent, origin)
+			require.ErrorIs(t, err, ErrCritical)
+			require.ErrorContains(t, err, tc.wantErr)
+			initial, gas, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
+			require.NoError(t, err)
+			require.Len(t, initial, 16)
+			require.EqualValues(t, 40_600_000, gas)
+		})
+	}
 }
 
 func TestCgtV2AttributesBuilderWiring(t *testing.T) {
@@ -252,7 +333,7 @@ func TestCgtV2DeprecatedChainsAreNotEnabled(t *testing.T) {
 	for _, id := range []int64{44787, 62320} {
 		cfg := cgtTestConfig()
 		cfg.L2ChainID = big.NewInt(id)
-		upgrades, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
+		upgrades, _, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
 		require.NoError(t, err)
 		require.Empty(t, upgrades)
 	}
@@ -261,7 +342,7 @@ func TestCgtV2DeprecatedChainsAreNotEnabled(t *testing.T) {
 func TestCgtV2IgnoresForeignEscrowEmitter(t *testing.T) {
 	cfg := cgtTestConfig()
 	cfg.L2ChainID = big.NewInt(params.CeloMainnetChainID)
-	group, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
+	group, _, err := cgtV2UpgradeTransactionsFromReceipts(cfg, cgtSeededReceipts())
 	require.NoError(t, err)
 	require.Empty(t, group)
 }
@@ -320,8 +401,8 @@ func TestCgtV2EscrowEvent(t *testing.T) {
 				event.Topics = append(event.Topics, common.Hash{})
 				bad = true
 			}
-			amount, retry, err := cgtV2EscrowAmount(optypes.FromGethReceipts(types.Receipts{receipt}), bridge, portal, common.Hash{})
-			require.False(t, retry)
+			amount, retry, err := cgtV2EscrowAmount(optypes.FromGethReceipts(types.Receipts{receipt}), cgtV2NetworkParams{bridge: bridge}, portal)
+			require.Nil(t, retry)
 			if bad {
 				require.Error(t, err)
 				return
@@ -371,7 +452,7 @@ func TestCgtV2CanonicalReceiptFields(t *testing.T) {
 			case "invalid receipt after event":
 				receipts = append(receipts, optypes.FromGethReceipt(&types.Receipt{Status: 2}))
 			}
-			group, err := cgtV2UpgradeTransactionsFromReceipts(cgtTestConfig(), receipts)
+			group, _, err := cgtV2UpgradeTransactionsFromReceipts(cgtTestConfig(), receipts)
 			if name != "valid" {
 				require.Error(t, err)
 				return
@@ -503,6 +584,9 @@ func TestCgtV2ReceiptScanVectors(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(raw, &vectors))
 	require.NotEmpty(t, vectors.Cases)
+	pinned := cgtV2FixtureParams
+	require.Equal(t, vectors.Bridge, pinned.bridge)
+	require.NotNil(t, pinned.retryBundle(vectors.PinnedHash))
 
 	for _, tc := range vectors.Cases {
 		t.Run(tc.Name, func(t *testing.T) {
@@ -517,24 +601,29 @@ func TestCgtV2ReceiptScanVectors(t *testing.T) {
 				}
 				receipts = append(receipts, receipt)
 			}
-			var pin common.Hash
-			if tc.Pinned {
-				pin = vectors.PinnedHash
+			network := pinned
+			if !tc.Pinned {
+				network.retryBundles = nil
 			}
 
-			amount, retry, err := cgtV2EscrowAmount(optypes.FromGethReceipts(receipts), vectors.Bridge, vectors.Portal, pin)
+			amount, retry, err := cgtV2EscrowAmount(optypes.FromGethReceipts(receipts), network, vectors.Portal)
 			switch tc.Expect.Kind {
 			case "none":
 				require.NoError(t, err)
 				require.Nil(t, amount)
-				require.False(t, retry)
+				require.Nil(t, retry)
 			case "escrow", "retry":
 				require.NoError(t, err)
 				want, ok := new(big.Int).SetString(tc.Expect.Amount, 10)
 				require.True(t, ok)
 				require.NotNil(t, amount)
 				require.Zero(t, want.Cmp(amount), "amount %v, want %v", amount, want)
-				require.Equal(t, tc.Expect.Kind == "retry", retry)
+				if tc.Expect.Kind == "retry" {
+					require.NotNil(t, retry)
+					require.Equal(t, vectors.PinnedHash, retry.hash)
+				} else {
+					require.Nil(t, retry)
+				}
 			case "error":
 				require.ErrorContains(t, err, tc.Expect.Message)
 			default:

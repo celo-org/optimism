@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // CeloTokenL1.TOTAL_MARKET_CAP: 1 billion CELO, with 18 decimals.
@@ -28,8 +29,27 @@ type cgtV2NetworkParams struct {
 	bridge      common.Address
 	totalSupply string
 	bundle      []byte
+	// Register new hashes before emitting the first retry request for them on L1.
+	retryBundles []cgtV2RetryBundle
+}
+
+type cgtV2RetryBundle struct {
 	// The protocol hash is pinned independently of the embedded artifact.
-	retryBundleHash common.Hash
+	hash   common.Hash
+	bundle []byte
+}
+
+func (p cgtV2NetworkParams) retryBundle(hash common.Hash) *cgtV2RetryBundle {
+	if hash == (common.Hash{}) {
+		return nil
+	}
+	for i := range p.retryBundles {
+		retry := &p.retryBundles[i]
+		if retry.hash == hash {
+			return retry
+		}
+	}
+	return nil
 }
 
 // Production profiles never select the synthetic NUT bundle.
@@ -43,9 +63,12 @@ var cgtV2Networks = map[uint64]cgtV2NetworkParams{
 const cgtV2FixtureChainID uint64 = 1337
 
 var cgtV2FixtureParams = cgtV2NetworkParams{
-	bridge:          common.HexToAddress("0xcc"),
-	totalSupply:     "1000",
-	retryBundleHash: common.HexToHash("0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"),
+	bridge:      common.HexToAddress("0xcc"),
+	totalSupply: "1000",
+	retryBundles: []cgtV2RetryBundle{{
+		hash:   common.HexToHash("0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"),
+		bundle: cgtV2FixtureBundle,
+	}},
 }
 
 func cgtV2Params(chainID uint64) (cgtV2NetworkParams, bool) {
@@ -113,7 +136,14 @@ func cgtV2NUTBundle(chainID uint64) (*nutBundle, error) {
 	if !ok {
 		return nil, fmt.Errorf("CGTv2 unsupported chain %d", chainID)
 	}
-	bundle, err := readNUTBundle(forks.Name("cgtv2"), bytes.NewReader(network.bundle))
+	return readCgtV2NUTBundle(chainID, network.bundle)
+}
+
+func readCgtV2NUTBundle(chainID uint64, artifact []byte) (*nutBundle, error) {
+	if len(artifact) == 0 {
+		return nil, fmt.Errorf("CGTv2 upgrade bundle is unresolved for chain %d", chainID)
+	}
+	bundle, err := readNUTBundle(forks.Name("cgtv2"), bytes.NewReader(artifact))
 	if err != nil {
 		return nil, err
 	}
@@ -127,9 +157,6 @@ func cgtV2NUTBundle(chainID uint64) (*nutBundle, error) {
 		if tx.Intent != cgtV2Intents[i] || tx.GasLimit == 0 {
 			return nil, fmt.Errorf("CGTv2 invalid static transaction %d", i)
 		}
-	}
-	if _, err := cgtV2BundleGas(bundle); err != nil {
-		return nil, err
 	}
 	return bundle, nil
 }
@@ -157,41 +184,94 @@ func CgtV2UpgradeGas(chainID *big.Int) (uint64, error) {
 	return cgtV2BundleGas(bundle)
 }
 
-// CgtV2UpgradeTransactions builds static upgrade deposits and dynamic reserve funding.
-// The exact amount is authenticated by derivation from the EscrowSeeded receipt.
+// CgtV2UpgradeTransactions builds the original upgrade deposits and dynamic reserve funding.
 func CgtV2UpgradeTransactions(chainID, migratedAmount *big.Int) ([]hexutil.Bytes, uint64, error) {
+	chain, network, err := cgtV2ParamsForChain(chainID)
+	if err != nil {
+		return nil, 0, err
+	}
+	return network.upgradeTransactions(chain, migratedAmount, nil)
+}
+
+func cgtV2ParamsForChain(chainID *big.Int) (uint64, cgtV2NetworkParams, error) {
 	if chainID == nil || !chainID.IsUint64() {
-		return nil, 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
+		return 0, cgtV2NetworkParams{}, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
 	}
-	network, ok := cgtV2Params(bigs.Uint64Strict(chainID))
+	chain := bigs.Uint64Strict(chainID)
+	network, ok := cgtV2Params(chain)
 	if !ok {
-		return nil, 0, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
+		return 0, cgtV2NetworkParams{}, fmt.Errorf("CGTv2 unsupported chain %v", chainID)
 	}
-	reserve, ok := network.reserveSeed(migratedAmount)
-	if !ok {
-		return nil, 0, fmt.Errorf("CGTv2 migrated amount exceeds fixed total supply or is invalid")
+	return chain, network, nil
+}
+
+func cgtV2StaticTransactions(chainID uint64, artifact []byte) ([]hexutil.Bytes, uint64, error) {
+	bundle, err := readCgtV2NUTBundle(chainID, artifact)
+	if err != nil {
+		return nil, 0, err
 	}
-	bundle, err := cgtV2NUTBundle(bigs.Uint64Strict(chainID))
+	gas, err := cgtV2BundleGas(bundle)
 	if err != nil {
 		return nil, 0, err
 	}
 	txs, err := bundle.toDepositTransactions()
+	return txs, gas, err
+}
+
+func cgtV2BundleHash(static []hexutil.Bytes) (common.Hash, error) {
+	raw, err := rlp.EncodeToBytes(static)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return crypto.Keccak256Hash(raw), nil
+}
+
+func (r *cgtV2RetryBundle) transactions(chainID uint64) ([]hexutil.Bytes, uint64, error) {
+	static, gas, err := cgtV2StaticTransactions(chainID, r.bundle)
+	if err != nil {
+		return nil, 0, fmt.Errorf("invalid local CGTv2 retry artifact for %s: %w", r.hash, err)
+	}
+	hash, err := cgtV2BundleHash(static)
 	if err != nil {
 		return nil, 0, err
 	}
+	if hash != r.hash {
+		return nil, 0, fmt.Errorf("local CGTv2 retry artifact does not match protocol hash %s", r.hash)
+	}
+	return static, gas, nil
+}
+
+func (p cgtV2NetworkParams) upgradeTransactions(chainID uint64, migratedAmount *big.Int, retry *cgtV2RetryBundle) ([]hexutil.Bytes, uint64, error) {
+	reserve, ok := p.reserveSeed(migratedAmount)
+	if !ok {
+		return nil, 0, fmt.Errorf("CGTv2 migrated amount exceeds fixed total supply or is invalid")
+	}
+	var txs []hexutil.Bytes
+	var gas uint64
+	var err error
+	if retry == nil {
+		txs, gas, err = cgtV2StaticTransactions(chainID, p.bundle)
+	} else {
+		txs, gas, err = retry.transactions(chainID)
+	}
+	if err != nil {
+		return nil, 0, err
+	}
+	raw, err := cgtV2FundingDeposit(reserve).MarshalBinary()
+	if err != nil {
+		return nil, 0, err
+	}
+	return append(txs, raw), gas, nil
+}
+
+func cgtV2FundingDeposit(reserve *big.Int) *optypes.DepositTx {
 	target := predeploys.NativeAssetLiquidityAddr
-	funding := &optypes.DepositTx{
+	return &optypes.DepositTx{
 		SourceHash: cgtV2FundingSource,
 		From:       predeploys.LiquidityControllerAddr, To: &target,
 		Mint: new(big.Int).Set(reserve), Value: reserve, Gas: cgtV2FundingGas,
 		Data: crypto.Keccak256([]byte("deposit()"))[:4],
 	}
-	raw, err := funding.MarshalBinary()
-	if err != nil {
-		return nil, 0, err
-	}
-	gas, err := cgtV2BundleGas(bundle)
-	return append(txs, raw), gas, err
 }
 
 var cgtV2GroupSources = func() map[common.Hash]struct{} {
@@ -204,7 +284,11 @@ var cgtV2GroupSources = func() map[common.Hash]struct{} {
 }()
 
 func containsCgtV2Group(txs []hexutil.Bytes) bool {
-	for _, raw := range txs {
+	return cgtV2GroupStart(txs) >= 0
+}
+
+func cgtV2GroupStart(txs []hexutil.Bytes) int {
+	for i, raw := range txs {
 		if len(raw) == 0 || raw[0] != optypes.DepositTxType {
 			continue
 		}
@@ -213,8 +297,52 @@ func containsCgtV2Group(txs []hexutil.Bytes) bool {
 			continue
 		}
 		if _, ok := cgtV2GroupSources[tx.SourceHash]; ok {
-			return true
+			return i
 		}
 	}
-	return false
+	return -1
+}
+
+// cgtV2PayloadUpgradeGas matches the complete suffix against a pinned artifact.
+func cgtV2PayloadUpgradeGas(chainID *big.Int, txs []hexutil.Bytes) (uint64, error) {
+	start := cgtV2GroupStart(txs)
+	if start < 0 {
+		return 0, nil
+	}
+	if start == 0 || len(txs)-start != len(cgtV2Intents)+1 {
+		return 0, fmt.Errorf("invalid CGTv2 upgrade group length")
+	}
+	chain, network, err := cgtV2ParamsForChain(chainID)
+	if err != nil {
+		return 0, err
+	}
+	last := txs[len(txs)-1]
+	funding, err := optypes.UnmarshalDepositTx(last)
+	if err != nil {
+		return 0, err
+	}
+	if _, ok := network.reserveSeed(funding.Value); !ok {
+		return 0, fmt.Errorf("invalid CGTv2 reserve funding amount")
+	}
+	expected, err := cgtV2FundingDeposit(funding.Value).MarshalBinary()
+	if err != nil || !bytes.Equal(last, expected) {
+		return 0, fmt.Errorf("invalid CGTv2 reserve funding deposit")
+	}
+
+	hash, err := cgtV2BundleHash(txs[start : len(txs)-1])
+	if err != nil {
+		return 0, err
+	}
+	// The original artifact remains valid even when also registered for retries.
+	if original, gas, err := cgtV2StaticTransactions(chain, network.bundle); err == nil {
+		if originalHash, err := cgtV2BundleHash(original); err == nil && originalHash == hash {
+			return gas, nil
+		}
+	}
+	// The receipt scan enforces eligibility. The parent payload identifies the artifact by its bytes.
+	if retry := network.retryBundle(hash); retry != nil {
+		_, gas, err := retry.transactions(chain)
+		return gas, err
+	}
+	return 0, fmt.Errorf("CGTv2 upgrade group does not match a pinned bundle")
 }
