@@ -90,6 +90,18 @@
     "file": "cgtv2-14.rlp"
   },
   {
+    "intent": "Cgtv2 15: L2CrossDomainMessenger deployment",
+    "sourceHash": "0xd886950174d6dc360c8c727f4b75d2699e7cf7e2279be2da1f01a2c4f769d1d3",
+    "transactionHash": "0x5a60693e15021ab9598ce1704b431a032efbebb5fbfbd1574d602b2cc43081f1",
+    "file": "cgtv2-15.rlp"
+  },
+  {
+    "intent": "Cgtv2 16: L2CrossDomainMessenger upgrade",
+    "sourceHash": "0xd9854c29541c5e721a0bc8929dd2f99d569458d7f66cd05b6178ddb5987f5983",
+    "transactionHash": "0xfa67ac030639d0cb3c81e255bf75ece1986fb385d7b919d7679cb87d8d0287ff",
+    "file": "cgtv2-16.rlp"
+  },
+  {
     "intent": "Celo: CGTv2 Reserve Funding",
     "sourceHash": "0x7972bab1b7b5e357beed404c84b8b6f2a0e11cd76404888de2ccbade5e63eb14",
     "transactionHash": "0xa745fc69719af149c9de45a940520cdaa94e6dc6a32340813519a232f35480f0",

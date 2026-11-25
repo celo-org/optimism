@@ -19,6 +19,7 @@ import { ILiquidityController } from "interfaces/L2/ILiquidityController.sol";
 import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
 import { ICeloGasBridgeL2 } from "interfaces/celo/ICeloGasBridgeL2.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
+import { IL2CrossDomainMessenger } from "interfaces/L2/IL2CrossDomainMessenger.sol";
 
 contract CgtV2Upgrade_Upgrade_Test is Test {
     address internal immutable BRIDGE = CeloPredeploys.CELO_GAS_BRIDGE_L2;
@@ -29,25 +30,30 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
     address internal constant RECIPIENT = address(0xCAFE);
     address internal constant L1_BRIDGE = address(0x1234);
     address internal constant L1_TOKEN = address(0x5678);
+    address internal constant L1_MESSENGER = address(0x9ABC);
 
     CgtFeeTokenFixture internal feeToken;
     GenerateCgtV2NUTBundle internal generator;
 
     function setUp() public {
-        address[7] memory proxies = [
+        address[8] memory proxies = [
             Predeploys.PROXY_ADMIN,
             Predeploys.L1_BLOCK_ATTRIBUTES,
             Predeploys.L2_TO_L1_MESSAGE_PASSER,
             Predeploys.NATIVE_ASSET_LIQUIDITY,
             Predeploys.LIQUIDITY_CONTROLLER,
             Predeploys.SEQUENCER_FEE_WALLET,
-            BRIDGE
+            BRIDGE,
+            Predeploys.L2_CROSS_DOMAIN_MESSENGER
         ];
         bytes memory code = address(new Proxy(Predeploys.PROXY_ADMIN)).code;
         for (uint256 i; i < proxies.length; i++) {
             vm.etch(proxies[i], code);
             vm.store(proxies[i], ADMIN_SLOT, bytes32(uint256(uint160(Predeploys.PROXY_ADMIN))));
         }
+        // Mirror live L2CrossDomainMessenger state: initialized, and wired to the L1 messenger.
+        vm.store(Predeploys.L2_CROSS_DOMAIN_MESSENGER, bytes32(0), bytes32(uint256(1) << 160));
+        vm.store(Predeploys.L2_CROSS_DOMAIN_MESSENGER, bytes32(uint256(207)), bytes32(uint256(uint160(L1_MESSENGER))));
         _install(Predeploys.L1_BLOCK_ATTRIBUTES, address(new LegacyCeloL1BlockFixture()));
         _install(Predeploys.SEQUENCER_FEE_WALLET, address(new LegacyCeloVaultFixture(RECIPIENT)));
         _install(Predeploys.PROXY_ADMIN, deployCode("ProxyAdmin.sol:ProxyAdmin", abi.encode(OWNER)));
@@ -79,7 +85,7 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
 
     function _run() internal {
         GenerateCgtV2NUTBundle.NutTx[] memory txs = generator.transactions(_config());
-        assertEq(txs.length, 15);
+        assertEq(txs.length, 17);
         for (uint256 i; i < txs.length; i++) {
             assertTrue(txs[i].to != Predeploys.PROXY_ADMIN, "must not upgrade ProxyAdmin");
             if (txs[i].isCreation) {
@@ -116,6 +122,10 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         assertEq(vm.load(Predeploys.PROXY_ADMIN, ADMIN_SLOT), bytes32(uint256(uint160(Predeploys.PROXY_ADMIN))));
         assertEq(IProxyAdmin(Predeploys.PROXY_ADMIN).owner(), OWNER);
         assertTrue(IL1Block(Predeploys.L1_BLOCK_ATTRIBUTES).isCustomGasToken());
+        IL2CrossDomainMessenger l2Messenger = IL2CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER);
+        assertEq(l2Messenger.version(), "2.2.0-celo");
+        assertEq(address(l2Messenger.otherMessenger()), L1_MESSENGER);
+        assertEq(l2Messenger.RELAY_RESERVED_GAS(), 135_000);
         ICeloGasBridgeL2 bridge = ICeloGasBridgeL2(payable(BRIDGE));
         assertEq(address(bridge.otherBridge()), L1_BRIDGE);
         assertEq(bridge.celoTokenL1(), L1_TOKEN);
@@ -191,7 +201,9 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         string memory json = vm.readFile(path);
         assertEq(vm.parseJsonString(json, ".metadata.version"), "1.0.0");
         assertEq(vm.parseJsonString(json, ".transactions[14].intent"), "CGTv2 flag enable");
-        assertFalse(vm.keyExistsJson(json, ".transactions[15]"));
+        assertEq(vm.parseJsonString(json, ".transactions[16].intent"), "L2CrossDomainMessenger upgrade");
+        assertEq(vm.parseJsonAddress(json, ".transactions[16].to"), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
+        assertFalse(vm.keyExistsJson(json, ".transactions[17]"));
         assertEq(vm.parseJsonAddress(json, ".transactions[9].to"), Predeploys.LIQUIDITY_CONTROLLER);
         assertEq(vm.parseJsonAddress(json, ".transactions[10].to"), CeloPredeploys.CELO_GAS_BRIDGE_L2);
         assertEq(vm.parseJsonBytes(json, ".transactions[9].data"), generator.transactions(_config())[9].data);

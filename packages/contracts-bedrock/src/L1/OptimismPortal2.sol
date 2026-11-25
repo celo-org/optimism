@@ -11,6 +11,7 @@ import { ReinitializableBase } from "src/universal/ReinitializableBase.sol";
 import { EOA } from "src/libraries/EOA.sol";
 import { SafeCall } from "src/libraries/SafeCall.sol";
 import { Constants } from "src/libraries/Constants.sol";
+import { Predeploys } from "src/libraries/Predeploys.sol";
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
 import { SecureMerkleTrie } from "src/libraries/trie/SecureMerkleTrie.sol";
@@ -174,6 +175,10 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
     /// @notice Thrown when a gas estimation transaction is being executed.
     error OptimismPortal_GasEstimation();
 
+    /// @notice Thrown when a withdrawal from the L2CrossDomainMessenger fails in the
+    ///         L1CrossDomainMessenger.
+    error OptimismPortal_L1CDMCallFailed();
+
     /// @notice Thrown when the gas limit for a deposit is too low.
     error OptimismPortal_GasLimitTooLow();
 
@@ -208,9 +213,9 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
     error OptimismPortal_InvalidLockboxState();
 
     /// @notice Semantic version.
-    /// @custom:semver 5.2.0
+    /// @custom:semver 5.2.0-celo
     function version() public pure virtual returns (string memory) {
-        return "5.2.0";
+        return "5.2.0-celo";
     }
 
     /// @param _proofMaturityDelaySeconds The proof maturity delay in seconds.
@@ -509,6 +514,15 @@ contract OptimismPortal2 is Initializable, ResourceMetering, ReinitializableBase
         // be sufficient to execute the sub call.
         if (!success && tx.origin == Constants.ESTIMATION_ADDRESS) {
             revert OptimismPortal_GasEstimation();
+        }
+
+        // A failed call means the L1CrossDomainMessenger reverted without recording the message,
+        // e.g. because it ran out of gas. Revert so the withdrawal stays unfinalized and can be
+        // finalized again with more gas, instead of being finalized with no way to replay it.
+        // Ported from op-contracts/v9.0.0. Checking the sender is enough because the
+        // L2CrossDomainMessenger only initiates withdrawals to `otherMessenger`.
+        if (!success && _tx.sender == Predeploys.L2_CROSS_DOMAIN_MESSENGER) {
+            revert OptimismPortal_L1CDMCallFailed();
         }
     }
 
