@@ -14,6 +14,8 @@ import { Predeploys } from "src/libraries/Predeploys.sol";
 import { CeloPredeploys } from "src/celo/CeloPredeploys.sol";
 import { Types } from "src/libraries/Types.sol";
 import { IL1Block } from "interfaces/L2/IL1Block.sol";
+import { IL2CrossDomainMessenger } from "interfaces/L2/IL2CrossDomainMessenger.sol";
+import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 import { INativeAssetLiquidity } from "interfaces/L2/INativeAssetLiquidity.sol";
 import { ILiquidityController } from "interfaces/L2/ILiquidityController.sol";
 import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
@@ -29,18 +31,20 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
     address internal constant RECIPIENT = address(0xCAFE);
     address internal constant L1_BRIDGE = address(0x1234);
     address internal constant L1_TOKEN = address(0x5678);
+    address internal constant L1_MESSENGER = address(0xCA11);
 
     CgtFeeTokenFixture internal feeToken;
     GenerateCgtV2NUTBundle internal generator;
 
     function setUp() public {
-        address[7] memory proxies = [
+        address[8] memory proxies = [
             Predeploys.PROXY_ADMIN,
             Predeploys.L1_BLOCK_ATTRIBUTES,
             Predeploys.L2_TO_L1_MESSAGE_PASSER,
             Predeploys.NATIVE_ASSET_LIQUIDITY,
             Predeploys.LIQUIDITY_CONTROLLER,
             Predeploys.SEQUENCER_FEE_WALLET,
+            Predeploys.L2_CROSS_DOMAIN_MESSENGER,
             BRIDGE
         ];
         bytes memory code = address(new Proxy(Predeploys.PROXY_ADMIN)).code;
@@ -54,6 +58,8 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         vm.store(Predeploys.PROXY_ADMIN, bytes32(0), bytes32(uint256(uint160(OWNER))));
         vm.store(Predeploys.SEQUENCER_FEE_WALLET, bytes32(0), bytes32(uint256(73)));
         vm.deal(Predeploys.SEQUENCER_FEE_WALLET, 41);
+        _install(Predeploys.L2_CROSS_DOMAIN_MESSENGER, deployCode("L2CrossDomainMessenger.sol:L2CrossDomainMessenger"));
+        IL2CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER).initialize(ICrossDomainMessenger(L1_MESSENGER));
         feeToken = new CgtFeeTokenFixture();
         feeToken.mint(Predeploys.SEQUENCER_FEE_WALLET, 19);
         generator = GenerateCgtV2NUTBundle(deployCode("GenerateCgtV2NUTBundle.s.sol:GenerateCgtV2NUTBundle"));
@@ -79,7 +85,7 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
 
     function _run() internal {
         GenerateCgtV2NUTBundle.NutTx[] memory txs = generator.transactions(_config());
-        assertEq(txs.length, 15);
+        assertEq(txs.length, 17);
         for (uint256 i; i < txs.length; i++) {
             assertTrue(txs[i].to != Predeploys.PROXY_ADMIN, "must not upgrade ProxyAdmin");
             if (txs[i].isCreation) {
@@ -143,6 +149,19 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         assertEq(Predeploys.NATIVE_ASSET_LIQUIDITY.balance, 400);
     }
 
+    function test_upgrade_l2MessengerPreservesRemoteMessenger_succeeds() external {
+        address proxy = Predeploys.L2_CROSS_DOMAIN_MESSENGER;
+        bytes32 oldImplementation = vm.load(proxy, IMPL_SLOT);
+
+        _run();
+
+        IL2CrossDomainMessenger messenger = IL2CrossDomainMessenger(proxy);
+        assertNotEq(vm.load(proxy, IMPL_SLOT), oldImplementation);
+        assertEq(address(messenger.otherMessenger()), L1_MESSENGER);
+        vm.expectRevert("Initializable: contract is already initialized");
+        messenger.initialize(ICrossDomainMessenger(address(1)));
+    }
+
     function runUpgrade() external {
         _run();
     }
@@ -190,8 +209,10 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         generator.runProduction(_config(), path);
         string memory json = vm.readFile(path);
         assertEq(vm.parseJsonString(json, ".metadata.version"), "1.0.0");
-        assertEq(vm.parseJsonString(json, ".transactions[14].intent"), "CGTv2 flag enable");
-        assertFalse(vm.keyExistsJson(json, ".transactions[15]"));
+        assertEq(vm.parseJsonString(json, ".transactions[14].intent"), "L2CrossDomainMessenger deployment");
+        assertEq(vm.parseJsonAddress(json, ".transactions[15].to"), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
+        assertEq(vm.parseJsonString(json, ".transactions[16].intent"), "CGTv2 flag enable");
+        assertFalse(vm.keyExistsJson(json, ".transactions[17]"));
         assertEq(vm.parseJsonAddress(json, ".transactions[9].to"), Predeploys.LIQUIDITY_CONTROLLER);
         assertEq(vm.parseJsonAddress(json, ".transactions[10].to"), CeloPredeploys.CELO_GAS_BRIDGE_L2);
         assertEq(vm.parseJsonBytes(json, ".transactions[9].data"), generator.transactions(_config())[9].data);

@@ -59,16 +59,16 @@ rows.append({'intent': funding_intent, 'sourceHash': '0x' + funding_source.hex()
              'transactionHash': '0x' + keccak(funding_bytes).hex(), 'file': 'cgtv2-funding-400.rlp',
              'migratedAmount': '600', 'totalSupply': '1000', 'reserve': '400'})
 (OUT / 'cgtv2-vectors.json').write_text(json.dumps(rows, indent=2) + '\n')
-artifacts = ['L1BlockCGT', 'L2ToL1MessagePasserCGT',
-             'NativeAssetLiquidity', 'LiquidityController', 'CeloGasBridgeL2',
-             'CeloSequencerFeeVault']
 builds = {}
-for name in artifacts:
+for tx in bundle['transactions']:
+    if tx['to'] is not None:
+        continue
+    name = tx['intent'].removesuffix(' deployment')
     artifact = json.loads(Path(f'forge-artifacts/{name}.sol/{name}.json').read_text())
     metadata = artifact['metadata']
     if isinstance(metadata, str):
         metadata = json.loads(metadata)
-    assert artifact['bytecode']['object'] == bundle['transactions'][artifacts.index(name)]['data'], name
+    assert artifact['bytecode']['object'] == tx['data'], name
     builds[name] = {'compiler': metadata['compiler'], 'settings': metadata['settings']}
 # Drop retired generated steps before freezing the manifest.
 for path in OUT.glob('cgtv2-[0-9][0-9].rlp'):
