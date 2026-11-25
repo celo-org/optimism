@@ -1,15 +1,15 @@
 {
   "fixtureOnly": true,
   "chainId": 1337,
-  "sourceCommit": "3dfab8e4ff32f8e8833e4fb300f6db7090ad903e",
-  "contractBase": "8c7d7a12c8b38c9211a95d39af7982bc207ba30e",
+  "sourceCommit": "e92a2ca758c59d74cf2f6a6829d4cf33adebd2b5",
+  "contractBase": "35504ec2de1a1ba158f06cb4ee972e7a96d70973",
   "upgradeMethod": "direct v6 Proxy upgrade deposits; no Karst backports",
-  "forgeVersion": "forge Version: 1.2.3-v1.2.3\nCommit SHA: a813a2cee7dd4926e7c56fd8a785b54f32e0d10f\nBuild Timestamp: 2025-06-08T14:03:57.241711000Z (1749391437)\nBuild Profile: maxperf",
+  "forgeVersion": "forge Version: 1.7.1\nCommit SHA: 4072e48705af9d93e3c0f6e29e93b5e9a40caed8\nBuild Timestamp: 2026-05-08T07:54:31.470926000Z (1778226871)\nBuild Profile: dist",
   "generation": [
     "forge script --offline scripts/cgt/GenerateCgtV2NUTBundle.s.sol --sig runFixture()",
     "python3 scripts/cgt/export-cgtv2-fixture.py"
   ],
-  "staticGasLimit": 40500000,
+  "staticGasLimit": 47000000,
   "fundingGasLimit": 100000,
   "sha256": {
     "cgtv2-00.rlp": "6af91e0e0799a1ee3536100e10e502745edb6c5db9fbce32db6b9914e83baa4a",
@@ -26,11 +26,13 @@
     "cgtv2-11.rlp": "dcdca5b518b53bf0ed16aaf3384551f6ab7ea808900cafdf5dfb6b5502e14ef6",
     "cgtv2-12.rlp": "a1c9669ab64c240af0a1ed140a194164edb773d60314c5e07282714605c6cf2d",
     "cgtv2-13.rlp": "743a41e89717bf88e9b8fa5b170e2599dde8074167a2e8a0c9d97e20d0be91d1",
-    "cgtv2-14.rlp": "d846408d750d06393343a7d5f4ae0ee18cade04d0fb581ae1fbb1974fdab0dbe",
-    "cgtv2-fixture-nut-bundle.json": "3a5f08b3a133d7a02b796b4d32e66cbe65de0d51e7ccbb447ff26e4258efcf5a",
-    "cgtv2-fixture-prestate.json": "cd3632a9c86b93aaa8e2787e8dcc3aa31648c541ac6f75cbcc92e119590070cb",
+    "cgtv2-14.rlp": "0513e7e9d7273ebd2d83bfb8abf6539fb130973b1898461e431e6e8337175e28",
+    "cgtv2-15.rlp": "9ac1d506d1f0c13aeba3fc88eed894db3627b4af258d18014e8844ffe3ccc0f2",
+    "cgtv2-16.rlp": "664fe1ead3246a67e23c1aca5c01be82b6fcdf515fcf91a2fcba22108128251f",
+    "cgtv2-fixture-nut-bundle.json": "8d8a63493eef591028771613e8ca9a366ce022c8ee97f5205f2c8401cd5a9997",
+    "cgtv2-fixture-prestate.json": "82bbecc178520aa904f552d1d7f16e414db8e0afdf4298d5634accf976f545e0",
     "cgtv2-funding-400.rlp": "230f0f5481a6e5fe89cf3f3120be85f803d9d2c58aaa2440943e13228eea8ae4",
-    "cgtv2-vectors.json": "3763e54a57a16761d70d79045582e7ebb906b3b82b15c2633c0dbe9dbdd63a96"
+    "cgtv2-vectors.json": "241f7a5b2ca3fa47ded795c01c463395870c5167cb58642601906aecbbca9824"
   },
   "builds": {
     "L1BlockCGT": {
@@ -362,6 +364,48 @@
           "src/L2/CeloSequencerFeeVault.sol": "CeloSequencerFeeVault"
         },
         "evmVersion": "cancun",
+        "libraries": {}
+      }
+    },
+    "L2CrossDomainMessenger": {
+      "compiler": {
+        "version": "0.8.15+commit.e14f2714"
+      },
+      "settings": {
+        "remappings": [
+          "@lib-keccak/=lib/lib-keccak/contracts/lib/",
+          "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
+          "@openzeppelin/contracts-v5/=lib/openzeppelin-contracts-v5/contracts/",
+          "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+          "@rari-capital/solmate/=lib/solmate/",
+          "@solady-test/=lib/lib-keccak/lib/solady/test/",
+          "@solady-v0.0.245/=lib/solady-v0.0.245/src/",
+          "@solady/=lib/solady/src/",
+          "ds-test/=lib/forge-std/lib/ds-test/src/",
+          "erc4626-tests/=lib/openzeppelin-contracts-v5/lib/erc4626-tests/",
+          "forge-std/=lib/forge-std/src/",
+          "interfaces/=interfaces/",
+          "kontrol-cheatcodes/=lib/kontrol-cheatcodes/src/",
+          "lib-keccak/=lib/lib-keccak/contracts/",
+          "openzeppelin-contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/",
+          "openzeppelin-contracts-v5/=lib/openzeppelin-contracts-v5/",
+          "openzeppelin-contracts/=lib/openzeppelin-contracts/",
+          "safe-contracts/=lib/safe-contracts/contracts/",
+          "solady-v0.0.245/=lib/solady-v0.0.245/src/",
+          "solady/=lib/solady/",
+          "solmate/=lib/solmate/src/"
+        ],
+        "optimizer": {
+          "enabled": true,
+          "runs": 999999
+        },
+        "metadata": {
+          "bytecodeHash": "none"
+        },
+        "compilationTarget": {
+          "src/L2/L2CrossDomainMessenger.sol": "L2CrossDomainMessenger"
+        },
+        "evmVersion": "london",
         "libraries": {}
       }
     }
