@@ -19,8 +19,8 @@ import (
 func TestCgtV2GroupMatchesSharedVectors(t *testing.T) {
 	raw, gas, err := CgtV2UpgradeTransactions(big.NewInt(1337), big.NewInt(600))
 	require.NoError(t, err)
-	require.Len(t, raw, 16)
-	require.EqualValues(t, 40_600_000, gas)
+	require.Len(t, raw, 18)
+	require.EqualValues(t, 47_100_000, gas)
 	var vectors []struct {
 		SourceHash      common.Hash
 		TransactionHash common.Hash
@@ -97,7 +97,7 @@ func TestCgtV2BundleGasRoundTrip(t *testing.T) {
 	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.EqualValues(t, 70_600_111, *attrs.GasLimit)
+	require.EqualValues(t, 77_100_111, *attrs.GasLimit)
 	payload := &eth.ExecutionPayload{BlockNumber: 101, Timestamp: attrs.Timestamp, GasLimit: *attrs.GasLimit, Transactions: attrs.Transactions}
 	recovered, err := PayloadToSystemConfig(cfg, payload)
 	require.NoError(t, err)
@@ -115,9 +115,9 @@ func TestCgtV2ProductionBundleSelection(t *testing.T) {
 			cgtV2Networks[id] = network
 			txs, gas, err := CgtV2UpgradeTransactions(new(big.Int).SetUint64(id), big.NewInt(600))
 			require.NoError(t, err)
-			require.Len(t, txs, 16)
-			require.EqualValues(t, 40_600_000, gas)
-			funding, err := optypes.UnmarshalDepositTx(txs[15])
+			require.Len(t, txs, 18)
+			require.EqualValues(t, 47_100_000, gas)
+			funding, err := optypes.UnmarshalDepositTx(txs[len(txs)-1])
 			require.NoError(t, err)
 			supply, _ := new(big.Int).SetString("1000000000000000000000000000", 10)
 			require.Equal(t, new(big.Int).Sub(supply, big.NewInt(600)), funding.Value)

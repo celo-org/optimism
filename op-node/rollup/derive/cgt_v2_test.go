@@ -76,7 +76,7 @@ func TestCgtV2RetryAttributesUseEventAmountWithoutPreflight(t *testing.T) {
 	static, err := rlp.EncodeToBytes(expected[:len(expected)-1])
 	require.NoError(t, err)
 	bundleHash := crypto.Keccak256Hash(static)
-	require.Equal(t, common.HexToHash("0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"), bundleHash)
+	require.Equal(t, common.HexToHash("0xdf4b9e639dee5da17fd51c194fb2709f3d5f1b995ec26682cb8d68308eff49f2"), bundleHash)
 	network, ok := cgtV2Params(bigs.Uint64Strict(cfg.L2ChainID))
 	require.True(t, ok)
 
@@ -158,7 +158,7 @@ func TestCgtV2OriginRetryEvents(t *testing.T) {
 				require.Empty(t, group)
 				return
 			}
-			require.Len(t, group, 16)
+			require.Len(t, group, 18)
 			funding, err := optypes.UnmarshalDepositTx(group[len(group)-1])
 			require.NoError(t, err)
 			require.Equal(t, big.NewInt(tc.wantMint), funding.Mint)
@@ -190,7 +190,7 @@ func TestCgtV2AttributesBuilderWiring(t *testing.T) {
 	builder := NewFetchingAttributesBuilder(cfg, params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.Len(t, attrs.Transactions, 17)
+	require.Len(t, attrs.Transactions, 19)
 	require.True(t, attrs.NoTxPool)
 	require.True(t, ContainsCgtV2Activation(attrs.Transactions))
 	require.EqualValues(t, 30_000_000+cgtV2UpgradeGas, *attrs.GasLimit)
@@ -216,7 +216,7 @@ func TestCgtV2SameOriginAndReorgReplay(t *testing.T) {
 	builder := NewFetchingAttributesBuilder(cgtTestConfig(), params.MergedTestChainConfig, nil, l1, cgtL2Stub{})
 	first, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.Len(t, first.Transactions, 17)
+	require.Len(t, first.Transactions, 19)
 	child := eth.L2BlockRef{Hash: common.Hash{3}, ParentHash: parent.Hash, Number: 101, Time: 102, L1Origin: origin}
 	same, err := builder.PreparePayloadAttributes(context.Background(), child, origin)
 	require.NoError(t, err)
@@ -345,7 +345,7 @@ func TestCgtV2EscrowAppendsGroupAfterAllOriginDeposits(t *testing.T) {
 	builder := NewFetchingAttributesBuilder(cgtTestConfig(), params.MergedTestChainConfig, nil, &cgtL1Stub{eth.HeaderBlockInfo(header), receipts}, cgtL2Stub{})
 	attrs, err := builder.PreparePayloadAttributes(context.Background(), parent, origin)
 	require.NoError(t, err)
-	require.Len(t, attrs.Transactions, 19)
+	require.Len(t, attrs.Transactions, 21)
 	for i, index := range []uint64{0, 2} {
 		tx, err := optypes.UnmarshalDepositTx(attrs.Transactions[i+1])
 		require.NoError(t, err)
@@ -377,7 +377,7 @@ func TestCgtV2CanonicalReceiptFields(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			require.Len(t, group, 16)
+			require.Len(t, group, 18)
 			fund, err := optypes.UnmarshalDepositTx(group[len(group)-1])
 			require.NoError(t, err)
 			require.EqualValues(t, 400, bigs.Uint64Strict(fund.Mint))
@@ -460,7 +460,7 @@ func TestCgtV2FullOriginMatchesNativeProofClient(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, vector.Transactions, attrs.Transactions)
 	require.EqualValues(t, vector.GasLimit, *attrs.GasLimit)
-	require.Len(t, attrs.Transactions, 19)
+	require.Len(t, attrs.Transactions, 21)
 	for _, index := range []int{1, 2} {
 		deposit, err := optypes.UnmarshalDepositTx(attrs.Transactions[index])
 		require.NoError(t, err)
@@ -477,7 +477,7 @@ func TestCgtV2ReceiptScanVectors(t *testing.T) {
 	raw, err := os.ReadFile("testdata/cgtv2-receipt-scan.json")
 	require.NoError(t, err)
 	// The same file and hash live in celo-kona crates/kona/derive/testdata/; change both together.
-	require.Equal(t, common.HexToHash("0xf281a29ec2c2c611320df3795a5ee879418d6d0f9fba549845c127764a99a4a4"), crypto.Keccak256Hash(raw))
+	require.Equal(t, common.HexToHash("0x66c3cffd4bf756b81e8c4d21b1f8ba639583baed1276dae34edaeaf3afadfca9"), crypto.Keccak256Hash(raw))
 
 	var vectors struct {
 		Bridge     common.Address `json:"bridge"`
