@@ -17,6 +17,7 @@ import { ForgeArtifacts, StorageSlot } from "scripts/libraries/ForgeArtifacts.so
 import { Types } from "src/libraries/Types.sol";
 import { Hashing } from "src/libraries/Hashing.sol";
 import { Constants } from "src/libraries/Constants.sol";
+import { Predeploys } from "src/libraries/Predeploys.sol";
 import { AddressAliasHelper } from "src/vendor/AddressAliasHelper.sol";
 import { EIP1967Helper } from "test/mocks/EIP1967Helper.sol";
 import { DevFeatures } from "src/libraries/DevFeatures.sol";
@@ -2880,5 +2881,63 @@ contract OptimismPortal2_Params_Test is CommonTest {
         bytes32 slot21After = vm.load(address(optimismPortal2), bytes32(uint256(21)));
         bytes32 slot21Expected = NextImpl(address(optimismPortal2)).slot21Init();
         assertEq(slot21Expected, slot21After);
+    }
+}
+
+/// @title OptimismPortal2_FinalizeWithdrawalTransaction_L1CDMCallFails_Test
+/// @notice Tests that a withdrawal sent by the L2CrossDomainMessenger stays unfinalized when the
+///         L1CrossDomainMessenger call fails, so it can be finalized again later.
+contract OptimismPortal2_FinalizeWithdrawalTransaction_L1CDMCallFails_Test is OptimismPortal2_TestInit {
+    /// @notice Version-1 nonce of the relayed message.
+    uint256 internal constant RELAY_NONCE = uint256(1) << 240;
+
+    /// @notice The relayMessage call the withdrawal makes on L1.
+    bytes internal relayCall;
+
+    constructor() {
+        // Replace the default withdrawal with one sent by the L2CrossDomainMessenger. The parent
+        // setUp() proposes its dispute game from `_outputRoot`, so the proof is regenerated here.
+        relayCall = abi.encodeCall(l1CrossDomainMessenger.relayMessage, (RELAY_NONCE, alice, bob, 0, 100_000, hex""));
+        _defaultTx = Types.WithdrawalTransaction({
+            nonce: 0,
+            sender: Predeploys.L2_CROSS_DOMAIN_MESSENGER,
+            target: address(l1CrossDomainMessenger),
+            value: 0,
+            gasLimit: 500_000,
+            data: relayCall
+        });
+        (_stateRoot, _storageRoot, _outputRoot, _withdrawalHash, _withdrawalProof) =
+            ffi.getProveWithdrawalTransactionInputs(_defaultTx);
+        _outputRootProof = Types.OutputRootProof({
+            version: bytes32(uint256(0)),
+            stateRoot: _stateRoot,
+            messagePasserStorageRoot: _storageRoot,
+            latestBlockhash: bytes32(uint256(0))
+        });
+    }
+
+    /// @notice Tests that finalizing reverts when the messenger call fails, and that the same
+    ///         withdrawal finalizes once the call succeeds.
+    function test_finalizeWithdrawalTransaction_l1CrossDomainMessengerCallFails_reverts() external {
+        optimismPortal2.proveWithdrawalTransaction(_defaultTx, _proposedGameIndex, _outputRootProof, _withdrawalProof);
+        game.resolveClaim(0, 0);
+        game.resolve();
+        vm.warp(block.timestamp + optimismPortal2.proofMaturityDelaySeconds() + 1);
+
+        // Model the messenger reverting before it records the message, e.g. by running out of gas.
+        vm.mockCallRevert(address(l1CrossDomainMessenger), relayCall, hex"");
+        vm.expectRevert(IOptimismPortal.OptimismPortal_L1CDMCallFailed.selector);
+        optimismPortal2.finalizeWithdrawalTransaction(_defaultTx);
+        assertFalse(optimismPortal2.finalizedWithdrawals(_withdrawalHash));
+
+        // The same withdrawal finalizes once the messenger call succeeds.
+        vm.clearMockedCalls();
+        optimismPortal2.finalizeWithdrawalTransaction(_defaultTx);
+        assertTrue(optimismPortal2.finalizedWithdrawals(_withdrawalHash));
+        assertTrue(
+            l1CrossDomainMessenger.successfulMessages(
+                Hashing.hashCrossDomainMessageV1(RELAY_NONCE, alice, bob, 0, 100_000, hex"")
+            )
+        );
     }
 }

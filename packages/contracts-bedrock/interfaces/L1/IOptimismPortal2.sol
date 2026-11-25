@@ -23,6 +23,7 @@ interface IOptimismPortal2 is IProxyAdminOwnedBase {
     error OptimismPortal_CalldataTooLarge();
     error OptimismPortal_NotAllowedOnCGTMode();
     error OptimismPortal_GasEstimation();
+    error OptimismPortal_L1CDMCallFailed();
     error OptimismPortal_GasLimitTooLow();
     error OptimismPortal_ImproperDisputeGame();
     error OptimismPortal_InvalidDisputeGame();

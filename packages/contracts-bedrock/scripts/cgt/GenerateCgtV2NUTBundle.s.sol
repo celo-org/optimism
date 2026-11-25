@@ -42,7 +42,7 @@ contract GenerateCgtV2NUTBundle is Script {
     /// @dev Verify legacy settings and zero initializer slots before freezing a production bundle.
     function transactions(NetworkConfig memory _config) public view returns (NutTx[] memory txs_) {
         _validateConfig(_config);
-        txs_ = new NutTx[](15);
+        txs_ = new NutTx[](17);
         txs_[0] = _deploy("L1BlockCGT deployment", "L1BlockCGT.sol:L1BlockCGT", "");
         txs_[1] = _deploy("L2ToL1MessagePasserCGT deployment", "L2ToL1MessagePasserCGT.sol:L2ToL1MessagePasserCGT", "");
         txs_[2] = _deploy("NativeAssetLiquidity deployment", "NativeAssetLiquidity.sol:NativeAssetLiquidity", "");
@@ -88,7 +88,11 @@ contract GenerateCgtV2NUTBundle is Script {
             Predeploys.LIQUIDITY_CONTROLLER,
             abi.encodeCall(ILiquidityController.transferOwnership, (_config.owner))
         );
-        txs_[14] = _call(
+        // Glamsterdam gas repricings
+        txs_[14] = _deploy("L2CrossDomainMessenger deployment", "L2CrossDomainMessenger.sol:L2CrossDomainMessenger", "");
+        txs_[15] =
+            _upgrade("L2CrossDomainMessenger upgrade", Predeploys.L2_CROSS_DOMAIN_MESSENGER, _created(txs_[14]), "");
+        txs_[16] = _call(
             "CGTv2 flag enable",
             Constants.DEPOSITOR_ACCOUNT,
             Predeploys.L1_BLOCK_ATTRIBUTES,
@@ -242,14 +246,15 @@ contract GenerateCgtV2NUTBundle is Script {
         bytes memory legacyAdmin = vm.getDeployedCode("ProxyAdmin.sol:ProxyAdmin");
         bytes memory legacyBlock = address(new LegacyCeloL1BlockFixture()).code;
         bytes memory legacyVault = address(new LegacyCeloVaultFixture(address(0xdd))).code;
-        address[7] memory proxies = [
+        address[8] memory proxies = [
             Predeploys.PROXY_ADMIN,
             Predeploys.L1_BLOCK_ATTRIBUTES,
             Predeploys.L2_TO_L1_MESSAGE_PASSER,
             Predeploys.NATIVE_ASSET_LIQUIDITY,
             Predeploys.LIQUIDITY_CONTROLLER,
             Predeploys.SEQUENCER_FEE_WALLET,
-            CeloPredeploys.CELO_GAS_BRIDGE_L2
+            CeloPredeploys.CELO_GAS_BRIDGE_L2,
+            Predeploys.L2_CROSS_DOMAIN_MESSENGER
         ];
         string memory json = "{";
         for (uint256 i; i < proxies.length; i++) {

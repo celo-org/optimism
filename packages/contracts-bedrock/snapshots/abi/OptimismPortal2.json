@@ -821,6 +821,11 @@
   },
   {
     "inputs": [],
+    "name": "OptimismPortal_L1CDMCallFailed",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "OptimismPortal_NoReentrancy",
     "type": "error"
   },

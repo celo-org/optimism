@@ -36,7 +36,7 @@ The output has a sibling `cgtv2-mainnet-nut-bundle.snapshot.json` containing the
 
 ## First initialization
 
-The bundle deploys six implementations and performs nine calls, for 15 static deposits plus the dynamic reserve-funding deposit. It does not deploy StorageSetter or reset initializer guards. The controller and reserved bridge proxy must be unused, and the FeeVault's OZ v5 initializer slot must be zero. An already-initialized target reverts instead of being reset.
+The bundle deploys seven implementations and performs ten calls, for 17 static deposits plus the dynamic reserve-funding deposit. The L2CrossDomainMessenger proxy is upgraded before the CGT flag is enabled, preserving its current L1 messenger and initialization state. It does not deploy StorageSetter or reset initializer guards. The controller and reserved bridge proxy must be unused, and the FeeVault's OZ v5 initializer slot must be zero. An already-initialized target reverts instead of being reset.
 
 Celo mainnet block 81287284 (`0x6e4a1f177fa8518b9b6765b6340af5a36fe46a652ebd5c865d176f949176d990`) has FeeVault version `1.5.0-beta.3` and a zero OZ v5 initializer slot (`0xf0c57e16840df040f15088dc2f81fe391c3923bec73e23a9662efc9c229c6a00`). Its populated slot zero is `totalProcessed`, which is preserved. Recheck these assumptions for each final network and activation parent.
 

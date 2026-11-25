@@ -239,7 +239,7 @@ class BundleWorkflowTests(unittest.TestCase):
         self.assertEqual(snapshot["networkConfig"]["vaultRecipient"], "0x00000000000000000000000000000000000000dd")
         self.assertEqual(snapshot["networkConfig"]["vaultMinWithdrawalAmount"], 23)
         self.assertEqual(snapshot["networkConfig"]["gasPayingTokenName"], "Celo")
-        self.assertEqual(len(data["transactions"]), 15)
+        self.assertEqual(len(data["transactions"]), 17)
         for index, signature, expected in [
             (11, "initialize(address,uint256,uint8)", ["0x00000000000000000000000000000000000000dd", 23, 1]),
             (9, "initialize(address,string,string)", ["0xdeaddeaddeaddeaddeaddeaddeaddeaddead0001", "Celo", "CELO"]),
