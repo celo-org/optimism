@@ -20,6 +20,7 @@ import { IFeeVault } from "interfaces/L2/IFeeVault.sol";
 import { ICeloGasBridgeL2 } from "interfaces/celo/ICeloGasBridgeL2.sol";
 import { IProxyAdmin } from "interfaces/universal/IProxyAdmin.sol";
 import { IL2CrossDomainMessenger } from "interfaces/L2/IL2CrossDomainMessenger.sol";
+import { ICrossDomainMessenger } from "interfaces/universal/ICrossDomainMessenger.sol";
 
 contract CgtV2Upgrade_Upgrade_Test is Test {
     address internal immutable BRIDGE = CeloPredeploys.CELO_GAS_BRIDGE_L2;
@@ -51,9 +52,8 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
             vm.etch(proxies[i], code);
             vm.store(proxies[i], ADMIN_SLOT, bytes32(uint256(uint160(Predeploys.PROXY_ADMIN))));
         }
-        // Mirror live L2CrossDomainMessenger state: initialized, and wired to the L1 messenger.
-        vm.store(Predeploys.L2_CROSS_DOMAIN_MESSENGER, bytes32(0), bytes32(uint256(1) << 160));
-        vm.store(Predeploys.L2_CROSS_DOMAIN_MESSENGER, bytes32(uint256(207)), bytes32(uint256(uint160(L1_MESSENGER))));
+        _install(Predeploys.L2_CROSS_DOMAIN_MESSENGER, deployCode("L2CrossDomainMessenger.sol:L2CrossDomainMessenger"));
+        IL2CrossDomainMessenger(Predeploys.L2_CROSS_DOMAIN_MESSENGER).initialize(ICrossDomainMessenger(L1_MESSENGER));
         _install(Predeploys.L1_BLOCK_ATTRIBUTES, address(new LegacyCeloL1BlockFixture()));
         _install(Predeploys.SEQUENCER_FEE_WALLET, address(new LegacyCeloVaultFixture(RECIPIENT)));
         _install(Predeploys.PROXY_ADMIN, deployCode("ProxyAdmin.sol:ProxyAdmin", abi.encode(OWNER)));
@@ -153,6 +153,19 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         assertEq(Predeploys.NATIVE_ASSET_LIQUIDITY.balance, 400);
     }
 
+    function test_upgrade_l2MessengerPreservesRemoteMessenger_succeeds() external {
+        address proxy = Predeploys.L2_CROSS_DOMAIN_MESSENGER;
+        bytes32 oldImplementation = vm.load(proxy, IMPL_SLOT);
+
+        _run();
+
+        IL2CrossDomainMessenger messenger = IL2CrossDomainMessenger(proxy);
+        assertNotEq(vm.load(proxy, IMPL_SLOT), oldImplementation);
+        assertEq(address(messenger.otherMessenger()), L1_MESSENGER);
+        vm.expectRevert("Initializable: contract is already initialized");
+        messenger.initialize(ICrossDomainMessenger(address(1)));
+    }
+
     function runUpgrade() external {
         _run();
     }
@@ -200,9 +213,10 @@ contract CgtV2Upgrade_Upgrade_Test is Test {
         generator.runProduction(_config(), path);
         string memory json = vm.readFile(path);
         assertEq(vm.parseJsonString(json, ".metadata.version"), "1.0.0");
-        assertEq(vm.parseJsonString(json, ".transactions[14].intent"), "CGTv2 flag enable");
-        assertEq(vm.parseJsonString(json, ".transactions[16].intent"), "L2CrossDomainMessenger upgrade");
-        assertEq(vm.parseJsonAddress(json, ".transactions[16].to"), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
+        assertEq(vm.parseJsonString(json, ".transactions[14].intent"), "L2CrossDomainMessenger deployment");
+        assertEq(vm.parseJsonString(json, ".transactions[15].intent"), "L2CrossDomainMessenger upgrade");
+        assertEq(vm.parseJsonAddress(json, ".transactions[15].to"), Predeploys.L2_CROSS_DOMAIN_MESSENGER);
+        assertEq(vm.parseJsonString(json, ".transactions[16].intent"), "CGTv2 flag enable");
         assertFalse(vm.keyExistsJson(json, ".transactions[17]"));
         assertEq(vm.parseJsonAddress(json, ".transactions[9].to"), Predeploys.LIQUIDITY_CONTROLLER);
         assertEq(vm.parseJsonAddress(json, ".transactions[10].to"), CeloPredeploys.CELO_GAS_BRIDGE_L2);

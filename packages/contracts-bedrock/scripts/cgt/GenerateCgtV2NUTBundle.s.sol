@@ -88,16 +88,16 @@ contract GenerateCgtV2NUTBundle is Script {
             Predeploys.LIQUIDITY_CONTROLLER,
             abi.encodeCall(ILiquidityController.transferOwnership, (_config.owner))
         );
-        txs_[14] = _call(
+        // Glamsterdam gas repricings
+        txs_[14] = _deploy("L2CrossDomainMessenger deployment", "L2CrossDomainMessenger.sol:L2CrossDomainMessenger", "");
+        txs_[15] =
+            _upgrade("L2CrossDomainMessenger upgrade", Predeploys.L2_CROSS_DOMAIN_MESSENGER, _created(txs_[14]), "");
+        txs_[16] = _call(
             "CGTv2 flag enable",
             Constants.DEPOSITOR_ACCOUNT,
             Predeploys.L1_BLOCK_ATTRIBUTES,
             abi.encodeCall(IL1BlockCGT.setCustomGasToken, ())
         );
-        // Glamsterdam gas repricings
-        txs_[15] = _deploy("L2CrossDomainMessenger deployment", "L2CrossDomainMessenger.sol:L2CrossDomainMessenger", "");
-        txs_[16] =
-            _upgrade("L2CrossDomainMessenger upgrade", Predeploys.L2_CROSS_DOMAIN_MESSENGER, _created(txs_[15]), "");
     }
 
     function _call(
