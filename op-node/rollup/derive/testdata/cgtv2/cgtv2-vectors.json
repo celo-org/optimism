@@ -84,10 +84,22 @@
     "file": "cgtv2-13.rlp"
   },
   {
-    "intent": "Cgtv2 14: CGTv2 flag enable",
-    "sourceHash": "0xf9c93f6f41a62482f972450ace24c7bb25ca464d6ce02830570acf39013aec05",
-    "transactionHash": "0x266c8af67547fc2961dea8d2f41efde68c30e32e118e93dea0f4f8d441bab6dd",
+    "intent": "Cgtv2 14: L2CrossDomainMessenger deployment",
+    "sourceHash": "0xc8c10fbe05828d4223ad0e43ddfae4da50358fe1f43ca11b9f0f22c22eb5bb8f",
+    "transactionHash": "0x4624564ff94998285ae5d5a1585eea2eeb61b78c599fcb37cc644d17339afbb4",
     "file": "cgtv2-14.rlp"
+  },
+  {
+    "intent": "Cgtv2 15: L2CrossDomainMessenger upgrade",
+    "sourceHash": "0x79c0cf694de19eff1db990183cc9a21a8d2edf0190833817396ffe23fd4fb0e7",
+    "transactionHash": "0x50341e04f4de255f8ea0e9d582079fd577797645ab161d5df0b0d55ea1190a39",
+    "file": "cgtv2-15.rlp"
+  },
+  {
+    "intent": "Cgtv2 16: CGTv2 flag enable",
+    "sourceHash": "0x53495f119b13d09ce4e0ee9f54737c8f35d8a78f0fa2c8197d752eb4dcc6c844",
+    "transactionHash": "0x9efe645ac983ea334fb716babf39221e40398cfb3c15fa2823289dca90669a3c",
+    "file": "cgtv2-16.rlp"
   },
   {
     "intent": "Celo: CGTv2 Reserve Funding",

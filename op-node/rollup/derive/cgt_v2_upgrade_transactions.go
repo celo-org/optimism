@@ -45,7 +45,7 @@ const cgtV2FixtureChainID uint64 = 1337
 var cgtV2FixtureParams = cgtV2NetworkParams{
 	bridge:          common.HexToAddress("0xcc"),
 	totalSupply:     "1000",
-	retryBundleHash: common.HexToHash("0x437fabe614e74fd20231c33accdacbad38631aaefc16abdb3c38c3bc5be10f14"),
+	retryBundleHash: common.HexToHash("0xdf4b9e639dee5da17fd51c194fb2709f3d5f1b995ec26682cb8d68308eff49f2"),
 }
 
 func cgtV2Params(chainID uint64) (cgtV2NetworkParams, bool) {
@@ -96,15 +96,17 @@ var cgtV2Intents = [...]string{
 	"CeloSequencerFeeVault upgrade and initialize",
 	"CeloGasBridgeL2 minter authorization",
 	"LiquidityController ownership transfer",
+	"L2CrossDomainMessenger deployment",
+	"L2CrossDomainMessenger upgrade",
 	"CGTv2 flag enable",
 }
 
-// Fixture gas limits: six 6M deployments, nine 500k direct calls,
+// Fixture gas limits: seven 6M deployments, ten 500k direct calls,
 // and 100k reserve funding. The v6 ProxyAdmin remains unchanged.
 // TODO(celo-org/celo-blockchain-planning#1466): calibrate limits against final contracts and production state,
 // then update the bundle and matching Go/Rust group allowances.
 const cgtV2FundingGas uint64 = 100_000
-const cgtV2UpgradeGas uint64 = 40_600_000
+const cgtV2UpgradeGas uint64 = 47_100_000
 
 var cgtV2FundingSource = (&UpgradeDepositSource{Intent: "Celo: CGTv2 Reserve Funding"}).SourceHash()
 
