@@ -71,6 +71,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 	var depositTxs []hexutil.Bytes
 	var seqNumber uint64
 	var cgtUpgrades []hexutil.Bytes
+	var cgtUpgradeGas uint64
 
 	sysConfig, err := ba.l2.SystemConfigByL2Hash(ctx, l2Parent.Hash)
 	if err != nil {
@@ -91,7 +92,7 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 				fmt.Errorf("cannot create new block with L1 origin %s (parent %s) on top of L1 origin %s",
 					epoch, info.ParentHash(), l2Parent.L1Origin))
 		}
-		cgtUpgrades, err = cgtV2UpgradeTransactionsFromReceipts(ba.rollupCfg, receipts)
+		cgtUpgrades, cgtUpgradeGas, err = cgtV2UpgradeTransactionsFromReceipts(ba.rollupCfg, receipts)
 		if err != nil {
 			return nil, NewCriticalError(err)
 		}
@@ -189,14 +190,10 @@ func (ba *FetchingAttributesBuilder) PreparePayloadAttributes(ctx context.Contex
 
 	if len(cgtUpgrades) > 0 {
 		upgradeTxs = append(upgradeTxs, cgtUpgrades...)
-		gas, err := CgtV2UpgradeGas(ba.rollupCfg.L2ChainID)
-		if err != nil {
-			return nil, NewCriticalError(err)
-		}
-		if gas > ^uint64(0)-upgradeGas {
+		if cgtUpgradeGas > ^uint64(0)-upgradeGas {
 			return nil, NewCriticalError(fmt.Errorf("CGTv2 upgrade gas overflow"))
 		}
-		upgradeGas += gas
+		upgradeGas += cgtUpgradeGas
 	}
 
 	l1InfoTx, err := L1InfoDepositBytes(ba.rollupCfg, ba.l1ChainConfig, sysConfig, seqNumber, l1Info, nextL2Time)

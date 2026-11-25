@@ -123,6 +123,7 @@ var versionSelector = []byte{0x54, 0xfd, 0x4d, 0x50}
 // ContractCaller abstracts contract calls for both script.Host and ethclient.Client
 type ContractCaller interface {
 	Call(to common.Address, data []byte) ([]byte, error)
+	CodeAt(to common.Address) ([]byte, error)
 }
 
 // HostCaller adapts script.Host to ContractCaller
@@ -141,6 +142,10 @@ func (h *HostCaller) Call(to common.Address, data []byte) ([]byte, error) {
 	return result, err
 }
 
+func (h *HostCaller) CodeAt(to common.Address) ([]byte, error) {
+	return h.Host.GetCode(to), nil
+}
+
 // RPCCaller adapts ethclient.Client to ContractCaller
 type RPCCaller struct {
 	Ctx    context.Context
@@ -150,6 +155,10 @@ type RPCCaller struct {
 func (r *RPCCaller) Call(to common.Address, data []byte) ([]byte, error) {
 	msg := ethereum.CallMsg{To: &to, Data: data}
 	return r.Client.CallContract(r.Ctx, msg, nil)
+}
+
+func (r *RPCCaller) CodeAt(to common.Address) ([]byte, error) {
+	return r.Client.CodeAt(r.Ctx, to, nil)
 }
 
 // isEVMRevert checks if an error is an EVM execution revert
@@ -180,11 +189,25 @@ func decodeABIString(data []byte) (string, error) {
 
 // getOPCMVersion queries the OPCM contract's version() function.
 func getOPCMVersion(caller ContractCaller, opcmAddr common.Address) (string, error) {
+	code, err := caller.CodeAt(opcmAddr)
+	if err != nil {
+		return "", fmt.Errorf("failed to read OPCM code: %w", err)
+	}
+	if len(code) == 0 {
+		return "", nil
+	}
 	data, err := caller.Call(opcmAddr, versionSelector)
 	if err != nil {
 		return "", fmt.Errorf("failed to call version(): %w", err)
 	}
-	return decodeABIString(data)
+	version, err := decodeABIString(data)
+	if err != nil {
+		return "", err
+	}
+	if version == "" {
+		return "", fmt.Errorf("empty OPCM version from deployed contract")
+	}
+	return version, nil
 }
 
 // getLastUsedOPCMVersion queries SystemConfig.lastUsedOPCMVersion() and returns the version string.
@@ -199,7 +222,7 @@ func getLastUsedOPCMVersion(caller ContractCaller, systemConfigProxy common.Addr
 	}
 	version, err := decodeABIString(data)
 	if err != nil {
-		return "", true, nil // call succeeded but response malformed
+		return "", false, fmt.Errorf("failed to decode lastUsedOPCMVersion(): %w", err)
 	}
 	return version, true, nil
 }
@@ -221,6 +244,10 @@ func runSingleOPCMUpgradeResolved(t *testing.T, host *script.Host, prank, system
 		t.Logf("OPCM %s (v%s) upgrade failed: %v", opcm.Address.Hex(), opcm.OPCMVersion.Raw, err)
 		return false
 	}
+	version, hasVersion, err := getLastUsedOPCMVersion(&HostCaller{Host: host}, systemConfigProxy)
+	require.NoError(t, err)
+	require.True(t, hasVersion, "the upgrade must record lastUsedOPCMVersion")
+	require.Equal(t, opcm.OPCMVersion.Raw, version, "lastUsedOPCMVersion must match the applied upgrade")
 	t.Logf("Successfully executed OPCM %s (v%s) upgrade", opcm.Address.Hex(), opcm.OPCMVersion.Raw)
 	return true
 }
@@ -312,10 +339,15 @@ func DeployDummyCaller(t *testing.T, rpcClient *rpc.Client, afactsFS foundry.Sta
 // RunPastUpgrades executes all past OPCM upgrades in-memory only (no broadcast).
 // It fetches OPCM addresses from the superchain-registry, queries their actual versions on-chain,
 // and applies upgrades in version order, skipping any that have already been applied.
-func RunPastUpgrades(t *testing.T, host *script.Host, chainID uint64, prank common.Address, systemConfigProxy common.Address) {
+func RunPastUpgrades(t *testing.T, host *script.Host, chainID uint64, prank common.Address, systemConfigProxy common.Address, targetOPCM common.Address) {
 	t.Helper()
 
 	caller := &HostCaller{Host: host}
+
+	targetVersion, err := getOPCMVersion(caller, targetOPCM)
+	require.NoError(t, err, "failed to query target OPCM version")
+	target, err := opcmregistry.ParseSemver(targetVersion)
+	require.NoError(t, err, "invalid target OPCM version")
 
 	// Create version querier that uses the host to query on-chain
 	queryVersion := func(addr common.Address) (string, error) {
@@ -325,12 +357,12 @@ func RunPastUpgrades(t *testing.T, host *script.Host, chainID uint64, prank comm
 	// Get resolved OPCMs (fetches from registry, queries versions on-chain, filters >= 6.x.x)
 	resolved, err := opcmregistry.GetResolvedOPCMs(chainID, queryVersion)
 	if err != nil {
-		t.Logf("Failed to get resolved OPCMs: %v", err)
+		t.Fatalf("Failed to get resolved OPCMs: %v", err)
 		return
 	}
 
 	if len(resolved) == 0 {
-		t.Logf("No OPCMs >= 6.x.x found for chain %d", chainID)
+		t.Fatalf("No deployed OPCMs >= 6.x.x found for chain %d", chainID)
 		return
 	}
 
@@ -349,19 +381,22 @@ func RunPastUpgrades(t *testing.T, host *script.Host, chainID uint64, prank comm
 	// Filter to only include OPCMs with version > lastUsedOPCMVersion
 	toApply, err := opcmregistry.FilterByLastUsedOPCMVersion(resolved, lastVersion)
 	if err != nil {
-		t.Logf("Warning: failed to filter by lastUsedOPCMVersion: %v", err)
-		toApply = resolved
+		t.Fatalf("Failed to filter by lastUsedOPCMVersion: %v", err)
 	}
 
 	for _, opcm := range toApply {
-		runSingleOPCMUpgradeResolved(t, host, prank, systemConfigProxy, opcm)
+		// The live registry may include managers at or above the target version.
+		if opcm.OPCMVersion.Compare(target) >= 0 {
+			continue
+		}
+		require.True(t, runSingleOPCMUpgradeResolved(t, host, prank, systemConfigProxy, opcm), "OPCM %s (v%s) upgrade failed", opcm.Address.Hex(), opcm.OPCMVersion.Raw)
 	}
 }
 
 // RunPastUpgradesWithRPC runs past upgrades and broadcasts them using Anvil impersonation.
 // It fetches OPCM data from the superchain-registry and applies upgrades in version order,
 // skipping any upgrades that have already been applied based on SystemConfig.lastUsedOPCMVersion().
-func RunPastUpgradesWithRPC(t *testing.T, l1RPCUrl string, afactsFS foundry.StatDirFs, lgr log.Logger, chainID uint64, prank common.Address, systemConfigProxy common.Address) {
+func RunPastUpgradesWithRPC(t *testing.T, l1RPCUrl string, afactsFS foundry.StatDirFs, lgr log.Logger, chainID uint64, prank common.Address, systemConfigProxy common.Address, targetOPCM common.Address) {
 	t.Helper()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
@@ -385,6 +420,11 @@ func RunPastUpgradesWithRPC(t *testing.T, l1RPCUrl string, afactsFS foundry.Stat
 
 	caller := &RPCCaller{Ctx: ctx, Client: ethClient}
 
+	targetVersion, err := getOPCMVersion(caller, targetOPCM)
+	require.NoError(t, err, "failed to query target OPCM version")
+	target, err := opcmregistry.ParseSemver(targetVersion)
+	require.NoError(t, err, "invalid target OPCM version")
+
 	// Create version querier that uses RPC to query on-chain
 	queryVersion := func(addr common.Address) (string, error) {
 		return getOPCMVersion(caller, addr)
@@ -393,12 +433,12 @@ func RunPastUpgradesWithRPC(t *testing.T, l1RPCUrl string, afactsFS foundry.Stat
 	// Get resolved OPCMs (fetches from registry, queries versions on-chain, filters >= 6.x.x)
 	resolved, err := opcmregistry.GetResolvedOPCMs(chainID, queryVersion)
 	if err != nil {
-		t.Logf("Failed to get resolved OPCMs: %v", err)
+		t.Fatalf("Failed to get resolved OPCMs: %v", err)
 		return
 	}
 
 	if len(resolved) == 0 {
-		t.Logf("No OPCMs >= 6.x.x found for chain %d", chainID)
+		t.Fatalf("No deployed OPCMs >= 6.x.x found for chain %d", chainID)
 		return
 	}
 
@@ -417,12 +457,15 @@ func RunPastUpgradesWithRPC(t *testing.T, l1RPCUrl string, afactsFS foundry.Stat
 	// Filter to only include OPCMs with version > lastUsedOPCMVersion
 	toApply, err := opcmregistry.FilterByLastUsedOPCMVersion(resolved, lastVersion)
 	if err != nil {
-		t.Logf("Warning: failed to filter by lastUsedOPCMVersion: %v", err)
-		toApply = resolved
+		t.Fatalf("Failed to filter by lastUsedOPCMVersion: %v", err)
 	}
 
 	// Process each OPCM upgrade: deploy DummyCaller with correct OPCM, run upgrade, broadcast
 	for _, opcm := range toApply {
+		// The live registry may include managers at or above the target version.
+		if opcm.OPCMVersion.Compare(target) >= 0 {
+			continue
+		}
 		// Deploy DummyCaller with this OPCM's address
 		DeployDummyCaller(t, rpcClient, afactsFS, prank, opcm.Address)
 
@@ -432,14 +475,16 @@ func RunPastUpgradesWithRPC(t *testing.T, l1RPCUrl string, afactsFS foundry.Stat
 		require.NoError(t, err)
 
 		// Run the upgrade
-		if !runSingleOPCMUpgradeResolved(t, host, prank, systemConfigProxy, opcm) {
-			continue
-		}
+		require.True(t, runSingleOPCMUpgradeResolved(t, host, prank, systemConfigProxy, opcm), "OPCM %s (v%s) upgrade failed", opcm.Address.Hex(), opcm.OPCMVersion.Raw)
 
 		// Broadcast this upgrade's transactions
 		if _, err = bcaster.Broadcast(ctx); err != nil {
-			t.Logf("Warning: OPCM %s (v%s) broadcast failed: %v", opcm.Address.Hex(), opcm.OPCMVersion.Raw, err)
+			t.Fatalf("OPCM %s (v%s) broadcast failed: %v", opcm.Address.Hex(), opcm.OPCMVersion.Raw, err)
 		} else {
+			version, hasVersion, err := getLastUsedOPCMVersion(caller, systemConfigProxy)
+			require.NoError(t, err)
+			require.True(t, hasVersion, "the upgrade must record lastUsedOPCMVersion")
+			require.Equal(t, opcm.OPCMVersion.Raw, version, "lastUsedOPCMVersion must match the applied upgrade")
 			t.Logf("Successfully broadcast OPCM %s (v%s) upgrade", opcm.Address.Hex(), opcm.OPCMVersion.Raw)
 		}
 	}

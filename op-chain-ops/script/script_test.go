@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 
@@ -65,6 +66,49 @@ func TestScript(t *testing.T) {
 	require.NoError(t, h.cheatcodes.Precompile.DumpState("noop"))
 	// and a second time, to see if we can revisit the host state.
 	require.NoError(t, h.cheatcodes.Precompile.DumpState("noop"))
+}
+
+func TestCallWithoutOpcodes(t *testing.T) {
+	const gas = uint64(100_000)
+	for _, tc := range []struct {
+		name    string
+		target  common.Address
+		input   []byte
+		value   uint64
+		want    []byte
+		wantGas uint64
+		wantErr error
+	}{
+		{name: "empty account", target: common.HexToAddress("0x1000"), input: []byte{0x54, 0xfd, 0x4d, 0x50}, wantGas: gas},
+		{name: "identity precompile", target: common.HexToAddress("0x04"), input: []byte{1, 2, 3}, want: []byte{1, 2, 3}, wantGas: gas - 18},
+		{name: "insufficient balance", target: common.HexToAddress("0x1000"), value: 1, wantGas: gas, wantErr: vm.ErrInsufficientBalance},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			host := NewHost(testlog.Logger(t, log.LevelInfo), nil, nil, DefaultContext)
+			var output []byte
+			var remaining uint64
+			var err error
+			require.NotPanics(t, func() {
+				output, remaining, err = host.Call(DefaultContext.Sender, tc.target, tc.input, gas, uint256.NewInt(tc.value))
+			})
+			if tc.wantErr != nil {
+				require.ErrorIs(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.want, output)
+			require.Equal(t, tc.wantGas, remaining)
+			require.Empty(t, host.callStack)
+
+			target := common.HexToAddress("0x2000")
+			host.ImportAccount(target, types.Account{Code: common.FromHex("0x602a60005260206000f3")})
+			output, remaining, err = host.Call(DefaultContext.Sender, target, nil, gas, uint256.NewInt(0))
+			require.NoError(t, err)
+			require.Equal(t, common.BigToHash(big.NewInt(42)).Bytes(), output)
+			require.Less(t, remaining, gas)
+			require.Empty(t, host.callStack)
+		})
+	}
 }
 
 func TestGetCodeArtifactResolution(t *testing.T) {

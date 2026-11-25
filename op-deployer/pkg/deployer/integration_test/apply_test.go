@@ -1072,9 +1072,9 @@ func runEndToEndBootstrapAndApplyUpgradeTest(t *testing.T, afactsFS foundry.Stat
 
 		// Run past upgrades before running the current upgrade.
 		// This is necessary when forking at a block before those upgrades were executed.
-		t.Run("run past upgrades", func(t *testing.T) {
-			shared.RunPastUpgrades(t, host, 11155111, superchainProxyAdminOwner, deployer.DefaultSystemConfigProxySepolia)
-		})
+		require.True(t, t.Run("run past upgrades", func(t *testing.T) {
+			shared.RunPastUpgrades(t, host, 11155111, superchainProxyAdminOwner, deployer.DefaultSystemConfigProxySepolia, opcmAddress)
+		}), "past upgrades must succeed before testing the target upgrade")
 
 		// Then run the OPCM V2 upgrade
 		t.Run("upgrade opcm v2", func(t *testing.T) {

@@ -619,7 +619,10 @@ func (h *Host) onExit(depth int, output []byte, gasUsed uint64, err error, rever
 		}
 	}
 
-	h.callStack[len(h.callStack)-1].GasUsed += gasUsed
+	// Empty-code calls, precompiles and pre-execution errors may exit without an opcode frame.
+	if len(h.callStack) > 0 {
+		h.callStack[len(h.callStack)-1].GasUsed += gasUsed
+	}
 	h.unwindCallstack(depth)
 }
 
