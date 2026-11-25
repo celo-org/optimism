@@ -2,8 +2,15 @@ package altda
 
 import (
 	"context"
+	"errors"
 	"math/rand"
+	"net"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/ethereum-optimism/optimism/op-service/log"
 	"github.com/ethereum-optimism/optimism/op-service/testlog"
@@ -126,4 +133,115 @@ func TestDAClientService(t *testing.T) {
 
 	_, err = client.GetInput(ctx, NewKeccak256Commitment(input), 0)
 	require.Error(t, err)
+}
+
+// TestDAClientGetInputTeapot checks that a 418 TEAPOT response only yields a DropEigenDACommitmentError,
+// the error that makes derivation drop the commitment, when its body carries a status code between 1 and 4.
+// Any other body must yield an ordinary error, which derivation retries.
+func TestDAClientGetInputTeapot(t *testing.T) {
+	// The proxy's message for a cert it fails to parse carries the cert in hex.
+	longMsg := "cert parsing failed for cert " + strings.Repeat("ab", 100_000)
+	// limitMsg pads the body it is put into to exactly maxTeapotBodySize bytes.
+	limitMsg := strings.Repeat("a", maxTeapotBodySize-len(`{"StatusCode": 1, "Msg": ""}`))
+
+	tests := []struct {
+		name string
+		body string
+		// expectedDrop is the DropEigenDACommitmentError expected from GetInput, or nil if an ordinary error is expected.
+		expectedDrop *DropEigenDACommitmentError
+		// expectedErrMsg is a part of the ordinary error's message, checked if set.
+		expectedErrMsg string
+	}{
+		{name: "status code 1", body: `{"StatusCode": 1, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: "invalid cert"}},
+		{name: "status code 2", body: `{"StatusCode": 2, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 2, Msg: "invalid cert"}},
+		{name: "status code 3", body: `{"StatusCode": 3, "Msg": "invalid cert"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}},
+		{name: "status code 4 without msg", body: `{"StatusCode": 4}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 4}},
+		{name: "msg longer than a cert in hex", body: `{"StatusCode": 1, "Msg": "` + longMsg + `"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: longMsg}},
+		{name: "body of exactly the size limit", body: `{"StatusCode": 1, "Msg": "` + limitMsg + `"}`, expectedDrop: &DropEigenDACommitmentError{StatusCode: 1, Msg: limitMsg}},
+		{name: "status code missing", body: `{"Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 0"},
+		{name: "empty object", body: `{}`, expectedErrMsg: "invalid status code 0"},
+		{name: "status code 0", body: `{"StatusCode": 0, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 0"},
+		{name: "status code 5", body: `{"StatusCode": 5, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code 5"},
+		{name: "status code negative", body: `{"StatusCode": -1, "Msg": "invalid cert"}`, expectedErrMsg: "invalid status code -1"},
+		{name: "body is not json", body: `I'm a teapot`, expectedErrMsg: "failed to decode"},
+		{name: "body over the size limit", body: `{"StatusCode": 1, "Msg": "` + strings.Repeat("a", maxTeapotBodySize) + `"}`, expectedErrMsg: "body exceeds"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusTeapot)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+
+			client := NewDAClient(server.URL, false, false)
+			_, err := client.GetInput(context.Background(), NewGenericCommitment([]byte("cert")), 0)
+			require.Error(t, err)
+
+			var dropErr DropEigenDACommitmentError
+			if tc.expectedDrop == nil {
+				require.False(t, errors.As(err, &dropErr), "must not drop the commitment, got: %v", err)
+				require.ErrorContains(t, err, tc.expectedErrMsg)
+				return
+			}
+			require.ErrorAs(t, err, &dropErr)
+			require.Equal(t, *tc.expectedDrop, dropErr)
+		})
+	}
+}
+
+// TestDAClientGetInputClosesErrorBody checks that GetInput releases the connection of a response
+// it rejects by its status code, even though it does not read that response's body.
+// Closing an unread body makes the HTTP transport close the connection, which is what the test observes.
+// If GetInput is changed to read the body before closing it, the connection is kept for reuse instead,
+// and this test has to observe the close some other way.
+func TestDAClientGetInputClosesErrorBody(t *testing.T) {
+	for _, status := range []int{http.StatusNotFound, http.StatusInternalServerError} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			var mu sync.Mutex
+			openConns := make(map[net.Conn]struct{})
+
+			server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+				_, _ = w.Write([]byte("error details that the client does not read"))
+			}))
+			server.Config.ConnState = func(conn net.Conn, state http.ConnState) {
+				mu.Lock()
+				defer mu.Unlock()
+				if state == http.StateClosed {
+					delete(openConns, conn)
+				} else {
+					openConns[conn] = struct{}{}
+				}
+			}
+			server.Start()
+			defer server.Close()
+
+			client := NewDAClient(server.URL, false, false)
+			_, err := client.GetInput(context.Background(), NewGenericCommitment([]byte("cert")), 0)
+			require.Error(t, err)
+
+			require.Eventually(t, func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				return len(openConns) == 0
+			}, 10*time.Second, 10*time.Millisecond, "connection of the rejected response was left open")
+		})
+	}
+}
+
+// TestDropEigenDACommitmentErrorMessage checks that the error text, which ends up in the logs,
+// shortens a long Msg and keeps a short one whole.
+func TestDropEigenDACommitmentErrorMessage(t *testing.T) {
+	short := DropEigenDACommitmentError{StatusCode: 3, Msg: "invalid cert"}
+	require.Equal(t, "Invalid AltDA Commitment: cert verification failed with status code 3: invalid cert", short.Error())
+
+	atLimit := DropEigenDACommitmentError{StatusCode: 3, Msg: strings.Repeat("a", maxErrorMsgSize)}
+	require.Contains(t, atLimit.Error(), atLimit.Msg)
+
+	long := DropEigenDACommitmentError{StatusCode: 1, Msg: strings.Repeat("a", maxErrorMsgSize) + "bbb"}
+	require.Equal(t,
+		"Invalid AltDA Commitment: cert verification failed with status code 1: "+strings.Repeat("a", maxErrorMsgSize)+"... (3 more bytes)",
+		long.Error())
 }

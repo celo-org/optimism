@@ -237,8 +237,13 @@ func (d *DA) GetInput(ctx context.Context, l1 L1Fetcher, comm CommitmentData, bl
 
 	// Fetch the input from the DA storage.
 	data, err := d.storage.GetInput(ctx, comm, blockId.Number)
-	notFound := errors.Is(ErrNotFound, err)
+	notFound := errors.Is(err, ErrNotFound)
 	if err != nil && !notFound {
+		// A dropped commitment is the DA layer's verdict on the commitment, not a failed fetch.
+		var dropErr DropEigenDACommitmentError
+		if !errors.As(err, &dropErr) {
+			d.metrics.RecordStorageError()
+		}
 		d.log.Error("failed to get preimage", "err", err)
 		// the storage client request failed for some other reason
 		return nil, err
