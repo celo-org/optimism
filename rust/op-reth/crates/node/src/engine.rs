@@ -16,7 +16,7 @@ use reth_node_api::{
     },
     validate_version_specific_fields,
 };
-use reth_optimism_consensus::isthmus;
+use reth_optimism_consensus::{OpConsensusError, isthmus};
 use reth_optimism_forks::OpHardforks;
 use reth_optimism_payload_builder::{
     OpExecData, OpExecutionPayloadValidator, OpPayloadAttrs, OpPayloadTypes,
@@ -123,6 +123,15 @@ where
     }
 }
 
+/// Maps a withdrawals root failure to the engine's error kind. A provider failure to compute the
+/// root is a processing error, so the engine does not report the payload as invalid.
+fn withdrawals_root_error(err: OpConsensusError) -> InsertBlockErrorKind {
+    match err {
+        OpConsensusError::L2WithdrawalsRootCalculationFail(err) => err.into(),
+        err => ConsensusError::msg(format!("failed to verify block post-execution: {err}")).into(),
+    }
+}
+
 impl<P, Tx, ChainSpec, Types> PayloadValidator<Types> for OpEngineValidator<P, Tx, ChainSpec>
 where
     P: StateProviderFactory + Unpin + 'static,
@@ -151,9 +160,7 @@ where
                 state,
                 block.header(),
             )
-            .map_err(|err| {
-                ConsensusError::msg(format!("failed to verify block post-execution: {err}"))
-            })?
+            .map_err(withdrawals_root_error)?
         }
 
         Ok(())
@@ -342,6 +349,21 @@ mod test {
         test_utils::create_test_provider_factory_with_node_types,
     };
     use reth_trie_common::KeccakKeyHasher;
+
+    #[test]
+    fn withdrawals_root_provider_failure_is_not_invalid() {
+        let err = withdrawals_root_error(OpConsensusError::L2WithdrawalsRootCalculationFail(
+            reth_provider::ProviderError::UnsupportedProvider,
+        ));
+        assert!(matches!(err, InsertBlockErrorKind::Provider(_)), "{err:?}");
+        assert!(!err.is_validation_error());
+
+        let err = withdrawals_root_error(OpConsensusError::L2WithdrawalsRootMismatch {
+            header: B256::ZERO,
+            exec_res: B256::repeat_byte(1),
+        });
+        assert!(err.is_validation_error(), "{err:?}");
+    }
 
     macro_rules! assert_invalid_params_error {
         ($result:expr, $msg:expr) => {{
