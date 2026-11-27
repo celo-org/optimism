@@ -20,7 +20,7 @@ use reth_metrics::Metrics;
 use reth_node_api::{BuiltPayload, Events, NodeTypes, PayloadBuilderError, PayloadTypes};
 use reth_node_builder::{BuilderContext, FullNodeTypes, components::PayloadServiceBuilder};
 use reth_optimism_payload_builder::{
-    OpPayloadAttrs, OpPayloadBuilder, is_invalid_derived_payload_error,
+    OpPayloadAttrs, OpPayloadBuilder, config::OpBuilderConfig, is_invalid_derived_payload_error,
 };
 use reth_payload_builder::{
     BuildNewPayload, PayloadBuilderHandle, PayloadBuilderResources, PayloadKind,
@@ -77,16 +77,24 @@ fn has_non_deposit_transaction(attributes: &OpPayloadAttrs) -> bool {
 /// it builds the payload, after the response.
 ///
 /// The derived build uses the node's EVM configuration, the one `engine_newPayload` validates
-/// with, whatever the wrapped payload service builds with.
+/// with, whatever the wrapped payload service builds with, and the default [`OpBuilderConfig`]
+/// unless [`Self::with_builder_config`] sets one.
 #[derive(Debug, Clone)]
 pub struct DerivedPayloadServiceBuilder<S> {
     inner: S,
+    builder_config: OpBuilderConfig,
 }
 
 impl<S> DerivedPayloadServiceBuilder<S> {
     /// Wraps `inner`.
-    pub const fn new(inner: S) -> Self {
-        Self { inner }
+    pub fn new(inner: S) -> Self {
+        Self { inner, builder_config: OpBuilderConfig::default() }
+    }
+
+    /// Builds derived payloads with `builder_config`, such as the node's state root wait.
+    pub fn with_builder_config(mut self, builder_config: OpBuilderConfig) -> Self {
+        self.builder_config = builder_config;
+        self
     }
 }
 
@@ -118,7 +126,12 @@ where
             self.inner.spawn_payload_builder_service(ctx, pool.clone(), evm_config.clone()).await?;
         let builder = OpDerivedPayloadBuilder::new(
             ctx.provider().clone(),
-            OpPayloadBuilder::new(pool, ctx.provider().clone(), evm_config),
+            OpPayloadBuilder::with_builder_config(
+                pool,
+                ctx.provider().clone(),
+                evm_config,
+                self.builder_config,
+            ),
         );
         Ok(DerivedPayloadService::spawn(wrapped, builder, ctx.task_executor().clone()).await?)
     }
